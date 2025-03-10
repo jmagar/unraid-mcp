@@ -1,0 +1,3 @@
+mcp>=1.2.0         # Python MCP SDK with FastMCP
+aiohttp            # For asynchronous HTTP requests to Unraid API
+python-dotenv      # For environment variable management 
