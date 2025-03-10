@@ -6,8 +6,12 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 
 - **System Information**: Query system status, CPU usage, memory, and uptime
 - **Docker Management**: List, start, and stop Docker containers
-- **Array Management**: Check array status, start/stop array
+- **Array Management**: Check array status, start/stop array operations
 - **VM Management**: List, start, and stop virtual machines
+- **Shares**: Browse user shares on the Unraid server
+- **Plugins**: View installed plugins and their status
+- **Error Handling**: Comprehensive error handling with diagnostic information
+- **Logging**: Detailed logging for troubleshooting
 
 ## Prerequisites
 
@@ -54,11 +58,57 @@ python server.py
 
 For production use, you can run the server with SSE transport:
 
-1. Uncomment and configure the server settings in `.env`
+1. Configure server settings in `.env`:
+   ```
+   # Unraid API Configuration
+   UNRAID_API_URL=https://your-unraid-server-ip/graphql
+   UNRAID_API_KEY=your-api-key
+   
+   # MCP Server Configuration
+   MCP_SERVER_HOST=0.0.0.0  # Listen on all interfaces
+   MCP_SERVER_PORT=8000     # Port to serve MCP
+   ```
+
 2. Run the server with:
    ```bash
-   python -c "from server import server; server.run(transport='sse')"
+   python run_server.py
    ```
+
+## Server Architecture
+
+The server is built using the FastMCP framework and consists of:
+
+1. **Unraid API Client** (`unraid_client.py`):
+   - Handles GraphQL communication with the Unraid server
+   - Manages authentication and error handling
+   - Provides consistent error reporting
+
+2. **MCP Server** (`server.py`):
+   - Defines resources and tools according to MCP specification
+   - Exposes Unraid functionality to AI assistants
+   - Handles request validation and error diagnostics
+
+## Available Resources
+
+| Resource URI | Description |
+|--------------|-------------|
+| `unraid://system-info` | System information (CPU, memory, uptime) |
+| `unraid://docker/containers` | List of Docker containers |
+| `unraid://array-status` | Current array status |
+| `unraid://virtual-machines` | List of virtual machines |
+| `unraid://shares` | User shares information |
+| `unraid://plugins` | Installed plugins |
+
+## Available Tools
+
+| Tool Name | Description |
+|-----------|-------------|
+| `start_container` | Start a Docker container by name |
+| `stop_container` | Stop a Docker container by name |
+| `start_array` | Start the Unraid array |
+| `stop_array` | Stop the Unraid array |
+| `start_vm` | Start a virtual machine by name |
+| `stop_vm` | Stop a virtual machine by name |
 
 ## Testing with MCP Inspector
 
@@ -69,11 +119,13 @@ pip install mcp-inspector
 mcp-inspector --url http://localhost:8000
 ```
 
-## Testing with Claude
+## Integration with Claude
 
 1. Go to Claude Desktop
 2. Navigate to Settings > Integrations
-3. Add a new integration with your server URL
+3. Add a new integration:
+   - Name: Unraid MCP
+   - URL: http://localhost:8000 (or your server URL)
 4. Start asking Claude about your Unraid server
 
 ## Example Queries
@@ -83,6 +135,17 @@ mcp-inspector --url http://localhost:8000
 - "Start the Plex container"
 - "What's the status of my array?"
 - "How much free space do I have on my Unraid server?"
+- "Show me all my VM's"
+- "What plugins do I have installed?"
+
+## Troubleshooting
+
+Check the log file (`unraid_mcp.log`) for detailed error information.
+
+Common issues:
+- Incorrect API URL or key in `.env` file
+- Network connectivity issues to Unraid server
+- Insufficient permissions for the API key
 
 ## Contributing
 
@@ -92,7 +155,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
+## References
 
 - [Model Context Protocol](https://modelcontextprotocol.io)
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [Unraid API Documentation](https://docs.unraid.net/API/) 

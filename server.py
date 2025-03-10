@@ -1,12 +1,15 @@
 from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent, ImageContent
+from mcp.types import TextContent, ImageContent, ErrorDiagnostic
 from unraid_client import UnraidClient
+import json
+import asyncio
+from typing import Optional, List, Dict, Any, Union
 
 # Initialize the client and server
 unraid = UnraidClient()
 server = FastMCP(
     name="Unraid MCP Server",
-    instructions="Access and manage your Unraid server through natural language commands."
+    instructions="Access and manage your Unraid server through natural language commands. You can query system information, manage Docker containers, VMs, and array operations."
 )
 
 # Define resources
@@ -32,8 +35,14 @@ async def system_info():
       }
     }
     """
-    result = await unraid.execute_query(query)
-    return result["data"]["system"]
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["system"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve system information: {str(e)}",
+            code="SYSTEM_INFO_ERROR"
+        )
 
 @server.resource("unraid://docker/containers",
                 name="Docker Containers",
@@ -55,14 +64,27 @@ async def docker_containers():
       }
     }
     """
-    result = await unraid.execute_query(query)
-    return result["data"]["docker"]["containers"]
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["docker"]["containers"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve Docker containers: {str(e)}",
+            code="DOCKER_CONTAINERS_ERROR"
+        )
 
 # Define tools
 
 @server.tool(description="Start a Docker container by name")
-async def start_container(container_name: str, ctx):
-    """Start a Docker container by name"""
+async def start_container(
+    container_name: str, 
+    ctx
+):
+    """Start a Docker container by name
+    
+    Args:
+        container_name: The name of the container to start
+    """
     await ctx.info(f"Starting container: {container_name}")
     
     mutation = """
@@ -76,17 +98,29 @@ async def start_container(container_name: str, ctx):
     }
     """
     variables = {"name": container_name}
-    result = await unraid.execute_query(mutation, variables)
     
-    response = result["data"]["docker"]["startContainer"]
-    if response["success"]:
-        return TextContent(text=f"✅ Container {container_name} started successfully")
-    else:
-        return TextContent(text=f"❌ Failed to start container: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation, variables)
+        
+        response = result["data"]["docker"]["startContainer"]
+        if response["success"]:
+            return TextContent(text=f"✅ Container {container_name} started successfully")
+        else:
+            return TextContent(text=f"❌ Failed to start container: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error starting container: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop a Docker container by name")
-async def stop_container(container_name: str, ctx):
-    """Stop a Docker container by name"""
+async def stop_container(
+    container_name: str,
+    ctx
+):
+    """Stop a Docker container by name
+    
+    Args:
+        container_name: The name of the container to stop
+    """
     await ctx.info(f"Stopping container: {container_name}")
     
     mutation = """
@@ -100,13 +134,18 @@ async def stop_container(container_name: str, ctx):
     }
     """
     variables = {"name": container_name}
-    result = await unraid.execute_query(mutation, variables)
     
-    response = result["data"]["docker"]["stopContainer"]
-    if response["success"]:
-        return TextContent(text=f"✅ Container {container_name} stopped successfully")
-    else:
-        return TextContent(text=f"❌ Failed to stop container: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation, variables)
+        
+        response = result["data"]["docker"]["stopContainer"]
+        if response["success"]:
+            return TextContent(text=f"✅ Container {container_name} stopped successfully")
+        else:
+            return TextContent(text=f"❌ Failed to stop container: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error stopping container: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.resource("unraid://array-status",
                 name="Array Status",
@@ -133,8 +172,14 @@ async def array_status():
       }
     }
     """
-    result = await unraid.execute_query(query)
-    return result["data"]["array"]
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["array"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve array status: {str(e)}",
+            code="ARRAY_STATUS_ERROR"
+        )
 
 @server.resource("unraid://virtual-machines",
                 name="Virtual Machines",
@@ -154,8 +199,14 @@ async def virtual_machines():
       }
     }
     """
-    result = await unraid.execute_query(query)
-    return result["data"]["vms"]
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["vms"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve virtual machines: {str(e)}",
+            code="VM_LIST_ERROR"
+        )
 
 @server.tool(description="Start the Unraid array")
 async def start_array(ctx):
@@ -172,13 +223,17 @@ async def start_array(ctx):
       }
     }
     """
-    result = await unraid.execute_query(mutation)
-    
-    response = result["data"]["array"]["start"]
-    if response["success"]:
-        return TextContent(text="✅ Array started successfully")
-    else:
-        return TextContent(text=f"❌ Failed to start array: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation)
+        
+        response = result["data"]["array"]["start"]
+        if response["success"]:
+            return TextContent(text="✅ Array started successfully")
+        else:
+            return TextContent(text=f"❌ Failed to start array: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error starting array: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop the Unraid array")
 async def stop_array(ctx):
@@ -195,17 +250,28 @@ async def stop_array(ctx):
       }
     }
     """
-    result = await unraid.execute_query(mutation)
-    
-    response = result["data"]["array"]["stop"]
-    if response["success"]:
-        return TextContent(text="✅ Array stopped successfully")
-    else:
-        return TextContent(text=f"❌ Failed to stop array: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation)
+        
+        response = result["data"]["array"]["stop"]
+        if response["success"]:
+            return TextContent(text="✅ Array stopped successfully")
+        else:
+            return TextContent(text=f"❌ Failed to stop array: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error stopping array: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Start a virtual machine by name")
-async def start_vm(vm_name: str, ctx):
-    """Start a virtual machine by name"""
+async def start_vm(
+    vm_name: str, 
+    ctx
+):
+    """Start a virtual machine by name
+    
+    Args:
+        vm_name: The name of the virtual machine to start
+    """
     await ctx.info(f"Starting VM: {vm_name}")
     
     mutation = """
@@ -219,17 +285,29 @@ async def start_vm(vm_name: str, ctx):
     }
     """
     variables = {"name": vm_name}
-    result = await unraid.execute_query(mutation, variables)
     
-    response = result["data"]["vms"]["startVM"]
-    if response["success"]:
-        return TextContent(text=f"✅ VM {vm_name} started successfully")
-    else:
-        return TextContent(text=f"❌ Failed to start VM: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation, variables)
+        
+        response = result["data"]["vms"]["startVM"]
+        if response["success"]:
+            return TextContent(text=f"✅ VM {vm_name} started successfully")
+        else:
+            return TextContent(text=f"❌ Failed to start VM: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error starting VM: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop a virtual machine by name")
-async def stop_vm(vm_name: str, ctx):
-    """Stop a virtual machine by name"""
+async def stop_vm(
+    vm_name: str, 
+    ctx
+):
+    """Stop a virtual machine by name
+    
+    Args:
+        vm_name: The name of the virtual machine to stop
+    """
     await ctx.info(f"Stopping VM: {vm_name}")
     
     mutation = """
@@ -243,15 +321,74 @@ async def stop_vm(vm_name: str, ctx):
     }
     """
     variables = {"name": vm_name}
-    result = await unraid.execute_query(mutation, variables)
     
-    response = result["data"]["vms"]["stopVM"]
-    if response["success"]:
-        return TextContent(text=f"✅ VM {vm_name} stopped successfully")
-    else:
-        return TextContent(text=f"❌ Failed to stop VM: {response['message']}")
+    try:
+        result = await unraid.execute_query(mutation, variables)
+        
+        response = result["data"]["vms"]["stopVM"]
+        if response["success"]:
+            return TextContent(text=f"✅ VM {vm_name} stopped successfully")
+        else:
+            return TextContent(text=f"❌ Failed to stop VM: {response['message']}")
+    except Exception as e:
+        await ctx.error(f"Error stopping VM: {str(e)}")
+        return TextContent(text=f"❌ Error occurred: {str(e)}")
 
-# Run the server
+@server.resource("unraid://shares",
+                name="Shares",
+                description="List of all user shares on the Unraid server",
+                mime_type="application/json")
+async def shares():
+    """List all user shares"""
+    query = """
+    query {
+      shares {
+        name
+        comment
+        free
+        size
+        cache
+        exportEnabled
+      }
+    }
+    """
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["shares"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve shares: {str(e)}",
+            code="SHARES_LIST_ERROR"
+        )
+
+@server.resource("unraid://plugins",
+                name="Plugins",
+                description="List of all installed plugins on the Unraid server",
+                mime_type="application/json")
+async def plugins():
+    """List all installed plugins"""
+    query = """
+    query {
+      plugins {
+        name
+        version
+        author
+        description
+        status
+      }
+    }
+    """
+    try:
+        result = await unraid.execute_query(query)
+        return result["data"]["plugins"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve plugins: {str(e)}",
+            code="PLUGINS_LIST_ERROR"
+        )
+
+# Run the server with appropriate transport
 if __name__ == "__main__":
     # For local development, use stdio transport
+    # In production, you might use the SSE transport instead
     server.run(transport="stdio") 
