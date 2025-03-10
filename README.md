@@ -12,6 +12,7 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 - **Plugins**: View installed plugins and their status
 - **Error Handling**: Comprehensive error handling with diagnostic information
 - **Logging**: Detailed logging for troubleshooting
+- **Templated Resources**: Access specific containers and VMs by name
 
 ## Prerequisites
 
@@ -92,12 +93,14 @@ The server is built using the FastMCP framework and consists of:
 
 | Resource URI | Description |
 |--------------|-------------|
-| `unraid://system-info` | System information (CPU, memory, uptime) |
-| `unraid://docker/containers` | List of Docker containers |
-| `unraid://array-status` | Current array status |
-| `unraid://virtual-machines` | List of virtual machines |
-| `unraid://shares` | User shares information |
-| `unraid://plugins` | Installed plugins |
+| `unraid://system/info` | System information (CPU, memory, uptime) |
+| `unraid://system/plugins` | Installed plugins |
+| `unraid://docker/containers` | List of all Docker containers |
+| `unraid://docker/{container_name}` | Details of a specific container |
+| `unraid://array/status` | Current array status |
+| `unraid://vms/list` | List of all virtual machines |
+| `unraid://vms/{vm_name}` | Details of a specific VM |
+| `unraid://storage/shares` | User shares information |
 
 ## Available Tools
 
@@ -132,10 +135,11 @@ mcp-inspector --url http://localhost:8000
 
 - "What's the current CPU usage on my Unraid server?"
 - "List all of my Docker containers"
+- "Tell me about my Plex container" (uses container_details resource)
 - "Start the Plex container"
 - "What's the status of my array?"
 - "How much free space do I have on my Unraid server?"
-- "Show me all my VM's"
+- "Show me details about my Windows VM" (uses vm_details resource)
 - "What plugins do I have installed?"
 
 ## Troubleshooting

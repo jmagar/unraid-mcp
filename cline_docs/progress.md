@@ -4,9 +4,12 @@
 - Project structure created
 - Python environment set up
 - Dependencies installed (mcp, aiohttp, python-dotenv)
-- Unraid API client implementation
+- Unraid API client implementation with improved error handling
 - MCP server implementation (resources and tools)
-- Documentation
+- Enhanced error handling and diagnostics
+- Added new resources (shares, plugins)
+- Improved documentation and logging
+- Production-ready server script with SSE transport
 
 ## What's Left to Build
 1. **Project Structure**
@@ -27,12 +30,15 @@
    - [x] Implement array management resources
    - [x] Implement VM resources
    - [x] Implement additional tools
+   - [x] Implement proper error diagnostics
+   - [x] Add logging support
 
 4. **Documentation**
    - [x] Create README.md
    - [x] Add installation instructions
    - [x] Add usage examples
    - [x] Add testing instructions
+   - [x] Document available resources and tools
 
 5. **Testing**
    - [ ] Test with MCP Inspector
@@ -40,6 +46,8 @@
    - [ ] Address any issues found during testing
 
 ## Progress Status
-- Project structure and core implementation complete
-- Ready for testing with actual Unraid server
-- Additional features could be added as needed 
+- Project structure and implementation complete
+- Improvements based on FastMCP examples and Unraid API documentation implemented
+- Added production-ready server script
+- Enhanced error handling and logging
+- Ready for testing with actual Unraid server 

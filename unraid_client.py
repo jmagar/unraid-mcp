@@ -62,8 +62,18 @@ class UnraidClient:
             "variables": variables
         }
         
-        logger.debug(f"Executing GraphQL query: {query[:100]}...")
-        logger.debug(f"Variables: {json.dumps(variables)}")
+        # Enhanced logging for templated queries
+        query_type = "mutation" if "mutation" in query.strip()[:20].lower() else "query"
+        operation_name = _extract_operation_name(query)
+        
+        if variables:
+            logger.debug(f"Executing GraphQL {query_type} '{operation_name}' with variables: {json.dumps(variables)}")
+        else:
+            logger.debug(f"Executing GraphQL {query_type} '{operation_name}'")
+            
+        if log_level == logging.DEBUG:
+            # Only log full queries at DEBUG level
+            logger.debug(f"Full GraphQL {query_type}:\n{query}")
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -100,7 +110,11 @@ class UnraidClient:
                         logger.error(f"No data in response: {result}")
                         raise UnraidApiError("No data in API response")
                     
-                    logger.debug(f"Received response with keys: {', '.join(result['data'].keys())}")
+                    # Log successful query results
+                    if "data" in result:
+                        data_keys = list(result["data"].keys())
+                        logger.debug(f"Received response for '{operation_name}' with data keys: {', '.join(data_keys)}")
+                    
                     return result
                     
         except aiohttp.ClientError as e:
@@ -108,4 +122,51 @@ class UnraidClient:
             raise UnraidApiError(f"API request failed: {str(e)}")
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
-            raise 
+            raise
+
+def _extract_operation_name(query: str) -> str:
+    """Extract operation name from a GraphQL query for better logging
+    
+    Args:
+        query: The GraphQL query string
+        
+    Returns:
+        The operation name or a fallback
+    """
+    # Clean the query
+    query = query.strip()
+    
+    # Check if it's a mutation or query
+    is_mutation = query.startswith("mutation")
+    
+    try:
+        # Get the first line and extract operation after first {
+        lines = query.split('\n')
+        first_line = None
+        
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith('#') and '{' in line:
+                first_line = line
+                break
+        
+        if not first_line:
+            return "unknown_operation"
+            
+        # Extract the first operation after {
+        parts = first_line.split('{')
+        if len(parts) < 2:
+            return "unknown_operation"
+            
+        second_part = parts[1].strip()
+        
+        # Get the first word which should be the operation
+        operation = second_part.split('(')[0].split(' ')[0].strip()
+        
+        if not operation:
+            return "unknown_operation"
+            
+        return operation
+    except Exception:
+        # Fallback if parsing fails
+        return "unknown_operation" 

@@ -14,7 +14,7 @@ server = FastMCP(
 
 # Define resources
 
-@server.resource("unraid://system-info", 
+@server.resource("unraid://system/info", 
                 name="System Information",
                 description="Current system information including CPU, memory, and uptime",
                 mime_type="application/json")
@@ -147,7 +147,7 @@ async def stop_container(
         await ctx.error(f"Error stopping container: {str(e)}")
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
-@server.resource("unraid://array-status",
+@server.resource("unraid://array/status",
                 name="Array Status",
                 description="Current array status information",
                 mime_type="application/json")
@@ -181,7 +181,7 @@ async def array_status():
             code="ARRAY_STATUS_ERROR"
         )
 
-@server.resource("unraid://virtual-machines",
+@server.resource("unraid://vms/list",
                 name="Virtual Machines",
                 description="List of all virtual machines and their status",
                 mime_type="application/json")
@@ -334,7 +334,7 @@ async def stop_vm(
         await ctx.error(f"Error stopping VM: {str(e)}")
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
-@server.resource("unraid://shares",
+@server.resource("unraid://storage/shares",
                 name="Shares",
                 description="List of all user shares on the Unraid server",
                 mime_type="application/json")
@@ -361,7 +361,7 @@ async def shares():
             code="SHARES_LIST_ERROR"
         )
 
-@server.resource("unraid://plugins",
+@server.resource("unraid://system/plugins",
                 name="Plugins",
                 description="List of all installed plugins on the Unraid server",
                 mime_type="application/json")
@@ -385,6 +385,84 @@ async def plugins():
         return ErrorDiagnostic(
             message=f"Failed to retrieve plugins: {str(e)}",
             code="PLUGINS_LIST_ERROR"
+        )
+
+# Add a resource for getting information about a specific VM by name
+@server.resource("unraid://vms/{vm_name}",
+                name="Virtual Machine Details",
+                description="Get detailed information about a specific virtual machine",
+                mime_type="application/json")
+async def vm_details(vm_name: str):
+    """Get details for a specific virtual machine
+    
+    Args:
+        vm_name: The name of the virtual machine
+    """
+    query = """
+    query ($name: String!) {
+      vms(name: $name) {
+        name
+        status
+        memory
+        cores
+        diskSize
+        template
+        description
+        primaryGPU
+        cpuMode
+        machine
+      }
+    }
+    """
+    variables = {"name": vm_name}
+    
+    try:
+        result = await unraid.execute_query(query, variables)
+        return result["data"]["vms"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve VM details for {vm_name}: {str(e)}",
+            code="VM_DETAILS_ERROR"
+        )
+
+# Add a resource for getting information about a specific Docker container by name
+@server.resource("unraid://docker/{container_name}",
+                name="Docker Container Details",
+                description="Get detailed information about a specific Docker container",
+                mime_type="application/json")
+async def container_details(container_name: str):
+    """Get details for a specific Docker container
+    
+    Args:
+        container_name: The name of the Docker container
+    """
+    query = """
+    query ($name: String!) {
+      docker {
+        container(name: $name) {
+          name
+          status
+          state
+          image
+          autostart
+          created
+          repository
+          ports
+          volumes
+          environment
+        }
+      }
+    }
+    """
+    variables = {"name": container_name}
+    
+    try:
+        result = await unraid.execute_query(query, variables)
+        return result["data"]["docker"]["container"]
+    except Exception as e:
+        return ErrorDiagnostic(
+            message=f"Failed to retrieve container details for {container_name}: {str(e)}",
+            code="CONTAINER_DETAILS_ERROR"
         )
 
 # Run the server with appropriate transport
