@@ -1,0 +1,94 @@
+"""
+Unraid MCP Server - Main Server Module
+Provides MCP functionality for Unraid server management
+"""
+import asyncio
+import logging
+import os
+
+from mcp.server.fastmcp import FastMCP
+from unraid_client import UnraidClient
+
+# Import our modular components
+from src.config import Config, setup_logging
+from src.resources import register_all_resources
+from src.tools import register_all_tools
+
+
+class UnraidMCPServer:
+    """Unraid MCP Server class that manages all components"""
+    
+    def __init__(self):
+        """Initialize the Unraid MCP server"""
+        # Set up logging
+        self.logger = setup_logging()
+        self.logger.info("Initializing Unraid MCP Server")
+        
+        # Validate configuration
+        Config.validate()
+        
+        # Initialize the client
+        self.unraid = UnraidClient()
+        
+        # We'll configure logging via our setup_logging function
+        # MCP framework logging will be controlled through the debug parameter
+        
+        # Initialize the MCP server
+        self.server = FastMCP(
+            name="Unraid MCP Server",
+            instructions="Access and manage your Unraid server through natural language commands. You can query system information, manage Docker containers, VMs, and array operations.",
+            debug=False  # Disable debug printing
+        )
+        
+        # Register all resources and tools
+        self._register_resources_and_tools()
+        
+        self.logger.info("Unraid MCP Server initialized successfully")
+    
+    def _register_resources_and_tools(self):
+        """Register all resources and tools with the MCP server"""
+        self.logger.info("Registering resources and tools")
+        
+        # Register all resources and tools using the helper functions
+        register_all_resources(self.server, self.unraid)
+        register_all_tools(self.server, self.unraid)
+    
+    def run(self, transport=None):
+        """Run the MCP server with the specified transport
+        
+        Args:
+            transport: The transport type to use (stdio or sse, defaults to auto-detect)
+        """
+        # Detect transport type if not specified
+        if transport is None:
+            transport = "stdio" if Config.CLAUDE_MODE else "sse"
+        
+        self.logger.info(f"Starting Unraid MCP Server with {transport} transport")
+        
+        # Set up error handling
+        self.server.onerror = lambda error: self.logger.error(f"MCP Error: {error}")
+        
+        # Run the server
+        if transport == "stdio":
+            self.logger.info("Using stdio transport (for Claude/Cline)")
+            self.server.run(transport="stdio")
+        else:
+            self.logger.info(f"Using SSE transport on port {Config.SERVER_PORT}")
+            # For SSE transport, it appears the FastMCP doesn't directly accept host/port parameters
+            # The SSE server likely uses default values or environment variables
+            self.server.run(transport="sse")
+
+
+def main():
+    """Main entry point for the Unraid MCP Server"""
+    try:
+        # Create and run the server
+        server = UnraidMCPServer()
+        server.run()
+    except Exception as e:
+        logging.error(f"Fatal error: {str(e)}")
+        raise
+
+
+if __name__ == "__main__":
+    main()
