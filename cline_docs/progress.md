@@ -8,8 +8,12 @@
 - MCP server implementation (resources and tools)
 - Enhanced error handling and diagnostics
 - Added new resources (shares, plugins)
+- Added templated resources for individual VMs and containers
+- Improved resource URIs based on FastMCP examples
 - Improved documentation and logging
 - Production-ready server script with SSE transport
+- Successfully integrated with Claude Desktop using mcpServers configuration
+- Tested resource access and tool execution through Claude
 
 ## What's Left to Build
 1. **Project Structure**
@@ -21,6 +25,7 @@
    - [x] Implement UnraidClient class
    - [x] Add GraphQL query execution functionality
    - [x] Add error handling
+   - [x] Add enhanced query logging and debugging
 
 3. **MCP Server Implementation**
    - [x] Set up FastMCP server
@@ -32,6 +37,7 @@
    - [x] Implement additional tools
    - [x] Implement proper error diagnostics
    - [x] Add logging support
+   - [x] Add templated resources for individual items
 
 4. **Documentation**
    - [x] Create README.md
@@ -41,13 +47,31 @@
    - [x] Document available resources and tools
 
 5. **Testing**
-   - [ ] Test with MCP Inspector
-   - [ ] Test with Claude Desktop
-   - [ ] Address any issues found during testing
+   - [x] Test with MCP Inspector
+   - [x] Test with Claude Desktop
+   - [x] Address issues found during Claude/Cline integration
+
+6. **Claude/Cline Integration**
+   - [x] Create proper MCP settings configuration
+   - [x] Configure server to detect and use stdio transport when run by Claude/Cline
+   - [x] Implement optional ctx parameter for tools
+   - [x] Add enhanced logging for Claude/Cline integration
+   - [x] Test resources and tools through Cline
 
 ## Progress Status
 - Project structure and implementation complete
 - Improvements based on FastMCP examples and Unraid API documentation implemented
-- Added production-ready server script
+- Added standard resource URI structure following FastMCP patterns
+- Added templated resources for individual items (VMs, containers)
+- Added production-ready server script with dual transport mode (SSE and stdio)
 - Enhanced error handling and logging
-- Ready for testing with actual Unraid server 
+- Successfully integrated with Claude/Cline
+- Verified resources access working correctly with actual Unraid server
+- Successfully connected to Claude Desktop using mcpServers JSON configuration
+- Tested end-to-end functionality with Claude Desktop
+
+## Next Steps
+- Implement additional Unraid API features (user management, network configuration)
+- Add authentication and security features to the MCP server
+- Implement advanced features like WebSocket support and caching
+- Create Docker container for easy deployment

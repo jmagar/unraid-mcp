@@ -41,9 +41,39 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 
 4. Create a `.env` file with your Unraid API credentials:
    ```bash
-   cp .env.example .env
+   cp .env.template .env
    # Edit .env with your actual API URL and key
    ```
+
+## Unraid API Setup
+
+To use this MCP server, you need to set up the Unraid API on your Unraid server:
+
+1. Enable developer mode and the GraphQL sandbox using the CLI:
+   ```
+   unraid-api developer
+   ```
+   Follow the prompts to enable the sandbox.
+
+2. Create an API key with the necessary permissions:
+   ```
+   unraid-api apikey --create
+   ```
+   Follow the prompts to set the name, description, roles, and permissions.
+
+3. Configure your `.env` file with:
+   - `UNRAID_API_URL`: The GraphQL URL (e.g., `http://your-unraid-server-ip/graphql`)
+   - `UNRAID_API_KEY`: The API key you created
+
+4. Test the API using the GraphQL sandbox at `http://your-unraid-server-ip/graphql`
+
+> **Note**: The Unraid API uses the `x-api-key` header for authentication, not Bearer tokens.
+
+### Troubleshooting
+
+- If you get CORS errors, make sure your client includes the correct `Origin` header that matches the server's URL.
+- Ensure your API key has the necessary roles and permissions for the queries you're trying to execute.
+- Check that the GraphQL sandbox is enabled and accessible.
 
 ## Usage
 
@@ -62,7 +92,7 @@ For production use, you can run the server with SSE transport:
 1. Configure server settings in `.env`:
    ```
    # Unraid API Configuration
-   UNRAID_API_URL=https://your-unraid-server-ip/graphql
+   UNRAID_API_URL=http://your-unraid-server-ip/graphql
    UNRAID_API_KEY=your-api-key
    
    # MCP Server Configuration
@@ -150,6 +180,8 @@ Common issues:
 - Incorrect API URL or key in `.env` file
 - Network connectivity issues to Unraid server
 - Insufficient permissions for the API key
+- Developer mode not enabled on Unraid server
+- API key not having the necessary roles
 
 ## Contributing
 

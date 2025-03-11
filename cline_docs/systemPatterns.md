@@ -12,6 +12,11 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Implements the Model Context Protocol
    - Exposes resources (data sources) and tools (actions) for AI assistants
    - Handles request/response formatting
+   
+3. **Server Runner** (`run_server.py`)
+   - Handles server configuration and initialization
+   - Manages transport mode detection (stdio vs SSE)
+   - Configures and manages logging
 
 ## Key Technical Decisions
 1. **GraphQL for API Communication**
@@ -41,4 +46,4 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Using modern Python async patterns for I/O-bound operations
 
 4. **Factory Pattern**
-   - Creating appropriate content types (TextContent, ImageContent) based on the data 
+   - Creating appropriate content types (TextContent, ImageContent) based on the data

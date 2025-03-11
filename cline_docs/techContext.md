@@ -9,7 +9,7 @@
 - **FastMCP**: Python library for building MCP servers
 
 ### Dependencies
-- **mcp>=1.2.0**: Python MCP SDK with FastMCP implementation
+- **mcp>=1.3.0**: Python MCP SDK with FastMCP implementation
 - **aiohttp**: Asynchronous HTTP client/server for API requests
 - **python-dotenv**: For environment variable management
 
@@ -24,6 +24,33 @@
 3. Environment variables configured in `.env` file:
    - `UNRAID_API_URL`: URL of the Unraid GraphQL API (e.g., `https://your-unraid-server-ip/graphql`)
    - `UNRAID_API_KEY`: API key for authentication with Unraid
+   - `MCP_SERVER_HOST`: Host address for SSE transport (default: 127.0.0.1)
+   - `MCP_SERVER_PORT`: Port number for SSE transport (default: 8400)
+   - `LOG_LEVEL`: Logging level (INFO, DEBUG, etc.)
+   - `LOG_FILE`: Path to log file (default: unraid_mcp.log)
+4. MCP configuration for Cline/Claude integration:
+   - Configuration file: `cline_mcp_settings.json`
+   - Format:
+     ```json
+     {
+       "mcpServers": {
+         "unraid": {
+           "command": "/path/to/python",
+           "args": ["/path/to/unraid-mcp/run_server.py"],
+           "env": {
+             "UNRAID_API_URL": "http://your-unraid-server:port/graphql",
+             "UNRAID_API_KEY": "your-api-key",
+             "MCP_SERVER_HOST": "127.0.0.1",
+             "MCP_SERVER_PORT": "8400",
+             "LOG_LEVEL": "DEBUG",
+             "CLAUDE_MCP_SERVER": "true"
+           },
+           "disabled": false,
+           "autoApprove": []
+         }
+       }
+     }
+     ```
 
 ## Technical Constraints
 1. **API Access**: Requires valid API key with appropriate permissions on the Unraid server
@@ -34,4 +61,4 @@
 
 ## Testing Tools
 - **MCP Inspector**: For testing MCP server implementation (`pip install mcp-inspector`)
-- **Claude Desktop**: For integration testing with an AI assistant 
+- **Claude Desktop**: For integration testing with an AI assistant

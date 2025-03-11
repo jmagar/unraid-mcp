@@ -1,0 +1,1619 @@
+"""
+Indicates exactly one field must be supplied and this field must not be `null`.
+"""
+directive @oneOf on INPUT_OBJECT
+
+type Permission {
+  resource: Resource!
+  actions: [String!]!
+}
+
+type ApiKey {
+  id: ID!
+  name: String!
+  description: String
+  roles: [Role!]!
+  createdAt: DateTime!
+  permissions: [Permission!]!
+}
+
+type ApiKeyWithSecret {
+  id: ID!
+  key: String!
+  name: String!
+  description: String
+  roles: [Role!]!
+  createdAt: DateTime!
+  permissions: [Permission!]!
+}
+
+input CreateApiKeyInput {
+  name: String!
+  description: String
+  roles: [Role!]
+  permissions: [AddPermissionInput!]
+
+  """ This will replace the existing key if one already exists with the same name, otherwise returns the existing key 
+  """
+  overwrite: Boolean
+}
+
+input AddPermissionInput {
+  resource: Resource!
+  actions: [String!]!
+}
+
+input AddRoleForUserInput {
+  userId: ID!
+  role: Role!
+}
+
+input AddRoleForApiKeyInput {
+  apiKeyId: ID!
+  role: Role!
+}
+
+input RemoveRoleFromApiKeyInput {
+  apiKeyId: ID!
+  role: Role!
+}
+
+type Mutation {
+  createApiKey(input: CreateApiKeyInput!): ApiKeyWithSecret!
+  addPermission(input: AddPermissionInput!): Boolean!
+  addRoleForUser(input: AddRoleForUserInput!): Boolean!
+  addRoleForApiKey(input: AddRoleForApiKeyInput!): Boolean!
+  removeRoleFromApiKey(input: RemoveRoleFromApiKeyInput!): Boolean!
+
+  """Start array"""
+  startArray: Array
+
+  """Stop array"""
+  stopArray: Array
+
+  """Add new disk to array"""
+  addDiskToArray(input: arrayDiskInput): Array
+
+  """
+  Remove existing disk from array. NOTE: The array must be stopped before running this otherwise it'll throw an error.
+  """
+  removeDiskFromArray(input: arrayDiskInput): Array
+  mountArrayDisk(id: ID!): Disk
+  unmountArrayDisk(id: ID!): Disk
+  clearArrayDiskStatistics(id: ID!): JSON
+
+  """Start parity check"""
+  startParityCheck(correct: Boolean): JSON
+
+  """Pause parity check"""
+  pauseParityCheck: JSON
+
+  """Resume parity check"""
+  resumeParityCheck: JSON
+
+  """Cancel parity check"""
+  cancelParityCheck: JSON
+  login(username: String!, password: String!): String
+  shutdown: String
+  reboot: String
+  connectSignIn(input: ConnectSignInInput!): Boolean!
+  connectSignOut: Boolean!
+  enableDynamicRemoteAccess(input: EnableDynamicRemoteAccessInput!): Boolean!
+  setAdditionalAllowedOrigins(input: AllowedOriginInput!): [String!]!
+  setupRemoteAccess(input: SetupRemoteAccessInput!): Boolean!
+  createNotification(input: NotificationData!): Notification!
+  deleteNotification(id: String!, type: NotificationType!): NotificationOverview!
+
+  """Deletes all archived notifications on server."""
+  deleteArchivedNotifications: NotificationOverview!
+
+  """Marks a notification as archived."""
+  archiveNotification(id: String!): Notification!
+
+  """Marks a notification as unread."""
+  unreadNotification(id: String!): Notification!
+  archiveNotifications(ids: [String!]): NotificationOverview!
+  unarchiveNotifications(ids: [String!]): NotificationOverview!
+  archiveAll(importance: Importance): NotificationOverview!
+  unarchiveAll(importance: Importance): NotificationOverview!
+
+  """Reads each notification to recompute & update the overview."""
+  recalculateOverview: NotificationOverview!
+
+  """Add a new user"""
+  addUser(input: addUserInput!): User
+
+  """Delete a user"""
+  deleteUser(input: deleteUserInput!): User
+}
+
+type Query {
+  apiKeys: [ApiKey!]!
+  apiKey(id: ID!): ApiKey
+
+  """
+  An Unraid array consisting of 1 or 2 Parity disks and a number of Data disks.
+  """
+  array: Array!
+  parityHistory: [ParityCheck]
+  online: Boolean
+  info: Info
+  cloud: Cloud
+  config: Config!
+  remoteAccess: RemoteAccess!
+  extraAllowedOrigins: [String!]!
+  connect: Connect!
+
+  """Single disk"""
+  disk(id: ID!): Disk
+
+  """Mulitiple disks"""
+  disks: [Disk]!
+  display: Display
+
+  """All Docker containers"""
+  dockerContainers(all: Boolean): [DockerContainer!]!
+  docker: Docker!
+
+  """Docker network"""
+  dockerNetwork(id: ID!): DockerNetwork!
+
+  """All Docker networks"""
+  dockerNetworks(all: Boolean): [DockerNetwork]!
+  flash: Flash
+  network: Network
+  notifications: Notifications!
+  owner: Owner
+  registration: Registration
+  server: Server
+  servers: [Server!]!
+  services: [Service!]!
+
+  """Network Shares"""
+  shares: [Share]
+  unassignedDevices: [UnassignedDevice]
+
+  """Current user account"""
+  me: Me
+
+  """User account"""
+  user(id: ID!): User
+
+  """User accounts"""
+  users(input: usersInput): [User!]!
+  vars: Vars
+
+  """Virtual machines"""
+  vms: Vms
+}
+
+"""Available resources for permissions"""
+enum Resource {
+  api_key
+  array
+  cloud
+  config
+  connect
+  connect__remote_access
+  customizations
+  dashboard
+  disk
+  display
+  docker
+  flash
+  info
+  logs
+  me
+  network
+  notifications
+  online
+  os
+  owner
+  permission
+  registration
+  servers
+  services
+  share
+  vars
+  vms
+  welcome
+}
+
+"""Available roles for API keys and users"""
+enum Role {
+  admin
+  connect
+  guest
+}
+
+type Subscription {
+  array: Array!
+  parityHistory: ParityCheck!
+  ping: String!
+  info: Info!
+  online: Boolean!
+  config: Config!
+  display: Display
+  dockerContainer(id: ID!): DockerContainer!
+  dockerContainers: [DockerContainer]
+  dockerNetwork(id: ID!): DockerNetwork!
+  dockerNetworks: [DockerNetwork]!
+  flash: Flash!
+  notificationAdded: Notification!
+  notificationsOverview: NotificationOverview!
+  owner: Owner!
+  registration: Registration!
+  server: Server
+  service(name: String!): [Service!]
+  share(id: ID!): Share!
+  shares: [Share!]
+  unassignedDevices: [UnassignedDevice!]
+  me: Me
+  user(id: ID!): User!
+  users: [User]!
+  vars: Vars!
+  vms: Vms
+}
+
+input arrayDiskInput {
+  """Disk ID"""
+  id: ID!
+
+  """The slot for the disk"""
+  slot: Int
+}
+
+type Array implements Node {
+  id: ID!
+
+  """Array state before this query/mutation"""
+  previousState: ArrayState
+
+  """Array state after this query/mutation"""
+  pendingState: ArrayPendingState
+
+  """Current array state"""
+  state: ArrayState!
+
+  """Current array capacity"""
+  capacity: ArrayCapacity!
+
+  """Current boot disk"""
+  boot: ArrayDisk
+
+  """Parity disks in the current array"""
+  parities: [ArrayDisk!]!
+
+  """Data disks in the current array"""
+  disks: [ArrayDisk!]!
+
+  """Caches in the current array"""
+  caches: [ArrayDisk!]!
+}
+
+enum ArrayState {
+  """Array is running"""
+  STARTED
+
+  """Array has stopped"""
+  STOPPED
+
+  """Array has new disks"""
+  NEW_ARRAY
+
+  """A disk is being reconstructed"""
+  RECON_DISK
+
+  """A disk is disabled in the array"""
+  DISABLE_DISK
+
+  """Array is disabled"""
+  SWAP_DSBL
+
+  """Too many changes to array at the same time"""
+  INVALID_EXPANSION
+
+  """Parity isn't the biggest, can't start array"""
+  PARITY_NOT_BIGGEST
+
+  """Array has too many missing data disks"""
+  TOO_MANY_MISSING_DISKS
+
+  """Array has new disks they're too small"""
+  NEW_DISK_TOO_SMALL
+
+  """Array has no data disks"""
+  NO_DATA_DISKS
+}
+
+enum ArrayDiskStatus {
+  """ no disk present, no disk configured """
+  DISK_NP
+
+  """ enabled, disk present, correct, valid """
+  DISK_OK
+
+  """ enabled, but missing """
+  DISK_NP_MISSING
+
+  """ enabled, disk present, but not valid """
+  DISK_INVALID
+
+  """ enablled, disk present, but not correct disk """
+  DISK_WRONG
+
+  """ disabled, old disk still present """
+  DISK_DSBL
+
+  """ disabled, no disk present """
+  DISK_NP_DSBL
+
+  """ disabled, new disk present """
+  DISK_DSBL_NEW
+
+  """ new disk """
+  DISK_NEW
+}
+
+enum ArrayPendingState {
+  """Array is starting"""
+  starting
+
+  """Array is stopping"""
+  stopping
+
+  """Array has no data disks"""
+  no_data_disks
+
+  """Array has too many missing data disks"""
+  too_many_missing_disks
+}
+
+type ArrayCapacity {
+  kilobytes: Capacity!
+  disks: Capacity!
+}
+
+type Capacity {
+  free: String!
+  used: String!
+  total: String!
+}
+
+type ArrayDisk {
+  """ Disk indentifier, only set for present disks on the system """
+  id: ID!
+
+  """ Array slot number. Parity1 is always 0 and Parity2 is always 29. Array slots will be 1 - 28. Cache slots are 30 - 53. Flash is 54. 
+  """
+  idx: Int!
+  name: String
+  device: String
+
+  """ (KB) Disk Size total """
+  size: Long!
+  status: ArrayDiskStatus
+
+  """ Is the disk a HDD or SSD. """
+  rotational: Boolean
+
+  """ Disk temp - will be NaN if array is not started or DISK_NP """
+  temp: Int
+
+  """
+  Count of I/O read requests sent to the device I/O drivers. These statistics may be cleared at any time.
+  """
+  numReads: Long!
+
+  """
+  Count of I/O writes requests sent to the device I/O drivers. These statistics may be cleared at any time.
+  """
+  numWrites: Long!
+
+  """
+  Number of unrecoverable errors reported by the device I/O drivers. Missing data due to unrecoverable array read errors is filled in on-the-fly using parity reconstruct (and we attempt to write this data back to the sector(s) which failed). Any unrecoverable write error results in disabling the disk.
+  """
+  numErrors: Long!
+
+  """ (KB) Total Size of the FS (Not present on Parity type drive) """
+  fsSize: Long
+
+  """ (KB) Free Size on the FS (Not present on Parity type drive)"""
+  fsFree: Long
+
+  """ (KB) Used Size on the FS (Not present on Parity type drive)"""
+  fsUsed: Long
+  exportable: Boolean
+
+  """ Type of Disk - used to differentiate Cache / Flash / Array / Parity """
+  type: ArrayDiskType!
+
+  """ (%) Disk space left to warn """
+  warning: Int
+
+  """ (%) Disk space left for critical """
+  critical: Int
+
+  """ File system type for the disk """
+  fsType: String
+
+  """ User comment on disk """
+  comment: String
+
+  """ File format (ex MBR: 4KiB-aligned) """
+  format: String
+
+  """ ata | nvme | usb | (others)"""
+  transport: String
+}
+
+enum ArrayDiskType {
+  """Data disk"""
+  Data
+
+  """Parity disk"""
+  Parity
+
+  """Flash disk"""
+  Flash
+
+  """Cache disk"""
+  Cache
+}
+
+enum ArrayDiskFsColor {
+  """Disk is OK and running"""
+  green_on
+
+  """Disk is OK and not running"""
+  green_off
+  yellow_on
+  yellow_off
+  red_on
+  red_off
+}
+
+type ParityCheck {
+  date: String!
+  duration: Int!
+  speed: String!
+  status: String!
+  errors: String!
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON
+
+"""The `Long` scalar type represents 52-bit integers"""
+scalar Long
+
+"""
+A field whose value is a generic Universally Unique Identifier: https://en.wikipedia.org/wiki/Universally_unique_identifier.
+"""
+scalar UUID
+
+"""
+A date-time string at UTC, such as 2007-12-03T10:15:30Z, compliant with the `date-time` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar.
+"""
+scalar DateTime
+
+"""
+A field whose value is a valid TCP port within the range of 0 to 65535: https://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_ports
+"""
+scalar Port
+
+"""
+A field whose value conforms to the standard URL format as specified in RFC3986: https://www.ietf.org/rfc/rfc3986.txt.
+"""
+scalar URL
+
+type Welcome {
+  message: String!
+}
+
+interface Node {
+  id: ID!
+}
+
+type ApiKeyResponse {
+  valid: Boolean!
+  error: String
+}
+
+enum MinigraphStatus {
+  PRE_INIT
+  CONNECTING
+  CONNECTED
+  PING_FAILURE
+  ERROR_RETRYING
+}
+
+type MinigraphqlResponse {
+  status: MinigraphStatus!
+  timeout: Int
+  error: String
+}
+
+type CloudResponse {
+  status: String!
+  ip: String
+  error: String
+}
+
+type RelayResponse {
+  status: String!
+  timeout: String
+  error: String
+}
+
+type Cloud {
+  error: String
+  apiKey: ApiKeyResponse!
+  relay: RelayResponse
+  minigraphql: MinigraphqlResponse!
+  cloud: CloudResponse!
+  allowedOrigins: [String!]!
+}
+
+enum ConfigErrorState {
+  UNKNOWN_ERROR
+  INVALID
+  NO_KEY_SERVER
+  WITHDRAWN
+}
+
+type Config implements Node {
+  id: ID!
+  valid: Boolean
+  error: ConfigErrorState
+}
+
+input ConnectUserInfoInput {
+  preferred_username: String!
+  email: String!
+  avatar: String
+}
+
+input ConnectSignInInput {
+  apiKey: String!
+  idToken: String
+  userInfo: ConnectUserInfoInput
+  accessToken: String
+  refreshToken: String
+}
+
+input AllowedOriginInput {
+  origins: [String!]!
+}
+
+enum WAN_ACCESS_TYPE {
+  DYNAMIC
+  ALWAYS
+  DISABLED
+}
+
+enum WAN_FORWARD_TYPE {
+  UPNP
+  STATIC
+}
+
+type RemoteAccess {
+  accessType: WAN_ACCESS_TYPE!
+  forwardType: WAN_FORWARD_TYPE
+  port: Port
+}
+
+input SetupRemoteAccessInput {
+  accessType: WAN_ACCESS_TYPE!
+  forwardType: WAN_FORWARD_TYPE
+  port: Port
+}
+
+input EnableDynamicRemoteAccessInput {
+  url: AccessUrlInput!
+  enabled: Boolean!
+}
+
+enum DynamicRemoteAccessType {
+  STATIC
+  UPNP
+  DISABLED
+}
+
+type DynamicRemoteAccessStatus {
+  enabledType: DynamicRemoteAccessType!
+  runningType: DynamicRemoteAccessType!
+  error: String
+}
+
+type Connect implements Node {
+  id: ID!
+  dynamicRemoteAccess: DynamicRemoteAccessStatus!
+}
+
+type Disk {
+  device: String!
+  type: String!
+  name: String!
+  vendor: String!
+  size: Long!
+  bytesPerSector: Long!
+  totalCylinders: Long!
+  totalHeads: Long!
+  totalSectors: Long!
+  totalTracks: Long!
+  tracksPerCylinder: Long!
+  sectorsPerTrack: Long!
+  firmwareRevision: String!
+  serialNum: String!
+  interfaceType: DiskInterfaceType!
+  smartStatus: DiskSmartStatus!
+  temperature: Long!
+  partitions: [DiskPartition!]
+}
+
+type DiskPartition {
+  name: String!
+  fsType: DiskFsType!
+  size: Long!
+}
+
+enum DiskFsType {
+  xfs
+  btrfs
+  vfat
+  zfs
+}
+
+enum DiskInterfaceType {
+  SAS
+  SATA
+  USB
+  PCIe
+  UNKNOWN
+}
+
+enum DiskSmartStatus {
+  OK
+  UNKNOWN
+}
+
+type Display {
+  id: ID!
+  case: Case
+  date: String
+  number: String
+  scale: Boolean
+  tabs: Boolean
+  users: String
+  resize: Boolean
+  wwn: Boolean
+  total: Boolean
+  usage: Boolean
+  banner: String
+  dashapps: String
+  theme: Theme
+  text: Boolean
+  unit: Temperature
+  warning: Int
+  critical: Int
+  hot: Int
+  max: Int
+  locale: String
+}
+
+type Case {
+  icon: String
+  url: String
+  error: String
+  base64: String
+}
+
+enum ContainerPortType {
+  TCP
+  UDP
+}
+
+type ContainerPort {
+  ip: String
+  privatePort: Int
+  publicPort: Int
+  type: ContainerPortType
+}
+
+enum ContainerState {
+  RUNNING
+  EXITED
+}
+
+type ContainerHostConfig {
+  networkMode: String!
+}
+
+type ContainerMount {
+  type: String!
+  name: String!
+  source: String!
+  destination: String!
+  driver: String!
+  mode: String!
+  rw: Boolean!
+  propagation: String!
+}
+
+type DockerContainer {
+  id: ID!
+  names: [String!]
+  image: String!
+  imageId: String!
+  command: String!
+  created: Int!
+  ports: [ContainerPort!]!
+
+  """ (B) Total size of all the files in the container """
+  sizeRootFs: Long
+  labels: JSON
+  state: ContainerState!
+  status: String!
+  hostConfig: ContainerHostConfig
+  networkSettings: JSON
+  mounts: [JSON]
+  autoStart: Boolean!
+}
+
+type Docker implements Node {
+  id: ID!
+  containers: [DockerContainer!]
+  networks: [DockerNetwork!]
+}
+
+type DockerNetwork {
+  name: String
+  id: ID
+  created: String
+  scope: String
+  driver: String
+  enableIPv6: Boolean!
+  ipam: JSON
+  internal: Boolean!
+  attachable: Boolean!
+  ingress: Boolean!
+  configFrom: JSON
+  configOnly: Boolean!
+  containers: JSON
+  options: JSON
+  labels: JSON
+}
+
+type Flash {
+  guid: String
+  vendor: String
+  product: String
+}
+
+type Info implements Node {
+  """Count of docker containers"""
+  apps: InfoApps
+  baseboard: Baseboard
+  cpu: InfoCpu
+  devices: Devices
+  display: Display
+  id: ID!
+
+  """Machine ID"""
+  machineId: ID
+  memory: InfoMemory
+  os: Os
+  system: System
+  time: DateTime!
+  versions: Versions
+}
+
+type InfoApps {
+  """How many docker containers are installed"""
+  installed: Int
+
+  """How many docker containers are running"""
+  started: Int
+}
+
+type Baseboard {
+  manufacturer: String!
+  model: String
+  version: String
+  serial: String
+  assetTag: String
+}
+
+type InfoCpu {
+  manufacturer: String!
+  brand: String!
+  vendor: String!
+  family: String!
+  model: String!
+  stepping: Int!
+  revision: String!
+  voltage: String
+  speed: Float!
+  speedmin: Float!
+  speedmax: Float!
+  threads: Int!
+  cores: Int!
+  processors: Long!
+  socket: String!
+  cache: JSON!
+  flags: [String!]
+}
+
+type Devices {
+  gpu: [Gpu]
+  network: [Network]
+  pci: [Pci]
+  usb: [Usb]
+}
+
+type Gpu {
+  id: ID!
+  type: String!
+  typeid: String!
+  vendorname: String!
+  productid: String!
+  blacklisted: Boolean!
+  class: String!
+}
+
+type Network implements Node {
+  iface: String
+  ifaceName: String
+  ipv4: String
+  ipv6: String
+  mac: String
+  internal: String
+  operstate: String
+  type: String
+  duplex: String
+  mtu: String
+  speed: String
+  carrierChanges: String
+  id: ID!
+  accessUrls: [AccessUrl!]
+}
+
+type Pci {
+  id: ID!
+  type: String
+  typeid: String
+  vendorname: String
+  vendorid: String
+  productname: String
+  productid: String
+  blacklisted: String
+  class: String
+}
+
+type Usb {
+  id: ID!
+  name: String
+}
+
+enum Temperature {
+  C
+  F
+}
+
+enum Theme {
+  white
+}
+
+type InfoMemory {
+  max: Long!
+  total: Long!
+  free: Long!
+  used: Long!
+  active: Long!
+  available: Long!
+  buffcache: Long!
+  swaptotal: Long!
+  swapused: Long!
+  swapfree: Long!
+  layout: [MemoryLayout!]
+}
+
+type MemoryLayout {
+  size: Long!
+  bank: String
+  type: MemoryType
+  clockSpeed: Long
+  formFactor: MemoryFormFactor
+  manufacturer: String
+  partNum: String
+  serialNum: String
+  voltageConfigured: Long
+  voltageMin: Long
+  voltageMax: Long
+}
+
+enum MemoryType {
+  DDR2
+  DDR3
+  DDR4
+}
+
+enum MemoryFormFactor {
+  DIMM
+}
+
+type Os {
+  platform: String
+  distro: String
+  release: String
+  codename: String
+  kernel: String
+  arch: String
+  hostname: String
+  codepage: String
+  logofile: String
+  serial: String
+  build: String
+  uptime: DateTime
+}
+
+type System {
+  manufacturer: String
+  model: String
+  version: String
+  serial: String
+  uuid: String
+  sku: String
+}
+
+type Versions {
+  kernel: String
+  openssl: String
+  systemOpenssl: String
+  systemOpensslLib: String
+  node: String
+  v8: String
+  npm: String
+  yarn: String
+  pm2: String
+  gulp: String
+  grunt: String
+  git: String
+  tsc: String
+  mysql: String
+  redis: String
+  mongodb: String
+  apache: String
+  nginx: String
+  php: String
+  docker: String
+  postfix: String
+  postgresql: String
+  perl: String
+  python: String
+  gcc: String
+  unraid: String
+}
+
+enum URL_TYPE {
+  LAN
+  WIREGUARD
+  WAN
+  MDNS
+  OTHER
+  DEFAULT
+}
+
+input AccessUrlInput {
+  type: URL_TYPE!
+  name: String
+  ipv4: URL
+  ipv6: URL
+}
+
+type AccessUrl {
+  type: URL_TYPE!
+  name: String
+  ipv4: URL
+  ipv6: URL
+}
+
+enum NotificationType {
+  UNREAD
+  ARCHIVE
+}
+
+input NotificationFilter {
+  importance: Importance
+  type: NotificationType
+  offset: Int!
+  limit: Int!
+}
+
+enum Importance {
+  ALERT
+  INFO
+  WARNING
+}
+
+type Notifications implements Node {
+  id: ID!
+
+  """A cached overview of the notifications in the system & their severity."""
+  overview: NotificationOverview!
+  list(filter: NotificationFilter!): [Notification!]!
+}
+
+type Notification implements Node {
+  id: ID!
+
+  """Also known as 'event'"""
+  title: String!
+  subject: String!
+  description: String!
+  importance: Importance!
+  link: String
+  type: NotificationType!
+
+  """ISO Timestamp for when the notification occurred"""
+  timestamp: String
+  formattedTimestamp: String
+}
+
+input NotificationData {
+  title: String!
+  subject: String!
+  description: String!
+  importance: Importance!
+  link: String
+}
+
+type NotificationOverview {
+  unread: NotificationCounts!
+  archive: NotificationCounts!
+}
+
+type NotificationCounts {
+  info: Int!
+  warning: Int!
+  alert: Int!
+  total: Int!
+}
+
+type Owner {
+  username: String
+  url: String
+  avatar: String
+}
+
+type KeyFile {
+  location: String
+  contents: String
+}
+
+type Registration {
+  guid: String
+  type: registrationType
+  keyFile: KeyFile
+  state: RegistrationState
+  expiration: String
+  updateExpiration: String
+}
+
+enum ServerStatus {
+  online
+  offline
+  never_connected
+}
+
+type ProfileModel {
+  userId: ID
+  username: String
+  url: String
+  avatar: String
+}
+
+type Server {
+  owner: ProfileModel!
+  guid: String!
+  apikey: String!
+  name: String!
+  status: ServerStatus!
+  wanip: String!
+  lanip: String!
+  localurl: String!
+  remoteurl: String!
+}
+
+type Uptime {
+  timestamp: String
+}
+
+type Service implements Node {
+  id: ID!
+  name: String
+  online: Boolean
+  uptime: Uptime
+  version: String
+}
+
+"""Network Share"""
+type Share {
+  """Display name"""
+  name: String
+
+  """(KB) Free space"""
+  free: Long
+
+  """(KB) Used Size"""
+  used: Long
+
+  """(KB) Total size"""
+  size: Long
+
+  """Disks that're included in this share"""
+  include: [String]
+
+  """Disks that're excluded from this share"""
+  exclude: [String]
+  cache: Boolean
+  nameOrig: String
+
+  """User comment"""
+  comment: String
+  allocator: String
+  splitLevel: String
+  floor: String
+  cow: String
+  color: String
+  luksStatus: String
+}
+
+type Mount {
+  name: String
+  directory: String
+  type: String
+  permissions: String
+}
+
+type Partition {
+  devlinks: String
+  devname: String
+  devpath: String
+  devtype: String
+  idAta: String
+  idAtaDownloadMicrocode: String
+  idAtaFeatureSetAam: String
+  idAtaFeatureSetAamCurrentValue: String
+  idAtaFeatureSetAamEnabled: String
+  idAtaFeatureSetAamVendorRecommendedValue: String
+  idAtaFeatureSetApm: String
+  idAtaFeatureSetApmCurrentValue: String
+  idAtaFeatureSetApmEnabled: String
+  idAtaFeatureSetHpa: String
+  idAtaFeatureSetHpaEnabled: String
+  idAtaFeatureSetPm: String
+  idAtaFeatureSetPmEnabled: String
+  idAtaFeatureSetPuis: String
+  idAtaFeatureSetPuisEnabled: String
+  idAtaFeatureSetSecurity: String
+  idAtaFeatureSetSecurityEnabled: String
+  idAtaFeatureSetSecurityEnhancedEraseUnitMin: String
+  idAtaFeatureSetSecurityEraseUnitMin: String
+  idAtaFeatureSetSmart: String
+  idAtaFeatureSetSmartEnabled: String
+  idAtaRotationRateRpm: String
+  idAtaSata: String
+  idAtaSataSignalRateGen1: String
+  idAtaSataSignalRateGen2: String
+  idAtaWriteCache: String
+  idAtaWriteCacheEnabled: String
+  idBus: String
+  idFsType: String
+  idFsUsage: String
+  idFsUuid: String
+  idFsUuidEnc: String
+  idModel: String
+  idModelEnc: String
+  idPartEntryDisk: String
+  idPartEntryNumber: String
+  idPartEntryOffset: String
+  idPartEntryScheme: String
+  idPartEntrySize: String
+  idPartEntryType: String
+  idPartTableType: String
+  idPath: String
+  idPathTag: String
+  idRevision: String
+  idSerial: String
+  idSerialShort: String
+  idType: String
+  idWwn: String
+  idWwnWithExtension: String
+  major: String
+  minor: String
+  partn: String
+  subsystem: String
+  usecInitialized: String
+}
+
+type UnassignedDevice {
+  devlinks: String
+  devname: String
+  devpath: String
+  devtype: String
+  idAta: String
+  idAtaDownloadMicrocode: String
+  idAtaFeatureSetAam: String
+  idAtaFeatureSetAamCurrentValue: String
+  idAtaFeatureSetAamEnabled: String
+  idAtaFeatureSetAamVendorRecommendedValue: String
+  idAtaFeatureSetApm: String
+  idAtaFeatureSetApmCurrentValue: String
+  idAtaFeatureSetApmEnabled: String
+  idAtaFeatureSetHpa: String
+  idAtaFeatureSetHpaEnabled: String
+  idAtaFeatureSetPm: String
+  idAtaFeatureSetPmEnabled: String
+  idAtaFeatureSetPuis: String
+  idAtaFeatureSetPuisEnabled: String
+  idAtaFeatureSetSecurity: String
+  idAtaFeatureSetSecurityEnabled: String
+  idAtaFeatureSetSecurityEnhancedEraseUnitMin: String
+  idAtaFeatureSetSecurityEraseUnitMin: String
+  idAtaFeatureSetSmart: String
+  idAtaFeatureSetSmartEnabled: String
+  idAtaRotationRateRpm: String
+  idAtaSata: String
+  idAtaSataSignalRateGen1: String
+  idAtaSataSignalRateGen2: String
+  idAtaWriteCache: String
+  idAtaWriteCacheEnabled: String
+  idBus: String
+  idModel: String
+  idModelEnc: String
+  idPartTableType: String
+  idPath: String
+  idPathTag: String
+  idRevision: String
+  idSerial: String
+  idSerialShort: String
+  idType: String
+  idWwn: String
+  idWwnWithExtension: String
+  major: String
+  minor: String
+  subsystem: String
+  usecInitialized: String
+  partitions: [Partition]
+  temp: Int
+  name: String
+  mounted: Boolean
+  mount: Mount
+}
+
+"""The current user"""
+type Me implements UserAccount {
+  id: ID!
+  name: String!
+  description: String!
+  roles: [Role!]!
+  permissions: [Permission!]
+}
+
+interface UserAccount {
+  id: ID!
+  name: String!
+  description: String!
+  roles: [Role!]!
+  permissions: [Permission!]
+}
+
+input usersInput {
+  slim: Boolean
+}
+
+input addUserInput {
+  name: String!
+  password: String!
+  description: String
+}
+
+input deleteUserInput {
+  name: String!
+}
+
+"""A local user account"""
+type User implements UserAccount {
+  id: ID!
+
+  """A unique name for the user"""
+  name: String!
+  description: String!
+  roles: [Role!]!
+
+  """If the account has a password set"""
+  password: Boolean
+  permissions: [Permission!]
+}
+
+type Vars implements Node {
+  id: ID!
+
+  """Unraid version"""
+  version: String
+  maxArraysz: Int
+  maxCachesz: Int
+
+  """Machine hostname"""
+  name: String
+  timeZone: String
+  comment: String
+  security: String
+  workgroup: String
+  domain: String
+  domainShort: String
+  hideDotFiles: Boolean
+  localMaster: Boolean
+  enableFruit: String
+
+  """Should a NTP server be used for time sync?"""
+  useNtp: Boolean
+
+  """NTP Server 1"""
+  ntpServer1: String
+
+  """NTP Server 2"""
+  ntpServer2: String
+
+  """NTP Server 3"""
+  ntpServer3: String
+
+  """NTP Server 4"""
+  ntpServer4: String
+  domainLogin: String
+  sysModel: String
+  sysArraySlots: Int
+  sysCacheSlots: Int
+  sysFlashSlots: Int
+  useSsl: Boolean
+
+  """Port for the webui via HTTP"""
+  port: Int
+
+  """Port for the webui via HTTPS"""
+  portssl: Int
+  localTld: String
+  bindMgt: Boolean
+
+  """Should telnet be enabled?"""
+  useTelnet: Boolean
+  porttelnet: Int
+  useSsh: Boolean
+  portssh: Int
+  startPage: String
+  startArray: Boolean
+  spindownDelay: String
+  queueDepth: String
+  spinupGroups: Boolean
+  defaultFormat: String
+  defaultFsType: String
+  shutdownTimeout: Int
+  luksKeyfile: String
+  pollAttributes: String
+  pollAttributesDefault: String
+  pollAttributesStatus: String
+  nrRequests: Int
+  nrRequestsDefault: Int
+  nrRequestsStatus: String
+  mdNumStripes: Int
+  mdNumStripesDefault: Int
+  mdNumStripesStatus: String
+  mdSyncWindow: Int
+  mdSyncWindowDefault: Int
+  mdSyncWindowStatus: String
+  mdSyncThresh: Int
+  mdSyncThreshDefault: Int
+  mdSyncThreshStatus: String
+  mdWriteMethod: Int
+  mdWriteMethodDefault: String
+  mdWriteMethodStatus: String
+  shareDisk: String
+  shareUser: String
+  shareUserInclude: String
+  shareUserExclude: String
+  shareSmbEnabled: Boolean
+  shareNfsEnabled: Boolean
+  shareAfpEnabled: Boolean
+  shareInitialOwner: String
+  shareInitialGroup: String
+  shareCacheEnabled: Boolean
+  shareCacheFloor: String
+  shareMoverSchedule: String
+  shareMoverLogging: Boolean
+  fuseRemember: String
+  fuseRememberDefault: String
+  fuseRememberStatus: String
+  fuseDirectio: String
+  fuseDirectioDefault: String
+  fuseDirectioStatus: String
+  shareAvahiEnabled: Boolean
+  shareAvahiSmbName: String
+  shareAvahiSmbModel: String
+  shareAvahiAfpName: String
+  shareAvahiAfpModel: String
+  safeMode: Boolean
+  startMode: String
+  configValid: Boolean
+  configError: ConfigErrorState
+  joinStatus: String
+  deviceCount: Int
+  flashGuid: String
+  flashProduct: String
+  flashVendor: String
+  regCheck: String
+  regFile: String
+  regGuid: String
+  regTy: String
+  regState: RegistrationState
+
+  """Registration owner"""
+  regTo: String
+  regTm: String
+  regTm2: String
+  regGen: String
+  sbName: String
+  sbVersion: String
+  sbUpdated: String
+  sbEvents: Int
+  sbState: String
+  sbClean: Boolean
+  sbSynced: Int
+  sbSyncErrs: Int
+  sbSynced2: Int
+  sbSyncExit: String
+  sbNumDisks: Int
+  mdColor: String
+  mdNumDisks: Int
+  mdNumDisabled: Int
+  mdNumInvalid: Int
+  mdNumMissing: Int
+  mdNumNew: Int
+  mdNumErased: Int
+  mdResync: Int
+  mdResyncCorr: String
+  mdResyncPos: String
+  mdResyncDb: String
+  mdResyncDt: String
+  mdResyncAction: String
+  mdResyncSize: Int
+  mdState: String
+  mdVersion: String
+  cacheNumDevices: Int
+  cacheSbNumDisks: Int
+  fsState: String
+
+  """Human friendly string of array events happening"""
+  fsProgress: String
+
+  """
+  Percentage from 0 - 100 while upgrading a disk or swapping parity drives
+  """
+  fsCopyPrcnt: Int
+  fsNumMounted: Int
+  fsNumUnmountable: Int
+  fsUnmountableMask: String
+
+  """Total amount of user shares"""
+  shareCount: Int
+
+  """Total amount shares with SMB enabled"""
+  shareSmbCount: Int
+
+  """Total amount shares with NFS enabled"""
+  shareNfsCount: Int
+
+  """Total amount shares with AFP enabled"""
+  shareAfpCount: Int
+  shareMoverActive: Boolean
+  csrfToken: String
+}
+
+enum mdState {
+  SWAP_DSBL
+  STARTED
+}
+
+enum registrationType {
+  BASIC
+  PLUS
+  PRO
+  STARTER
+  UNLEASHED
+  LIFETIME
+  INVALID
+  TRIAL
+}
+
+enum RegistrationState {
+  TRIAL
+  BASIC
+  PLUS
+  PRO
+  STARTER
+  UNLEASHED
+  LIFETIME
+
+  """Trial Expired"""
+  EEXPIRED
+
+  """GUID Error"""
+  EGUID
+
+  """Multiple License Keys Present"""
+  EGUID1
+
+  """Invalid installation"""
+  ETRIAL
+
+  """No Keyfile"""
+  ENOKEYFILE
+
+  """No Keyfile"""
+  ENOKEYFILE1
+
+  """Missing key file"""
+  ENOKEYFILE2
+
+  """No Flash"""
+  ENOFLASH
+  ENOFLASH1
+  ENOFLASH2
+  ENOFLASH3
+  ENOFLASH4
+  ENOFLASH5
+  ENOFLASH6
+  ENOFLASH7
+
+  """BLACKLISTED"""
+  EBLACKLISTED
+
+  """BLACKLISTED"""
+  EBLACKLISTED1
+
+  """BLACKLISTED"""
+  EBLACKLISTED2
+
+  """Trial Requires Internet Connection"""
+  ENOCONN
+}
+
+type Vms {
+  id: ID!
+  domain: [VmDomain!]
+}
+
+enum VmState {
+  NOSTATE
+  RUNNING
+  IDLE
+  PAUSED
+  SHUTDOWN
+  SHUTOFF
+  CRASHED
+  PMSUSPENDED
+}
+
+"""A virtual machine"""
+type VmDomain {
+  uuid: ID!
+
+  """A friendly name for the vm"""
+  name: String
+
+  """Current domain vm state"""
+  state: VmState!
+}

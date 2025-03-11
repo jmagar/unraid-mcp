@@ -1,9 +1,11 @@
 from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent, ImageContent, ErrorDiagnostic
-from unraid_client import UnraidClient
+from mcp.types import TextContent, ImageContent
+from unraid_client import UnraidClient, UnraidApiError
 import json
 import asyncio
 from typing import Optional, List, Dict, Any, Union
+import os
+from dotenv import load_dotenv
 
 # Initialize the client and server
 unraid = UnraidClient()
@@ -20,29 +22,15 @@ server = FastMCP(
                 mime_type="application/json")
 async def system_info():
     """Get current system information from Unraid server"""
-    query = """
-    query {
-      system {
-        hostname
-        version
-        cpuModel
-        cpuCount
-        cpuFrequency
-        cpuUsage
-        memoryTotal
-        memoryUsed
-        uptime
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(query)
-        return result["data"]["system"]
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.get_system_info()
+        return result
+    except UnraidApiError as e:
+        # Return error as JSON instead of using ErrorDiagnostic
+        return {"error": f"Failed to retrieve system information: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve system information: {str(e)}",
-            code="SYSTEM_INFO_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving system information: {str(e)}"}
 
 @server.resource("unraid://docker/containers",
                 name="Docker Containers",
@@ -50,42 +38,31 @@ async def system_info():
                 mime_type="application/json")
 async def docker_containers():
     """List all Docker containers and their status"""
-    query = """
-    query {
-      docker {
-        containers {
-          name
-          status
-          state
-          image
-          autostart
-          created
-        }
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(query)
-        return result["data"]["docker"]["containers"]
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.get_docker_containers()
+        return result
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve Docker containers: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve Docker containers: {str(e)}",
-            code="DOCKER_CONTAINERS_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving Docker containers: {str(e)}"}
 
 # Define tools
 
 @server.tool(description="Start a Docker container by name")
 async def start_container(
     container_name: str, 
-    ctx
+    ctx=None
 ):
     """Start a Docker container by name
     
     Args:
         container_name: The name of the container to start
     """
-    await ctx.info(f"Starting container: {container_name}")
+    if ctx:
+        await ctx.info(f"Starting container: {container_name}")
+    else:
+        print(f"Starting container: {container_name}")
     
     mutation = """
     mutation ($name: String!) {
@@ -107,21 +84,35 @@ async def start_container(
             return TextContent(text=f"✅ Container {container_name} started successfully")
         else:
             return TextContent(text=f"❌ Failed to start container: {response['message']}")
+    except UnraidApiError as e:
+        error_msg = f"API error starting container: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error starting container: {str(e)}")
+        error_msg = f"Error starting container: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop a Docker container by name")
 async def stop_container(
     container_name: str,
-    ctx
+    ctx=None
 ):
     """Stop a Docker container by name
     
     Args:
         container_name: The name of the container to stop
     """
-    await ctx.info(f"Stopping container: {container_name}")
+    if ctx:
+        await ctx.info(f"Stopping container: {container_name}")
+    else:
+        print(f"Stopping container: {container_name}")
     
     mutation = """
     mutation ($name: String!) {
@@ -143,8 +134,19 @@ async def stop_container(
             return TextContent(text=f"✅ Container {container_name} stopped successfully")
         else:
             return TextContent(text=f"❌ Failed to stop container: {response['message']}")
+    except UnraidApiError as e:
+        error_msg = f"API error stopping container: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error stopping container: {str(e)}")
+        error_msg = f"Error stopping container: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.resource("unraid://array/status",
@@ -153,33 +155,14 @@ async def stop_container(
                 mime_type="application/json")
 async def array_status():
     """Get current array status information"""
-    query = """
-    query {
-      array {
-        status
-        started
-        protected
-        size
-        used
-        free
-        disks {
-          name
-          size
-          free
-          device
-          status
-        }
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(query)
-        return result["data"]["array"]
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.get_array_status()
+        return result
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve array status: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve array status: {str(e)}",
-            code="ARRAY_STATUS_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving array status: {str(e)}"}
 
 @server.resource("unraid://vms/list",
                 name="Virtual Machines",
@@ -187,92 +170,83 @@ async def array_status():
                 mime_type="application/json")
 async def virtual_machines():
     """List all virtual machines and their status"""
-    query = """
-    query {
-      vms {
-        name
-        status
-        memory
-        cores
-        diskSize
-        template
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(query)
-        return result["data"]["vms"]
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.get_vms()
+        return result
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve virtual machines: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve virtual machines: {str(e)}",
-            code="VM_LIST_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving virtual machines: {str(e)}"}
 
 @server.tool(description="Start the Unraid array")
-async def start_array(ctx):
+async def start_array(ctx=None):
     """Start the Unraid array"""
-    await ctx.info("Starting array...")
+    if ctx:
+        await ctx.info("Starting array...")
+    else:
+        print("Starting array...")
     
-    mutation = """
-    mutation {
-      array {
-        start {
-          success
-          message
-        }
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(mutation)
-        
-        response = result["data"]["array"]["start"]
-        if response["success"]:
-            return TextContent(text="✅ Array started successfully")
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.start_array()
+        return TextContent(text="✅ Array started successfully")
+    except UnraidApiError as e:
+        error_msg = f"API error starting array: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
         else:
-            return TextContent(text=f"❌ Failed to start array: {response['message']}")
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error starting array: {str(e)}")
+        error_msg = f"Error starting array: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop the Unraid array")
-async def stop_array(ctx):
+async def stop_array(ctx=None):
     """Stop the Unraid array"""
-    await ctx.info("Stopping array...")
+    if ctx:
+        await ctx.info("Stopping array...")
+    else:
+        print("Stopping array...")
     
-    mutation = """
-    mutation {
-      array {
-        stop {
-          success
-          message
-        }
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(mutation)
-        
-        response = result["data"]["array"]["stop"]
-        if response["success"]:
-            return TextContent(text="✅ Array stopped successfully")
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.stop_array()
+        return TextContent(text="✅ Array stopped successfully")
+    except UnraidApiError as e:
+        error_msg = f"API error stopping array: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
         else:
-            return TextContent(text=f"❌ Failed to stop array: {response['message']}")
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error stopping array: {str(e)}")
+        error_msg = f"Error stopping array: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Start a virtual machine by name")
 async def start_vm(
     vm_name: str, 
-    ctx
+    ctx=None
 ):
     """Start a virtual machine by name
     
     Args:
         vm_name: The name of the virtual machine to start
     """
-    await ctx.info(f"Starting VM: {vm_name}")
+    if ctx:
+        await ctx.info(f"Starting VM: {vm_name}")
+    else:
+        print(f"Starting VM: {vm_name}")
     
     mutation = """
     mutation ($name: String!) {
@@ -294,21 +268,35 @@ async def start_vm(
             return TextContent(text=f"✅ VM {vm_name} started successfully")
         else:
             return TextContent(text=f"❌ Failed to start VM: {response['message']}")
+    except UnraidApiError as e:
+        error_msg = f"API error starting VM: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error starting VM: {str(e)}")
+        error_msg = f"Error starting VM: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.tool(description="Stop a virtual machine by name")
 async def stop_vm(
     vm_name: str, 
-    ctx
+    ctx=None
 ):
     """Stop a virtual machine by name
     
     Args:
         vm_name: The name of the virtual machine to stop
     """
-    await ctx.info(f"Stopping VM: {vm_name}")
+    if ctx:
+        await ctx.info(f"Stopping VM: {vm_name}")
+    else:
+        print(f"Stopping VM: {vm_name}")
     
     mutation = """
     mutation ($name: String!) {
@@ -330,8 +318,19 @@ async def stop_vm(
             return TextContent(text=f"✅ VM {vm_name} stopped successfully")
         else:
             return TextContent(text=f"❌ Failed to stop VM: {response['message']}")
+    except UnraidApiError as e:
+        error_msg = f"API error stopping VM: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
+        return TextContent(text=f"❌ API error: {str(e)}")
     except Exception as e:
-        await ctx.error(f"Error stopping VM: {str(e)}")
+        error_msg = f"Error stopping VM: {str(e)}"
+        if ctx:
+            await ctx.error(error_msg)
+        else:
+            print(error_msg)
         return TextContent(text=f"❌ Error occurred: {str(e)}")
 
 @server.resource("unraid://storage/shares",
@@ -340,26 +339,14 @@ async def stop_vm(
                 mime_type="application/json")
 async def shares():
     """List all user shares"""
-    query = """
-    query {
-      shares {
-        name
-        comment
-        free
-        size
-        cache
-        exportEnabled
-      }
-    }
-    """
     try:
-        result = await unraid.execute_query(query)
-        return result["data"]["shares"]
+        # Use the client's method instead of raw GraphQL
+        result = await unraid.get_shares()
+        return result
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve shares: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve shares: {str(e)}",
-            code="SHARES_LIST_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving shares: {str(e)}"}
 
 @server.resource("unraid://system/plugins",
                 name="Plugins",
@@ -381,11 +368,10 @@ async def plugins():
     try:
         result = await unraid.execute_query(query)
         return result["data"]["plugins"]
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve plugins: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve plugins: {str(e)}",
-            code="PLUGINS_LIST_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving plugins: {str(e)}"}
 
 # Add a resource for getting information about a specific VM by name
 @server.resource("unraid://vms/{vm_name}",
@@ -419,11 +405,10 @@ async def vm_details(vm_name: str):
     try:
         result = await unraid.execute_query(query, variables)
         return result["data"]["vms"]
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve VM details for {vm_name}: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve VM details for {vm_name}: {str(e)}",
-            code="VM_DETAILS_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving VM details for {vm_name}: {str(e)}"}
 
 # Add a resource for getting information about a specific Docker container by name
 @server.resource("unraid://docker/{container_name}",
@@ -459,14 +444,38 @@ async def container_details(container_name: str):
     try:
         result = await unraid.execute_query(query, variables)
         return result["data"]["docker"]["container"]
+    except UnraidApiError as e:
+        return {"error": f"Failed to retrieve container details for {container_name}: {str(e)}"}
     except Exception as e:
-        return ErrorDiagnostic(
-            message=f"Failed to retrieve container details for {container_name}: {str(e)}",
-            code="CONTAINER_DETAILS_ERROR"
-        )
+        return {"error": f"Unexpected error retrieving container details for {container_name}: {str(e)}"}
+
+# Set up logging for the server
+import logging
+logger = logging.getLogger("unraid_mcp")
+logger.info("Initialized Unraid MCP Server")
 
 # Run the server with appropriate transport
 if __name__ == "__main__":
-    # For local development, use stdio transport
-    # In production, you might use the SSE transport instead
-    server.run(transport="stdio") 
+    # Load environment variables
+    load_dotenv()
+    
+    # Get server configuration from environment variables
+    host = os.getenv("MCP_SERVER_HOST", "127.0.0.1")
+    port = int(os.getenv("MCP_SERVER_PORT", "8400"))
+    
+    print(f"Starting Unraid MCP Server (MCP 1.3.0 uses default host/port)")
+    
+    # Set up logging for the server
+    import logging
+    logger = logging.getLogger("unraid_mcp")
+    logger.info("Server initialization complete, ready to process requests")
+    
+    # Detect if running under Claude/Cline
+    claude_mode = os.getenv("CLAUDE_MCP_SERVER", "false").lower() in ("true", "1", "yes")
+    
+    if claude_mode:
+        print("Detected Claude/Cline environment, using stdio transport")
+        server.run(transport="stdio")
+    else:
+        print("Using SSE transport on port", port)
+        server.run(transport="sse")
