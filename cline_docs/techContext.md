@@ -12,6 +12,8 @@
 - **mcp>=1.3.0**: Python MCP SDK with FastMCP implementation
 - **aiohttp**: Asynchronous HTTP client/server for API requests
 - **python-dotenv**: For environment variable management
+- **logging**: Enhanced Python logging with multiple handlers
+- **json**: JSON parsing for API responses
 
 ### External APIs
 - **Unraid GraphQL API**: Core API for interacting with Unraid server
@@ -58,6 +60,32 @@
 3. **Rate Limiting**: Be mindful of potential rate limits on the Unraid API
 4. **Security**: API keys and sensitive data should be properly secured
 5. **Error Handling**: Must handle API failures and network issues gracefully
+6. **Schema Compatibility**: GraphQL schema may have nullable fields that require careful query design
+7. **Timeout Configuration**: Some operations (particularly disk-related) may take longer and require extended timeouts
+8. **Logging System**: Comprehensive logging needed for debugging and monitoring
+
+## Technical Implementation Details
+1. **Enhanced Error Handling**:
+   - Proper handling of GraphQL errors from the Unraid API
+   - Timeout management for longer operations
+   - Validation of nested fields in responses
+   - Graceful degradation when fields are missing
+
+2. **Logging System**:
+   - Console and file outputs for comprehensive visibility
+   - Multi-level logging (DEBUG, INFO, WARNING, ERROR)
+   - Detailed context in log messages
+   - Stack traces for error diagnostics
+
+3. **Query Optimization**:
+   - Simplified queries to avoid schema incompatibilities
+   - Only requesting essential fields to minimize errors
+   - Handling nested fields properly
+
+4. **Timeout Management**:
+   - Extended timeouts (60 seconds) for disk operations
+   - Appropriate error handling for timeout conditions
+   - Clear error messages for timeout situations
 
 ## Testing Tools
 - **MCP Inspector**: For testing MCP server implementation (`pip install mcp-inspector`)

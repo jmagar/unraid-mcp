@@ -14,6 +14,10 @@
 - Production-ready server script with SSE transport
 - Successfully integrated with Claude Desktop using mcpServers configuration
 - Tested resource access and tool execution through Claude
+- Fixed timeout issues with disk operations
+- Resolved GraphQL schema validation errors
+- Enhanced logging system with both console and file outputs
+- Fixed Docker container tools to use direct query execution
 
 ## What's Left to Build
 1. **Project Structure**
@@ -26,6 +30,8 @@
    - [x] Add GraphQL query execution functionality
    - [x] Add error handling
    - [x] Add enhanced query logging and debugging
+   - [x] Fix timeout issues with long-running operations
+   - [x] Improve handling of nested GraphQL fields
 
 3. **MCP Server Implementation**
    - [x] Set up FastMCP server
@@ -38,6 +44,7 @@
    - [x] Implement proper error diagnostics
    - [x] Add logging support
    - [x] Add templated resources for individual items
+   - [x] Fix schema validation errors in disk and Docker tools
 
 4. **Documentation**
    - [x] Create README.md
@@ -50,6 +57,7 @@
    - [x] Test with MCP Inspector
    - [x] Test with Claude Desktop
    - [x] Address issues found during Claude/Cline integration
+   - [x] Test fixed disk and Docker tools with real Unraid server
 
 6. **Claude/Cline Integration**
    - [x] Create proper MCP settings configuration
@@ -69,8 +77,12 @@
 - Verified resources access working correctly with actual Unraid server
 - Successfully connected to Claude Desktop using mcpServers JSON configuration
 - Tested end-to-end functionality with Claude Desktop
+- Fixed critical issues with disk operations and GraphQL schema validation
+- Improved Docker container tools functionality
+- Enhanced logging system with both console and file outputs
 
 ## Next Steps
+- Continue testing and improving the disk and Docker tools with various configurations
 - Implement additional Unraid API features (user management, network configuration)
 - Add authentication and security features to the MCP server
 - Implement advanced features like WebSocket support and caching

@@ -1,5 +1,11 @@
 """Virtual Machine management tools for Unraid MCP server"""
 from mcp.types import TextContent
+import logging
+import json
+import traceback
+
+# Get logger
+logger = logging.getLogger("unraid_mcp.vm_tools")
 
 def register_vm_tools(server, unraid_client):
     """Register VM-related tools with the MCP server
@@ -8,28 +14,77 @@ def register_vm_tools(server, unraid_client):
         server: The MCP server instance
         unraid_client: The Unraid API client
     """
+    logger.info("Registering VM tools")
     
-    @server.tool(description="Start a virtual machine by name")
-    async def start_vm(
-        vm_name: str, 
+    @server.tool(description="Get information about virtual machines")
+    async def get_vms(
         ctx=None
     ):
-        """Start a virtual machine by name
+        """Get information about all virtual machines
+        
+        Returns:
+            Information about all virtual machines including their status
+        """
+        logger.info("Tool called: get_vms()")
+        
+        if ctx:
+            await ctx.info("Retrieving virtual machine information...")
+        else:
+            print("Retrieving virtual machine information...")
+        
+        try:
+            # Use the client method directly
+            response = await unraid_client.get_vms()
+            logger.debug(f"VM query result: {response}")
+            
+            if "data" in response and "vms" in response["data"] and "domain" in response["data"]["vms"]:
+                vms = response["data"]["vms"]["domain"]
+                logger.info(f"Retrieved information for {len(vms)} virtual machines")
+                return TextContent(type="text", text=json.dumps(vms, indent=2))
+            else:
+                logger.warning("Failed to retrieve VM information: Invalid response format")
+                return TextContent(type="text", text="❌ Failed to retrieve VM information: Invalid response format")
+        except Exception as e:
+            error_msg = f"Error retrieving VM information: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            
+            # Get the full stack trace for debugging
+            stack_trace = traceback.format_exc()
+            logger.error(f"Stack trace: {stack_trace}")
+            
+            if ctx:
+                await ctx.error(error_msg)
+            else:
+                print(error_msg)
+            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
+    
+    @server.tool(description="Get detailed information about a specific virtual machine")
+    async def get_vm_details(
+        vm_name: str,
+        ctx=None
+    ):
+        """Get detailed information about a specific virtual machine
         
         Args:
-            vm_name: The name of the virtual machine to start
+            vm_name: The name of the virtual machine
+            
+        Returns:
+            Detailed information about the specified virtual machine
         """
-        if ctx:
-            await ctx.info(f"Starting VM: {vm_name}")
-        else:
-            print(f"Starting VM: {vm_name}")
+        logger.info(f"Tool called: get_vm_details({vm_name})")
         
-        mutation = """
-        mutation ($name: String!) {
+        if ctx:
+            await ctx.info(f"Retrieving details for VM: {vm_name}")
+        else:
+            print(f"Retrieving details for VM: {vm_name}")
+        
+        query = """
+        query ($name: String!) {
           vms {
-            startVM(name: $name) {
-              success
-              message
+            domain(name: $name) {
+              uuid
+              name
+              state
             }
           }
         }
@@ -37,60 +92,33 @@ def register_vm_tools(server, unraid_client):
         variables = {"name": vm_name}
         
         try:
-            result = await unraid_client.execute_query(mutation, variables)
+            result = await unraid_client.execute_query(query, variables)
+            logger.debug(f"VM details query result: {result}")
             
-            response = result["data"]["vms"]["startVM"]
-            if response["success"]:
-                return TextContent(type="text", text=f"✅ VM {vm_name} started successfully")
+            if "data" in result and "vms" in result["data"] and "domain" in result["data"]["vms"]:
+                vm_details = result["data"]["vms"]["domain"]
+                if vm_details:
+                    logger.info(f"Retrieved details for VM {vm_name}")
+                    return TextContent(type="text", text=json.dumps(vm_details, indent=2))
+                else:
+                    logger.warning(f"VM {vm_name} not found")
+                    return TextContent(type="text", text=f"❌ VM {vm_name} not found")
             else:
-                return TextContent(type="text", text=f"❌ Failed to start VM: {response['message']}")
+                logger.warning(f"Failed to retrieve details for VM {vm_name}: Invalid response format")
+                return TextContent(type="text", text=f"❌ Failed to retrieve details for VM {vm_name}: Invalid response format")
         except Exception as e:
-            error_msg = f"Error starting VM: {str(e)}"
+            error_msg = f"Error retrieving VM details: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            
+            # Get the full stack trace for debugging
+            stack_trace = traceback.format_exc()
+            logger.error(f"Stack trace: {stack_trace}")
+            
             if ctx:
                 await ctx.error(error_msg)
             else:
                 print(error_msg)
             return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
-
-    @server.tool(description="Stop a virtual machine by name")
-    async def stop_vm(
-        vm_name: str, 
-        ctx=None
-    ):
-        """Stop a virtual machine by name
-        
-        Args:
-            vm_name: The name of the virtual machine to stop
-        """
-        if ctx:
-            await ctx.info(f"Stopping VM: {vm_name}")
-        else:
-            print(f"Stopping VM: {vm_name}")
-        
-        mutation = """
-        mutation ($name: String!) {
-          vms {
-            stopVM(name: $name) {
-              success
-              message
-            }
-          }
-        }
-        """
-        variables = {"name": vm_name}
-        
-        try:
-            result = await unraid_client.execute_query(mutation, variables)
-            
-            response = result["data"]["vms"]["stopVM"]
-            if response["success"]:
-                return TextContent(type="text", text=f"✅ VM {vm_name} stopped successfully")
-            else:
-                return TextContent(type="text", text=f"❌ Failed to stop VM: {response['message']}")
-        except Exception as e:
-            error_msg = f"Error stopping VM: {str(e)}"
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
+    
+    # Log that tools were registered
+    logger.info("VM tools registered successfully")

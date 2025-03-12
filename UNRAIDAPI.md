@@ -1,5 +1,14 @@
 # Unraid API Documentation
 
+## Credits
+
+This documentation is based on and references the work from:
+- Repository: [domalab/unraid-api-client](https://github.com/domalab/unraid-api-client)
+- Author: Ruaan Deysel
+- License: MIT
+- Description: Use the Unraid API Client to query Unraid's GraphQL API
+- Created: 2025-03-03
+
 ## Overview
 
 This document provides a comprehensive guide to the Unraid GraphQL API. The API allows developers to interact with various components of an Unraid server, including array management, disk operations, user administration, Docker containers, virtual machines, and more.

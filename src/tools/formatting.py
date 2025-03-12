@@ -1,5 +1,9 @@
-"""Formatted display tools for Unraid MCP server"""
+"""Display tools for Unraid MCP server"""
 from mcp.types import TextContent
+import logging
+
+# Get logger
+logger = logging.getLogger("unraid_mcp.display_tools")
 
 def register_formatting_tools(server, unraid_client):
     """Register formatting tools with the MCP server
@@ -8,10 +12,13 @@ def register_formatting_tools(server, unraid_client):
         server: The MCP server instance
         unraid_client: The Unraid API client
     """
+    logger.info("Registering display tools")
     
-    @server.tool(description="Get formatted system information in a human-readable format")
-    async def get_formatted_system_info(ctx=None):
+    @server.tool(description="Get system information in a human-readable format")
+    async def get_system_info(ctx=None):
         """Get system information from Unraid server in a readable format"""
+        logger.info("Tool called: get_system_info()")
+        
         if ctx:
             await ctx.info("Retrieving system information...")
         else:
@@ -20,8 +27,10 @@ def register_formatting_tools(server, unraid_client):
         try:
             # Get the data directly from the client
             result = await unraid_client.get_system_info()
+            logger.debug(f"System info result received with keys: {list(result.keys())}")
             
             if isinstance(result, dict) and "error" in result:
+                logger.error(f"Error in system info response: {result['error']}")
                 return TextContent(type="text", text=f"❌ Error: {result['error']}")
                 
             # Format the data nicely
@@ -54,24 +63,28 @@ def register_formatting_tools(server, unraid_client):
             formatted_text += f"  • Available: {available_gb} GB\n\n"
             
             # OS info
-            formatted_text += "💻 OPERATING SYSTEM\n"
-            formatted_text += f"  • {result['os']['distro']} {result['os']['release']}\n"
-            formatted_text += f"  • Unraid Version: {result['versions']['unraid']}\n"
-            formatted_text += f"  • Kernel: {result['versions']['kernel']}\n"
-            formatted_text += f"  • Docker Version: {result['versions']['docker']}\n"
+            formatted_text += "🐧 OPERATING SYSTEM\n"
+            formatted_text += f"  • Distro: {result['os']['distro']}\n"
+            formatted_text += f"  • Release: {result['os']['release']}\n"
+            formatted_text += f"  • Kernel: {result['os']['kernel']}\n"
+            formatted_text += f"  • Uptime: {result['os']['uptime']}\n\n"
             
+            # Unraid version
+            formatted_text += "🔄 UNRAID VERSION\n"
+            formatted_text += f"  • Version: {result['versions']['unraid']}\n"
+            
+            logger.info("System info formatted successfully")
             return TextContent(type="text", text=formatted_text)
         except Exception as e:
-            error_msg = f"Error formatting system information: {str(e)}"
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error: {str(e)}")
-
-    @server.tool(description="List Docker containers in a formatted, human-readable way")
-    async def list_formatted_containers(ctx=None):
-        """List all Docker containers with their status in a readable format"""
+            error_message = f"❌ Error retrieving system information: {str(e)}"
+            logger.error(f"Error formatting system info: {str(e)}", exc_info=True)
+            return TextContent(type="text", text=error_message)
+    
+    @server.tool(description="List Docker containers in a human-readable way")
+    async def list_containers(ctx=None):
+        """List Docker containers in a readable format"""
+        logger.info("Tool called: list_containers()")
+        
         if ctx:
             await ctx.info("Retrieving Docker containers...")
         else:
@@ -80,85 +93,74 @@ def register_formatting_tools(server, unraid_client):
         try:
             # Get the data directly from the client
             result = await unraid_client.get_docker_containers()
+            logger.debug(f"Retrieved {len(result)} Docker containers")
             
             if isinstance(result, dict) and "error" in result:
+                logger.error(f"Error in Docker containers response: {result['error']}")
                 return TextContent(type="text", text=f"❌ Error: {result['error']}")
-                
+            
             # Format the data nicely
             formatted_text = "🐳 DOCKER CONTAINERS\n"
             formatted_text += "══════════════════\n\n"
             
+            # Count running and total containers
+            running_count = sum(1 for container in result if container['state'] == 'RUNNING')
+            total_count = len(result)
+            
+            formatted_text += f"📊 Status: {running_count} running out of {total_count} total containers\n\n"
+            
+            # Sort containers by state (running first) and then by name
+            sorted_containers = sorted(
+                result,
+                key=lambda c: (0 if c['state'] == 'RUNNING' else 1, c['names'][0].lower() if c['names'] else '')
+            )
+            
             # Group containers by state
-            running = []
-            stopped = []
-            other = []
-            
-            for container in result:
-                if container["state"] == "RUNNING":
-                    running.append(container)
-                elif container["state"] == "EXITED":
-                    stopped.append(container)
-                else:
-                    other.append(container)
-            
-            # Display running containers
-            formatted_text += f"✅ RUNNING CONTAINERS ({len(running)})\n"
-            if running:
-                for container in running:
-                    name = container["names"][0].replace("/", "") if container["names"] else "Unnamed"
-                    image = container["image"]
-                    status = container["status"]
-                    ports = []
-                    for port in container.get("ports", []):
-                        if port.get("publicPort"):
-                            ports.append(f"{port['publicPort']}:{port.get('privatePort', '?')}")
-                    ports_str = ", ".join(ports) if ports else "No published ports"
-                    
-                    formatted_text += f"  • {name}\n"
-                    formatted_text += f"    Image: {image}\n"
-                    formatted_text += f"    Status: {status}\n"
-                    formatted_text += f"    Ports: {ports_str}\n\n"
-            else:
-                formatted_text += "  None\n\n"
+            for container in sorted_containers:
+                # Get the first name (usually the main name)
+                name = container['names'][0] if container['names'] else 'Unnamed'
                 
-            # Display stopped containers
-            formatted_text += f"❌ STOPPED CONTAINERS ({len(stopped)})\n"
-            if stopped:
-                for container in stopped:
-                    name = container["names"][0].replace("/", "") if container["names"] else "Unnamed"
-                    image = container["image"]
-                    status = container["status"]
-                    
-                    formatted_text += f"  • {name}\n"
-                    formatted_text += f"    Image: {image}\n"
-                    formatted_text += f"    Status: {status}\n\n"
-            else:
-                formatted_text += "  None\n\n"
+                # Status emoji based on state
+                status_emoji = "🟢" if container['state'] == 'RUNNING' else "🔴"
                 
-            # Display other containers
-            if other:
-                formatted_text += f"⚠️ OTHER CONTAINERS ({len(other)})\n"
-                for container in other:
-                    name = container["names"][0].replace("/", "") if container["names"] else "Unnamed"
-                    state = container["state"]
-                    status = container["status"]
+                # Format container info
+                formatted_text += f"{status_emoji} {name}\n"
+                formatted_text += f"  • State: {container['state']}\n"
+                formatted_text += f"  • Image: {container['image']}\n"
+                
+                # Add port mappings if available
+                if container['ports'] and len(container['ports']) > 0:
+                    formatted_text += "  • Ports: "
+                    port_mappings = []
+                    for port in container['ports']:
+                        if 'publicPort' in port and port['publicPort']:
+                            mapping = f"{port['publicPort']}:{port['privatePort']}"
+                            if 'ip' in port and port['ip']:
+                                mapping = f"{port['ip']}:{mapping}"
+                            port_mappings.append(mapping)
                     
-                    formatted_text += f"  • {name}\n"
-                    formatted_text += f"    State: {state}\n"
-                    formatted_text += f"    Status: {status}\n\n"
+                    if port_mappings:
+                        formatted_text += ", ".join(port_mappings)
+                    else:
+                        formatted_text += "None"
+                    formatted_text += "\n"
+                
+                # Add auto-start info
+                auto_start = "Yes" if container.get('autoStart', False) else "No"
+                formatted_text += f"  • Auto-start: {auto_start}\n\n"
             
+            logger.info("Docker containers formatted successfully")
             return TextContent(type="text", text=formatted_text)
         except Exception as e:
-            error_msg = f"Error formatting container list: {str(e)}"
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error: {str(e)}")
-
-    @server.tool(description="Get formatted array status in a human-readable way")
-    async def get_formatted_array_status(ctx=None):
-        """Get array status information in a readable format"""
+            error_message = f"❌ Error retrieving Docker containers: {str(e)}"
+            logger.error(f"Error formatting Docker containers: {str(e)}", exc_info=True)
+            return TextContent(type="text", text=error_message)
+    
+    @server.tool(description="Get array status in a human-readable way")
+    async def get_array_status(ctx=None):
+        """Get array status in a readable format"""
+        logger.info("Tool called: get_array_status()")
+        
         if ctx:
             await ctx.info("Retrieving array status...")
         else:
@@ -167,86 +169,122 @@ def register_formatting_tools(server, unraid_client):
         try:
             # Get the data directly from the client
             result = await unraid_client.get_array_status()
+            logger.debug(f"Array status result received with keys: {list(result.keys())}")
             
             if isinstance(result, dict) and "error" in result:
+                logger.error(f"Error in array status response: {result['error']}")
                 return TextContent(type="text", text=f"❌ Error: {result['error']}")
-                
+            
             # Format the data nicely
             formatted_text = "💾 UNRAID ARRAY STATUS\n"
-            formatted_text += "═══════════════════\n\n"
+            formatted_text += "═════════════════════\n\n"
             
             # Array state
-            state = result["state"]
-            state_emoji = "✅" if state == "STARTED" else "⚠️"
-            formatted_text += f"Array State: {state_emoji} {state}\n\n"
+            state_emoji = "🟢" if result['state'] == 'STARTED' else "🔴"
+            formatted_text += f"{state_emoji} Array State: {result['state']}\n\n"
             
-            # Capacity information
-            if "capacity" in result:
-                capacity = result["capacity"]
-                # Convert KB to GB
-                total_gb = round(int(capacity["kilobytes"]["total"]) / (1024**2), 2)
-                used_gb = round(int(capacity["kilobytes"]["used"]) / (1024**2), 2)
-                free_gb = round(int(capacity["kilobytes"]["free"]) / (1024**2), 2)
+            # Array capacity
+            if 'capacity' in result and 'kilobytes' in result['capacity']:
+                capacity = result['capacity']['kilobytes']
+                # Convert to more readable units (GB)
+                total_gb = round(float(capacity['total']) / (1024 * 1024), 2)
+                used_gb = round(float(capacity['used']) / (1024 * 1024), 2)
+                free_gb = round(float(capacity['free']) / (1024 * 1024), 2)
                 
-                used_percent = round((used_gb / total_gb) * 100) if total_gb > 0 else 0
+                # Calculate usage percentage
+                usage_percent = round((used_gb / total_gb) * 100, 1) if total_gb > 0 else 0
                 
-                formatted_text += "CAPACITY\n"
-                formatted_text += f"  • Total Size: {total_gb:.2f} TB\n"
-                formatted_text += f"  • Used: {used_gb:.2f} TB ({used_percent}%)\n"
-                formatted_text += f"  • Free: {free_gb:.2f} TB\n"
-                formatted_text += f"  • Disks: {capacity['disks']['used']}/{capacity['disks']['total']} disks used\n\n"
+                formatted_text += "💽 CAPACITY\n"
+                formatted_text += f"  • Total: {total_gb} TB\n"
+                formatted_text += f"  • Used: {used_gb} TB ({usage_percent}%)\n"
+                formatted_text += f"  • Free: {free_gb} TB\n\n"
             
-            # Disk information
-            if "disks" in result:
-                disks = result["disks"]
-                formatted_text += f"ARRAY DISKS ({len(disks)})\n"
-                
-                for disk in disks:
-                    # Convert bytes to GB/TB
-                    size_tb = round(disk["size"] / (1024**3), 2)
+            # Parity disks
+            if 'parities' in result and result['parities']:
+                formatted_text += "🛡️ PARITY DISKS\n"
+                for parity in result['parities']:
+                    size_tb = round(parity['size'] / (1024 * 1024 * 1024), 2)
+                    formatted_text += f"  • {parity['name']}: {size_tb} TB"
                     
-                    if "fsSize" in disk and "fsFree" in disk and "fsUsed" in disk:
-                        fs_size_tb = round(disk["fsSize"] / (1024**3), 2)
-                        fs_used_tb = round(disk["fsUsed"] / (1024**3), 2)
-                        fs_free_tb = round(disk["fsFree"] / (1024**3), 2)
-                        used_percent = round((fs_used_tb / fs_size_tb) * 100) if fs_size_tb > 0 else 0
-                        
-                        formatted_text += f"  • {disk['name']} - {size_tb:.2f} TB ({disk['status']})\n"
-                        formatted_text += f"    {used_percent}% used ({fs_used_tb:.2f} TB used, {fs_free_tb:.2f} TB free)\n"
-                        if "temp" in disk and disk["temp"] is not None:
-                            formatted_text += f"    Temperature: {disk['temp']}°C\n"
-                        formatted_text += "\n"
-                    else:
-                        formatted_text += f"  • {disk['name']} - {size_tb:.2f} TB ({disk['status']})\n"
-                        if "temp" in disk and disk["temp"] is not None:
-                            formatted_text += f"    Temperature: {disk['temp']}°C\n"
-                        formatted_text += "\n"
+                    if 'temp' in parity and parity['temp'] is not None:
+                        formatted_text += f", {parity['temp']}°C"
+                    
+                    if 'numErrors' in parity:
+                        error_text = f", Errors: {parity['numErrors']}"
+                        formatted_text += error_text
+                    
+                    formatted_text += "\n"
+                formatted_text += "\n"
             
-            # Cache information
-            if "caches" in result:
-                caches = result["caches"]
-                formatted_text += f"CACHE DEVICES ({len(caches)})\n"
-                
-                for cache in caches:
-                    # Convert bytes to GB
-                    size_gb = round(cache["size"] / (1024**2), 2)
-                    formatted_text += f"  • {cache['name']} - {size_gb:.2f} GB ({cache['status']})\n"
-                    if "temp" in cache and cache["temp"] is not None:
-                        formatted_text += f"    Temperature: {cache['temp']}°C\n"
+            # Data disks
+            if 'disks' in result and result['disks']:
+                formatted_text += "💿 DATA DISKS\n"
+                for disk in result['disks']:
+                    # Skip if no name (might be an empty slot)
+                    if not disk.get('name'):
+                        continue
+                    
+                    # Get disk size in TB
+                    size_tb = round(disk['size'] / (1024 * 1024 * 1024), 2)
+                    
+                    # Calculate usage if available
+                    usage_info = ""
+                    if 'fsSize' in disk and disk['fsSize'] and 'fsUsed' in disk and disk['fsUsed']:
+                        usage_percent = round((disk['fsUsed'] / disk['fsSize']) * 100, 1)
+                        usage_info = f", Used: {usage_percent}%"
+                    
+                    # Format disk info
+                    formatted_text += f"  • {disk['name']}: {size_tb} TB{usage_info}"
+                    
+                    # Add temperature if available
+                    if 'temp' in disk and disk['temp'] is not None:
+                        formatted_text += f", {disk['temp']}°C"
+                    
+                    # Add error count if available
+                    if 'numErrors' in disk:
+                        error_text = f", Errors: {disk['numErrors']}"
+                        formatted_text += error_text
+                    
+                    formatted_text += "\n"
+                formatted_text += "\n"
+            
+            # Cache pools
+            if 'caches' in result and result['caches']:
+                formatted_text += "🔄 CACHE POOLS\n"
+                for cache in result['caches']:
+                    # Skip if no name (might be an empty slot)
+                    if not cache.get('name'):
+                        continue
+                    
+                    # Get cache size in TB
+                    size_tb = round(cache['size'] / (1024 * 1024 * 1024), 2)
+                    
+                    # Format cache info
+                    formatted_text += f"  • {cache['name']}: {size_tb} TB"
+                    
+                    # Add temperature if available
+                    if 'temp' in cache and cache['temp'] is not None:
+                        formatted_text += f", {cache['temp']}°C"
+                    
+                    # Add error count if available
+                    if 'numErrors' in cache:
+                        error_text = f", Errors: {cache['numErrors']}"
+                        formatted_text += error_text
+                    
                     formatted_text += "\n"
             
+            logger.info("Array status formatted successfully")
             return TextContent(type="text", text=formatted_text)
         except Exception as e:
-            error_msg = f"Error formatting array status: {str(e)}"
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error: {str(e)}")
-
-    @server.tool(description="List virtual machines in a formatted, human-readable way")
-    async def list_formatted_vms(ctx=None):
-        """List all virtual machines with their status in a readable format"""
+            error_message = f"❌ Error retrieving array status: {str(e)}"
+            logger.error(f"Error formatting array status: {str(e)}", exc_info=True)
+            return TextContent(type="text", text=error_message)
+    
+    @server.tool(description="List virtual machines in a human-readable way")
+    async def list_vms(ctx=None):
+        """List virtual machines in a readable format"""
+        logger.info("Tool called: list_vms()")
+        
         if ctx:
             await ctx.info("Retrieving virtual machines...")
         else:
@@ -255,67 +293,53 @@ def register_formatting_tools(server, unraid_client):
         try:
             # Get the data directly from the client
             result = await unraid_client.get_vms()
+            logger.debug(f"VM result received: {result}")
             
             if isinstance(result, dict) and "error" in result:
+                logger.error(f"Error in VMs response: {result['error']}")
                 return TextContent(type="text", text=f"❌ Error: {result['error']}")
-                
+            
             # Format the data nicely
-            formatted_text = "🖥️ UNRAID VIRTUAL MACHINES\n"
-            formatted_text += "═════════════════════\n\n"
+            formatted_text = "🖥️ VIRTUAL MACHINES\n"
+            formatted_text += "══════════════════\n\n"
             
-            # Group VMs by status
-            running = []
-            stopped = []
+            # Check if we have any VMs
+            if not result or not result.get('domain'):
+                logger.info("No virtual machines found")
+                return TextContent(type="text", text=formatted_text + "No virtual machines found.")
             
-            for vm in result:
-                if vm.get("status") == "running":
-                    running.append(vm)
-                else:
-                    stopped.append(vm)
+            # Count running and total VMs
+            vms = result['domain']
+            running_count = sum(1 for vm in vms if vm['state'] == 'RUNNING')
+            total_count = len(vms)
             
-            # Display running VMs
-            formatted_text += f"✅ RUNNING VMs ({len(running)})\n"
-            if running:
-                for vm in running:
-                    name = vm.get("name", "Unnamed")
-                    memory = vm.get("memory", "Unknown")
-                    cores = vm.get("cores", "Unknown")
-                    
-                    # Format memory as GB if it's a number
-                    memory_text = f"{int(memory)/1024:.1f} GB" if isinstance(memory, (int, float)) else memory
-                    
-                    formatted_text += f"  • {name}\n"
-                    if "template" in vm:
-                        formatted_text += f"    Template: {vm['template']}\n"
-                    formatted_text += f"    Memory: {memory_text}\n"
-                    formatted_text += f"    Cores: {cores}\n\n"
-            else:
-                formatted_text += "  None\n\n"
+            formatted_text += f"📊 Status: {running_count} running out of {total_count} total VMs\n\n"
+            
+            # Sort VMs by state (running first) and then by name
+            sorted_vms = sorted(
+                vms,
+                key=lambda vm: (0 if vm['state'] == 'RUNNING' else 1, vm.get('name', '').lower())
+            )
+            
+            # List each VM with its status
+            for vm in sorted_vms:
+                # Status emoji based on state
+                status_emoji = "🟢" if vm['state'] == 'RUNNING' else "🔴"
                 
-            # Display stopped VMs
-            formatted_text += f"❌ STOPPED VMs ({len(stopped)})\n"
-            if stopped:
-                for vm in stopped:
-                    name = vm.get("name", "Unnamed")
-                    memory = vm.get("memory", "Unknown")
-                    cores = vm.get("cores", "Unknown")
-                    
-                    # Format memory as GB if it's a number
-                    memory_text = f"{int(memory)/1024:.1f} GB" if isinstance(memory, (int, float)) else memory
-                    
-                    formatted_text += f"  • {name}\n"
-                    if "template" in vm:
-                        formatted_text += f"    Template: {vm['template']}\n"
-                    formatted_text += f"    Memory: {memory_text}\n"
-                    formatted_text += f"    Cores: {cores}\n\n"
-            else:
-                formatted_text += "  None\n\n"
+                # VM name or UUID if name is not available
+                name = vm.get('name', vm['uuid'])
+                
+                # Format VM info
+                formatted_text += f"{status_emoji} {name}\n"
+                formatted_text += f"  • State: {vm['state']}\n"
+                formatted_text += f"  • UUID: {vm['uuid']}\n\n"
             
+            logger.info("VMs formatted successfully")
             return TextContent(type="text", text=formatted_text)
         except Exception as e:
-            error_msg = f"Error formatting VM list: {str(e)}"
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error: {str(e)}")
+            error_message = f"❌ Error retrieving virtual machines: {str(e)}"
+            logger.error(f"Error formatting VMs: {str(e)}", exc_info=True)
+            return TextContent(type="text", text=error_message)
+    
+    # Log that tools were registered
+    logger.info("Display tools registered successfully")

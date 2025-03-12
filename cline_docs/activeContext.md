@@ -1,51 +1,67 @@
 # Active Context: Unraid MCP Server Implementation
 
 ## What We're Working On Now
+- Successfully debugged and fixed critical issues in the Unraid MCP server
+- Fixed timeout issues with disk operations by increasing request timeout
+- Resolved GraphQL schema validation errors by simplifying queries
+- Enhanced error handling and logging for better diagnostics
 - Successfully integrated the MCP server with Claude/Cline
-- Fixed MCP configuration format to use correct command/args structure
 - Made server compatible with both SSE and stdio transport modes
-- Implemented proper error handling for tool parameters
-- Enhanced logging to debug and track MCP server operations
 - Verified resources and tools are working correctly with real Unraid server
-- Successfully connected to Claude Desktop using mcpServers JSON configuration
-- Tested resource access and tool execution through Claude Desktop
 
 ## Recent Changes
+- Fixed HTTP timeout errors in the Unraid client:
+  - Increased timeout from 30 to 60 seconds for API requests
+  - Added better error handling for timeout conditions
+  
+- Resolved GraphQL schema validation errors:
+  - Simplified queries to avoid fields that might be null or missing
+  - Removed problematic fields like `interfaceType` and `fsType` that caused validation errors
+  - Improved handling of nested field paths in GraphQL responses
+  
+- Enhanced logging system:
+  - Added both console and file outputs for better visibility
+  - Improved error context in log messages
+  - Added detailed diagnostic information for debugging
+  
+- Updated Docker tools implementation:
+  - Fixed container query execution by using direct query instead of helper methods
+  - Improved error handling for Docker operations
+  
 - Enhanced UnraidClient with better error handling based on API documentation
-- Improved server implementation with proper diagnostics
-- Added error handling throughout the codebase
 - Reorganized resource URIs to follow FastMCP patterns
 - Added templated resources for individual VMs and containers
 - Added resources for shares and plugins information
-- Enhanced query logging and operation name extraction
-- Implemented comprehensive logging
 - Created production server script with SSE transport
 - Enhanced documentation with tables of available resources and tools
-- Updated README with information about new templated resources
-- Git repository updated with all improvements
 - Successfully integrated with Claude Desktop
 - Configured server using mcpServers JSON configuration
 - Tested end-to-end functionality with Claude Desktop
 
 ## Next Steps
-1. Implement additional Unraid API features:
+1. Continue testing and improving the fixed disk and Docker tools:
+   - Test with various Unraid server configurations
+   - Verify error handling under different failure scenarios
+   - Optimize queries for better performance
+   
+2. Implement additional Unraid API features:
    - User management
    - Network configuration
    - Docker container creation
    - VM creation and configuration
 
-2. Add security enhancements:
+3. Add security enhancements:
    - User authentication for the MCP server
    - Role-based access control
    - Secure token handling
 
-3. Implement advanced features:
+4. Implement advanced features:
    - WebSocket support for real-time updates
    - Caching layer for improved performance
    - Metrics and monitoring
    - Connection pooling for API requests
 
-4. Deployment improvements:
+5. Deployment improvements:
    - Create Docker container for easy deployment
    - Add systemd service configuration
    - Implement automatic updates

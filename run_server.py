@@ -16,9 +16,15 @@ from src.server import UnraidMCPServer
 from src.config import Config, setup_logging
 
 if __name__ == "__main__":
-    # Set up logging
-    logger = setup_logging("unraid_mcp_runner")
+    # Set up logging with debug level
+    logger = setup_logging("unraid_mcp_runner", logging.DEBUG)
     logger.info("Starting Unraid MCP Server (Runner)")
+    
+    # Log environment and configuration
+    logger.debug(f"Python version: {sys.version}")
+    logger.debug(f"Working directory: {os.getcwd()}")
+    logger.debug(f"Log file: {Config.LOG_FILE}")
+    logger.debug(f"Log level: {logging.getLevelName(logger.level)}")
     
     try:
         # Create and run the server
@@ -39,6 +45,7 @@ if __name__ == "__main__":
         
         # Start the server with the appropriate transport
         server = UnraidMCPServer()
+        logger.info("Server initialized, starting transport...")
         server.run(transport)
     except KeyboardInterrupt:
         logger.info("Server stopped by user")

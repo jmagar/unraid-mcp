@@ -88,14 +88,29 @@ class UnraidClient:
                     self.api_url,
                     json=payload,
                     headers=self.headers,
-                    timeout=aiohttp.ClientTimeout(total=30)  # 30 second timeout
+                    timeout=aiohttp.ClientTimeout(total=60)  # 60 second timeout
                 ) as response:
                     response_text = await response.text()
                     
                     if response.status != 200:
-                        logger.error(f"HTTP error {response.status}: {response_text}")
+                        # Try to parse the response as JSON for more detailed error info
+                        error_details = "Unknown error"
+                        try:
+                            error_json = json.loads(response_text)
+                            if "errors" in error_json:
+                                error_details = "; ".join([error.get("message", "Unknown error") for error in error_json["errors"]])
+                            elif "message" in error_json:
+                                error_details = error_json["message"]
+                        except:
+                            error_details = response_text
+                        
+                        error_message = f"API request failed with status {response.status}: {error_details}"
+                        logger.error(error_message)
+                        logger.error(f"Request payload: {json.dumps(payload)}")
+                        logger.error(f"Response: {response_text}")
+                        
                         raise UnraidApiError(
-                            f"API request failed with status {response.status}", 
+                            error_message, 
                             status_code=response.status, 
                             response_text=response_text
                         )
@@ -111,11 +126,49 @@ class UnraidClient:
                         errors = result["errors"]
                         error_message = "; ".join([error.get("message", "Unknown error") for error in errors])
                         logger.error(f"GraphQL errors: {error_message}")
+                        logger.error(f"Request payload: {json.dumps(payload)}")
+                        logger.error(f"Full response: {json.dumps(result)}")
                         raise UnraidApiError(f"GraphQL query failed: {error_message}")
                     
                     if "data" not in result:
                         logger.error(f"No data in response: {result}")
                         raise UnraidApiError("No data in API response")
+                    
+                    # Check for null values in the data that might indicate errors
+                    if result["data"] is None:
+                        logger.error(f"Null data in response: {result}")
+                        raise UnraidApiError("Null data in API response")
+                    
+                    # Check if any of the expected fields are missing
+                    # Handle nested fields like "docker.containers"
+                    if '.' in operation_name:
+                        # For nested paths like "docker.containers"
+                        current_data = result["data"]
+                        field_path = operation_name.split('.')
+                        valid_path = True
+                        
+                        for i, key in enumerate(field_path):
+                            if key and key in current_data:
+                                current_data = current_data[key]
+                                # If we're at the last level and it exists, we're good
+                                if i == len(field_path) - 1:
+                                    break
+                            else:
+                                if key:  # Only log if key is not empty
+                                    path_so_far = '.'.join(field_path[:i])
+                                    logger.error(f"Expected field '{key}' missing in path '{path_so_far}' of response data: {result['data']}")
+                                    valid_path = False
+                                    break
+                        
+                        if not valid_path:
+                            # Log full response for debugging but continue execution
+                            logger.warning(f"Invalid path in response, but continuing execution: {result['data']}")
+                    else:
+                        # Original behavior for non-nested fields
+                        if operation_name and operation_name not in result["data"]:
+                            logger.error(f"Expected field '{operation_name}' missing in response data: {result['data']}")
+                            # Log warning but don't raise exception to allow continuing execution
+                            logger.warning(f"Missing field in response, but continuing execution")
                     
                     # Log successful query results
                     if "data" in result:
@@ -127,8 +180,11 @@ class UnraidClient:
         except aiohttp.ClientError as e:
             logger.error(f"HTTP client error: {str(e)}")
             raise UnraidApiError(f"API request failed: {str(e)}")
+        except UnraidApiError:
+            # Re-raise UnraidApiError exceptions
+            raise
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}")
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
             raise
 
     # System Information Methods
@@ -479,21 +535,116 @@ class UnraidClient:
         """
         query = """
         query {
-            docker {
-                networks {
-                    id
-                    name
-                    driver
-                    scope
-                    internal
-                    attachable
-                    created
-                }
+            dockerNetworks {
+                id
+                name
+                driver
+                scope
+                internal
+                attachable
             }
         }
         """
         result = await self.execute_query(query)
-        return result["data"]["docker"]["networks"]
+        return result["data"]["dockerNetworks"]
+    
+    async def start_container(self, container_name: str) -> Dict[str, Any]:
+        """Start a Docker container by name
+        
+        Args:
+            container_name: The name of the container to start
+            
+        Returns:
+            Dictionary with success status and message
+        """
+        mutation = """
+        mutation ($name: String!) {
+          docker {
+            startContainer(name: $name) {
+              success
+              message
+            }
+          }
+        }
+        """
+        variables = {"name": container_name}
+        
+        logger.info(f"Starting Docker container: {container_name}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            # Note: This operation might not be supported by all Unraid GraphQL API versions
+            # Some Unraid API implementations may return an error for this operation
+            result = await self.execute_query(mutation, variables)
+            logger.info(f"Start container result: {result}")
+            
+            # Check if the operation is supported
+            if "errors" in result and any("not found" in error.get("message", "").lower() for error in result["errors"]):
+                logger.warning("Docker container control operations may not be supported by this Unraid GraphQL API version")
+                return {"error": "Docker container control operations may not be supported by this Unraid GraphQL API version"}
+                
+            return result["data"]["docker"]["startContainer"]
+        except UnraidApiError as e:
+            logger.error(f"API error starting container {container_name}: {str(e)}")
+            logger.error(f"Status code: {e.status_code}, Response: {e.response_text}")
+            
+            # Check if this is due to the operation not being supported
+            if "not found" in str(e).lower() or "unknown field" in str(e).lower():
+                return {"error": "Docker container control operations are not supported by this Unraid GraphQL API version"}
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error starting container {container_name}: {str(e)}", exc_info=True)
+            raise
+    
+    async def stop_container(self, container_name: str) -> Dict[str, Any]:
+        """Stop a Docker container by name
+        
+        Args:
+            container_name: The name of the container to stop
+            
+        Returns:
+            Dictionary with success status and message
+        """
+        mutation = """
+        mutation ($name: String!) {
+          docker {
+            stopContainer(name: $name) {
+              success
+              message
+            }
+          }
+        }
+        """
+        variables = {"name": container_name}
+        
+        logger.info(f"Stopping Docker container: {container_name}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            # Note: This operation might not be supported by all Unraid GraphQL API versions
+            # Some Unraid API implementations may return an error for this operation
+            result = await self.execute_query(mutation, variables)
+            logger.info(f"Stop container result: {result}")
+            
+            # Check if the operation is supported
+            if "errors" in result and any("not found" in error.get("message", "").lower() for error in result["errors"]):
+                logger.warning("Docker container control operations may not be supported by this Unraid GraphQL API version")
+                return {"error": "Docker container control operations may not be supported by this Unraid GraphQL API version"}
+                
+            return result["data"]["docker"]["stopContainer"]
+        except UnraidApiError as e:
+            logger.error(f"API error stopping container {container_name}: {str(e)}")
+            logger.error(f"Status code: {e.status_code}, Response: {e.response_text}")
+            
+            # Check if this is due to the operation not being supported
+            if "not found" in str(e).lower() or "unknown field" in str(e).lower():
+                return {"error": "Docker container control operations are not supported by this Unraid GraphQL API version"}
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error stopping container {container_name}: {str(e)}", exc_info=True)
+            raise
     
     # VM Management Methods
     
@@ -813,33 +964,54 @@ def _extract_operation_name(query: str) -> str:
     is_mutation = query.startswith("mutation")
     
     try:
-        # Get the first line and extract operation after first {
-        lines = query.split('\n')
-        first_line = None
+        # Extract all operation names in the query
+        operations = []
+        current_level = 0
+        capture = False
+        current_op = ""
         
-        for line in lines:
+        # Skip the first opening brace (the query/mutation definition)
+        skip_first_brace = True
+        
+        for line in query.split('\n'):
             line = line.strip()
-            if line and not line.startswith('#') and '{' in line:
-                first_line = line
-                break
+            if not line or line.startswith('#'):
+                continue
+                
+            for char in line:
+                if char == '{':
+                    if skip_first_brace:
+                        skip_first_brace = False
+                        continue
+                        
+                    current_level += 1
+                    if current_level == 1:
+                        capture = True
+                elif char == '}':
+                    current_level -= 1
+                    if current_level == 0 and current_op:
+                        operations.append(current_op.strip())
+                        current_op = ""
+                        capture = False
+                elif capture and current_level == 1 and char not in '()':
+                    current_op += char
         
-        if not first_line:
+        # Clean up operations
+        clean_operations = []
+        for op in operations:
+            # Remove any parameters
+            op = op.split('(')[0].strip()
+            # Split by whitespace and take the first part
+            op = op.split()[0].strip()
+            if op:
+                clean_operations.append(op)
+        
+        if not clean_operations:
             return "unknown_operation"
             
-        # Extract the first operation after {
-        parts = first_line.split('{')
-        if len(parts) < 2:
-            return "unknown_operation"
-            
-        second_part = parts[1].strip()
-        
-        # Get the first word which should be the operation
-        operation = second_part.split('(')[0].split(' ')[0].strip()
-        
-        if not operation:
-            return "unknown_operation"
-            
-        return operation
-    except Exception:
-        # Fallback if parsing fails
-        return "unknown_operation" 
+        # Join operations with dots to represent nesting
+        return ".".join(clean_operations)
+    except Exception as e:
+        # Log the error but don't fail the whole operation
+        logger.debug(f"Error extracting operation name: {str(e)}")
+        return "unknown_operation"

@@ -73,10 +73,19 @@ class UnraidMCPServer:
             self.logger.info("Using stdio transport (for Claude/Cline)")
             self.server.run(transport="stdio")
         else:
-            self.logger.info(f"Using SSE transport on port {Config.SERVER_PORT}")
-            # For SSE transport, it appears the FastMCP doesn't directly accept host/port parameters
-            # The SSE server likely uses default values or environment variables
-            self.server.run(transport="sse")
+            # For SSE transport, we need to set environment variables for the host and port
+            # FastMCP uses these environment variables for SSE configuration
+            os.environ["MCP_HOST"] = Config.SERVER_HOST
+            os.environ["MCP_PORT"] = str(Config.SERVER_PORT)
+            
+            self.logger.info(f"Using SSE transport on {Config.SERVER_HOST}:{Config.SERVER_PORT}")
+            self.logger.debug(f"SSE transport configuration: MCP_HOST={os.environ.get('MCP_HOST')}, MCP_PORT={os.environ.get('MCP_PORT')}")
+            
+            try:
+                self.server.run(transport="sse")
+            except Exception as e:
+                self.logger.error(f"Error starting SSE transport: {str(e)}", exc_info=True)
+                raise
 
 
 def main():
