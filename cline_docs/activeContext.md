@@ -11,13 +11,14 @@
 - Modified server.py and run_server.py to use stdio transport by default
 - Updated .env.template to remove SSE-related configuration
 - Verified resources and tools are working correctly with real Unraid server
-- Implemented additional API features:
-  - User management (get_users, add_user, delete_user)
-  - API key management (get_api_keys, create_api_key)
+- Implemented read-only API features:
+  - User management (get_users)
+  - API key management (get_api_keys)
   - Unassigned devices (get_unassigned_devices)
   - Parity history (get_parity_history)
 - Updated README with proper JSON configuration for stdio mode integration
 - Added comprehensive "Use at Your Own Risk" disclaimer to README
+- Removed all potentially dangerous tools and methods for security
 
 ## Recent Changes
 - Fixed HTTP timeout errors in the Unraid client:
@@ -47,13 +48,15 @@
 - Configured server using mcpServers JSON configuration
 - Tested end-to-end functionality with Claude
 
-- Implemented additional API features:
-  - Added user management tools (get_users, add_user, delete_user)
-  - Added API key management tools (get_api_keys, create_api_key)
-  - Removed remote access configuration tools for security reasons
-  - Added unassigned devices tools (get_unassigned_devices)
-  - Added parity history tools (get_parity_history)
-  - Updated documentation to accurately reflect API capabilities
+- Removed potentially dangerous tools and methods:
+  - Removed system management tools (shutdown_server, reboot_server)
+  - Removed array management tools (start_array, stop_array)
+  - Removed disk management tools (mount_disk, unmount_disk)
+  - Removed user management tools (add_user, delete_user)
+  - Removed API key management tools (create_api_key)
+  - Removed remote access configuration tools (setup_remote_access, enable_dynamic_remote_access)
+  - Removed all corresponding methods from unraid_client.py
+  - Updated documentation to reflect read-only nature of the server
 
 - Updated README.md:
   - Removed references to SSE transport mode
@@ -61,7 +64,8 @@
   - Added JSON configuration examples for Anthropic API and Cursor
   - Simplified usage instructions to focus on stdio mode
   - Organized available tools by category for better readability
-  - Added "Use at Your Own Risk" disclaimer with specific cautions
+  - Updated "Use at Your Own Risk" disclaimer to emphasize read-only nature
+  - Updated Features section to reflect read-only capabilities
 
 - Modified code to use stdio transport exclusively:
   - Updated server.py to always use stdio transport
@@ -71,7 +75,7 @@
   - Updated .env.template to clarify that SSE transport is not used
 
 ## Next Steps
-1. Continue testing and improving the new tools:
+1. Continue testing and improving the read-only tools:
    - Test with various Unraid server configurations
    - Verify error handling under different failure scenarios
    - Optimize queries for better performance

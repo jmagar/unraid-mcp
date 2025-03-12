@@ -18,14 +18,21 @@
 - Resolved GraphQL schema validation errors
 - Enhanced logging system with both console and file outputs
 - Fixed Docker container tools to use direct query execution
-- Added user management tools (get_users, add_user, delete_user)
-- Added API key management tools (get_api_keys, create_api_key)
-- Removed remote access configuration tools for security reasons
-- Added unassigned devices tools (get_unassigned_devices)
-- Added parity history tools (get_parity_history)
+- Converted to read-only tools for security:
+  - User information tools (get_users)
+  - API key information tools (get_api_keys)
+  - Unassigned devices tools (get_unassigned_devices)
+  - Parity history tools (get_parity_history)
+- Removed all potentially dangerous tools and methods:
+  - System management tools (shutdown_server, reboot_server)
+  - Array management tools (start_array, stop_array)
+  - Disk management tools (mount_disk, unmount_disk)
+  - User management tools (add_user, delete_user)
+  - API key management tools (create_api_key)
+  - Remote access configuration tools
 - Updated README with proper JSON configuration for stdio mode
 - Organized available tools by category in README for better readability
-- Added "Use at Your Own Risk" disclaimer to README
+- Updated "Use at Your Own Risk" disclaimer to emphasize read-only nature
 - Modified code to use stdio transport exclusively
 - Commented out all SSE-related code to simplify the codebase
 
@@ -42,6 +49,7 @@
    - [x] Add enhanced query logging and debugging
    - [x] Fix timeout issues with long-running operations
    - [x] Improve handling of nested GraphQL fields
+   - [x] Convert to read-only operations for security
 
 3. **MCP Server Implementation**
    - [x] Set up FastMCP server
@@ -55,12 +63,12 @@
    - [x] Add logging support
    - [x] Add templated resources for individual items
    - [x] Fix schema validation errors in disk and Docker tools
-   - [x] Implement user management tools
-   - [x] Implement API key management tools
-   - [x] ~~Implement remote access configuration tools~~ (Removed for security reasons)
+   - [x] Implement user information tools (read-only)
+   - [x] Implement API key information tools (read-only)
    - [x] Implement unassigned devices tools
    - [x] Implement parity history tools
    - [x] Modify code to use stdio transport exclusively
+   - [x] Remove all potentially dangerous tools and methods
 
 4. **Documentation**
    - [x] Create README.md
@@ -72,6 +80,7 @@
    - [x] Add JSON configuration examples
    - [x] Organize tools by category for better readability
    - [x] Add "Use at Your Own Risk" disclaimer
+   - [x] Update documentation to reflect read-only nature
 
 5. **Testing**
    - [x] Test with Claude
@@ -100,16 +109,17 @@
 - Fixed critical issues with disk operations and GraphQL schema validation
 - Improved Docker container tools functionality
 - Enhanced logging system with both console and file outputs
-- Added user management, API key management, unassigned devices, and parity history tools
+- Converted to read-only tools for security (user information, API key information, unassigned devices, parity history)
+- Removed all potentially dangerous tools and methods
 - Updated README with proper JSON configuration for stdio mode integration
 - Organized available tools by category for better readability
-- Added "Use at Your Own Risk" disclaimer to README
+- Updated "Use at Your Own Risk" disclaimer to emphasize read-only nature
 - Modified code to use stdio transport exclusively
 - Commented out all SSE-related code to simplify the codebase
 
 ## Next Steps
-- Continue testing and improving the tools with various configurations
-- Implement additional Unraid API features as they become available
+- Continue testing and improving the read-only tools with various configurations
+- Implement additional Unraid API features as they become available (read-only only)
 - Add authentication and security features to the MCP server
 - Implement advanced features like caching
 - Create Docker container for easy deployment

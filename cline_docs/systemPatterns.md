@@ -10,6 +10,7 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Implements robust error handling for API responses
    - Handles timeout management for longer operations
    - Provides enhanced logging and diagnostics
+   - Implements read-only operations for safety
    
 2. **MCP Server Layer** (`server.py`)
    - Implements the Model Context Protocol
@@ -17,6 +18,7 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Handles request/response formatting
    - Manages error reporting and recovery
    - Uses stdio transport exclusively for AI assistant integration
+   - Enforces read-only operations for security
    
 3. **Server Runner** (`run_server.py`)
    - Handles server configuration and initialization
@@ -26,20 +28,20 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
 
 4. **Tools Layer** (`src/tools/`)
    - Modular organization of tools by functionality
-   - Each module focuses on a specific aspect of Unraid management:
-     - `array.py`: Array management tools
-     - `docker.py`: Docker container management
-     - `vms.py`: Virtual machine management
-     - `system.py`: System information and control
+   - Each module focuses on a specific aspect of Unraid monitoring:
+     - `array.py`: Array monitoring tools
+     - `docker.py`: Docker container information
+     - `vms.py`: Virtual machine information
+     - `system.py`: System information
      - `notifications.py`: Notification management
-     - `shares.py`: Share management
-     - `disks.py`: Disk operations
-     - `users.py`: User management
-     - `apikeys.py`: API key management
-     - `remote_access.py`: Remote access configuration
-     - `unassigned_devices.py`: Unassigned devices management
+     - `shares.py`: Share information
+     - `disks.py`: Disk information
+     - `users.py`: User information (read-only)
+     - `apikeys.py`: API key information (read-only)
+     - `unassigned_devices.py`: Unassigned devices information
      - `parity.py`: Parity history tools
    - Centralized registration through `__init__.py`
+   - All tools are read-only for security
 
 ## Key Technical Decisions
 1. **GraphQL for API Communication**
@@ -83,6 +85,12 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Simplified deployment without requiring HTTP server setup
    - Default and only transport mode used in the application
 
+8. **Read-Only Design Pattern**
+   - All tools and methods are read-only for security
+   - Removed potentially dangerous tools that could modify the system
+   - Focused on information retrieval rather than system modification
+   - Enhanced safety for AI assistant integration
+
 ## Design Patterns
 1. **Facade Pattern** 
    - The UnraidClient class acts as a facade to the complex GraphQL API
@@ -113,3 +121,8 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Adapting the MCP protocol to work over stdio
    - Converting between MCP messages and JSON-serialized data
    - Handling input/output streams for communication
+
+8. **Read-Only Pattern**
+   - Implementing only query operations, not mutations
+   - Focusing on data retrieval rather than modification
+   - Enhancing security by preventing system changes

@@ -19,17 +19,16 @@
 - **Unraid GraphQL API**: Core API for interacting with Unraid server
   - Documentation: https://docs.unraid.net/API/
   - GraphQL Sandbox: https://docs.unraid.net/API/how-to-use-the-api/#accessing-the-graphql-sandbox
-  - Supported features:
+  - Supported features (read-only):
     - System information
-    - Array management
+    - Array status
     - Docker containers and networks
     - Virtual machines
-    - Disk operations
+    - Disk information
     - Notifications
     - Shares
-    - User management
-    - API key management
-    - Remote access configuration
+    - User information
+    - API key information
     - Unassigned devices
     - Parity history
 
@@ -72,6 +71,7 @@
 6. **Schema Compatibility**: GraphQL schema may have nullable fields that require careful query design
 7. **Timeout Configuration**: Some operations (particularly disk-related) may take longer and require extended timeouts
 8. **Logging System**: Comprehensive logging needed for debugging and monitoring
+9. **Read-Only Operations**: Limited to read-only operations for security reasons
 
 ## Technical Implementation Details
 1. **Enhanced Error Handling**:
@@ -96,28 +96,27 @@
    - Appropriate error handling for timeout conditions
    - Clear error messages for timeout situations
 
-5. **User Management**:
-   - Tools for listing, adding, and deleting users
-   - Secure password handling
-   - Role-based user management
+5. **User Information**:
+   - Tools for listing users (read-only)
+   - No user modification capabilities for security
 
-6. **API Key Management**:
-   - Tools for creating and listing API keys
-   - Secure key generation and storage
-   - Role-based permissions for API keys
+6. **API Key Information**:
+   - Tools for listing API keys (read-only)
+   - No key creation capabilities for security
 
-7. **Remote Access Configuration**:
-   - Tools for setting up and managing remote access
-   - Support for dynamic remote access configuration
-   - Secure URL handling
-
-8. **Unassigned Devices Management**:
-   - Tools for listing and managing unassigned devices
+7. **Unassigned Devices Information**:
+   - Tools for listing and viewing unassigned devices
    - Detailed device information including partitions
 
-9. **Parity History**:
+8. **Parity History**:
    - Tools for retrieving and analyzing parity check history
    - Historical data on parity check performance and errors
+
+9. **Read-Only Design**:
+   - All operations limited to queries, not mutations
+   - Removed potentially dangerous methods from client
+   - Focus on information retrieval rather than system modification
+   - Enhanced security for AI assistant integration
 
 10. **Stdio Transport Mode**:
     - Exclusive use of stdio transport for direct integration with AI assistants
