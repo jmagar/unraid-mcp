@@ -1,0 +1,35 @@
+# Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
+
+startCommand:
+  type: stdio
+  configSchema:
+    # JSON Schema defining the configuration options for the MCP.
+    type: object
+    required:
+      - unraidApiUrl
+      - unraidApiKey
+    properties:
+      unraidApiUrl:
+        type: string
+        description: The GraphQL endpoint URL for the Unraid server, e.g.
+          http://your-unraid-server:port/graphql
+      unraidApiKey:
+        type: string
+        description: The API key used for authenticating with the Unraid API
+      logLevel:
+        type: string
+        default: INFO
+        description: Logging level such as DEBUG, INFO, WARNING, etc.
+      claudeMode:
+        type: boolean
+        default: true
+        description: Enable or disable Claude mode integration
+  commandFunction:
+    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
+    |-
+    (config) => { const env = Object.assign({}, process.env, { UNRAID_API_URL: config.unraidApiUrl, UNRAID_API_KEY: config.unraidApiKey, LOG_LEVEL: config.logLevel || 'INFO', CLAUDE_MODE: config.claudeMode ? 'true' : 'false' }); return { command: 'python', args: ['run_server.py', 'stdio'], env: env }; }
+  exampleConfig:
+    unraidApiUrl: http://your-unraid-server:port/graphql
+    unraidApiKey: your-secret-api-key
+    logLevel: INFO
+    claudeMode: true

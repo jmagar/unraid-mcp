@@ -1,5 +1,7 @@
 # Unraid MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@jmagar/unraid-mcp)](https://smithery.ai/server/@jmagar/unraid-mcp)
+
 A Python-based MCP (Model Context Protocol) server that enables AI assistants to interact with an Unraid server through the official Unraid GraphQL API.
 
 ## Disclaimer
@@ -41,6 +43,15 @@ By using this software, you acknowledge and accept these risks.
 
 ## Installation
 
+### Installing via Smithery
+
+To install Unraid MCP Server for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@jmagar/unraid-mcp):
+
+```bash
+npx -y @smithery/cli install @jmagar/unraid-mcp --client claude
+```
+
+### Manual Installation
 1. Clone the repository:
    ```bash
    git clone https://github.com/jmagar/unraid-mcp.git
