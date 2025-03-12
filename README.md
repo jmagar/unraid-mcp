@@ -19,15 +19,14 @@ Even with read-only access, monitoring tools can potentially expose sensitive sy
 ## Features
 
 - **System Information**: Get detailed information about your Unraid server
-- **Array Management**: Monitor array status, start and stop the array
+- **Array Management**: Monitor array status
 - **Docker Management**: List Docker containers and networks
 - **VM Management**: List virtual machines
 - **Disk Information**: Get detailed information about disks and unassigned devices
 - **Notification Management**: View and manage system notifications
 - **Share Management**: View and manage network shares
-- **User Management**: Add, delete, and list users
-- **API Key Management**: Create and list API keys
-- **Remote Access Configuration**: Set up and manage remote access
+- **User Management**: List users
+- **API Key Management**: List API keys
 - **Parity History**: View parity check history
 - **Shares**: Browse user shares on the Unraid server
 - **Plugins**: View installed plugins and their status
@@ -207,7 +206,6 @@ The server is built using the FastMCP framework and consists of:
 | Tool Name | Description |
 |-----------|-------------|
 | `get_api_keys` | Get information about all API keys |
-| `create_api_key` | Create a new API key |
 
 ## Integration with Claude
 
