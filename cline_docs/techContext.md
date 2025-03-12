@@ -19,6 +19,19 @@
 - **Unraid GraphQL API**: Core API for interacting with Unraid server
   - Documentation: https://docs.unraid.net/API/
   - GraphQL Sandbox: https://docs.unraid.net/API/how-to-use-the-api/#accessing-the-graphql-sandbox
+  - Supported features:
+    - System information
+    - Array management
+    - Docker containers and networks
+    - Virtual machines
+    - Disk operations
+    - Notifications
+    - Shares
+    - User management
+    - API key management
+    - Remote access configuration
+    - Unassigned devices
+    - Parity history
 
 ## Development Setup
 1. Python 3.9+ environment with pip
@@ -26,12 +39,10 @@
 3. Environment variables configured in `.env` file:
    - `UNRAID_API_URL`: URL of the Unraid GraphQL API (e.g., `https://your-unraid-server-ip/graphql`)
    - `UNRAID_API_KEY`: API key for authentication with Unraid
-   - `MCP_SERVER_HOST`: Host address for SSE transport (default: 127.0.0.1)
-   - `MCP_SERVER_PORT`: Port number for SSE transport (default: 8400)
    - `LOG_LEVEL`: Logging level (INFO, DEBUG, etc.)
    - `LOG_FILE`: Path to log file (default: unraid_mcp.log)
 4. MCP configuration for Cline/Claude integration:
-   - Configuration file: `cline_mcp_settings.json`
+   - Configuration file: `unraid_mcp_config.json`
    - Format:
      ```json
      {
@@ -42,9 +53,7 @@
            "env": {
              "UNRAID_API_URL": "http://your-unraid-server:port/graphql",
              "UNRAID_API_KEY": "your-api-key",
-             "MCP_SERVER_HOST": "127.0.0.1",
-             "MCP_SERVER_PORT": "8400",
-             "LOG_LEVEL": "DEBUG",
+             "LOG_LEVEL": "INFO",
              "CLAUDE_MCP_SERVER": "true"
            },
            "disabled": false,
@@ -86,6 +95,39 @@
    - Extended timeouts (60 seconds) for disk operations
    - Appropriate error handling for timeout conditions
    - Clear error messages for timeout situations
+
+5. **User Management**:
+   - Tools for listing, adding, and deleting users
+   - Secure password handling
+   - Role-based user management
+
+6. **API Key Management**:
+   - Tools for creating and listing API keys
+   - Secure key generation and storage
+   - Role-based permissions for API keys
+
+7. **Remote Access Configuration**:
+   - Tools for setting up and managing remote access
+   - Support for dynamic remote access configuration
+   - Secure URL handling
+
+8. **Unassigned Devices Management**:
+   - Tools for listing and managing unassigned devices
+   - Detailed device information including partitions
+
+9. **Parity History**:
+   - Tools for retrieving and analyzing parity check history
+   - Historical data on parity check performance and errors
+
+10. **Stdio Transport Mode**:
+    - Implementation of stdio transport for direct integration with AI assistants
+    - Support for the MCP protocol over standard input/output
+    - Compatible with Anthropic API and Cursor integration
+
+## Integration Methods
+- **Anthropic Python SDK**: Using the `mcp_config_file` parameter
+- **Cursor**: Using the MCP Configuration in Claude settings
+- **Direct Stdio**: Running the server directly and communicating via stdin/stdout
 
 ## Testing Tools
 - **MCP Inspector**: For testing MCP server implementation (`pip install mcp-inspector`)

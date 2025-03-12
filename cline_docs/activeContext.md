@@ -6,7 +6,7 @@
 - Resolved GraphQL schema validation errors by simplifying queries
 - Enhanced error handling and logging for better diagnostics
 - Successfully integrated the MCP server with Claude/Cline
-- Made server compatible with both SSE and stdio transport modes
+- Made server compatible with stdio transport mode
 - Verified resources and tools are working correctly with real Unraid server
 - Implemented additional API features:
   - User management (get_users, add_user, delete_user)
@@ -14,6 +14,7 @@
   - Remote access configuration (setup_remote_access, enable_dynamic_remote_access)
   - Unassigned devices (get_unassigned_devices)
   - Parity history (get_parity_history)
+- Updated README with proper JSON configuration for stdio mode integration
 
 ## Recent Changes
 - Fixed HTTP timeout errors in the Unraid client:
@@ -38,11 +39,10 @@
 - Reorganized resource URIs to follow FastMCP patterns
 - Added templated resources for individual VMs and containers
 - Added resources for shares and plugins information
-- Created production server script with SSE transport
 - Enhanced documentation with tables of available resources and tools
-- Successfully integrated with Claude Desktop
+- Successfully integrated with Claude using stdio mode
 - Configured server using mcpServers JSON configuration
-- Tested end-to-end functionality with Claude Desktop
+- Tested end-to-end functionality with Claude
 
 - Implemented additional API features:
   - Added user management tools (get_users, add_user, delete_user)
@@ -51,6 +51,12 @@
   - Added unassigned devices tools (get_unassigned_devices)
   - Added parity history tools (get_parity_history)
   - Updated documentation to accurately reflect API capabilities
+
+- Updated README.md:
+  - Removed references to SSE transport mode
+  - Added detailed instructions for stdio mode integration
+  - Added JSON configuration examples for Anthropic API and Cursor
+  - Simplified usage instructions to focus on stdio mode
 
 ## Next Steps
 1. Continue testing and improving the new tools:

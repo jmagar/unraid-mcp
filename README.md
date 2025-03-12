@@ -84,33 +84,21 @@ To use this MCP server, you need to set up the Unraid API on your Unraid server:
 
 ## Usage
 
-### Running in Local Development Mode
+### Running the MCP Server
 
-For testing and development, you can run the server in stdio mode:
+Run the server in stdio mode for integration with AI assistants:
 
 ```bash
-python server.py
+# Run in stdio mode (for direct integration with AI assistants)
+python run_server.py
 ```
 
-### Running as a Production Server
+The stdio mode is useful for:
+- Direct integration with AI assistants that support the MCP protocol
+- Testing with the Anthropic Python SDK
+- Integration with Claude in Cursor
 
-For production use, you can run the server with SSE transport:
-
-1. Configure server settings in `.env`:
-   ```
-   # Unraid API Configuration
-   UNRAID_API_URL=http://your-unraid-server-ip/graphql
-   UNRAID_API_KEY=your-api-key
-   
-   # MCP Server Configuration
-   MCP_SERVER_HOST=0.0.0.0  # Listen on all interfaces
-   MCP_SERVER_PORT=8000     # Port to serve MCP
-   ```
-
-2. Run the server with:
-   ```bash
-   python run_server.py
-   ```
+When running in stdio mode, the server reads from standard input and writes to standard output, following the MCP protocol format. This allows for direct communication with AI assistants without requiring HTTP transport.
 
 ## Server Architecture
 
@@ -158,23 +146,32 @@ The server is built using the FastMCP framework and consists of:
 | `get_unassigned_devices` | Get information about unassigned devices |
 | `get_parity_history` | Get parity check history |
 
-## Testing with MCP Inspector
-
-You can test the server using the MCP Inspector tool:
-
-```bash
-pip install mcp-inspector
-mcp-inspector --url http://localhost:8000
-```
-
 ## Integration with Claude
 
-1. Go to Claude Desktop
-2. Navigate to Settings > Integrations
-3. Add a new integration:
-   - Name: Unraid MCP
-   - URL: http://localhost:8000 (or your server URL)
-4. Start asking Claude about your Unraid server
+To use the MCP server with Claude API or other AI assistants that support stdio mode:
+
+1. Create a configuration file (e.g., `unraid_mcp_config.json`):
+   ```json
+   {
+     "mcpServers": {
+       "unraid": {
+         "command": "/path/to/python",
+         "args": ["/path/to/unraid-mcp/run_server.py"],
+         "env": {
+           "UNRAID_API_URL": "http://your-unraid-server:port/graphql",
+           "UNRAID_API_KEY": "your-api-key",
+           "LOG_LEVEL": "INFO",
+           "CLAUDE_MCP_SERVER": "true"
+         },
+         "disabled": false,
+         "autoApprove": []
+       }
+     }
+   }
+   ```
+
+
+> **Note**: For Windows users, make sure to use double backslashes in paths (e.g., `C:\\Users\\username\\unraid-mcp\\run_server.py`)
 
 ## Example Queries
 

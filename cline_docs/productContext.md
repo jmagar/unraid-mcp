@@ -10,6 +10,11 @@ The Unraid MCP server project aims to create a bridge between AI assistants (lik
 4. **API Complexity**: Abstracts the complex GraphQL API behind a more user-friendly interface.
 5. **Schema Validation Issues**: Handles inconsistencies and nullable fields in the Unraid GraphQL schema.
 6. **Timeout Management**: Properly manages longer operations like disk queries that may take time to complete.
+7. **User Management Complexity**: Simplifies the process of managing users on the Unraid server.
+8. **API Key Security**: Provides a secure way to manage API keys for Unraid API access.
+9. **Remote Access Configuration**: Simplifies the setup and management of remote access to the Unraid server.
+10. **Unassigned Devices Management**: Makes it easier to view and manage unassigned devices.
+11. **Parity History Analysis**: Provides access to historical parity check data for system health monitoring.
 
 ## How It Should Work
 1. The MCP server acts as an intermediary between AI assistants and the Unraid GraphQL API.
@@ -20,3 +25,8 @@ The Unraid MCP server project aims to create a bridge between AI assistants (lik
 6. The server handles error conditions gracefully with appropriate retry mechanisms and user feedback.
 7. Comprehensive logging provides visibility into operations for debugging and monitoring purposes.
 8. Timeout configurations accommodate varying response times from different Unraid API endpoints.
+9. User management tools allow for listing, adding, and deleting users with appropriate permissions.
+10. API key management tools provide secure creation and listing of API keys with role-based permissions.
+11. Remote access configuration tools simplify the setup and management of remote access to the Unraid server.
+12. Unassigned devices tools provide detailed information about devices not assigned to the array.
+13. Parity history tools offer insights into historical parity check performance and errors.
