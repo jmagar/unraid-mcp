@@ -156,15 +156,11 @@ The server is built using the FastMCP framework and consists of:
 | Tool Name | Description |
 |-----------|-------------|
 | `get_system_info` | Get detailed system information |
-| `reboot_server` | Reboot the Unraid server |
-| `shutdown_server` | Shutdown the Unraid server |
 | `get_network_info` | Get network interface information |
 
 ### Array Management
 | Tool Name | Description |
 |-----------|-------------|
-| `start_array` | Start the Unraid array |
-| `stop_array` | Stop the Unraid array |
 | `get_array_status` | Get array status in a human-readable way |
 | `get_parity_history` | Get parity check history |
 
@@ -200,16 +196,12 @@ The server is built using the FastMCP framework and consists of:
 |-----------|-------------|
 | `get_disks` | Get information about all disks |
 | `get_disk_details` | Get information about a specific disk |
-| `mount_disk` | Mount a disk |
-| `unmount_disk` | Unmount a disk |
 | `get_unassigned_devices` | Get information about unassigned devices |
 
 ### User Management
 | Tool Name | Description |
 |-----------|-------------|
 | `get_users` | Get information about all users |
-| `add_user` | Add a new user to the Unraid server |
-| `delete_user` | Delete a user from the Unraid server |
 
 ### API Key Management
 | Tool Name | Description |

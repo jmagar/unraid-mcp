@@ -1,6 +1,8 @@
 """Array management tools for Unraid MCP server"""
 from mcp.types import TextContent
 import logging
+import traceback
+import json
 
 # Get logger
 logger = logging.getLogger("unraid_mcp.array_tools")
@@ -14,57 +16,47 @@ def register_array_tools(server, unraid_client):
     """
     logger.info("Registering array tools")
     
-    @server.tool(description="Start the Unraid array")
-    async def start_array(ctx=None):
-        """Start the Unraid array"""
-        logger.info("Tool called: start_array()")
+    @server.tool(description="Get array status in a human-readable way")
+    async def get_array_status(
+        ctx=None
+    ):
+        """Get the current status of the Unraid array
+        
+        Returns:
+            Human-readable array status information
+        """
+        logger.info("Tool called: get_array_status()")
         
         if ctx:
-            await ctx.info("Starting array...")
+            await ctx.info("Retrieving array status...")
         else:
-            print("Starting array...")
+            print("Retrieving array status...")
         
         try:
-            # Use the client's method instead of raw GraphQL
-            result = await unraid_client.start_array()
-            logger.debug(f"Start array response: {result}")
-            logger.info("Array started successfully")
-            return TextContent(type="text", text="✅ Array started successfully")
+            # Use the client method directly
+            response = await unraid_client.get_array_status()
+            logger.debug(f"Array status response: {response}")
+            
+            if "data" in response and "array" in response["data"]:
+                array = response["data"]["array"]
+                logger.info("Retrieved array status successfully")
+                return TextContent(type="text", text=json.dumps(array, indent=2))
+            else:
+                logger.warning("Failed to retrieve array status: Invalid response format")
+                return TextContent(type="text", text="❌ Failed to retrieve array status: Invalid response format")
         except Exception as e:
-            error_msg = f"Error starting array: {str(e)}"
+            error_msg = f"Error retrieving array status: {str(e)}"
             logger.error(error_msg, exc_info=True)
+            
+            # Get the full stack trace for debugging
+            stack_trace = traceback.format_exc()
+            logger.error(f"Stack trace: {stack_trace}")
             
             if ctx:
                 await ctx.error(error_msg)
             else:
                 print(error_msg)
-            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
-
-    @server.tool(description="Stop the Unraid array")
-    async def stop_array(ctx=None):
-        """Stop the Unraid array"""
-        logger.info("Tool called: stop_array()")
-        
-        if ctx:
-            await ctx.info("Stopping array...")
-        else:
-            print("Stopping array...")
-        
-        try:
-            # Use the client's method instead of raw GraphQL
-            result = await unraid_client.stop_array()
-            logger.debug(f"Stop array response: {result}")
-            logger.info("Array stopped successfully")
-            return TextContent(type="text", text="✅ Array stopped successfully")
-        except Exception as e:
-            error_msg = f"Error stopping array: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
+            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}\n\nPlease check the server logs for more details.")
     
     # Log that tools were registered
     logger.info("Array tools registered successfully")
