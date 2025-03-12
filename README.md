@@ -8,9 +8,13 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 - **Array Management**: Monitor array status, start and stop the array
 - **Docker Management**: List Docker containers and networks
 - **VM Management**: List virtual machines
-- **Disk Information**: Get detailed information about disks
+- **Disk Information**: Get detailed information about disks and unassigned devices
 - **Notification Management**: View and manage system notifications
 - **Share Management**: View and manage network shares
+- **User Management**: Add, delete, and list users
+- **API Key Management**: Create and list API keys
+- **Remote Access Configuration**: Set up and manage remote access
+- **Parity History**: View parity check history
 - **Shares**: Browse user shares on the Unraid server
 - **Plugins**: View installed plugins and their status
 - **Error Handling**: Comprehensive error handling with diagnostic information
@@ -144,6 +148,15 @@ The server is built using the FastMCP framework and consists of:
 | `get_docker_containers` | Get information about Docker containers |
 | `get_docker_networks` | Get information about Docker networks |
 | `get_vms` | Get information about virtual machines |
+| `get_users` | Get information about all users |
+| `add_user` | Add a new user to the Unraid server |
+| `delete_user` | Delete a user from the Unraid server |
+| `get_api_keys` | Get information about all API keys |
+| `create_api_key` | Create a new API key |
+| `setup_remote_access` | Set up remote access for the Unraid server |
+| `enable_dynamic_remote_access` | Enable or disable dynamic remote access |
+| `get_unassigned_devices` | Get information about unassigned devices |
+| `get_parity_history` | Get parity check history |
 
 ## Testing with MCP Inspector
 

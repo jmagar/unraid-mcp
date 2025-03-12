@@ -18,6 +18,11 @@
 - Resolved GraphQL schema validation errors
 - Enhanced logging system with both console and file outputs
 - Fixed Docker container tools to use direct query execution
+- Added user management tools (get_users, add_user, delete_user)
+- Added API key management tools (get_api_keys, create_api_key)
+- Added remote access configuration tools (setup_remote_access, enable_dynamic_remote_access)
+- Added unassigned devices tools (get_unassigned_devices)
+- Added parity history tools (get_parity_history)
 
 ## What's Left to Build
 1. **Project Structure**
@@ -45,6 +50,11 @@
    - [x] Add logging support
    - [x] Add templated resources for individual items
    - [x] Fix schema validation errors in disk and Docker tools
+   - [x] Implement user management tools
+   - [x] Implement API key management tools
+   - [x] Implement remote access configuration tools
+   - [x] Implement unassigned devices tools
+   - [x] Implement parity history tools
 
 4. **Documentation**
    - [x] Create README.md

@@ -8,6 +8,12 @@
 - Successfully integrated the MCP server with Claude/Cline
 - Made server compatible with both SSE and stdio transport modes
 - Verified resources and tools are working correctly with real Unraid server
+- Implemented additional API features:
+  - User management (get_users, add_user, delete_user)
+  - API key management (get_api_keys, create_api_key)
+  - Remote access configuration (setup_remote_access, enable_dynamic_remote_access)
+  - Unassigned devices (get_unassigned_devices)
+  - Parity history (get_parity_history)
 
 ## Recent Changes
 - Fixed HTTP timeout errors in the Unraid client:
@@ -38,30 +44,31 @@
 - Configured server using mcpServers JSON configuration
 - Tested end-to-end functionality with Claude Desktop
 
+- Implemented additional API features:
+  - Added user management tools (get_users, add_user, delete_user)
+  - Added API key management tools (get_api_keys, create_api_key)
+  - Added remote access configuration tools (setup_remote_access, enable_dynamic_remote_access)
+  - Added unassigned devices tools (get_unassigned_devices)
+  - Added parity history tools (get_parity_history)
+  - Updated documentation to accurately reflect API capabilities
+
 ## Next Steps
-1. Continue testing and improving the fixed disk and Docker tools:
+1. Continue testing and improving the new tools:
    - Test with various Unraid server configurations
    - Verify error handling under different failure scenarios
    - Optimize queries for better performance
    
-2. Implement additional Unraid API features:
-   - User management (addUser, deleteUser mutations are available)
-   - Remote access configuration (enableDynamicRemoteAccess, setupRemoteAccess mutations are available)
-   - API key management (createApiKey mutation is available)
-   - Note: Docker container creation/management is not supported by the current API
-
-3. Add security enhancements:
+2. Add security enhancements:
    - User authentication for the MCP server
    - Role-based access control
    - Secure token handling
 
-4. Implement advanced features:
-   - WebSocket support for real-time updates
+3. Implement advanced features:
    - Caching layer for improved performance
    - Metrics and monitoring
    - Connection pooling for API requests
 
-5. Deployment improvements:
+4. Deployment improvements:
    - Create Docker container for easy deployment
    - Add systemd service configuration
    - Implement automatic updates

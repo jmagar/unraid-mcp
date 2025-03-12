@@ -701,6 +701,129 @@ class UnraidClient:
         result = await self.execute_query(query)
         return result["data"]["me"]
     
+    async def get_users(self) -> List[Dict[str, Any]]:
+        """Get information about all users
+        
+        Returns:
+            List of user objects
+        """
+        query = """
+        query {
+          users {
+            id
+            name
+            description
+            roles
+          }
+        }
+        """
+        
+        logger.info("Getting users")
+        logger.debug(f"Using query: {query}")
+        
+        try:
+            result = await self.execute_query(query)
+            logger.debug(f"Get users result: {result}")
+            
+            if "data" in result and "users" in result["data"]:
+                return result["data"]["users"]
+            else:
+                logger.warning("Failed to get users: Invalid response format")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting users: {str(e)}")
+            raise
+    
+    async def add_user(self, name: str, password: str, description: str = "") -> Dict[str, Any]:
+        """Add a new user
+        
+        Args:
+            name: The username
+            password: The user's password
+            description: Optional description for the user
+            
+        Returns:
+            The created user object
+        """
+        mutation = """
+        mutation ($input: addUserInput!) {
+          addUser(input: $input) {
+            id
+            name
+            description
+            roles
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "name": name,
+                "password": password,
+                "description": description
+            }
+        }
+        
+        logger.info(f"Adding user: {name}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            result = await self.execute_query(mutation, variables)
+            logger.debug(f"Add user result: {result}")
+            
+            if "data" in result and "addUser" in result["data"]:
+                return result["data"]["addUser"]
+            else:
+                logger.warning(f"Failed to add user {name}: Invalid response format")
+                if "errors" in result:
+                    logger.warning(f"Errors: {result['errors']}")
+                return {"error": "Failed to add user"}
+        except Exception as e:
+            logger.error(f"Error adding user {name}: {str(e)}")
+            raise
+    
+    async def delete_user(self, user_id: str) -> Dict[str, Any]:
+        """Delete a user
+        
+        Args:
+            user_id: The ID of the user to delete
+            
+        Returns:
+            The deleted user object
+        """
+        mutation = """
+        mutation ($input: deleteUserInput!) {
+          deleteUser(input: $input) {
+            id
+            name
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "userId": user_id
+            }
+        }
+        
+        logger.info(f"Deleting user with ID: {user_id}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            result = await self.execute_query(mutation, variables)
+            logger.debug(f"Delete user result: {result}")
+            
+            if "data" in result and "deleteUser" in result["data"]:
+                return result["data"]["deleteUser"]
+            else:
+                logger.warning(f"Failed to delete user {user_id}: Invalid response format")
+                if "errors" in result:
+                    logger.warning(f"Errors: {result['errors']}")
+                return {"error": "Failed to delete user"}
+        except Exception as e:
+            logger.error(f"Error deleting user {user_id}: {str(e)}")
+            raise
+
     # Notification Methods
     
     async def get_notifications(self, importance=None, notification_type="UNREAD", offset=0, limit=10) -> Dict[str, Any]:
@@ -955,6 +1078,211 @@ class UnraidClient:
         """
         result = await self.execute_query(mutation)
         return result["data"]["reboot"]
+
+    # API Key Management Methods
+    
+    async def create_api_key(self, name: str, description: str = "", roles: List[str] = ["admin"]) -> Dict[str, Any]:
+        """Create a new API key
+        
+        Args:
+            name: The name for the API key
+            description: Optional description for the API key
+            roles: List of roles to assign to the API key (default: ["admin"])
+            
+        Returns:
+            The created API key object including the secret key
+        """
+        mutation = """
+        mutation ($input: CreateApiKeyInput!) {
+          createApiKey(input: $input) {
+            id
+            key
+            name
+            description
+            roles
+            createdAt
+          }
+        }
+        """
+        variables = {
+            "input": {
+                "name": name,
+                "description": description,
+                "roles": roles
+            }
+        }
+        
+        logger.info(f"Creating API key: {name}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            result = await self.execute_query(mutation, variables)
+            logger.debug(f"Create API key result: {result}")
+            
+            if "data" in result and "createApiKey" in result["data"]:
+                return result["data"]["createApiKey"]
+            else:
+                logger.warning(f"Failed to create API key {name}: Invalid response format")
+                if "errors" in result:
+                    logger.warning(f"Errors: {result['errors']}")
+                return {"error": "Failed to create API key"}
+        except Exception as e:
+            logger.error(f"Error creating API key {name}: {str(e)}")
+            raise
+    
+    async def get_api_keys(self) -> List[Dict[str, Any]]:
+        """Get information about all API keys
+        
+        Returns:
+            List of API key objects
+        """
+        query = """
+        query {
+          apiKeys {
+            id
+            name
+            description
+            roles
+            createdAt
+          }
+        }
+        """
+        
+        logger.info("Getting API keys")
+        logger.debug(f"Using query: {query}")
+        
+        try:
+            result = await self.execute_query(query)
+            logger.debug(f"Get API keys result: {result}")
+            
+            if "data" in result and "apiKeys" in result["data"]:
+                return result["data"]["apiKeys"]
+            else:
+                logger.warning("Failed to get API keys: Invalid response format")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting API keys: {str(e)}")
+            raise
+
+    # Remote Access Methods
+    
+    async def setup_remote_access(self, url: str) -> bool:
+        """Set up remote access
+        
+        Args:
+            url: The remote access URL
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        mutation = """
+        mutation ($input: SetupRemoteAccessInput!) {
+          setupRemoteAccess(input: $input)
+        }
+        """
+        variables = {
+            "input": {
+                "url": url
+            }
+        }
+        
+        logger.info(f"Setting up remote access with URL: {url}")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            result = await self.execute_query(mutation, variables)
+            logger.debug(f"Setup remote access result: {result}")
+            
+            if "data" in result and "setupRemoteAccess" in result["data"]:
+                return result["data"]["setupRemoteAccess"]
+            else:
+                logger.warning(f"Failed to set up remote access: Invalid response format")
+                if "errors" in result:
+                    logger.warning(f"Errors: {result['errors']}")
+                return False
+        except Exception as e:
+            logger.error(f"Error setting up remote access: {str(e)}")
+            raise
+    
+    async def enable_dynamic_remote_access(self, enabled: bool = True) -> bool:
+        """Enable or disable dynamic remote access
+        
+        Args:
+            enabled: Whether to enable (True) or disable (False) dynamic remote access
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        mutation = """
+        mutation ($input: EnableDynamicRemoteAccessInput!) {
+          enableDynamicRemoteAccess(input: $input)
+        }
+        """
+        variables = {
+            "input": {
+                "enabled": enabled
+            }
+        }
+        
+        logger.info(f"{'Enabling' if enabled else 'Disabling'} dynamic remote access")
+        logger.debug(f"Using mutation: {mutation}")
+        logger.debug(f"With variables: {variables}")
+        
+        try:
+            result = await self.execute_query(mutation, variables)
+            logger.debug(f"Enable dynamic remote access result: {result}")
+            
+            if "data" in result and "enableDynamicRemoteAccess" in result["data"]:
+                return result["data"]["enableDynamicRemoteAccess"]
+            else:
+                logger.warning(f"Failed to {'enable' if enabled else 'disable'} dynamic remote access: Invalid response format")
+                if "errors" in result:
+                    logger.warning(f"Errors: {result['errors']}")
+                return False
+        except Exception as e:
+            logger.error(f"Error {'enabling' if enabled else 'disabling'} dynamic remote access: {str(e)}")
+            raise
+
+    # Unassigned Devices Methods
+    
+    async def get_unassigned_devices(self) -> List[Dict[str, Any]]:
+        """Get information about unassigned devices
+        
+        Returns:
+            List of unassigned device objects
+        """
+        query = """
+        query {
+          unassignedDevices {
+            id
+            name
+            size
+            partitions {
+              name
+              size
+              fsType
+            }
+          }
+        }
+        """
+        
+        logger.info("Getting unassigned devices")
+        logger.debug(f"Using query: {query}")
+        
+        try:
+            result = await self.execute_query(query)
+            logger.debug(f"Get unassigned devices result: {result}")
+            
+            if "data" in result and "unassignedDevices" in result["data"]:
+                return result["data"]["unassignedDevices"]
+            else:
+                logger.warning("Failed to get unassigned devices: Invalid response format")
+                return []
+        except Exception as e:
+            logger.error(f"Error getting unassigned devices: {str(e)}")
+            raise
 
 def _extract_operation_name(query: str) -> str:
     """Extract operation name from a GraphQL query for better logging
