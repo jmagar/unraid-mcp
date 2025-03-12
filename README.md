@@ -129,22 +129,76 @@ The server is built using the FastMCP framework and consists of:
 
 ## Available Tools
 
+### System Management
+| Tool Name | Description |
+|-----------|-------------|
+| `get_system_info` | Get detailed system information |
+| `reboot_server` | Reboot the Unraid server |
+| `shutdown_server` | Shutdown the Unraid server |
+| `get_network_info` | Get network interface information |
+
+### Array Management
 | Tool Name | Description |
 |-----------|-------------|
 | `start_array` | Start the Unraid array |
 | `stop_array` | Stop the Unraid array |
+| `get_array_status` | Get array status in a human-readable way |
+| `get_parity_history` | Get parity check history |
+
+### Docker Management
+| Tool Name | Description |
+|-----------|-------------|
 | `get_docker_containers` | Get information about Docker containers |
 | `get_docker_networks` | Get information about Docker networks |
+| `list_containers` | List Docker containers in a human-readable way |
+
+### VM Management
+| Tool Name | Description |
+|-----------|-------------|
 | `get_vms` | Get information about virtual machines |
+| `get_vm_details` | Get detailed information about a specific VM |
+| `list_vms` | List virtual machines in a human-readable way |
+
+### Notification Management
+| Tool Name | Description |
+|-----------|-------------|
+| `get_notifications` | Get notifications from the Unraid server |
+| `create_notification` | Create a new notification |
+| `archive_notification` | Archive a notification |
+
+### Share Management
+| Tool Name | Description |
+|-----------|-------------|
+| `get_shares` | Get information about network shares |
+| `get_share_details` | Get detailed information about a specific share |
+
+### Disk Management
+| Tool Name | Description |
+|-----------|-------------|
+| `get_disks` | Get information about all disks |
+| `get_disk_details` | Get information about a specific disk |
+| `mount_disk` | Mount a disk |
+| `unmount_disk` | Unmount a disk |
+| `get_unassigned_devices` | Get information about unassigned devices |
+
+### User Management
+| Tool Name | Description |
+|-----------|-------------|
 | `get_users` | Get information about all users |
 | `add_user` | Add a new user to the Unraid server |
 | `delete_user` | Delete a user from the Unraid server |
+
+### API Key Management
+| Tool Name | Description |
+|-----------|-------------|
 | `get_api_keys` | Get information about all API keys |
 | `create_api_key` | Create a new API key |
+
+### Remote Access Management
+| Tool Name | Description |
+|-----------|-------------|
 | `setup_remote_access` | Set up remote access for the Unraid server |
 | `enable_dynamic_remote_access` | Enable or disable dynamic remote access |
-| `get_unassigned_devices` | Get information about unassigned devices |
-| `get_parity_history` | Get parity check history |
 
 ## Integration with Claude
 
