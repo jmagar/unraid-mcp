@@ -2,6 +2,18 @@
 
 A Python-based MCP (Model Context Protocol) server that enables AI assistants to interact with an Unraid server through the official Unraid GraphQL API.
 
+## Disclaimer
+
+**USE AT YOUR OWN RISK**: This software provides direct access to your Unraid server through AI assistants. While efforts have been made to ensure safe operation, improper use could potentially lead to data loss, system instability, or security vulnerabilities. 
+
+- This is an unofficial tool and is not affiliated with or endorsed by Unraid, Inc.
+- Always maintain proper backups of your data
+- Be cautious when using tools that modify system settings or user accounts
+- Review all commands suggested by AI assistants before allowing them to execute
+- The developers are not responsible for any damage, data loss, or security issues that may arise from using this software
+
+By using this software, you acknowledge and accept these risks.
+
 ## Features
 
 - **System Information**: Get detailed information about your Unraid server
