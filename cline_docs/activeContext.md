@@ -14,7 +14,6 @@
 - Implemented additional API features:
   - User management (get_users, add_user, delete_user)
   - API key management (get_api_keys, create_api_key)
-  - Remote access configuration (setup_remote_access, enable_dynamic_remote_access)
   - Unassigned devices (get_unassigned_devices)
   - Parity history (get_parity_history)
 - Updated README with proper JSON configuration for stdio mode integration
@@ -51,7 +50,7 @@
 - Implemented additional API features:
   - Added user management tools (get_users, add_user, delete_user)
   - Added API key management tools (get_api_keys, create_api_key)
-  - Added remote access configuration tools (setup_remote_access, enable_dynamic_remote_access)
+  - Removed remote access configuration tools for security reasons
   - Added unassigned devices tools (get_unassigned_devices)
   - Added parity history tools (get_parity_history)
   - Updated documentation to accurately reflect API capabilities

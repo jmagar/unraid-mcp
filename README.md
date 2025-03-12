@@ -6,15 +6,15 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 
 ## Disclaimer
 
-**USE AT YOUR OWN RISK**: This software provides direct access to your Unraid server through AI assistants. While efforts have been made to ensure safe operation, improper use could potentially lead to data loss, system instability, or security vulnerabilities. 
+**USE AT YOUR OWN RISK**: This software provides access to your Unraid server through AI assistants. While this implementation is configured as **read-only** to enhance safety, you should still exercise caution when using it.
 
 - This is an unofficial tool and is not affiliated with or endorsed by Unraid, Inc.
+- All operations are limited to read-only actions to prevent system modifications
 - Always maintain proper backups of your data
-- Be cautious when using tools that modify system settings or user accounts
-- Review all commands suggested by AI assistants before allowing them to execute
-- The developers are not responsible for any damage, data loss, or security issues that may arise from using this software
+- Review all information and suggestions provided by AI assistants before taking action
+- The developers are not responsible for any issues that may arise from using this software
 
-By using this software, you acknowledge and accept these risks.
+Even with read-only access, monitoring tools can potentially expose sensitive system information. By using this software, you acknowledge and accept these limitations and risks.
 
 ## Features
 
@@ -208,12 +208,6 @@ The server is built using the FastMCP framework and consists of:
 |-----------|-------------|
 | `get_api_keys` | Get information about all API keys |
 | `create_api_key` | Create a new API key |
-
-### Remote Access Management
-| Tool Name | Description |
-|-----------|-------------|
-| `setup_remote_access` | Set up remote access for the Unraid server |
-| `enable_dynamic_remote_access` | Enable or disable dynamic remote access |
 
 ## Integration with Claude
 

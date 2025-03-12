@@ -20,7 +20,7 @@
 - Fixed Docker container tools to use direct query execution
 - Added user management tools (get_users, add_user, delete_user)
 - Added API key management tools (get_api_keys, create_api_key)
-- Added remote access configuration tools (setup_remote_access, enable_dynamic_remote_access)
+- Removed remote access configuration tools for security reasons
 - Added unassigned devices tools (get_unassigned_devices)
 - Added parity history tools (get_parity_history)
 - Updated README with proper JSON configuration for stdio mode
@@ -57,7 +57,7 @@
    - [x] Fix schema validation errors in disk and Docker tools
    - [x] Implement user management tools
    - [x] Implement API key management tools
-   - [x] Implement remote access configuration tools
+   - [x] ~~Implement remote access configuration tools~~ (Removed for security reasons)
    - [x] Implement unassigned devices tools
    - [x] Implement parity history tools
    - [x] Modify code to use stdio transport exclusively
@@ -100,7 +100,7 @@
 - Fixed critical issues with disk operations and GraphQL schema validation
 - Improved Docker container tools functionality
 - Enhanced logging system with both console and file outputs
-- Added user management, API key management, remote access, unassigned devices, and parity history tools
+- Added user management, API key management, unassigned devices, and parity history tools
 - Updated README with proper JSON configuration for stdio mode integration
 - Organized available tools by category for better readability
 - Added "Use at Your Own Risk" disclaimer to README
