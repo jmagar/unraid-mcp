@@ -37,7 +37,7 @@
    - [x] Set up FastMCP server
    - [x] Implement system information resource
    - [x] Implement Docker container resources
-   - [x] Implement container management tools (start/stop)
+   - [ ] Implement container management tools (start/stop) - Not supported by Unraid API
    - [x] Implement array management resources
    - [x] Implement VM resources
    - [x] Implement additional tools

@@ -45,10 +45,10 @@
    - Optimize queries for better performance
    
 2. Implement additional Unraid API features:
-   - User management
-   - Network configuration
-   - Docker container creation
-   - VM creation and configuration
+   - User management (addUser, deleteUser mutations are available)
+   - Remote access configuration (enableDynamicRemoteAccess, setupRemoteAccess mutations are available)
+   - API key management (createApiKey mutation is available)
+   - Note: Docker container creation/management is not supported by the current API
 
 3. Add security enhancements:
    - User authentication for the MCP server

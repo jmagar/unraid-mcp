@@ -4,10 +4,13 @@ A Python-based MCP (Model Context Protocol) server that enables AI assistants to
 
 ## Features
 
-- **System Information**: Query system status, CPU usage, memory, and uptime
-- **Docker Management**: List, start, and stop Docker containers
-- **Array Management**: Check array status, start/stop array operations
-- **VM Management**: List, start, and stop virtual machines
+- **System Information**: Get detailed information about your Unraid server
+- **Array Management**: Monitor array status, start and stop the array
+- **Docker Management**: List Docker containers and networks
+- **VM Management**: List virtual machines
+- **Disk Information**: Get detailed information about disks
+- **Notification Management**: View and manage system notifications
+- **Share Management**: View and manage network shares
 - **Shares**: Browse user shares on the Unraid server
 - **Plugins**: View installed plugins and their status
 - **Error Handling**: Comprehensive error handling with diagnostic information
@@ -136,12 +139,11 @@ The server is built using the FastMCP framework and consists of:
 
 | Tool Name | Description |
 |-----------|-------------|
-| `start_container` | Start a Docker container by name |
-| `stop_container` | Stop a Docker container by name |
 | `start_array` | Start the Unraid array |
 | `stop_array` | Stop the Unraid array |
-| `start_vm` | Start a virtual machine by name |
-| `stop_vm` | Stop a virtual machine by name |
+| `get_docker_containers` | Get information about Docker containers |
+| `get_docker_networks` | Get information about Docker networks |
+| `get_vms` | Get information about virtual machines |
 
 ## Testing with MCP Inspector
 

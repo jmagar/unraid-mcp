@@ -551,6 +551,10 @@ class UnraidClient:
     async def start_container(self, container_name: str) -> Dict[str, Any]:
         """Start a Docker container by name
         
+        WARNING: EXPERIMENTAL/UNSUPPORTED - This operation is not officially supported by the Unraid GraphQL API.
+        The current API schema does not include mutations for starting Docker containers.
+        This method is included for future compatibility but will likely fail with current Unraid versions.
+        
         Args:
             container_name: The name of the container to start
             
@@ -599,6 +603,10 @@ class UnraidClient:
     
     async def stop_container(self, container_name: str) -> Dict[str, Any]:
         """Stop a Docker container by name
+        
+        WARNING: EXPERIMENTAL/UNSUPPORTED - This operation is not officially supported by the Unraid GraphQL API.
+        The current API schema does not include mutations for stopping Docker containers.
+        This method is included for future compatibility but will likely fail with current Unraid versions.
         
         Args:
             container_name: The name of the container to stop
