@@ -57,35 +57,39 @@ class UnraidMCPServer:
         """Run the MCP server with the specified transport
         
         Args:
-            transport: The transport type to use (stdio or sse, defaults to auto-detect)
+            transport: The transport type to use (defaults to stdio)
         """
-        # Detect transport type if not specified
+        # Always use stdio transport by default
         if transport is None:
-            transport = "stdio" if Config.CLAUDE_MODE else "sse"
+            transport = "stdio"
         
         self.logger.info(f"Starting Unraid MCP Server with {transport} transport")
         
         # Set up error handling
         self.server.onerror = lambda error: self.logger.error(f"MCP Error: {error}")
         
-        # Run the server
-        if transport == "stdio":
-            self.logger.info("Using stdio transport (for Claude/Cline)")
-            self.server.run(transport="stdio")
-        else:
-            # For SSE transport, we need to set environment variables for the host and port
-            # FastMCP uses these environment variables for SSE configuration
-            os.environ["MCP_HOST"] = Config.SERVER_HOST
-            os.environ["MCP_PORT"] = str(Config.SERVER_PORT)
-            
-            self.logger.info(f"Using SSE transport on {Config.SERVER_HOST}:{Config.SERVER_PORT}")
-            self.logger.debug(f"SSE transport configuration: MCP_HOST={os.environ.get('MCP_HOST')}, MCP_PORT={os.environ.get('MCP_PORT')}")
-            
-            try:
-                self.server.run(transport="sse")
-            except Exception as e:
-                self.logger.error(f"Error starting SSE transport: {str(e)}", exc_info=True)
-                raise
+        # Run the server with stdio transport
+        self.logger.info("Using stdio transport (for Claude/Cline)")
+        self.server.run(transport="stdio")
+        
+        # SSE transport code is commented out as we're using stdio by default
+        # if transport == "stdio":
+        #     self.logger.info("Using stdio transport (for Claude/Cline)")
+        #     self.server.run(transport="stdio")
+        # else:
+        #     # For SSE transport, we need to set environment variables for the host and port
+        #     # FastMCP uses these environment variables for SSE configuration
+        #     os.environ["MCP_HOST"] = Config.SERVER_HOST
+        #     os.environ["MCP_PORT"] = str(Config.SERVER_PORT)
+        #     
+        #     self.logger.info(f"Using SSE transport on {Config.SERVER_HOST}:{Config.SERVER_PORT}")
+        #     self.logger.debug(f"SSE transport configuration: MCP_HOST={os.environ.get('MCP_HOST')}, MCP_PORT={os.environ.get('MCP_PORT')}")
+        #     
+        #     try:
+        #         self.server.run(transport="sse")
+        #     except Exception as e:
+        #         self.logger.error(f"Error starting SSE transport: {str(e)}", exc_info=True)
+        #         raise
 
 
 def main():

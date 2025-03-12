@@ -30,3 +30,14 @@ The Unraid MCP server project aims to create a bridge between AI assistants (lik
 11. Remote access configuration tools simplify the setup and management of remote access to the Unraid server.
 12. Unassigned devices tools provide detailed information about devices not assigned to the array.
 13. Parity history tools offer insights into historical parity check performance and errors.
+14. The server uses stdio transport mode exclusively for direct integration with AI assistants.
+
+## Safety Considerations
+1. **System Modification Risk**: The server provides tools that can modify the Unraid system, including user management and remote access configuration.
+2. **Data Security**: API keys and user credentials must be handled securely.
+3. **AI Assistant Limitations**: AI assistants may not always understand the full implications of system changes they suggest.
+4. **User Verification**: Users should review and approve all system-modifying actions suggested by AI assistants.
+5. **Backup Importance**: Regular backups are essential when using tools that can modify system configuration.
+6. **Disclaimer Requirement**: A clear "Use at Your Own Risk" disclaimer is necessary to inform users of potential risks.
+7. **Transport Security**: Using stdio transport mode ensures direct communication with the AI assistant without exposing network ports.
+8. **Configuration Security**: Sensitive configuration like API keys should be stored securely in the environment or configuration files.

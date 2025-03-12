@@ -16,10 +16,11 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Exposes resources (data sources) and tools (actions) for AI assistants
    - Handles request/response formatting
    - Manages error reporting and recovery
+   - Uses stdio transport exclusively for AI assistant integration
    
 3. **Server Runner** (`run_server.py`)
    - Handles server configuration and initialization
-   - Manages stdio transport mode
+   - Manages stdio transport mode exclusively
    - Configures and manages logging
    - Provides graceful startup and shutdown
 
@@ -50,7 +51,7 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
 2. **FastMCP Framework**
    - Using the FastMCP library for rapid MCP server implementation
    - Provides structured way to define resources and tools
-   - Supports stdio transport mode for AI assistant integration
+   - Uses stdio transport mode exclusively for AI assistant integration
 
 3. **Asynchronous Programming**
    - Using `aiohttp` for asynchronous HTTP communication
@@ -76,10 +77,11 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Unified context handling for AI assistant interaction
 
 7. **Stdio Transport Mode**
-   - Direct integration with AI assistants through standard input/output
+   - Exclusive use of stdio transport for direct integration with AI assistants
    - Follows the MCP protocol specification for message exchange
    - Compatible with Anthropic API and Cursor integration
    - Simplified deployment without requiring HTTP server setup
+   - Default and only transport mode used in the application
 
 ## Design Patterns
 1. **Facade Pattern** 

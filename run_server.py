@@ -28,22 +28,29 @@ if __name__ == "__main__":
     
     try:
         # Create and run the server
-        transport = None
+        transport = "stdio"  # Always use stdio transport by default
         
-        # Check command line args for transport override
+        # Check command line args for transport override (only for stdio)
         if len(sys.argv) > 1:
-            if sys.argv[1].lower() in ("stdio", "sse"):
-                transport = sys.argv[1].lower()
-                logger.info(f"Transport overridden from command line: {transport}")
+            if sys.argv[1].lower() == "stdio":
+                transport = "stdio"
+                logger.info(f"Transport confirmed from command line: {transport}")
+            # SSE transport is commented out as we're using stdio by default
+            # elif sys.argv[1].lower() == "sse":
+            #     transport = "sse"
+            #     logger.info(f"Transport overridden from command line: {transport}")
         
         # Log key configuration
         logger.info(f"Claude mode: {Config.CLAUDE_MODE}")
-        if Config.CLAUDE_MODE:
-            logger.info(f"Using stdio transport for Claude integration")
-        else:
-            logger.info(f"Using SSE transport on {Config.SERVER_HOST}:{Config.SERVER_PORT}")
+        logger.info(f"Using stdio transport for AI assistant integration")
         
-        # Start the server with the appropriate transport
+        # SSE transport logging is commented out as we're using stdio by default
+        # if Config.CLAUDE_MODE:
+        #     logger.info(f"Using stdio transport for Claude integration")
+        # else:
+        #     logger.info(f"Using SSE transport on {Config.SERVER_HOST}:{Config.SERVER_PORT}")
+        
+        # Start the server with stdio transport
         server = UnraidMCPServer()
         logger.info("Server initialized, starting transport...")
         server.run(transport)

@@ -6,7 +6,10 @@
 - Resolved GraphQL schema validation errors by simplifying queries
 - Enhanced error handling and logging for better diagnostics
 - Successfully integrated the MCP server with Claude/Cline
-- Made server compatible with stdio transport mode
+- Made server use stdio transport mode exclusively
+- Commented out all SSE-related code to simplify the codebase
+- Modified server.py and run_server.py to use stdio transport by default
+- Updated .env.template to remove SSE-related configuration
 - Verified resources and tools are working correctly with real Unraid server
 - Implemented additional API features:
   - User management (get_users, add_user, delete_user)
@@ -15,6 +18,7 @@
   - Unassigned devices (get_unassigned_devices)
   - Parity history (get_parity_history)
 - Updated README with proper JSON configuration for stdio mode integration
+- Added comprehensive "Use at Your Own Risk" disclaimer to README
 
 ## Recent Changes
 - Fixed HTTP timeout errors in the Unraid client:
@@ -57,6 +61,15 @@
   - Added detailed instructions for stdio mode integration
   - Added JSON configuration examples for Anthropic API and Cursor
   - Simplified usage instructions to focus on stdio mode
+  - Organized available tools by category for better readability
+  - Added "Use at Your Own Risk" disclaimer with specific cautions
+
+- Modified code to use stdio transport exclusively:
+  - Updated server.py to always use stdio transport
+  - Commented out all SSE-related code in server.py
+  - Modified run_server.py to default to stdio transport
+  - Commented out SSE-related command line arguments
+  - Updated .env.template to clarify that SSE transport is not used
 
 ## Next Steps
 1. Continue testing and improving the new tools:

@@ -120,9 +120,10 @@
    - Historical data on parity check performance and errors
 
 10. **Stdio Transport Mode**:
-    - Implementation of stdio transport for direct integration with AI assistants
+    - Exclusive use of stdio transport for direct integration with AI assistants
     - Support for the MCP protocol over standard input/output
     - Compatible with Anthropic API and Cursor integration
+    - Default and only transport mode used in the application
 
 ## Integration Methods
 - **Anthropic Python SDK**: Using the `mcp_config_file` parameter
@@ -130,5 +131,5 @@
 - **Direct Stdio**: Running the server directly and communicating via stdin/stdout
 
 ## Testing Tools
-- **MCP Inspector**: For testing MCP server implementation (`pip install mcp-inspector`)
-- **Claude Desktop**: For integration testing with an AI assistant
+- **Direct Testing**: Running the server and interacting via stdin/stdout
+- **Claude API**: Testing with the Anthropic Python SDK

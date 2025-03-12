@@ -11,7 +11,7 @@
 - Added templated resources for individual VMs and containers
 - Improved resource URIs based on FastMCP examples
 - Improved documentation and logging
-- Server implementation with stdio transport mode
+- Server implementation with stdio transport mode exclusively
 - Successfully integrated with Claude using mcpServers configuration
 - Tested resource access and tool execution through Claude
 - Fixed timeout issues with disk operations
@@ -24,6 +24,10 @@
 - Added unassigned devices tools (get_unassigned_devices)
 - Added parity history tools (get_parity_history)
 - Updated README with proper JSON configuration for stdio mode
+- Organized available tools by category in README for better readability
+- Added "Use at Your Own Risk" disclaimer to README
+- Modified code to use stdio transport exclusively
+- Commented out all SSE-related code to simplify the codebase
 
 ## What's Left to Build
 1. **Project Structure**
@@ -56,6 +60,7 @@
    - [x] Implement remote access configuration tools
    - [x] Implement unassigned devices tools
    - [x] Implement parity history tools
+   - [x] Modify code to use stdio transport exclusively
 
 4. **Documentation**
    - [x] Create README.md
@@ -65,6 +70,8 @@
    - [x] Document available resources and tools
    - [x] Add stdio mode integration instructions
    - [x] Add JSON configuration examples
+   - [x] Organize tools by category for better readability
+   - [x] Add "Use at Your Own Risk" disclaimer
 
 5. **Testing**
    - [x] Test with Claude
@@ -74,7 +81,7 @@
 
 6. **Claude/Cline Integration**
    - [x] Create proper MCP settings configuration
-   - [x] Configure server to use stdio transport
+   - [x] Configure server to use stdio transport exclusively
    - [x] Implement optional ctx parameter for tools
    - [x] Add enhanced logging for Claude/Cline integration
    - [x] Test resources and tools through Cline
@@ -84,7 +91,7 @@
 - Improvements based on FastMCP examples and Unraid API documentation implemented
 - Added standard resource URI structure following FastMCP patterns
 - Added templated resources for individual items (VMs, containers)
-- Added server implementation with stdio transport mode
+- Added server implementation with stdio transport mode exclusively
 - Enhanced error handling and logging
 - Successfully integrated with Claude/Cline
 - Verified resources access working correctly with actual Unraid server
@@ -95,6 +102,10 @@
 - Enhanced logging system with both console and file outputs
 - Added user management, API key management, remote access, unassigned devices, and parity history tools
 - Updated README with proper JSON configuration for stdio mode integration
+- Organized available tools by category for better readability
+- Added "Use at Your Own Risk" disclaimer to README
+- Modified code to use stdio transport exclusively
+- Commented out all SSE-related code to simplify the codebase
 
 ## Next Steps
 - Continue testing and improving the tools with various configurations
