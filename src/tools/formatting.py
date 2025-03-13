@@ -156,10 +156,10 @@ def register_formatting_tools(server, unraid_client):
             logger.error(f"Error formatting Docker containers: {str(e)}", exc_info=True)
             return TextContent(type="text", text=error_message)
     
-    @server.tool(description="Get array status in a human-readable way")
-    async def get_array_status(ctx=None):
-        """Get array status in a readable format"""
-        logger.info("Tool called: get_array_status()")
+    @server.tool(description="Get formatted array status in a human-readable way")
+    async def format_array_status(ctx=None):
+        """Get array status in a readable, formatted display"""
+        logger.info("Tool called: format_array_status()")
         
         if ctx:
             await ctx.info("Retrieving array status...")

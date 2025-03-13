@@ -19,6 +19,8 @@
 - Updated README with proper JSON configuration for stdio mode integration
 - Added comprehensive "Use at Your Own Risk" disclaimer to README
 - Removed all potentially dangerous tools and methods for security
+- Improved all tools with proper human-readable formatting
+- Removed duplicate tools to simplify the codebase
 
 ## Recent Changes
 - Fixed HTTP timeout errors in the Unraid client:
@@ -73,6 +75,20 @@
   - Modified run_server.py to default to stdio transport
   - Commented out SSE-related command line arguments
   - Updated .env.template to clarify that SSE transport is not used
+
+- Improved all tools with proper human-readable formatting:
+  - Added consistent formatting patterns across all tools
+  - Used emojis and clear section headers for better readability
+  - Organized information in a logical, easy-to-read format
+  - Added status indicators (🟢/🔴) for running/stopped services
+  - Included summary statistics where applicable
+  - Improved error messages with more context
+
+- Removed duplicate tools to simplify the codebase:
+  - Removed `get_vms` (keeping the formatted `list_vms`)
+  - Removed `get_array_status` (keeping the formatted `format_array_status`)
+  - Removed `get_docker_containers` (keeping the formatted `list_containers`)
+  - Removed `archive_notification` (was not working correctly)
 
 ## Next Steps
 1. Continue testing and improving the read-only tools:

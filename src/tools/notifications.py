@@ -86,7 +86,64 @@ def register_notification_tools(server, unraid_client):
             if "data" in response and "notifications" in response["data"]:
                 notifications = response["data"]["notifications"]
                 logger.info(f"Retrieved notifications successfully")
-                return TextContent(type="text", text=json.dumps(notifications, indent=2))
+                
+                # Format the notifications in a human-readable way
+                formatted_text = "🔔 NOTIFICATIONS\n"
+                formatted_text += "══════════════════\n\n"
+                
+                # Add overview statistics
+                if "overview" in notifications:
+                    overview = notifications["overview"]
+                    formatted_text += "📊 OVERVIEW\n"
+                    
+                    # Unread notifications
+                    if "unread" in overview:
+                        unread = overview["unread"]
+                        formatted_text += f"  • Unread: {unread.get('total', 0)} total "
+                        formatted_text += f"({unread.get('info', 0)} info, {unread.get('warning', 0)} warning, {unread.get('alert', 0)} alert)\n"
+                    
+                    # Archived notifications
+                    if "archive" in overview:
+                        archive = overview["archive"]
+                        formatted_text += f"  • Archived: {archive.get('total', 0)} total "
+                        formatted_text += f"({archive.get('info', 0)} info, {archive.get('warning', 0)} warning, {archive.get('alert', 0)} alert)\n"
+                    
+                    formatted_text += "\n"
+                
+                # List notifications
+                if "list" in notifications and notifications["list"]:
+                    notification_list = notifications["list"]
+                    formatted_text += f"📋 {notification_type.upper()} NOTIFICATIONS ({len(notification_list)})\n\n"
+                    
+                    for notification in notification_list:
+                        # Importance emoji
+                        importance_emoji = "ℹ️"
+                        if notification.get("importance") == "WARNING":
+                            importance_emoji = "⚠️"
+                        elif notification.get("importance") == "ALERT":
+                            importance_emoji = "🚨"
+                        
+                        # Notification title and timestamp
+                        formatted_text += f"{importance_emoji} {notification.get('title', 'Untitled')}\n"
+                        if "formattedTimestamp" in notification:
+                            formatted_text += f"  • Time: {notification.get('formattedTimestamp')}\n"
+                        
+                        # Subject and description
+                        if "subject" in notification:
+                            formatted_text += f"  • Subject: {notification.get('subject')}\n"
+                        if "description" in notification:
+                            formatted_text += f"  • Description: {notification.get('description')}\n"
+                        
+                        # Link if available
+                        if "link" in notification and notification["link"]:
+                            formatted_text += f"  • Link: {notification.get('link')}\n"
+                        
+                        # ID for reference
+                        formatted_text += f"  • ID: {notification.get('id')}\n\n"
+                else:
+                    formatted_text += f"No {notification_type.lower()} notifications found.\n"
+                
+                return TextContent(type="text", text=formatted_text)
             else:
                 logger.warning("Failed to retrieve notifications: Invalid response format")
                 return TextContent(type="text", text="❌ Failed to retrieve notifications: Invalid response format")
@@ -161,7 +218,41 @@ def register_notification_tools(server, unraid_client):
             if "data" in response and "createNotification" in response["data"]:
                 notification = response["data"]["createNotification"]
                 logger.info(f"Created notification successfully with ID: {notification['id']}")
-                return TextContent(type="text", text=json.dumps(notification, indent=2))
+                
+                # Format the created notification in a human-readable way
+                formatted_text = "🔔 NOTIFICATION CREATED\n"
+                formatted_text += "══════════════════════\n\n"
+                
+                # Importance emoji
+                importance_emoji = "ℹ️"
+                if notification.get("importance") == "WARNING":
+                    importance_emoji = "⚠️"
+                elif notification.get("importance") == "ALERT":
+                    importance_emoji = "🚨"
+                
+                # Notification title and timestamp
+                formatted_text += f"{importance_emoji} {notification.get('title', 'Untitled')}\n"
+                if "formattedTimestamp" in notification:
+                    formatted_text += f"  • Time: {notification.get('formattedTimestamp')}\n"
+                elif "timestamp" in notification:
+                    formatted_text += f"  • Time: {notification.get('timestamp')}\n"
+                
+                # Subject and description
+                if "subject" in notification:
+                    formatted_text += f"  • Subject: {notification.get('subject')}\n"
+                if "description" in notification:
+                    formatted_text += f"  • Description: {notification.get('description')}\n"
+                
+                # Link if available
+                if "link" in notification and notification["link"]:
+                    formatted_text += f"  • Link: {notification.get('link')}\n"
+                
+                # ID for reference
+                formatted_text += f"  • ID: {notification.get('id')}\n\n"
+                
+                formatted_text += "✅ Notification created successfully!\n"
+                
+                return TextContent(type="text", text=formatted_text)
             else:
                 logger.warning("Failed to create notification: Invalid response format")
                 return TextContent(type="text", text="❌ Failed to create notification: Invalid response format")
@@ -179,59 +270,8 @@ def register_notification_tools(server, unraid_client):
                 print(error_msg)
             return TextContent(type="text", text=f"❌ Error occurred: {str(e)}\n\nPlease check the server logs for more details.")
     
-    @server.tool(description="Archive a notification")
-    async def archive_notification(
-        notification_id: str,
-        ctx=None
-    ):
-        """Archive a notification
-        
-        Args:
-            notification_id: ID of the notification to archive
-            
-        Returns:
-            The archived notification
-        """
-        logger.info(f"Tool called: archive_notification(id={notification_id})")
-        
-        if ctx:
-            await ctx.info(f"Archiving notification: {notification_id}")
-        else:
-            print(f"Archiving notification: {notification_id}")
-        
-        try:
-            mutation = f"""
-            mutation {{
-                archiveNotification(id: "{notification_id}") {{
-                    id
-                    title
-                    type
-                }}
-            }}
-            """
-            response = await unraid_client.execute_query(mutation)
-            logger.debug(f"Archive notification response: {response}")
-            
-            if "data" in response and "archiveNotification" in response["data"]:
-                notification = response["data"]["archiveNotification"]
-                logger.info(f"Archived notification successfully: {notification['id']}")
-                return TextContent(type="text", text=json.dumps(notification, indent=2))
-            else:
-                logger.warning("Failed to archive notification: Invalid response format")
-                return TextContent(type="text", text="❌ Failed to archive notification: Invalid response format")
-        except Exception as e:
-            error_msg = f"Error archiving notification: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            
-            # Get the full stack trace for debugging
-            stack_trace = traceback.format_exc()
-            logger.error(f"Stack trace: {stack_trace}")
-            
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}\n\nPlease check the server logs for more details.")
+    # The archive_notification tool has been removed as it was not working correctly
+    # and was causing errors when trying to archive notifications
     
     # Log that tools were registered
-    logger.info("Notification tools registered successfully") 
+    logger.info("Notification tools registered successfully")

@@ -16,48 +16,6 @@ def register_vm_tools(server, unraid_client):
     """
     logger.info("Registering VM tools")
     
-    @server.tool(description="Get information about virtual machines")
-    async def get_vms(
-        ctx=None
-    ):
-        """Get information about all virtual machines
-        
-        Returns:
-            Information about all virtual machines including their status
-        """
-        logger.info("Tool called: get_vms()")
-        
-        if ctx:
-            await ctx.info("Retrieving virtual machine information...")
-        else:
-            print("Retrieving virtual machine information...")
-        
-        try:
-            # Use the client method directly
-            response = await unraid_client.get_vms()
-            logger.debug(f"VM query result: {response}")
-            
-            if "data" in response and "vms" in response["data"] and "domain" in response["data"]["vms"]:
-                vms = response["data"]["vms"]["domain"]
-                logger.info(f"Retrieved information for {len(vms)} virtual machines")
-                return TextContent(type="text", text=json.dumps(vms, indent=2))
-            else:
-                logger.warning("Failed to retrieve VM information: Invalid response format")
-                return TextContent(type="text", text="❌ Failed to retrieve VM information: Invalid response format")
-        except Exception as e:
-            error_msg = f"Error retrieving VM information: {str(e)}"
-            logger.error(error_msg, exc_info=True)
-            
-            # Get the full stack trace for debugging
-            stack_trace = traceback.format_exc()
-            logger.error(f"Stack trace: {stack_trace}")
-            
-            if ctx:
-                await ctx.error(error_msg)
-            else:
-                print(error_msg)
-            return TextContent(type="text", text=f"❌ Error occurred: {str(e)}")
-    
     @server.tool(description="Get detailed information about a specific virtual machine")
     async def get_vm_details(
         vm_name: str,
@@ -78,10 +36,11 @@ def register_vm_tools(server, unraid_client):
         else:
             print(f"Retrieving details for VM: {vm_name}")
         
+        # The API doesn't support filtering by name directly, so get all VMs and filter in code
         query = """
-        query ($name: String!) {
+        query {
           vms {
-            domain(name: $name) {
+            domain {
               uuid
               name
               state
@@ -89,23 +48,75 @@ def register_vm_tools(server, unraid_client):
           }
         }
         """
-        variables = {"name": vm_name}
         
         try:
-            result = await unraid_client.execute_query(query, variables)
+            # Get all VMs and filter by name in code
+            result = await unraid_client.execute_query(query)
             logger.debug(f"VM details query result: {result}")
             
-            if "data" in result and "vms" in result["data"] and "domain" in result["data"]["vms"]:
-                vm_details = result["data"]["vms"]["domain"]
+            # More robust response handling with safer access methods
+            if isinstance(result, dict):
+                # If there's an error, return it
+                if "error" in result:
+                    logger.error(f"Error in VM details response: {result['error']}")
+                    return TextContent(type="text", text=f"❌ Error: {result['error']}")
+                
+                # Check for VM data in different possible locations
+                vm_details = None
+                
+                # Try different possible response structures
+                if "data" in result and "vms" in result.get("data", {}) and "domain" in result.get("data", {}).get("vms", {}):
+                    vm_details = result["data"]["vms"]["domain"]
+                elif "vms" in result and "domain" in result.get("vms", {}):
+                    vm_details = result["vms"]["domain"]
+                
                 if vm_details:
-                    logger.info(f"Retrieved details for VM {vm_name}")
-                    return TextContent(type="text", text=json.dumps(vm_details, indent=2))
-                else:
-                    logger.warning(f"VM {vm_name} not found")
-                    return TextContent(type="text", text=f"❌ VM {vm_name} not found")
-            else:
-                logger.warning(f"Failed to retrieve details for VM {vm_name}: Invalid response format")
-                return TextContent(type="text", text=f"❌ Failed to retrieve details for VM {vm_name}: Invalid response format")
+                    # Filter by name (case-insensitive)
+                    matching_vms = [vm for vm in vm_details if vm.get('name', '').lower() == vm_name.lower()]
+                    
+                    if matching_vms:
+                        logger.info(f"Found VM matching name: {vm_name}")
+                        vm = matching_vms[0]
+                        
+                        # Format the VM details in a human-readable way
+                        formatted_text = f"🖥️ VIRTUAL MACHINE: {vm.get('name', 'Unknown')}\n"
+                        formatted_text += "══════════════════════════════\n\n"
+                        
+                        # Status with emoji
+                        status_emoji = "🟢" if vm.get('state') == 'RUNNING' else "🔴"
+                        formatted_text += f"{status_emoji} Status: {vm.get('state', 'Unknown')}\n\n"
+                        
+                        # Basic information
+                        formatted_text += "📋 DETAILS\n"
+                        formatted_text += f"  • UUID: {vm.get('uuid', 'Unknown')}\n"
+                        
+                        # Add any additional fields that might be available
+                        if 'memory' in vm:
+                            memory_gb = round(vm.get('memory', 0) / 1024 / 1024, 2)
+                            formatted_text += f"  • Memory: {memory_gb} GB\n"
+                        
+                        if 'vcpus' in vm:
+                            formatted_text += f"  • vCPUs: {vm.get('vcpus', 'Unknown')}\n"
+                            
+                        if 'diskSize' in vm:
+                            disk_gb = round(vm.get('diskSize', 0) / 1024 / 1024 / 1024, 2)
+                            formatted_text += f"  • Disk Size: {disk_gb} GB\n"
+                        
+                        return TextContent(type="text", text=formatted_text)
+                    else:
+                        logger.warning(f"VM with name '{vm_name}' not found")
+                        # Show list of available VMs
+                        available_vms = [vm.get('name', vm.get('uuid', 'Unknown')) for vm in vm_details]
+                        formatted_text = f"❌ VM '{vm_name}' not found\n\n"
+                        formatted_text += "Available VMs:\n"
+                        for vm_name in available_vms:
+                            formatted_text += f"  • {vm_name}\n"
+                        return TextContent(type="text", text=formatted_text)
+            
+            # If we've reached here, we couldn't find usable data
+            logger.warning(f"Failed to retrieve details for VM {vm_name}: Invalid response format")
+            # Return as much data as we can rather than just an error
+            return TextContent(type="text", text=f"⚠️ VM details may be incomplete or in unexpected format:\n{json.dumps(result, indent=2)}")
         except Exception as e:
             error_msg = f"Error retrieving VM details: {str(e)}"
             logger.error(error_msg, exc_info=True)

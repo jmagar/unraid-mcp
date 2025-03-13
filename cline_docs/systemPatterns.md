@@ -40,8 +40,10 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
      - `apikeys.py`: API key information (read-only)
      - `unassigned_devices.py`: Unassigned devices information
      - `parity.py`: Parity history tools
+     - `formatting.py`: Formatted display tools
    - Centralized registration through `__init__.py`
    - All tools are read-only for security
+   - Consistent human-readable formatting across all tools
 
 ## Key Technical Decisions
 1. **GraphQL for API Communication**
@@ -91,6 +93,14 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Focused on information retrieval rather than system modification
    - Enhanced safety for AI assistant integration
 
+9. **Human-Readable Formatting**
+   - Consistent formatting patterns across all tools
+   - Use of emojis and clear section headers for better readability
+   - Organized information in a logical, easy-to-read format
+   - Status indicators (🟢/🔴) for running/stopped services
+   - Summary statistics where applicable
+   - Enhanced error messages with more context
+
 ## Design Patterns
 1. **Facade Pattern** 
    - The UnraidClient class acts as a facade to the complex GraphQL API
@@ -126,3 +136,63 @@ The Unraid MCP server follows a clean, modular architecture designed to separate
    - Implementing only query operations, not mutations
    - Focusing on data retrieval rather than modification
    - Enhancing security by preventing system changes
+
+9. **Formatting Pattern**
+   - Consistent formatting structure across all tools
+   - Standard header with title and separator
+   - Emoji indicators for status and categories
+   - Hierarchical information organization with bullet points
+   - Consistent indentation and spacing
+   - Status indicators using colored emoji (🟢/🔴)
+   - Summary statistics at the top of listings
+   - Fallback handling for missing or null data
+   - Consistent error message formatting with emoji indicators
+
+## Formatting Standards
+All tools follow these formatting standards for human-readable output:
+
+1. **Headers**
+   - Title with relevant emoji indicator
+   - Separator line using "═" characters
+   - Blank line after header
+
+2. **Sections**
+   - Section headers with emoji indicators
+   - Indented content under sections
+   - Blank line between sections
+
+3. **List Items**
+   - Bullet points using "•" character
+   - Consistent indentation (2 spaces)
+   - Key-value pairs with colon separator
+
+4. **Status Indicators**
+   - Running/active: 🟢
+   - Stopped/inactive: 🔴
+   - Warning: ⚠️
+   - Error: ❌
+   - Information: ℹ️
+
+5. **Category Indicators**
+   - System: 🖥️
+   - Memory: 🧠
+   - CPU: 🔄
+   - Disk: 💾
+   - Network: 🌐
+   - Docker: 🐳
+   - Virtual Machine: 🖥️
+   - Notification: 🔔
+   - Array: 💽
+   - Statistics: 📊
+
+6. **Error Handling**
+   - Clear error messages with ❌ indicator
+   - Warning messages with ⚠️ indicator
+   - Fallback text for missing data
+   - Context information for troubleshooting
+
+7. **Numerical Formatting**
+   - Consistent units (GB, TB, etc.)
+   - Rounded to appropriate precision
+   - Percentage values where applicable
+   - Proper spacing between numbers and units

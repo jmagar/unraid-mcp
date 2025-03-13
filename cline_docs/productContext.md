@@ -14,12 +14,15 @@ The Unraid MCP server project aims to create a bridge between AI assistants (lik
 8. **API Key Visibility**: Provides a secure way to view API keys for Unraid API access.
 9. **Unassigned Devices Monitoring**: Makes it easier to view unassigned devices.
 10. **Parity History Analysis**: Provides access to historical parity check data for system health monitoring.
+11. **Information Readability**: Presents system information in a human-readable, well-formatted way with clear organization and visual indicators.
+12. **Status Visualization**: Uses visual indicators (emojis) to quickly convey status information about services and devices.
+13. **Consistent Information Display**: Provides a consistent formatting pattern across all tools for better user experience.
 
 ## How It Should Work
 1. The MCP server acts as an intermediary between AI assistants and the Unraid GraphQL API.
 2. AI assistants make natural language requests to the MCP server.
 3. The server translates these requests into appropriate GraphQL queries for the Unraid API.
-4. Results are formatted and returned to the AI assistant in a comprehensible format.
+4. Results are formatted and returned to the AI assistant in a comprehensible, human-readable format.
 5. Users can ask questions in natural language about their Unraid server (system info, Docker containers, VMs, array status, etc.) and get appropriate responses.
 6. The server handles error conditions gracefully with appropriate retry mechanisms and user feedback.
 7. Comprehensive logging provides visibility into operations for debugging and monitoring purposes.
@@ -29,6 +32,13 @@ The Unraid MCP server project aims to create a bridge between AI assistants (lik
 11. Unassigned devices tools provide detailed information about devices not assigned to the array.
 12. Parity history tools offer insights into historical parity check performance and errors.
 13. The server uses stdio transport mode exclusively for direct integration with AI assistants.
+14. All information is presented in a consistent, human-readable format with:
+    - Clear section headers with emoji indicators
+    - Logical organization of information
+    - Status indicators using colored emoji (🟢/🔴)
+    - Summary statistics where applicable
+    - Proper error handling with clear messages
+    - Consistent formatting across all tools
 
 ## Safety Considerations
 1. **Read-Only Design**: The server is designed to be read-only, preventing any modifications to the Unraid system.

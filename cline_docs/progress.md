@@ -35,6 +35,18 @@
 - Updated "Use at Your Own Risk" disclaimer to emphasize read-only nature
 - Modified code to use stdio transport exclusively
 - Commented out all SSE-related code to simplify the codebase
+- Improved all tools with proper human-readable formatting:
+  - Added consistent formatting patterns across all tools
+  - Used emojis and clear section headers for better readability
+  - Organized information in a logical, easy-to-read format
+  - Added status indicators (🟢/🔴) for running/stopped services
+  - Included summary statistics where applicable
+  - Improved error messages with more context
+- Removed duplicate tools to simplify the codebase:
+  - Removed `get_vms` (keeping the formatted `list_vms`)
+  - Removed `get_array_status` (keeping the formatted `format_array_status`)
+  - Removed `get_docker_containers` (keeping the formatted `list_containers`)
+  - Removed `archive_notification` (was not working correctly)
 
 ## What's Left to Build
 1. **Project Structure**
@@ -69,6 +81,8 @@
    - [x] Implement parity history tools
    - [x] Modify code to use stdio transport exclusively
    - [x] Remove all potentially dangerous tools and methods
+   - [x] Improve all tools with proper human-readable formatting
+   - [x] Remove duplicate tools to simplify the codebase
 
 4. **Documentation**
    - [x] Create README.md
@@ -87,6 +101,7 @@
    - [x] Address issues found during Claude/Cline integration
    - [x] Test fixed disk and Docker tools with real Unraid server
    - [x] Verify stdio mode integration works correctly
+   - [x] Test all tools with proper human-readable formatting
 
 6. **Claude/Cline Integration**
    - [x] Create proper MCP settings configuration
@@ -116,6 +131,8 @@
 - Updated "Use at Your Own Risk" disclaimer to emphasize read-only nature
 - Modified code to use stdio transport exclusively
 - Commented out all SSE-related code to simplify the codebase
+- Improved all tools with proper human-readable formatting
+- Removed duplicate tools to simplify the codebase
 
 ## Next Steps
 - Continue testing and improving the read-only tools with various configurations

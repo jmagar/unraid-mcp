@@ -124,6 +124,28 @@
     - Compatible with Anthropic API and Cursor integration
     - Default and only transport mode used in the application
 
+11. **Human-Readable Formatting**:
+    - Consistent formatting patterns across all tools
+    - Use of emojis and clear section headers for better readability
+    - Organized information in a logical, easy-to-read format
+    - Status indicators (🟢/🔴) for running/stopped services
+    - Summary statistics where applicable
+    - Enhanced error messages with more context
+    - Standardized formatting for all tools:
+      - Headers with title and separator
+      - Sections with emoji indicators
+      - List items with bullet points
+      - Status indicators using colored emoji
+      - Category indicators for different types of information
+      - Consistent error handling with emoji indicators
+      - Proper numerical formatting with units
+
+12. **Tool Consolidation**:
+    - Removed duplicate tools to simplify the codebase
+    - Kept only the nicely formatted versions of tools
+    - Standardized tool naming conventions
+    - Improved tool organization by functionality
+
 ## Integration Methods
 - **Anthropic Python SDK**: Using the `mcp_config_file` parameter
 - **Cursor**: Using the MCP Configuration in Claude settings
