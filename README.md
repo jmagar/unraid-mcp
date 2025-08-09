@@ -6,13 +6,16 @@ This server provides an MCP interface to interact with an Unraid server's GraphQ
 
 This section describes the setup for local development **without Docker**. For Docker-based deployment, see the "Docker" section below.
 
-1.  Ensure your main project dependencies (including `fastmcp`, `python-dotenv`, `httpx`) are installed. If your project uses `pyproject.toml`, this is typically done via a command like `uv pip install -e .` or `pip install -e .` from the project root.
-2.  Navigate to the directory containing `unraid-mcp-server.py` (e.g., `src/unraid-mcp/` or the project root if it's there).
+1.  Install dependencies using uv:
+    ```bash
+    uv sync
+    ```
+2.  Navigate to the project root directory containing `unraid_mcp_server.py`.
 3.  Copy `.env.example` to `.env`: `cp .env.example .env`
 4.  Edit `.env` and fill in your Unraid and MCP server details:
     *   `UNRAID_API_URL`: Your Unraid GraphQL endpoint (e.g., `http://your-unraid-ip/graphql`). **Required.**
     *   `UNRAID_API_KEY`: Your Unraid API key. **Required.**
-    *   `UNRAID_MCP_TRANSPORT` (optional, defaults to `sse` for local non-Docker. `streamable-http` is recommended for new setups). Valid options: `streamable-http`, `sse`, `stdio`.
+    *   `UNRAID_MCP_TRANSPORT` (optional, defaults to `streamable-http` for both local and Docker. Recommended for new setups). Valid options: `streamable-http`, `sse`, `stdio`.
     *   `UNRAID_MCP_HOST` (optional, defaults to `0.0.0.0` for network transports, listens on all interfaces).
     *   `UNRAID_MCP_PORT` (optional, defaults to `6970` for network transports).
     *   `UNRAID_MCP_LOG_LEVEL` (optional, defaults to `INFO`). Examples: `DEBUG`, `INFO`, `WARNING`, `ERROR`.
@@ -21,19 +24,19 @@ This section describes the setup for local development **without Docker**. For D
 
 ## Running the Server
 
-From the project root (`yarr-mcp/`):
+From the project root:
 
 ```bash
-python src/unraid-mcp/unraid-mcp-server.py
+uv run unraid-mcp-server
 ```
 
-Or from `src/unraid-mcp/`:
+Alternatively, you can run the Python file directly:
 
 ```bash
-python unraid-mcp-server.py
+uv run python unraid_mcp_server.py
 ```
 
-The server will start, by default using SSE transport on port 6970.
+The server will start, by default using streamable-http transport on port 6970.
 
 ## Implemented Tools
 
@@ -62,7 +65,7 @@ Refer to the Unraid GraphQL schema for detailed response structures.
 
 ### Claude Desktop Client Configuration
 
-If your Unraid MCP Server is running on `localhost:6970` (the default for SSE):
+If your Unraid MCP Server is running on `localhost:6970` (the default):
 
 Create or update your Claude Desktop MCP settings file at `~/.config/claude/claude_mcp_settings.jsonc` (create the `claude` directory if it doesn't exist).
 Add or update the entry for this server:
@@ -71,10 +74,10 @@ Add or update the entry for this server:
 {
   "mcp_servers": {
     "unraid": { // Use a short, descriptive name for the client
-      "url": "http://localhost:6970/mcp", // Default path for FastMCP SSE is /mcp
+      "url": "http://localhost:6970/mcp", // Default path for FastMCP streamable-http is /mcp
       "disabled": false,
       "timeout": 60, // Optional: timeout in seconds for requests
-      "transport": "sse" // Explicitly set transport if not default or for clarity
+      "transport": "streamable-http" // Default transport
     }
     // ... other server configurations
   }

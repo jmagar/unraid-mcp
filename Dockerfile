@@ -1,17 +1,18 @@
 # Use an official Python runtime as a parent image
-FROM python:3.9-slim
+FROM python:3.11-slim
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the dependencies file to the working directory
-COPY requirements.txt .
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy the project files
+COPY pyproject.toml .
+COPY unraid_mcp_server.py .
 
-# Copy the rest of the application's code to the working directory
-COPY . .
+# Install dependencies
+RUN uv sync --frozen --no-dev
 
 # Make port UNRAID_MCP_PORT available to the world outside this container
 # Defaulting to 6970, but can be overridden by environment variable
@@ -27,4 +28,4 @@ ENV UNRAID_VERIFY_SSL="true"
 ENV UNRAID_MCP_LOG_LEVEL="INFO"
 
 # Run unraid-mcp-server.py when the container launches
-CMD ["python", "unraid-mcp-server.py"]
+CMD ["uv", "run", "unraid-mcp-server"]

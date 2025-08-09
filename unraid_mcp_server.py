@@ -10,12 +10,18 @@ import json
 import logging
 import httpx
 import asyncio
+import websockets
 from pathlib import Path
+import threading
 from typing import Optional, Dict, Any, List, Union
 from logging.handlers import RotatingFileHandler
+from datetime import datetime
+from dataclasses import dataclass
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastmcp import FastMCP, ToolError
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 
 # Ensure the script's directory is in the Python path for potential local imports if structured differently
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -97,6 +103,475 @@ logger.info(f"UNRAID_MCP_PORT set to: {UNRAID_MCP_PORT}")
 logger.info(f"UNRAID_MCP_HOST set to: {UNRAID_MCP_HOST}")
 logger.info(f"UNRAID_MCP_TRANSPORT set to: {UNRAID_MCP_TRANSPORT}")
 logger.info(f"UNRAID_MCP_LOG_LEVEL set to: {LOG_LEVEL_STR}") # Changed from LOG_LEVEL
+
+
+@dataclass
+class SubscriptionData:
+    """Container for subscription data with metadata"""
+    data: Dict[str, Any]
+    last_updated: datetime
+    subscription_type: str
+
+
+class SubscriptionManager:
+    """Manages GraphQL subscriptions and converts them to MCP resources"""
+    
+    def __init__(self):
+        self.active_subscriptions: Dict[str, asyncio.Task] = {}
+        self.resource_data: Dict[str, SubscriptionData] = {}
+        self.websocket: Optional[websockets.WebSocketServerProtocol] = None
+        self.subscription_lock = asyncio.Lock()
+        
+        # Configuration
+        self.auto_start_enabled = os.getenv("UNRAID_AUTO_START_SUBSCRIPTIONS", "true").lower() == "true"
+        self.reconnect_attempts: Dict[str, int] = {}
+        self.max_reconnect_attempts = int(os.getenv("UNRAID_MAX_RECONNECT_ATTEMPTS", "10"))
+        self.connection_states: Dict[str, str] = {}  # Track connection state per subscription
+        self.last_error: Dict[str, str] = {}  # Track last error per subscription
+        
+        # Define subscription configurations
+        self.subscription_configs = {
+            "arraySubscription": {
+                "query": """
+                subscription ArraySubscription {
+                    arraySubscription {
+                        id
+                        state
+                        capacity {
+                            disks { free used total }
+                        }
+                        disks {
+                            name
+                            size
+                            status
+                            temp
+                        }
+                    }
+                }
+                """,
+                "resource": "unraid://array/status",
+                "description": "Real-time array status monitoring",
+                "auto_start": True
+            },
+            "infoSubscription": {
+                "query": """
+                subscription InfoSubscription {
+                    infoSubscription {
+                        id
+                        time
+                        machineId
+                        os { platform distro release uptime }
+                        cpu { manufacturer brand cores threads }
+                        memory { total free used available }
+                    }
+                }
+                """,
+                "resource": "unraid://system/info",
+                "description": "Real-time system information monitoring",
+                "auto_start": True
+            },
+            "notificationsOverview": {
+                "query": """
+                subscription NotificationOverviewSubscription {
+                    notificationsOverview {
+                        unread { total info warning alert }
+                        archive { total info warning alert }
+                    }
+                }
+                """,
+                "resource": "unraid://notifications/overview",
+                "description": "Real-time notification overview monitoring",
+                "auto_start": True
+            },
+            "parityHistorySubscription": {
+                "query": """
+                subscription ParityHistorySubscription {
+                    parityHistorySubscription {
+                        status
+                        progress
+                        duration
+                        speed
+                        errors
+                    }
+                }
+                """,
+                "resource": "unraid://parity/status", 
+                "description": "Real-time parity check monitoring",
+                "auto_start": True
+            },
+            "logFileSubscription": {
+                "query": """
+                subscription LogFileSubscription($path: String!) {
+                    logFile(path: $path) {
+                        path
+                        content
+                        totalLines
+                    }
+                }
+                """,
+                "resource": "unraid://logs/stream",
+                "description": "Real-time log file streaming",
+                "auto_start": False  # Started manually with path parameter
+            }
+        }
+        
+        logger.info(f"[SUBSCRIPTION_MANAGER] Initialized with auto_start={self.auto_start_enabled}, max_reconnects={self.max_reconnect_attempts}")
+        logger.debug(f"[SUBSCRIPTION_MANAGER] Available subscriptions: {list(self.subscription_configs.keys())}")
+        
+    async def auto_start_all_subscriptions(self):
+        """Auto-start all subscriptions marked for auto-start"""
+        if not self.auto_start_enabled:
+            logger.info("[SUBSCRIPTION_MANAGER] Auto-start disabled")
+            return
+            
+        logger.info("[SUBSCRIPTION_MANAGER] Starting auto-start process...")
+        auto_start_count = 0
+        
+        for subscription_name, config in self.subscription_configs.items():
+            if config.get("auto_start", False):
+                try:
+                    logger.info(f"[SUBSCRIPTION_MANAGER] Auto-starting subscription: {subscription_name}")
+                    await self.start_subscription(subscription_name, config["query"])
+                    auto_start_count += 1
+                except Exception as e:
+                    logger.error(f"[SUBSCRIPTION_MANAGER] Failed to auto-start {subscription_name}: {e}")
+                    self.last_error[subscription_name] = str(e)
+        
+        logger.info(f"[SUBSCRIPTION_MANAGER] Auto-start completed. Started {auto_start_count} subscriptions")
+        
+    async def start_subscription(self, subscription_name: str, query: str, variables: Dict[str, Any] = None):
+        """Start a GraphQL subscription and maintain it as a resource"""
+        logger.info(f"[SUBSCRIPTION:{subscription_name}] Starting subscription...")
+        
+        if subscription_name in self.active_subscriptions:
+            logger.warning(f"[SUBSCRIPTION:{subscription_name}] Subscription already active, skipping")
+            return
+
+        # Reset connection tracking
+        self.reconnect_attempts[subscription_name] = 0
+        self.connection_states[subscription_name] = "starting"
+        
+        async with self.subscription_lock:
+            try:
+                task = asyncio.create_task(self._subscription_loop(subscription_name, query, variables or {}))
+                self.active_subscriptions[subscription_name] = task
+                logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription task created and started")
+                self.connection_states[subscription_name] = "active"
+            except Exception as e:
+                logger.error(f"[SUBSCRIPTION:{subscription_name}] Failed to start subscription task: {e}")
+                self.connection_states[subscription_name] = "failed"
+                self.last_error[subscription_name] = str(e)
+                raise
+    
+    async def stop_subscription(self, subscription_name: str):
+        """Stop a specific subscription"""
+        logger.info(f"[SUBSCRIPTION:{subscription_name}] Stopping subscription...")
+        
+        async with self.subscription_lock:
+            if subscription_name in self.active_subscriptions:
+                task = self.active_subscriptions[subscription_name]
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
+                del self.active_subscriptions[subscription_name]
+                self.connection_states[subscription_name] = "stopped"
+                logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
+            else:
+                logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
+    
+    async def _subscription_loop(self, subscription_name: str, query: str, variables: Dict[str, Any]):
+        """Main loop for maintaining a GraphQL subscription with comprehensive logging"""
+        retry_delay = 5
+        max_retry_delay = 300  # 5 minutes max
+        
+        while True:
+            attempt = self.reconnect_attempts.get(subscription_name, 0) + 1
+            self.reconnect_attempts[subscription_name] = attempt
+            
+            logger.info(f"[WEBSOCKET:{subscription_name}] Connection attempt #{attempt} (max: {self.max_reconnect_attempts})")
+            
+            if attempt > self.max_reconnect_attempts:
+                logger.error(f"[WEBSOCKET:{subscription_name}] Max reconnection attempts ({self.max_reconnect_attempts}) exceeded, stopping")
+                self.connection_states[subscription_name] = "max_retries_exceeded"
+                break
+            
+            try:
+                # Build WebSocket URL with detailed logging
+                if UNRAID_API_URL.startswith('https://'):
+                    ws_url = 'wss://' + UNRAID_API_URL[len('https://'):]
+                elif UNRAID_API_URL.startswith('http://'):
+                    ws_url = 'ws://' + UNRAID_API_URL[len('http://'):]
+                else:
+                    ws_url = UNRAID_API_URL
+                    
+                if not ws_url.endswith('/graphql'):
+                    ws_url = ws_url.rstrip('/') + '/graphql'
+                    
+                logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
+                logger.debug(f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}")
+                
+                # Connection with timeout
+                connect_timeout = 10
+                logger.debug(f"[WEBSOCKET:{subscription_name}] Connection timeout: {connect_timeout}s")
+                
+                async with websockets.connect(
+                    ws_url,
+                    subprotocols=["graphql-transport-ws", "graphql-ws"],
+                    ping_interval=20,
+                    ping_timeout=10,
+                    close_timeout=10
+                ) as websocket:
+                    
+                    selected_proto = websocket.subprotocol or "none"
+                    logger.info(f"[WEBSOCKET:{subscription_name}] Connected! Protocol: {selected_proto}")
+                    self.connection_states[subscription_name] = "connected"
+                    
+                    # Reset retry count on successful connection
+                    self.reconnect_attempts[subscription_name] = 0
+                    retry_delay = 5  # Reset delay
+                    
+                    # Initialize GraphQL-WS protocol
+                    logger.debug(f"[PROTOCOL:{subscription_name}] Initializing GraphQL-WS protocol...")
+                    init_type = "connection_init"
+                    init_payload: Dict[str, Any] = {"type": init_type}
+                    
+                    if UNRAID_API_KEY:
+                        logger.debug(f"[AUTH:{subscription_name}] Adding authentication payload")
+                        auth_payload = {
+                            "X-API-Key": UNRAID_API_KEY,
+                            "x-api-key": UNRAID_API_KEY,
+                            "authorization": f"Bearer {UNRAID_API_KEY}",
+                            "Authorization": f"Bearer {UNRAID_API_KEY}",
+                            "headers": {
+                                "X-API-Key": UNRAID_API_KEY,
+                                "x-api-key": UNRAID_API_KEY,
+                                "Authorization": f"Bearer {UNRAID_API_KEY}"
+                            }
+                        }
+                        init_payload["payload"] = auth_payload
+                    else:
+                        logger.warning(f"[AUTH:{subscription_name}] No API key available for authentication")
+
+                    logger.debug(f"[PROTOCOL:{subscription_name}] Sending connection_init message")
+                    await websocket.send(json.dumps(init_payload))
+                    
+                    # Wait for connection acknowledgment
+                    logger.debug(f"[PROTOCOL:{subscription_name}] Waiting for connection_ack...")
+                    init_raw = await asyncio.wait_for(websocket.recv(), timeout=30)
+                    
+                    try:
+                        init_data = json.loads(init_raw)
+                        logger.debug(f"[PROTOCOL:{subscription_name}] Received init response: {init_data.get('type')}")
+                    except json.JSONDecodeError as e:
+                        logger.error(f"[PROTOCOL:{subscription_name}] Failed to decode init response: {init_raw[:200]}...")
+                        self.last_error[subscription_name] = f"Invalid JSON in init response: {e}"
+                        break
+
+                    # Handle connection acknowledgment
+                    if init_data.get("type") == "connection_ack":
+                        logger.info(f"[PROTOCOL:{subscription_name}] Connection acknowledged successfully")
+                        self.connection_states[subscription_name] = "authenticated"
+                    elif init_data.get("type") == "connection_error":
+                        error_payload = init_data.get('payload', {})
+                        logger.error(f"[AUTH:{subscription_name}] Authentication failed: {error_payload}")
+                        self.last_error[subscription_name] = f"Authentication error: {error_payload}"
+                        self.connection_states[subscription_name] = "auth_failed"
+                        break
+                    else:
+                        logger.warning(f"[PROTOCOL:{subscription_name}] Unexpected init response: {init_data}")
+                        # Continue anyway - some servers send other messages first
+                    
+                    # Start the subscription
+                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Starting GraphQL subscription...")
+                    start_type = "subscribe" if selected_proto == "graphql-transport-ws" else "start"
+                    subscription_message = {
+                        "id": subscription_name,
+                        "type": start_type,
+                        "payload": {
+                            "query": query,
+                            "variables": variables
+                        }
+                    }
+                    
+                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Subscription message type: {start_type}")
+                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Query: {query[:100]}...")
+                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Variables: {variables}")
+                    
+                    await websocket.send(json.dumps(subscription_message))
+                    logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription started successfully")
+                    self.connection_states[subscription_name] = "subscribed"
+                    
+                    # Listen for subscription data
+                    message_count = 0
+                    last_data_time = datetime.now()
+                    
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
+                            message_count += 1
+                            message_type = data.get('type', 'unknown')
+                            
+                            logger.debug(f"[DATA:{subscription_name}] Message #{message_count}: {message_type}")
+                            
+                            # Handle different message types
+                            expected_data_type = "next" if selected_proto == "graphql-transport-ws" else "data"
+                            
+                            if data.get("type") == expected_data_type and data.get("id") == subscription_name:
+                                payload = data.get("payload", {})
+                                
+                                if payload.get("data"):
+                                    logger.info(f"[DATA:{subscription_name}] Received subscription data update")
+                                    self.resource_data[subscription_name] = SubscriptionData(
+                                        data=payload["data"],
+                                        last_updated=datetime.now(),
+                                        subscription_type=subscription_name
+                                    )
+                                    last_data_time = datetime.now()
+                                    logger.debug(f"[RESOURCE:{subscription_name}] Resource data updated successfully")
+                                elif payload.get("errors"):
+                                    logger.error(f"[DATA:{subscription_name}] GraphQL errors in response: {payload['errors']}")
+                                    self.last_error[subscription_name] = f"GraphQL errors: {payload['errors']}"
+                                else:
+                                    logger.warning(f"[DATA:{subscription_name}] Empty or invalid data payload: {payload}")
+                                    
+                            elif data.get("type") == "ping":
+                                logger.debug(f"[PROTOCOL:{subscription_name}] Received ping, sending pong")
+                                await websocket.send(json.dumps({"type": "pong"}))
+                                
+                            elif data.get("type") == "error":
+                                error_payload = data.get('payload', {})
+                                logger.error(f"[SUBSCRIPTION:{subscription_name}] Subscription error: {error_payload}")
+                                self.last_error[subscription_name] = f"Subscription error: {error_payload}"
+                                self.connection_states[subscription_name] = "error"
+                                
+                            elif data.get("type") == "complete":
+                                logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription completed by server")
+                                self.connection_states[subscription_name] = "completed"
+                                break
+                                
+                            elif data.get("type") in ["ka", "ping", "pong"]:
+                                logger.debug(f"[PROTOCOL:{subscription_name}] Keepalive message: {message_type}")
+                                
+                            else:
+                                logger.debug(f"[PROTOCOL:{subscription_name}] Unhandled message type: {message_type}")
+                                
+                        except json.JSONDecodeError as e:
+                            logger.error(f"[PROTOCOL:{subscription_name}] Failed to decode message: {message[:200]}...")
+                            logger.error(f"[PROTOCOL:{subscription_name}] JSON decode error: {e}")
+                        except Exception as e:
+                            logger.error(f"[DATA:{subscription_name}] Error processing message: {e}")
+                            logger.debug(f"[DATA:{subscription_name}] Raw message: {message[:200]}...")
+                            
+            except asyncio.TimeoutError:
+                error_msg = "Connection or authentication timeout"
+                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                self.last_error[subscription_name] = error_msg
+                self.connection_states[subscription_name] = "timeout"
+                
+            except websockets.exceptions.ConnectionClosed as e:
+                error_msg = f"WebSocket connection closed: {e}"
+                logger.warning(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                self.last_error[subscription_name] = error_msg
+                self.connection_states[subscription_name] = "disconnected"
+                
+            except websockets.exceptions.InvalidURI as e:
+                error_msg = f"Invalid WebSocket URI: {e}"
+                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                self.last_error[subscription_name] = error_msg
+                self.connection_states[subscription_name] = "invalid_uri"
+                break  # Don't retry on invalid URI
+                
+            except Exception as e:
+                error_msg = f"Unexpected error: {e}"
+                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                self.last_error[subscription_name] = error_msg
+                self.connection_states[subscription_name] = "error"
+                
+            # Calculate backoff delay
+            retry_delay = min(retry_delay * 1.5, max_retry_delay)
+            logger.info(f"[WEBSOCKET:{subscription_name}] Reconnecting in {retry_delay:.1f} seconds...")
+            self.connection_states[subscription_name] = "reconnecting"
+            await asyncio.sleep(retry_delay)
+    
+    def get_resource_data(self, resource_name: str) -> Optional[Dict[str, Any]]:
+        """Get current resource data with enhanced logging"""
+        logger.debug(f"[RESOURCE:{resource_name}] Resource data requested")
+        
+        if resource_name in self.resource_data:
+            data = self.resource_data[resource_name]
+            age_seconds = (datetime.now() - data.last_updated).total_seconds()
+            logger.debug(f"[RESOURCE:{resource_name}] Data found, age: {age_seconds:.1f}s")
+            return data.data
+        else:
+            logger.debug(f"[RESOURCE:{resource_name}] No data available")
+            return None
+    
+    def list_active_subscriptions(self) -> List[str]:
+        """List all active subscriptions"""
+        active = list(self.active_subscriptions.keys())
+        logger.debug(f"[SUBSCRIPTION_MANAGER] Active subscriptions: {active}")
+        return active
+    
+    def get_subscription_status(self) -> Dict[str, Dict[str, Any]]:
+        """Get detailed status of all subscriptions for diagnostics"""
+        status = {}
+        
+        for sub_name, config in self.subscription_configs.items():
+            sub_status = {
+                "config": {
+                    "resource": config["resource"],
+                    "description": config["description"],
+                    "auto_start": config.get("auto_start", False)
+                },
+                "runtime": {
+                    "active": sub_name in self.active_subscriptions,
+                    "connection_state": self.connection_states.get(sub_name, "not_started"),
+                    "reconnect_attempts": self.reconnect_attempts.get(sub_name, 0),
+                    "last_error": self.last_error.get(sub_name, None)
+                }
+            }
+            
+            # Add data info if available
+            if sub_name in self.resource_data:
+                data_info = self.resource_data[sub_name]
+                age_seconds = (datetime.now() - data_info.last_updated).total_seconds()
+                sub_status["data"] = {
+                    "available": True,
+                    "last_updated": data_info.last_updated.isoformat(),
+                    "age_seconds": age_seconds
+                }
+            else:
+                sub_status["data"] = {"available": False}
+                
+            status[sub_name] = sub_status
+            
+        logger.debug(f"[SUBSCRIPTION_MANAGER] Generated status for {len(status)} subscriptions")
+        return status
+
+
+# Global subscription manager
+subscription_manager = SubscriptionManager()
+
+# Track if we've started subscriptions
+_subscriptions_started = False
+
+async def ensure_subscriptions_started():
+    """Ensure subscriptions are started, called from async context"""
+    global _subscriptions_started
+    
+    if _subscriptions_started:
+        return
+        
+    logger.info("[STARTUP] First async operation detected, starting subscriptions...")
+    try:
+        await autostart_subscriptions()
+        _subscriptions_started = True
+        logger.info("[STARTUP] Subscriptions started successfully")
+    except Exception as e:
+        logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
+
 logger.info(f"UNRAID_MCP_LOG_FILE set to: {log_file_path}") # Added
 logger.info(f"UNRAID_VERIFY_SSL set to: {UNRAID_VERIFY_SSL}")
 
@@ -110,6 +585,128 @@ mcp = FastMCP(
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version="0.1.0",
 )
+
+
+# MCP Resources for real-time subscription data
+
+async def autostart_subscriptions():
+    """Auto-start all subscriptions marked for auto-start in SubscriptionManager"""
+    logger.info("[AUTOSTART] Initiating subscription auto-start process...")
+    
+    try:
+        # Use the new SubscriptionManager auto-start method
+        await subscription_manager.auto_start_all_subscriptions()
+        logger.info("[AUTOSTART] Auto-start process completed successfully")
+    except Exception as e:
+        logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
+        
+    # Optional log file subscription
+    log_path = os.getenv("UNRAID_AUTOSTART_LOG_PATH")
+    if log_path is None:
+        # Default to syslog if available
+        default_path = "/var/log/syslog"
+        if Path(default_path).exists():
+            log_path = default_path
+            logger.info(f"[AUTOSTART] Using default log path: {default_path}")
+            
+    if log_path:
+        try:
+            logger.info(f"[AUTOSTART] Starting log file subscription for: {log_path}")
+            config = subscription_manager.subscription_configs.get("logFileSubscription")
+            if config:
+                await subscription_manager.start_subscription("logFileSubscription", config["query"], {"path": log_path})
+                logger.info(f"[AUTOSTART] Log file subscription started for: {log_path}")
+            else:
+                logger.error("[AUTOSTART] logFileSubscription config not found")
+        except Exception as e:
+            logger.error(f"[AUTOSTART] Failed to start log file subscription: {e}", exc_info=True)
+    else:
+        logger.info("[AUTOSTART] No log file path configured for auto-start")
+@mcp.resource("unraid://array/status")
+async def array_status_resource() -> str:
+    """Real-time Unraid array status from subscription"""
+    await ensure_subscriptions_started()
+    data = subscription_manager.get_resource_data("arraySubscription")
+    if data:
+        return json.dumps({
+            "source": "live_subscription",
+            "timestamp": data.get("timestamp", "unknown"),
+            "data": data
+        }, indent=2)
+    
+    # Subscription connected but no live data yet, get current state as fallback
+    try:
+        fallback_data = await get_array_status()
+        return json.dumps({
+            "source": "fallback_query",
+            "message": "Subscription connected but no live updates yet. Showing current state. Will update automatically when array changes.",
+            "data": fallback_data
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "status": "No subscription data yet", 
+            "message": "Subscription connected but no data. Array might be stable (no changes to trigger updates).",
+            "error": str(e)
+        })
+
+@mcp.resource("unraid://system/info")
+async def system_info_resource() -> str:
+    """Real-time system information from subscription"""
+    await ensure_subscriptions_started()
+    data = subscription_manager.get_resource_data("infoSubscription")
+    if data:
+        return json.dumps(data, indent=2)
+    
+    # If no subscription data, try to get current state via regular query as fallback
+    try:
+        fallback_data = await get_system_info()
+        return json.dumps({
+            "source": "fallback_query",
+            "message": "Subscription connected but no live data yet, showing current state",
+            "data": fallback_data
+        }, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "status": "No subscription data yet", 
+            "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
+            "fallback_error": str(e)
+        })
+
+@mcp.resource("unraid://notifications/overview")
+async def notifications_overview_resource() -> str:
+    """Real-time notification overview from subscription"""
+    await ensure_subscriptions_started()
+    data = subscription_manager.get_resource_data("notificationsOverview")
+    if data:
+        return json.dumps(data, indent=2)
+    return json.dumps({
+        "status": "No subscription data yet",
+        "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues."
+    })
+
+@mcp.resource("unraid://parity/status")
+async def parity_status_resource() -> str:
+    """Real-time parity check status from subscription"""
+    await ensure_subscriptions_started()
+    data = subscription_manager.get_resource_data("parityHistorySubscription")
+    if data:
+        return json.dumps(data, indent=2)
+    return json.dumps({
+        "status": "No subscription data yet",
+        "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues."
+    })
+
+@mcp.resource("unraid://logs/stream")
+async def logs_stream_resource() -> str:
+    """Real-time log stream data from subscription"""
+    await ensure_subscriptions_started()
+    data = subscription_manager.get_resource_data("logFileSubscription")
+    if data:
+        return json.dumps(data, indent=2)
+    return json.dumps({
+        "status": "No subscription data yet",
+        "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues."
+    })
 
 # HTTP client timeout settings
 TIMEOUT_CONFIG = httpx.Timeout(10.0, read=30.0, connect=5.0)
@@ -1163,9 +1760,344 @@ async def health_check() -> Dict[str, Any]:
             }
         }
 
-if __name__ == "__main__":
+# =============================================================================
+# SUBSCRIPTION DIAGNOSTICS TOOLS
+# =============================================================================
+
+@mcp.tool()
+async def test_subscription_query(subscription_query: str) -> Dict[str, Any]:
+    """
+    Test a GraphQL subscription query directly to debug schema issues.
+    Use this to find working subscription field names and structure.
+    """
+    try:
+        logger.info(f"[TEST_SUBSCRIPTION] Testing query: {subscription_query}")
+        
+        # Create a temporary WebSocket connection to test the query
+        import websockets
+        import json
+        
+        # Build WebSocket URL
+        ws_url = UNRAID_API_URL.replace("https://", "wss://").replace("http://", "ws://") + "/graphql"
+        
+        # Test connection
+        async with websockets.connect(
+            ws_url,
+            extra_headers={"Authorization": f"Bearer {UNRAID_API_KEY}"},
+            ssl=UNRAID_VERIFY_SSL,
+            ping_interval=30,
+            ping_timeout=10
+        ) as websocket:
+            
+            # Send connection init
+            await websocket.send(json.dumps({
+                "type": "connection_init",
+                "payload": {"Authorization": f"Bearer {UNRAID_API_KEY}"}
+            }))
+            
+            # Wait for ack
+            response = await websocket.recv()
+            init_response = json.loads(response)
+            
+            if init_response.get("type") != "connection_ack":
+                return {"error": f"Connection failed: {init_response}"}
+            
+            # Send subscription
+            await websocket.send(json.dumps({
+                "id": "test",
+                "type": "start",
+                "payload": {"query": subscription_query}
+            }))
+            
+            # Wait for response with timeout
+            try:
+                response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                result = json.loads(response)
+                
+                logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
+                return {
+                    "success": True,
+                    "response": result,
+                    "query_tested": subscription_query
+                }
+                
+            except asyncio.TimeoutError:
+                return {
+                    "success": True,
+                    "response": "No immediate response (subscriptions may only send data on changes)",
+                    "query_tested": subscription_query,
+                    "note": "Connection successful, subscription may be waiting for events"
+                }
+                
+    except Exception as e:
+        logger.error(f"[TEST_SUBSCRIPTION] Error: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "query_tested": subscription_query
+        }
+
+@mcp.tool()
+async def diagnose_subscriptions() -> Dict[str, Any]:
+    """
+    Comprehensive diagnostic tool for subscription system.
+    Shows detailed status, connection states, errors, and troubleshooting info.
+    """
+    # Ensure subscriptions are started before diagnosing
+    await ensure_subscriptions_started()
+    
+    try:
+        logger.info("[DIAGNOSTIC] Running subscription diagnostics...")
+        
+        # Get comprehensive status
+        status = subscription_manager.get_subscription_status()
+        
+        # Add environment info
+        diagnostic_info = {
+            "timestamp": datetime.now().isoformat(),
+            "environment": {
+                "auto_start_enabled": subscription_manager.auto_start_enabled,
+                "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
+                "unraid_api_url": UNRAID_API_URL[:50] + "..." if UNRAID_API_URL else None,
+                "api_key_configured": bool(UNRAID_API_KEY),
+                "websocket_url": None
+            },
+            "subscriptions": status,
+            "summary": {
+                "total_configured": len(subscription_manager.subscription_configs),
+                "auto_start_count": sum(1 for s in subscription_manager.subscription_configs.values() if s.get("auto_start")),
+                "active_count": len(subscription_manager.active_subscriptions),
+                "with_data": len(subscription_manager.resource_data),
+                "in_error_state": 0,
+                "connection_issues": []
+            }
+        }
+        
+        # Calculate WebSocket URL
+        if UNRAID_API_URL:
+            if UNRAID_API_URL.startswith('https://'):
+                ws_url = 'wss://' + UNRAID_API_URL[len('https://'):]
+            elif UNRAID_API_URL.startswith('http://'):
+                ws_url = 'ws://' + UNRAID_API_URL[len('http://'):]
+            else:
+                ws_url = UNRAID_API_URL
+            if not ws_url.endswith('/graphql'):
+                ws_url = ws_url.rstrip('/') + '/graphql'
+            diagnostic_info["environment"]["websocket_url"] = ws_url
+        
+        # Analyze issues
+        for sub_name, sub_status in status.items():
+            runtime = sub_status.get("runtime", {})
+            connection_state = runtime.get("connection_state", "unknown")
+            
+            if connection_state in ["error", "auth_failed", "timeout", "max_retries_exceeded"]:
+                diagnostic_info["summary"]["in_error_state"] += 1
+                
+            if runtime.get("last_error"):
+                diagnostic_info["summary"]["connection_issues"].append({
+                    "subscription": sub_name,
+                    "state": connection_state,
+                    "error": runtime["last_error"]
+                })
+        
+        # Add troubleshooting recommendations
+        recommendations = []
+        
+        if not diagnostic_info["environment"]["api_key_configured"]:
+            recommendations.append("CRITICAL: No API key configured. Set UNRAID_API_KEY environment variable.")
+        
+        if diagnostic_info["summary"]["in_error_state"] > 0:
+            recommendations.append("Some subscriptions are in error state. Check 'connection_issues' for details.")
+            
+        if diagnostic_info["summary"]["with_data"] == 0:
+            recommendations.append("No subscriptions have received data yet. Check WebSocket connectivity and authentication.")
+            
+        if diagnostic_info["summary"]["active_count"] < diagnostic_info["summary"]["auto_start_count"]:
+            recommendations.append("Not all auto-start subscriptions are active. Check server startup logs.")
+            
+        diagnostic_info["troubleshooting"] = {
+            "recommendations": recommendations,
+            "log_commands": [
+                "Check server logs for [WEBSOCKET:*], [AUTH:*], [SUBSCRIPTION:*] prefixed messages",
+                "Look for connection timeout or authentication errors",
+                "Verify Unraid API URL is accessible and supports GraphQL subscriptions"
+            ],
+            "next_steps": [
+                "If authentication fails: Verify API key has correct permissions",
+                "If connection fails: Check network connectivity to Unraid server", 
+                "If no data received: Enable DEBUG logging to see detailed protocol messages"
+            ]
+        }
+        
+        logger.info(f"[DIAGNOSTIC] Completed. Active: {diagnostic_info['summary']['active_count']}, With data: {diagnostic_info['summary']['with_data']}, Errors: {diagnostic_info['summary']['in_error_state']}")
+        return diagnostic_info
+        
+    except Exception as e:
+        logger.error(f"[DIAGNOSTIC] Failed to generate diagnostics: {e}")
+        raise ToolError(f"Failed to generate diagnostics: {str(e)}")
+
+# =============================================================================
+# RCLONE MANAGEMENT TOOLS
+# =============================================================================
+
+@mcp.tool()
+async def list_rclone_remotes() -> List[Dict[str, Any]]:
+    """Retrieves all configured RClone remotes with their configuration details."""
+    try:
+        query = """
+        query ListRCloneRemotes {
+            rclone {
+                remotes {
+                    name
+                    type
+                    parameters
+                    config
+                }
+            }
+        }
+        """
+        
+        response_data = await _make_graphql_request(query)
+        
+        if "rclone" in response_data and "remotes" in response_data["rclone"]:
+            remotes = response_data["rclone"]["remotes"]
+            logger.info(f"Retrieved {len(remotes)} RClone remotes")
+            return remotes
+        
+        return []
+        
+    except Exception as e:
+        logger.error(f"Failed to list RClone remotes: {str(e)}")
+        raise ToolError(f"Failed to list RClone remotes: {str(e)}")
+
+@mcp.tool()
+async def get_rclone_config_form(provider_type: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get RClone configuration form schema for setting up new remotes.
+    
+    Args:
+        provider_type: Optional provider type to get specific form (e.g., 's3', 'drive', 'dropbox')
+    """
+    try:
+        query = """
+        query GetRCloneConfigForm($formOptions: RCloneConfigFormInput) {
+            rclone {
+                configForm(formOptions: $formOptions) {
+                    id
+                    dataSchema
+                    uiSchema
+                }
+            }
+        }
+        """
+        
+        variables = {}
+        if provider_type:
+            variables["formOptions"] = {"type": provider_type}
+        
+        response_data = await _make_graphql_request(query, variables)
+        
+        if "rclone" in response_data and "configForm" in response_data["rclone"]:
+            form_data = response_data["rclone"]["configForm"]
+            logger.info(f"Retrieved RClone config form for {provider_type or 'general'}")
+            return form_data
+        
+        raise ToolError("No RClone config form data received")
+        
+    except Exception as e:
+        logger.error(f"Failed to get RClone config form: {str(e)}")
+        raise ToolError(f"Failed to get RClone config form: {str(e)}")
+
+@mcp.tool()
+async def create_rclone_remote(name: str, provider_type: str, config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a new RClone remote with the specified configuration.
+    
+    Args:
+        name: Name for the new remote
+        provider_type: Type of provider (e.g., 's3', 'drive', 'dropbox', 'ftp')
+        config_data: Configuration parameters specific to the provider type
+    """
+    try:
+        mutation = """
+        mutation CreateRCloneRemote($input: CreateRCloneRemoteInput!) {
+            rclone {
+                createRCloneRemote(input: $input) {
+                    name
+                    type
+                    parameters
+                }
+            }
+        }
+        """
+        
+        variables = {
+            "input": {
+                "name": name,
+                "type": provider_type,
+                "config": config_data
+            }
+        }
+        
+        response_data = await _make_graphql_request(mutation, variables)
+        
+        if "rclone" in response_data and "createRCloneRemote" in response_data["rclone"]:
+            remote_info = response_data["rclone"]["createRCloneRemote"]
+            logger.info(f"Successfully created RClone remote: {name}")
+            return {
+                "success": True,
+                "message": f"RClone remote '{name}' created successfully",
+                "remote": remote_info
+            }
+        
+        raise ToolError("Failed to create RClone remote")
+        
+    except Exception as e:
+        logger.error(f"Failed to create RClone remote {name}: {str(e)}")
+        raise ToolError(f"Failed to create RClone remote {name}: {str(e)}")
+
+@mcp.tool()
+async def delete_rclone_remote(name: str) -> Dict[str, Any]:
+    """
+    Delete an existing RClone remote by name.
+    
+    Args:
+        name: Name of the remote to delete
+    """
+    try:
+        mutation = """
+        mutation DeleteRCloneRemote($input: DeleteRCloneRemoteInput!) {
+            rclone {
+                deleteRCloneRemote(input: $input)
+            }
+        }
+        """
+        
+        variables = {
+            "input": {
+                "name": name
+            }
+        }
+        
+        response_data = await _make_graphql_request(mutation, variables)
+        
+        if "rclone" in response_data and response_data["rclone"]["deleteRCloneRemote"]:
+            logger.info(f"Successfully deleted RClone remote: {name}")
+            return {
+                "success": True,
+                "message": f"RClone remote '{name}' deleted successfully"
+            }
+        
+        raise ToolError(f"Failed to delete RClone remote '{name}'")
+        
+    except Exception as e:
+        logger.error(f"Failed to delete RClone remote {name}: {str(e)}")
+        raise ToolError(f"Failed to delete RClone remote {name}: {str(e)}")
+
+def main():
+    """Main entry point for the Unraid MCP server."""
     logger.info(f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport...")
     try:
+        # Subscriptions will auto-start on first async operation
         if UNRAID_MCP_TRANSPORT == "streamable-http":
             # Use the recommended Streamable HTTP transport
             mcp.run(
@@ -1191,3 +2123,7 @@ if __name__ == "__main__":
     except Exception as e:
         logger.critical(f"Failed to start Unraid MCP server: {e}", exc_info=True)
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
