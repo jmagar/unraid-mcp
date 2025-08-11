@@ -30,7 +30,7 @@ dependencies = [
     "httpx>=0.28.1",
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
-    "websockets>=14.1",
+    "websockets>=13.1,<14.0",
 ]
 
 [project.optional-dependencies]
@@ -49,10 +49,10 @@ Repository = "https://github.com/your-username/unraid-mcp"
 Issues = "https://github.com/your-username/unraid-mcp/issues"
 
 [project.scripts]
-unraid-mcp-server = "unraid_mcp_server:main"
+unraid-mcp-server = "unraid_mcp.main:main"
 
 [tool.hatch.build.targets.wheel]
-only-include = ["unraid_mcp_server.py"]
+only-include = ["unraid_mcp/"]
 
 [tool.black]
 line-length = 100
