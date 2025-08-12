@@ -8,19 +8,44 @@ set -euo pipefail
 # Configuration
 DEFAULT_PORT=6970
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="$PROJECT_DIR/dev.log"
+LOG_DIR="$PROJECT_DIR/logs"
+LOG_FILE="$LOG_DIR/unraid-mcp.log"
+PID_FILE="$LOG_DIR/dev.pid"
+# Ensure logs directory exists
+mkdir -p "$LOG_DIR"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# All colors are now handled by Rich logging system
 
-# Helper function for colored output
+# Helper function for unified Rich logging
 log() {
-    echo -e "${2:-$NC}[$(date +'%H:%M:%S')] $1${NC}"
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    local message="$1"
+    local level="${2:-info}"
+    local indent="${3:-0}"
+    local file_timestamp="$(date +'%Y-%m-%d %H:%M:%S')"
+    
+    # Use unified Rich logger for beautiful console output - escape single quotes
+    local escaped_message="${message//\'/\'\"\'\"\'}"
+    uv run python -c "from unraid_mcp.config.logging import log_with_level_and_indent; log_with_level_and_indent('$escaped_message', '$level', $indent)"
+    
+    # File output without color
+    printf "[%s] %s\n" "$file_timestamp" "$message" >> "$LOG_FILE"
+}
+
+# Convenience functions for different log levels
+log_error() { log "$1" "error" "${2:-0}"; }
+log_warning() { log "$1" "warning" "${2:-0}"; }
+log_success() { log "$1" "success" "${2:-0}"; }
+log_info() { log "$1" "info" "${2:-0}"; }
+log_status() { log "$1" "status" "${2:-0}"; }
+
+# Rich header function
+log_header() {
+    uv run python -c "from unraid_mcp.config.logging import log_header; log_header('$1')"
+}
+
+# Rich separator function  
+log_separator() {
+    uv run python -c "from unraid_mcp.config.logging import log_separator; log_separator()"
 }
 
 # Get port from environment or use default
@@ -29,21 +54,69 @@ get_port() {
     echo "$port"
 }
 
+# Write PID to file
+write_pid_file() {
+    local pid=$1
+    echo "$pid" > "$PID_FILE"
+}
+
+# Read PID from file
+read_pid_file() {
+    if [[ -f "$PID_FILE" ]]; then
+        cat "$PID_FILE" 2>/dev/null
+    fi
+}
+
+# Check if PID file contains valid running process
+is_pid_valid() {
+    local pid=$1
+    [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+# Clean up PID file
+cleanup_pid_file() {
+    if [[ -f "$PID_FILE" ]]; then
+        rm -f "$PID_FILE"
+        log_info "🗑️  Cleaned up PID file"
+    fi
+}
+
+# Get PID from PID file if valid, otherwise return empty
+get_valid_pid_from_file() {
+    local pid=$(read_pid_file)
+    if is_pid_valid "$pid"; then
+        echo "$pid"
+    else
+        # Clean up stale PID file
+        [[ -f "$PID_FILE" ]] && cleanup_pid_file
+        echo ""
+    fi
+}
+
 # Find processes using multiple detection methods
 find_server_processes() {
     local port=$(get_port)
     local pids=()
     
-    # Method 1: Command line pattern matching
+    # Method 0: Check PID file first (most reliable)
+    local pid_from_file=$(get_valid_pid_from_file)
+    if [[ -n "$pid_from_file" ]]; then
+        log_status "🔍 Found server PID from file: $pid_from_file"
+        pids+=("$pid_from_file")
+    fi
+    
+    # Method 1: Command line pattern matching (fallback)
     while IFS= read -r line; do
         if [[ -n "$line" ]]; then
             local pid=$(echo "$line" | awk '{print $2}')
-            local cmd=$(echo "$line" | awk '{for(i=11;i<=NF;i++) printf "%s ", $i; print ""}')
-            pids+=("$pid")
+            # Add to pids if not already present
+            if [[ ! " ${pids[@]} " =~ " $pid " ]]; then
+                pids+=("$pid")
+            fi
         fi
     done < <(ps aux | grep -E 'python.*unraid.*mcp|python.*main\.py|uv run.*main\.py|uv run -m unraid_mcp' | grep -v grep | grep -v "$0")
     
-    # Method 2: Port binding verification
+    # Method 2: Port binding verification (fallback)
     if command -v lsof >/dev/null 2>&1; then
         while IFS= read -r line; do
             if [[ -n "$line" ]]; then
@@ -56,7 +129,7 @@ find_server_processes() {
         done < <(lsof -i ":$port" 2>/dev/null | grep LISTEN || true)
     fi
     
-    # Method 3: Working directory verification
+    # Method 3: Working directory verification for fallback methods
     local verified_pids=()
     for pid in "${pids[@]}"; do
         # Skip if not a valid PID
@@ -64,6 +137,13 @@ find_server_processes() {
             continue
         fi
         
+        # If this PID came from the PID file, it's already verified
+        if [[ "$pid" == "$pid_from_file" ]]; then
+            verified_pids+=("$pid")
+            continue
+        fi
+        
+        # Verify other PIDs by working directory
         if [[ -d "/proc/$pid" ]]; then
             local pwd_info=""
             if command -v pwdx >/dev/null 2>&1; then
@@ -89,16 +169,16 @@ terminate_process() {
     local name=${2:-"process"}
     
     if ! kill -0 "$pid" 2>/dev/null; then
-        log "Process $pid ($name) already terminated" "$YELLOW"
+        log_warning "⚠️  Process $pid ($name) already terminated"
         return 0
     fi
     
-    log "Terminating $name (PID: $pid)..." "$YELLOW"
+    log_warning "🔄 Terminating $name (PID: $pid)..."
     
     # Step 1: Graceful shutdown (SIGTERM)
-    log "  → Sending SIGTERM to PID $pid" "$BLUE"
+    log_info "→ Sending SIGTERM to PID $pid" 1
     kill -TERM "$pid" 2>/dev/null || {
-        log "    Failed to send SIGTERM (process may have died)" "$YELLOW"
+        log_warning "⚠️  Failed to send SIGTERM (process may have died)" 2
         return 0
     }
     
@@ -106,40 +186,55 @@ terminate_process() {
     local count=0
     while [[ $count -lt 5 ]]; do
         if ! kill -0 "$pid" 2>/dev/null; then
-            log "  ✓ Process $pid terminated gracefully" "$GREEN"
+            log_success "✅ Process $pid terminated gracefully" 1
+            
+            # Clean up PID file if this was our server process
+            local pid_from_file=$(read_pid_file)
+            if [[ "$pid" == "$pid_from_file" ]]; then
+                cleanup_pid_file
+            fi
+            
             return 0
         fi
         sleep 1
         ((count++))
-        log "    Waiting for graceful shutdown... (${count}/5)" "$BLUE"
+        log_info "⏳ Waiting for graceful shutdown... (${count}/5)" 2
     done
     
     # Step 3: Force kill (SIGKILL)
-    log "  → Graceful shutdown timeout, sending SIGKILL to PID $pid" "$RED"
+    log_error "⚡ Graceful shutdown timeout, sending SIGKILL to PID $pid" 1
     kill -KILL "$pid" 2>/dev/null || {
-        log "    Failed to send SIGKILL (process may have died)" "$YELLOW"
+        log_warning "⚠️  Failed to send SIGKILL (process may have died)" 2
         return 0
     }
     
     # Step 4: Final verification
     sleep 1
     if kill -0 "$pid" 2>/dev/null; then
-        log "  ✗ Failed to terminate process $pid" "$RED"
+        log_error "❌ Failed to terminate process $pid" 1
         return 1
     else
-        log "  ✓ Process $pid terminated forcefully" "$GREEN"
+        log_success "✅ Process $pid terminated forcefully" 1
+        
+        # Clean up PID file if this was our server process
+        local pid_from_file=$(read_pid_file)
+        if [[ "$pid" == "$pid_from_file" ]]; then
+            cleanup_pid_file
+        fi
+        
         return 0
     fi
 }
 
 # Stop all server processes
 stop_servers() {
-    log "🛑 Stopping existing server processes..." "$RED"
+    log_header "Server Shutdown"
+    log_error "🛑 Stopping existing server processes..."
     
     local pids=($(find_server_processes))
     
     if [[ ${#pids[@]} -eq 0 ]]; then
-        log "No processes to stop" "$GREEN"
+        log_success "✅ No processes to stop"
         return 0
     fi
     
@@ -152,11 +247,11 @@ stop_servers() {
     
     # Wait for ports to be released
     local port=$(get_port)
-    log "Waiting for port $port to be released..." "$BLUE"
+    log_info "⏳ Waiting for port $port to be released..."
     local port_wait=0
     while [[ $port_wait -lt 3 ]]; do
         if ! lsof -i ":$port" >/dev/null 2>&1; then
-            log "✓ Port $port released" "$GREEN"
+            log_success "✅ Port $port released" 1
             break
         fi
         sleep 1
@@ -164,94 +259,124 @@ stop_servers() {
     done
     
     if [[ $failed -gt 0 ]]; then
-        log "⚠️  Failed to stop $failed process(es)" "$RED"
+        log_error "⚠️  Failed to stop $failed process(es)"
         return 1
     else
-        log "✅ All processes stopped successfully" "$GREEN"
+        log_success "✅ All processes stopped successfully"
         return 0
     fi
 }
 
 # Start the new modular server
 start_modular_server() {
-    log "🚀 Starting modular server..." "$GREEN"
+    log_header "Modular Server Startup"
+    log_success "🚀 Starting modular server..."
     
     cd "$PROJECT_DIR"
     
     # Check if main.py exists in unraid_mcp/
     if [[ ! -f "unraid_mcp/main.py" ]]; then
-        log "❌ unraid_mcp/main.py not found. Make sure modular server is implemented." "$RED"
+        log_error "❌ unraid_mcp/main.py not found. Make sure modular server is implemented."
         return 1
     fi
     
+    # Clear the log file and add a startup marker to capture fresh logs
+    echo "=== Server Starting at $(date) ===" > "$LOG_FILE"
+    
     # Start server in background using module syntax
-    log "  → Executing: uv run -m unraid_mcp.main" "$BLUE"
-    nohup uv run -m unraid_mcp.main >> "$LOG_FILE" 2>&1 &
+    log_info "→ Executing: uv run -m unraid_mcp.main" 1
+    # Start server in new process group to isolate it from parent signals
+    setsid nohup uv run -m unraid_mcp.main >> "$LOG_FILE" 2>&1 &
     local pid=$!
     
-    # Give it a moment to start
-    sleep 2
+    # Write PID to file
+    write_pid_file "$pid"
+    log_info "📝 Written PID $pid to file: $PID_FILE" 1
+    
+    # Give it a moment to start and write some logs
+    sleep 3
     
     # Check if it's still running
     if kill -0 "$pid" 2>/dev/null; then
         local port=$(get_port)
-        log "✅ Modular server started successfully (PID: $pid, Port: $port)" "$GREEN"
-        log "📋 Process info: $(ps -p "$pid" -o pid,ppid,cmd --no-headers 2>/dev/null || echo 'Process info unavailable')" "$BLUE"
+        log_success "✅ Modular server started successfully (PID: $pid, Port: $port)"
+        log_info "📋 Process info: $(ps -p "$pid" -o pid,ppid,cmd --no-headers 2>/dev/null || echo 'Process info unavailable')" 1
         
         # Auto-tail logs after successful start
         echo ""
-        log "📄 Following server logs in real-time..." "$GREEN"
-        log "Press Ctrl+C to stop following logs (server will continue running)" "$YELLOW"
+        log_success "📄 Following server logs in real-time..."
+        log_info "ℹ️  Press Ctrl+C to stop following logs (server will continue running)" 1
+        log_separator
         echo ""
-        echo -e "${GREEN}=== Following Server Logs (Press Ctrl+C to exit) ===${NC}"
+        
+        # Set up signal handler for graceful exit from log following
+        trap 'handle_log_interrupt' SIGINT
+        
+        # Start tailing from beginning of the fresh log file
         tail -f "$LOG_FILE"
         
         return 0
     else
-        log "❌ Modular server failed to start" "$RED"
-        log "📄 Check $LOG_FILE for error details" "$YELLOW"
+        log_error "❌ Modular server failed to start"
+        cleanup_pid_file
+        log_warning "📄 Check $LOG_FILE for error details"
         return 1
     fi
 }
 
 # Start the original server
 start_original_server() {
-    log "🚀 Starting original server..." "$GREEN"
+    log_header "Original Server Startup"
+    log_success "🚀 Starting original server..."
     
     cd "$PROJECT_DIR"
     
     # Check if original server exists
     if [[ ! -f "unraid_mcp_server.py" ]]; then
-        log "❌ unraid_mcp_server.py not found" "$RED"
+        log_error "❌ unraid_mcp_server.py not found"
         return 1
     fi
     
+    # Clear the log file and add a startup marker to capture fresh logs
+    echo "=== Server Starting at $(date) ===" > "$LOG_FILE"
+    
     # Start server in background
-    log "  → Executing: uv run unraid_mcp_server.py" "$BLUE"
-    nohup uv run unraid_mcp_server.py >> "$LOG_FILE" 2>&1 &
+    log_info "→ Executing: uv run unraid_mcp_server.py" 1
+    # Start server in new process group to isolate it from parent signals
+    setsid nohup uv run unraid_mcp_server.py >> "$LOG_FILE" 2>&1 &
     local pid=$!
     
-    # Give it a moment to start
-    sleep 2
+    # Write PID to file
+    write_pid_file "$pid"
+    log_info "📝 Written PID $pid to file: $PID_FILE" 1
+    
+    # Give it a moment to start and write some logs
+    sleep 3
     
     # Check if it's still running
     if kill -0 "$pid" 2>/dev/null; then
         local port=$(get_port)
-        log "✅ Original server started successfully (PID: $pid, Port: $port)" "$GREEN"
-        log "📋 Process info: $(ps -p "$pid" -o pid,ppid,cmd --no-headers 2>/dev/null || echo 'Process info unavailable')" "$BLUE"
+        log_success "✅ Original server started successfully (PID: $pid, Port: $port)"
+        log_info "📋 Process info: $(ps -p "$pid" -o pid,ppid,cmd --no-headers 2>/dev/null || echo 'Process info unavailable')" 1
         
         # Auto-tail logs after successful start
         echo ""
-        log "📄 Following server logs in real-time..." "$GREEN"
-        log "Press Ctrl+C to stop following logs (server will continue running)" "$YELLOW"
+        log_success "📄 Following server logs in real-time..."
+        log_info "ℹ️  Press Ctrl+C to stop following logs (server will continue running)" 1
+        log_separator
         echo ""
-        echo -e "${GREEN}=== Following Server Logs (Press Ctrl+C to exit) ===${NC}"
+        
+        # Set up signal handler for graceful exit from log following
+        trap 'handle_log_interrupt' SIGINT
+        
+        # Start tailing from beginning of the fresh log file
         tail -f "$LOG_FILE"
         
         return 0
     else
-        log "❌ Original server failed to start" "$RED"
-        log "📄 Check $LOG_FILE for error details" "$YELLOW"
+        log_error "❌ Original server failed to start"
+        cleanup_pid_file
+        log_warning "📄 Check $LOG_FILE for error details"
         return 1
     fi
 }
@@ -287,20 +412,39 @@ show_usage() {
 # Show server status
 show_status() {
     local port=$(get_port)
-    log "🔍 Server Status Check" "$BLUE"
-    log "Project Directory: $PROJECT_DIR" "$BLUE"
-    log "Expected Port: $port" "$BLUE"
+    log_header "Server Status"
+    log_status "🔍 Server Status Check"
+    log_info "📁 Project Directory: $PROJECT_DIR" 1
+    log_info "📝 PID File: $PID_FILE" 1
+    log_info "🔌 Expected Port: $port" 1
+    echo ""
+    
+    # Check PID file status
+    local pid_from_file=$(read_pid_file)
+    if [[ -n "$pid_from_file" ]]; then
+        if is_pid_valid "$pid_from_file"; then
+            log_success "✅ PID File: Contains valid PID $pid_from_file" 1
+        else
+            log_warning "⚠️  PID File: Contains stale PID $pid_from_file (process not running)" 1
+        fi
+    else
+        log_warning "🚫 PID File: Not found or empty" 1
+    fi
     echo ""
     
     local pids=($(find_server_processes))
     
     if [[ ${#pids[@]} -eq 0 ]]; then
-        log "Status: No servers running" "$YELLOW"
+        log_warning "🟡 Status: No servers running" 1
     else
-        log "Status: ${#pids[@]} server(s) running" "$GREEN"
+        log_success "✅ Status: ${#pids[@]} server(s) running" 1
         for pid in "${pids[@]}"; do
             local cmd=$(ps -p "$pid" -o cmd --no-headers 2>/dev/null || echo "Command unavailable")
-            log "  PID $pid: $cmd" "$GREEN"
+            local source="process scan"
+            if [[ "$pid" == "$pid_from_file" ]]; then
+                source="PID file"
+            fi
+            log_success "PID $pid ($source): $cmd" 2
         done
     fi
     
@@ -308,12 +452,12 @@ show_status() {
     if command -v lsof >/dev/null 2>&1; then
         local port_info=$(lsof -i ":$port" 2>/dev/null | grep LISTEN || echo "")
         if [[ -n "$port_info" ]]; then
-            log "Port $port: BOUND" "$GREEN"
+            log_success "Port $port: BOUND" 1
             echo "$port_info" | while IFS= read -r line; do
-                log "  $line" "$BLUE"
+                log_info "$line" 2
             done
         else
-            log "Port $port: FREE" "$YELLOW"
+            log_warning "Port $port: FREE" 1
         fi
     fi
 }
@@ -322,32 +466,44 @@ show_status() {
 tail_logs() {
     local lines="${1:-50}"
     
-    log "📄 Tailing last $lines lines from server logs..." "$BLUE"
+    log_info "📄 Tailing last $lines lines from server logs..."
     
     if [[ ! -f "$LOG_FILE" ]]; then
-        log "❌ Log file not found: $LOG_FILE" "$RED"
+        log_error "❌ Log file not found: $LOG_FILE"
         return 1
     fi
     
     echo ""
-    echo -e "${YELLOW}=== Server Logs (last $lines lines) ===${NC}"
+    echo "=== Server Logs (last $lines lines) ==="
     tail -n "$lines" "$LOG_FILE"
-    echo -e "${YELLOW}=== End of Logs ===${NC}"
+    echo "=== End of Logs ===="
     echo ""
+}
+
+# Handle SIGINT during log following
+handle_log_interrupt() {
+    echo ""
+    log_info "📄 Stopped following logs. Server continues running in background."
+    log_info "💡 Use './dev.sh --status' to check server status" 1
+    log_info "💡 Use './dev.sh --tail' to resume following logs" 1
+    exit 0
 }
 
 # Follow server logs in real-time
 follow_logs() {
-    log "📄 Following server logs in real-time..." "$GREEN"
-    log "Press Ctrl+C to stop following" "$YELLOW"
+    log_success "📄 Following server logs in real-time..."
+    log_info "ℹ️  Press Ctrl+C to stop following logs"
     
     if [[ ! -f "$LOG_FILE" ]]; then
-        log "❌ Log file not found: $LOG_FILE" "$RED"
+        log_error "❌ Log file not found: $LOG_FILE"
         return 1
     fi
     
+    # Set up signal handler for graceful exit
+    trap 'handle_log_interrupt' SIGINT
+    
+    log_separator
     echo ""
-    echo -e "${GREEN}=== Following Server Logs (Press Ctrl+C to exit) ===${NC}"
     tail -f "$LOG_FILE"
 }
 
@@ -376,7 +532,7 @@ main() {
             if stop_servers; then
                 start_original_server
             else
-                log "❌ Failed to stop existing servers" "$RED"
+                log_error "❌ Failed to stop existing servers"
                 exit 1
             fi
             ;;
@@ -384,12 +540,12 @@ main() {
             if stop_servers; then
                 start_modular_server
             else
-                log "❌ Failed to stop existing servers" "$RED"
+                log_error "❌ Failed to stop existing servers"
                 exit 1
             fi
             ;;
         *)
-            log "❌ Unknown option: $1" "$RED"
+            log_error "❌ Unknown option: $1"
             show_usage
             exit 1
             ;;

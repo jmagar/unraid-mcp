@@ -31,6 +31,8 @@ dependencies = [
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
     "websockets>=13.1,<14.0",
+    "rich>=14.1.0",
+    "pytz>=2025.2",
 ]
 
 [project.optional-dependencies]
@@ -142,3 +144,6 @@ exclude_lines = [
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
 ]
+
+[dependency-groups]
+dev = []

@@ -8,7 +8,7 @@ import sys
 
 from fastmcp import FastMCP
 
-from .config.logging import logger
+from .config.logging import logger, console
 from .config.settings import (
     UNRAID_API_KEY,
     UNRAID_API_URL,
