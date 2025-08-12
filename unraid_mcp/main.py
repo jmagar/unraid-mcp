@@ -6,7 +6,7 @@ the modular server implementation from unraid_mcp.server.
 """
 
 
-def main():
+def main() -> None:
     """Main entry point for the Unraid MCP Server."""
     try:
         from .server import run_server

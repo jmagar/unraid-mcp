@@ -65,7 +65,7 @@ def get_available_container_names(containers: list[dict[str, Any]]) -> list[str]
     return names
 
 
-def register_docker_tools(mcp: FastMCP):
+def register_docker_tools(mcp: FastMCP) -> None:
     """Register all Docker tools with the FastMCP instance.
 
     Args:
@@ -97,11 +97,12 @@ def register_docker_tools(mcp: FastMCP):
             logger.info("Executing list_docker_containers tool")
             response_data = await make_graphql_request(query)
             if response_data.get("docker"):
-                return response_data["docker"].get("containers", [])
+                containers = response_data["docker"].get("containers", [])
+                return list(containers) if isinstance(containers, list) else []
             return []
         except Exception as e:
             logger.error(f"Error in list_docker_containers: {e}", exc_info=True)
-            raise ToolError(f"Failed to list Docker containers: {str(e)}")
+            raise ToolError(f"Failed to list Docker containers: {str(e)}") from e
 
     @mcp.tool()
     async def manage_docker_container(container_id: str, action: str) -> dict[str, Any]:
@@ -161,7 +162,7 @@ def register_docker_tools(mcp: FastMCP):
                     containers = list_response["docker"].get("containers", [])
                     resolved_container = find_container_by_identifier(container_id, containers)
                     if resolved_container:
-                        actual_container_id = resolved_container.get("id")
+                        actual_container_id = str(resolved_container.get("id", ""))
                         logger.info(f"Resolved '{container_id}' to container ID: {actual_container_id}")
                     else:
                         available_names = get_available_container_names(containers)
@@ -309,7 +310,7 @@ def register_docker_tools(mcp: FastMCP):
 
         except Exception as e:
             logger.error(f"Error in manage_docker_container ({action}): {e}", exc_info=True)
-            raise ToolError(f"Failed to {action} Docker container: {str(e)}")
+            raise ToolError(f"Failed to {action} Docker container: {str(e)}") from e
 
     @mcp.tool()
     async def get_docker_container_details(container_identifier: str) -> dict[str, Any]:
@@ -382,6 +383,6 @@ def register_docker_tools(mcp: FastMCP):
 
         except Exception as e:
             logger.error(f"Error in get_docker_container_details: {e}", exc_info=True)
-            raise ToolError(f"Failed to retrieve Docker container details: {str(e)}")
+            raise ToolError(f"Failed to retrieve Docker container details: {str(e)}") from e
 
     logger.info("Docker tools registered successfully")

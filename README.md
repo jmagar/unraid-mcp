@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- 🔧 **25+ Tools**: Complete Unraid management through MCP protocol
+- 🔧 **26 Tools**: Complete Unraid management through MCP protocol
 - 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase  
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
 - 🔄 **Real-time Data**: WebSocket subscriptions for live log streaming
@@ -41,7 +41,7 @@
 
 ### 1. Installation
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/jmagar/unraid-mcp
 cd unraid-mcp
 uv sync
 ```
@@ -341,7 +341,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 📞 Support
 
 - 📚 Documentation: Check inline code documentation
-- 🐛 Issues: [GitHub Issues](https://github.com/your-username/unraid-mcp/issues)
+- 🐛 Issues: [GitHub Issues](https://github.com/jmagar/unraid-mcp/issues)
 - 💬 Discussions: Use GitHub Discussions for questions
 
 ---

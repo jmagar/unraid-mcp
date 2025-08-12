@@ -6,13 +6,13 @@ multiple modules for consistent data handling.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 
 @dataclass
 class SubscriptionData:
     """Container for subscription data with metadata."""
-    data: Dict[str, Any]
+    data: dict[str, Any]
     last_updated: datetime
     subscription_type: str
 
@@ -24,20 +24,20 @@ class SystemHealth:
     issues: list[str]
     warnings: list[str]
     last_checked: datetime
-    component_status: Dict[str, str]
+    component_status: dict[str, str]
 
 
 @dataclass
 class APIResponse:
     """Container for standardized API response data."""
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    data: dict[str, Any] | None = None
+    error: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 # Type aliases for common data structures
-ConfigValue = Union[str, int, bool, float, None]
-ConfigDict = Dict[str, ConfigValue]
-GraphQLVariables = Dict[str, Any]
-HealthStatus = Dict[str, Union[str, bool, int, list]]
+ConfigValue = str | int | bool | float | None
+ConfigDict = dict[str, ConfigValue]
+GraphQLVariables = dict[str, Any]
+HealthStatus = dict[str, str | bool | int | list[Any]]

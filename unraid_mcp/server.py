@@ -8,7 +8,7 @@ import sys
 
 from fastmcp import FastMCP
 
-from .config.logging import logger, console
+from .config.logging import logger
 from .config.settings import (
     UNRAID_API_KEY,
     UNRAID_API_URL,
@@ -37,10 +37,10 @@ mcp = FastMCP(
 subscription_manager = SubscriptionManager()
 
 
-async def autostart_subscriptions():
+async def autostart_subscriptions() -> None:
     """Auto-start all subscriptions marked for auto-start in SubscriptionManager"""
     logger.info("[AUTOSTART] Initiating subscription auto-start process...")
-    
+
     try:
         # Use the SubscriptionManager auto-start method
         await subscription_manager.auto_start_all_subscriptions()
@@ -49,44 +49,44 @@ async def autostart_subscriptions():
         logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
 
 
-def register_all_modules():
+def register_all_modules() -> None:
     """Register all tools and resources with the MCP instance."""
     try:
         # Register subscription resources first
         register_subscription_resources(mcp)
         logger.info("📊 Subscription resources registered")
-        
+
         # Register diagnostic tools
         register_diagnostic_tools(mcp)
         logger.info("🔧 Diagnostic tools registered")
-        
+
         # Register all tool categories
         register_system_tools(mcp)
         logger.info("🖥️  System tools registered")
-        
-        register_docker_tools(mcp) 
+
+        register_docker_tools(mcp)
         logger.info("🐳 Docker tools registered")
-        
+
         register_vm_tools(mcp)
         logger.info("💻 Virtualization tools registered")
-        
+
         register_storage_tools(mcp)
         logger.info("💾 Storage tools registered")
-        
+
         register_health_tools(mcp)
         logger.info("🏥 Health tools registered")
-        
+
         register_rclone_tools(mcp)
         logger.info("☁️  RClone tools registered")
-        
+
         logger.info("🎯 All modules registered successfully - Server ready!")
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to register modules: {e}", exc_info=True)
         raise
 
 
-def run_server():
+def run_server() -> None:
     """Run the MCP server with the configured transport."""
     # Log configuration
     if UNRAID_API_URL:
@@ -105,16 +105,16 @@ def run_server():
 
     # Register all modules
     register_all_modules()
-    
+
     logger.info(f"🚀 Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport...")
-    
+
     try:
         # Auto-start subscriptions on first async operation
         if UNRAID_MCP_TRANSPORT == "streamable-http":
             # Use the recommended Streamable HTTP transport
             mcp.run(
-                transport="streamable-http", 
-                host=UNRAID_MCP_HOST, 
+                transport="streamable-http",
+                host=UNRAID_MCP_HOST,
                 port=UNRAID_MCP_PORT,
                 path="/mcp"  # Standard path for MCP
             )
@@ -122,8 +122,8 @@ def run_server():
             # Deprecated SSE transport - log warning
             logger.warning("SSE transport is deprecated and may be removed in a future version. Consider switching to 'streamable-http'.")
             mcp.run(
-                transport="sse", 
-                host=UNRAID_MCP_HOST, 
+                transport="sse",
+                host=UNRAID_MCP_HOST,
                 port=UNRAID_MCP_PORT,
                 path="/mcp"  # Keep custom path for SSE
             )

@@ -81,7 +81,7 @@ async def make_graphql_request(
         "User-Agent": "UnraidMCPServer/0.1.0"  # Custom user-agent
     }
 
-    payload = {"query": query}
+    payload: dict[str, Any] = {"query": query}
     if variables:
         payload["variables"] = variables
 
@@ -119,17 +119,18 @@ async def make_graphql_request(
                 raise ToolError(f"GraphQL API error: {error_details}")
 
             logger.debug("GraphQL request successful.")
-            return response_data.get("data", {})  # Return only the data part
+            data = response_data.get("data", {})
+            return data if isinstance(data, dict) else {}  # Ensure we return dict
 
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
-        raise ToolError(f"HTTP error {e.response.status_code}: {e.response.text}")
+        raise ToolError(f"HTTP error {e.response.status_code}: {e.response.text}") from e
     except httpx.RequestError as e:
         logger.error(f"Request error occurred: {e}")
-        raise ToolError(f"Network connection error: {str(e)}")
+        raise ToolError(f"Network connection error: {str(e)}") from e
     except json.JSONDecodeError as e:
         logger.error(f"Failed to decode JSON response: {e}")
-        raise ToolError(f"Invalid JSON response from Unraid API: {str(e)}")
+        raise ToolError(f"Invalid JSON response from Unraid API: {str(e)}") from e
 
 
 def get_timeout_for_operation(operation_type: str = "default") -> httpx.Timeout:

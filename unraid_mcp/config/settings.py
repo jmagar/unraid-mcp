@@ -6,7 +6,8 @@ and provides all configuration constants used throughout the application.
 
 import os
 from pathlib import Path
-from typing import Union
+from typing import Any
+
 from dotenv import load_dotenv
 
 # Get the script directory (config module location)
@@ -40,7 +41,7 @@ UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lowe
 # SSL Configuration
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
 if raw_verify_ssl in ["false", "0", "no"]:
-    UNRAID_VERIFY_SSL: Union[bool, str] = False
+    UNRAID_VERIFY_SSL: bool | str = False
 elif raw_verify_ssl in ["true", "1", "yes"]:
     UNRAID_VERIFY_SSL = True
 else:  # Path to CA bundle
@@ -62,9 +63,9 @@ TIMEOUT_CONFIG = {
 }
 
 
-def validate_required_config() -> bool:
+def validate_required_config() -> tuple[bool, list[str]]:
     """Validate that required configuration is present.
-    
+
     Returns:
         bool: True if all required config is present, False otherwise.
     """
@@ -72,23 +73,23 @@ def validate_required_config() -> bool:
         ("UNRAID_API_URL", UNRAID_API_URL),
         ("UNRAID_API_KEY", UNRAID_API_KEY)
     ]
-    
+
     missing = []
     for name, value in required_vars:
         if not value:
             missing.append(name)
-    
+
     return len(missing) == 0, missing
 
 
-def get_config_summary() -> dict:
+def get_config_summary() -> dict[str, Any]:
     """Get a summary of current configuration (safe for logging).
-    
+
     Returns:
         dict: Configuration summary with sensitive data redacted.
     """
     is_valid, missing = validate_required_config()
-    
+
     return {
         'api_url_configured': bool(UNRAID_API_URL),
         'api_url_preview': UNRAID_API_URL[:20] + '...' if UNRAID_API_URL else None,

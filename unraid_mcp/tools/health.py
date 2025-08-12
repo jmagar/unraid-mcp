@@ -7,30 +7,29 @@ notifications, Docker services, and API responsiveness.
 
 import datetime
 import time
-from typing import Any, Dict
+from typing import Any
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_URL, UNRAID_MCP_HOST, UNRAID_MCP_PORT, UNRAID_MCP_TRANSPORT
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
 
 
-def register_health_tools(mcp: FastMCP):
+def register_health_tools(mcp: FastMCP) -> None:
     """Register all health tools with the FastMCP instance.
-    
+
     Args:
         mcp: FastMCP instance to register tools with
     """
-    
+
     @mcp.tool()
-    async def health_check() -> Dict[str, Any]:
+    async def health_check() -> dict[str, Any]:
         """Returns comprehensive health status of the Unraid MCP server and system for monitoring purposes."""
         start_time = time.time()
         health_status = "healthy"
         issues = []
-        
+
         try:
             # Enhanced health check with multiple system components
             comprehensive_query = """
@@ -58,10 +57,10 @@ def register_health_tools(mcp: FastMCP):
               }
             }
             """
-            
+
             response_data = await make_graphql_request(comprehensive_query)
             api_latency = round((time.time() - start_time) * 1000, 2)  # ms
-            
+
             # Base health info
             health_info = {
                 "status": health_status,
@@ -76,14 +75,14 @@ def register_health_tools(mcp: FastMCP):
                     "process_uptime_seconds": time.time() - start_time  # Rough estimate
                 }
             }
-            
+
             if not response_data:
                 health_status = "unhealthy"
                 issues.append("No response from Unraid API")
                 health_info["status"] = health_status
                 health_info["issues"] = issues
                 return health_info
-            
+
             # System info analysis
             info = response_data.get("info", {})
             if info:
@@ -98,7 +97,7 @@ def register_health_tools(mcp: FastMCP):
             else:
                 health_status = "degraded"
                 issues.append("Unable to retrieve system info")
-            
+
             # Array health analysis
             array_info = response_data.get("array", {})
             if array_info:
@@ -113,7 +112,7 @@ def register_health_tools(mcp: FastMCP):
             else:
                 health_status = "warning"
                 issues.append("Unable to retrieve array status")
-            
+
             # Notifications analysis
             notifications = response_data.get("notifications", {})
             if notifications and notifications.get("overview"):
@@ -121,32 +120,32 @@ def register_health_tools(mcp: FastMCP):
                 alert_count = unread.get("alert", 0)
                 warning_count = unread.get("warning", 0)
                 total_unread = unread.get("total", 0)
-                
+
                 health_info["notifications"] = {
                     "unread_total": total_unread,
                     "unread_alerts": alert_count,
                     "unread_warnings": warning_count,
                     "has_critical_notifications": alert_count > 0
                 }
-                
+
                 if alert_count > 0:
                     health_status = "warning"
                     issues.append(f"{alert_count} unread alert notification(s)")
-            
-            # Docker services analysis  
+
+            # Docker services analysis
             docker_info = response_data.get("docker", {})
             if docker_info and docker_info.get("containers"):
                 containers = docker_info["containers"]
                 running_containers = [c for c in containers if c.get("state") == "running"]
                 stopped_containers = [c for c in containers if c.get("state") == "exited"]
-                
+
                 health_info["docker_services"] = {
                     "total_containers": len(containers),
                     "running_containers": len(running_containers),
                     "stopped_containers": len(stopped_containers),
                     "containers_healthy": len([c for c in containers if c.get("status", "").startswith("Up")])
                 }
-            
+
             # API performance assessment
             if api_latency > 5000:  # > 5 seconds
                 health_status = "warning"
@@ -154,20 +153,20 @@ def register_health_tools(mcp: FastMCP):
             elif api_latency > 10000:  # > 10 seconds
                 health_status = "degraded"
                 issues.append(f"Very high API latency: {api_latency}ms")
-            
+
             # Final status determination
             health_info["status"] = health_status
             if issues:
                 health_info["issues"] = issues
-            
+
             # Add performance metrics
             health_info["performance"] = {
                 "api_response_time_ms": api_latency,
                 "health_check_duration_ms": round((time.time() - start_time) * 1000, 2)
             }
-            
+
             return health_info
-            
+
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return {
