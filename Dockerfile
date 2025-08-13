@@ -7,12 +7,16 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Copy the project files
+# Copy dependency files
 COPY pyproject.toml .
-COPY unraid_mcp_server.py .
+COPY uv.lock .
+COPY README.md .
 
-# Install dependencies
-RUN uv sync --frozen --no-dev
+# Copy the source code
+COPY unraid_mcp/ ./unraid_mcp/
+
+# Install dependencies and the package
+RUN uv sync --frozen
 
 # Make port UNRAID_MCP_PORT available to the world outside this container
 # Defaulting to 6970, but can be overridden by environment variable

@@ -98,7 +98,7 @@ docker-compose down
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:
 1. `/app/.env.local` (container mount)
-2. `../env.local` (project root)
+2. `../.env.local` (project root)
 3. `../.env` (project root)
 4. `.env` (local directory)
 

@@ -1,10 +1,8 @@
 services:
   unraid-mcp:
-    image: unraid-mcp-server # Assumes you've built this image locally using 'docker build -t unraid-mcp-server .'
-    # Or, to build automatically if the image doesn't exist:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: unraid-mcp
     restart: unless-stopped
     ports:
@@ -12,7 +10,7 @@ services:
       # Change the host port (left side) if 6970 is already in use on your host
       - "6970:6970" 
     env_file:
-      - .env.local # Loads environment variables from .env.local in the same directory as this docker-compose.yml
-    # Optional: If you want to mount a specific directory for logs (ensure UNRAID_MCP_LOG_FILE in .env.local points within this mount)
+      - .env # Loads environment variables from .env in the same directory as this docker-compose.yml
+    # Optional: If you want to mount a specific directory for logs (ensure UNRAID_MCP_LOG_FILE in .env points within this mount)
     # volumes:
     #   - ./logs:/app/logs # Example: maps ./logs on host to /app/logs in container

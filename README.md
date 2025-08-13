@@ -25,7 +25,6 @@
 - [Installation](#-installation)
 - [Configuration](#-configuration)
 - [Available Tools & Resources](#-available-tools--resources)
-- [Docker Deployment](#-docker-deployment)
 - [Development](#-development)
 - [Architecture](#-architecture)
 - [Troubleshooting](#-troubleshooting)
@@ -35,51 +34,94 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.10+
-- [uv](https://github.com/astral-sh/uv) package manager
+- Docker and Docker Compose (recommended)
+- OR Python 3.10+ with [uv](https://github.com/astral-sh/uv) for development
 - Unraid server with GraphQL API enabled
 
-### 1. Installation
+### 1. Clone Repository
 ```bash
 git clone https://github.com/jmagar/unraid-mcp
 cd unraid-mcp
-uv sync
 ```
 
-### 2. Configuration
+### 2. Configure Environment
 ```bash
 cp .env.example .env
-# Edit .env with your Unraid details
+# Edit .env with your Unraid API details
 ```
 
-### 3. Run
+### 3. Deploy with Docker (Recommended)
 ```bash
-# Using uv script (recommended)
-uv run unraid-mcp-server
+# Start with Docker Compose
+docker compose up -d
 
-# Using development script (with hot reload)
+# View logs
+docker compose logs -f unraid-mcp
+```
+
+### OR 3. Run for Development
+```bash
+# Install dependencies
+uv sync
+
+# Run development server
 ./dev.sh
-
-# Using module syntax
-uv run -m unraid_mcp.main
 ```
 
 ---
 
 ## 📦 Installation
 
-### Using uv (Recommended)
+### 🐳 Docker Deployment (Recommended)
+
+The easiest way to run the Unraid MCP Server is with Docker:
+
 ```bash
-# Install dependencies
+# Clone and configure
+git clone https://github.com/jmagar/unraid-mcp
+cd unraid-mcp
+cp .env.example .env
+# Edit .env with your Unraid API details
+
+# Deploy with Docker Compose
+docker compose up -d
+
+# View logs
+docker compose logs -f unraid-mcp
+```
+
+#### Manual Docker Build
+```bash
+# Build and run manually
+docker build -t unraid-mcp-server .
+docker run -d --name unraid-mcp \
+  --restart unless-stopped \
+  -p 6970:6970 \
+  --env-file .env \
+  unraid-mcp-server
+```
+
+### 🔧 Development Installation
+
+For development and testing:
+
+```bash
+# Clone repository
+git clone https://github.com/jmagar/unraid-mcp
+cd unraid-mcp
+
+# Install dependencies with uv
 uv sync
 
 # Install development dependencies  
 uv sync --group dev
-```
 
-### Manual Installation
-```bash
-pip install -r requirements.txt  # If you have a requirements.txt
+# Configure environment
+cp .env.example .env
+# Edit .env with your settings
+
+# Run development server
+./dev.sh
 ```
 
 ---
@@ -170,41 +212,6 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 
 ---
 
-## 🐳 Docker Deployment
-
-### Using Docker Compose (Recommended)
-
-1. **Prepare Environment**
-   ```bash
-   cp .env.example .env.local
-   # Edit .env.local with your settings
-   ```
-
-2. **Start Services**
-   ```bash
-   docker compose up -d
-   ```
-
-3. **View Logs**
-   ```bash
-   docker compose logs -f unraid-mcp
-   ```
-
-### Manual Docker
-
-```bash
-# Build image
-docker build -t unraid-mcp-server .
-
-# Run container  
-docker run -d --name unraid-mcp \
-  --restart unless-stopped \
-  -p 6970:6970 \
-  --env-file .env.local \
-  unraid-mcp-server
-```
-
----
 
 ## 🔧 Development
 
