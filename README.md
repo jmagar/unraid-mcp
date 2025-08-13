@@ -77,11 +77,13 @@ uv sync
 The easiest way to run the Unraid MCP Server is with Docker:
 
 ```bash
-# Clone and configure
+# Clone repository
 git clone https://github.com/jmagar/unraid-mcp
 cd unraid-mcp
-cp .env.example .env
-# Edit .env with your Unraid API details
+
+# Set required environment variables
+export UNRAID_API_URL="http://your-unraid-server/graphql"
+export UNRAID_API_KEY="your_api_key_here"
 
 # Deploy with Docker Compose
 docker compose up -d
@@ -97,7 +99,8 @@ docker build -t unraid-mcp-server .
 docker run -d --name unraid-mcp \
   --restart unless-stopped \
   -p 6970:6970 \
-  --env-file .env \
+  -e UNRAID_API_URL="http://your-unraid-server/graphql" \
+  -e UNRAID_API_KEY="your_api_key_here" \
   unraid-mcp-server
 ```
 

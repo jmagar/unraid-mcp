@@ -8,9 +8,30 @@ services:
     ports:
       # HostPort:ContainerPort (maps to UNRAID_MCP_PORT inside the container, default 6970)
       # Change the host port (left side) if 6970 is already in use on your host
-      - "6970:6970" 
-    env_file:
-      - .env # Loads environment variables from .env in the same directory as this docker-compose.yml
-    # Optional: If you want to mount a specific directory for logs (ensure UNRAID_MCP_LOG_FILE in .env points within this mount)
+      - "${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
+    environment:
+      # Core API Configuration (Required)
+      - UNRAID_API_URL=${UNRAID_API_URL}
+      - UNRAID_API_KEY=${UNRAID_API_KEY}
+      
+      # MCP Server Settings
+      - UNRAID_MCP_PORT=${UNRAID_MCP_PORT:-6970}
+      - UNRAID_MCP_HOST=${UNRAID_MCP_HOST:-0.0.0.0}
+      - UNRAID_MCP_TRANSPORT=${UNRAID_MCP_TRANSPORT:-streamable-http}
+      
+      # SSL Configuration
+      - UNRAID_VERIFY_SSL=${UNRAID_VERIFY_SSL:-true}
+      
+      # Logging Configuration
+      - UNRAID_MCP_LOG_LEVEL=${UNRAID_MCP_LOG_LEVEL:-INFO}
+      - UNRAID_MCP_LOG_FILE=${UNRAID_MCP_LOG_FILE:-unraid-mcp.log}
+      
+      # Real-time Subscription Configuration
+      - UNRAID_AUTO_START_SUBSCRIPTIONS=${UNRAID_AUTO_START_SUBSCRIPTIONS:-true}
+      - UNRAID_MAX_RECONNECT_ATTEMPTS=${UNRAID_MAX_RECONNECT_ATTEMPTS:-10}
+      
+      # Optional: Custom log file path for subscription auto-start diagnostics
+      - UNRAID_AUTOSTART_LOG_PATH=${UNRAID_AUTOSTART_LOG_PATH}
+    # Optional: If you want to mount a specific directory for logs (ensure UNRAID_MCP_LOG_FILE points within this mount)
     # volumes:
     #   - ./logs:/app/logs # Example: maps ./logs on host to /app/logs in container
