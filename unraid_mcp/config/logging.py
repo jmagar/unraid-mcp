@@ -1,12 +1,12 @@
 """Logging configuration for Unraid MCP Server.
 
-This module sets up structured logging with Rich console and rotating file handlers
-that can be used consistently across all modules and development scripts.
+This module sets up structured logging with Rich console and overwrite file handlers
+that cap at 10MB and start over (no rotation) for consistent use across all modules.
 """
 
 import logging
+import os
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
 
 import pytz
 from rich.align import Align
@@ -26,6 +26,62 @@ from .settings import LOG_FILE_PATH, LOG_LEVEL_STR
 
 # Global Rich console for consistent formatting
 console = Console(stderr=True, force_terminal=True)
+
+
+class OverwriteFileHandler(logging.FileHandler):
+    """Custom file handler that overwrites the log file when it reaches max size."""
+    
+    def __init__(self, filename, max_bytes=10*1024*1024, mode='a', encoding=None, delay=False):
+        """Initialize the handler.
+        
+        Args:
+            filename: Path to the log file
+            max_bytes: Maximum file size in bytes before overwriting (default: 10MB)
+            mode: File open mode
+            encoding: File encoding
+            delay: Whether to delay file opening
+        """
+        self.max_bytes = max_bytes
+        super().__init__(filename, mode, encoding, delay)
+    
+    def emit(self, record):
+        """Emit a record, checking file size and overwriting if needed."""
+        # Check file size before writing
+        if self.stream and hasattr(self.stream, 'name'):
+            try:
+                if os.path.exists(self.baseFilename):
+                    file_size = os.path.getsize(self.baseFilename)
+                    if file_size >= self.max_bytes:
+                        # Close current stream
+                        if self.stream:
+                            self.stream.close()
+                            self.stream = None
+                        
+                        # Remove the old file and start fresh
+                        if os.path.exists(self.baseFilename):
+                            os.remove(self.baseFilename)
+                        
+                        # Reopen with truncate mode
+                        self.stream = self._open()
+                        
+                        # Log a marker that the file was reset
+                        reset_record = logging.LogRecord(
+                            name="UnraidMCPServer.Logging",
+                            level=logging.INFO,
+                            pathname="",
+                            lineno=0,
+                            msg="=== LOG FILE RESET (10MB limit reached) ===",
+                            args=(),
+                            exc_info=None
+                        )
+                        super().emit(reset_record)
+                        
+            except (OSError, IOError):
+                # If there's an issue checking file size, just continue normally
+                pass
+        
+        # Emit the original record
+        super().emit(record)
 
 
 def setup_logger(name: str = "UnraidMCPServer") -> logging.Logger:
@@ -60,12 +116,10 @@ def setup_logger(name: str = "UnraidMCPServer") -> logging.Logger:
     console_handler.setLevel(numeric_log_level)
     logger.addHandler(console_handler)
 
-    # File Handler with Rotation
-    # Rotate logs at 5MB, keep 3 backup logs
-    file_handler = RotatingFileHandler(
+    # File Handler with 10MB cap (overwrites instead of rotating)
+    file_handler = OverwriteFileHandler(
         LOG_FILE_PATH,
-        maxBytes=5*1024*1024,
-        backupCount=3,
+        max_bytes=10*1024*1024,
         encoding='utf-8'
     )
     file_handler.setLevel(numeric_log_level)
@@ -106,11 +160,10 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
     console_handler.setLevel(numeric_log_level)
     fastmcp_logger.addHandler(console_handler)
 
-    # File Handler with Rotation
-    file_handler = RotatingFileHandler(
+    # File Handler with 10MB cap (overwrites instead of rotating)
+    file_handler = OverwriteFileHandler(
         LOG_FILE_PATH,
-        maxBytes=5*1024*1024,
-        backupCount=3,
+        max_bytes=10*1024*1024,
         encoding='utf-8'
     )
     file_handler.setLevel(numeric_log_level)
@@ -140,11 +193,10 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
     root_console_handler.setLevel(numeric_log_level)
     root_logger.addHandler(root_console_handler)
 
-    # File Handler for root logger
-    root_file_handler = RotatingFileHandler(
+    # File Handler for root logger with 10MB cap (overwrites instead of rotating)
+    root_file_handler = OverwriteFileHandler(
         LOG_FILE_PATH,
-        maxBytes=5*1024*1024,
-        backupCount=3,
+        max_bytes=10*1024*1024,
         encoding='utf-8'
     )
     root_file_handler.setLevel(numeric_log_level)
