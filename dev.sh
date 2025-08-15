@@ -8,7 +8,7 @@ set -euo pipefail
 # Configuration
 DEFAULT_PORT=6970
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="$PROJECT_DIR/logs"
+LOG_DIR="/tmp"
 LOG_FILE="$LOG_DIR/unraid-mcp.log"
 PID_FILE="$LOG_DIR/dev.pid"
 # Ensure logs directory exists
