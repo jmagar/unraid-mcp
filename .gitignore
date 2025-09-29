@@ -16,6 +16,11 @@ logs/
 .bivvy
 .cursor
 
+# Serena IDE configuration
+.serena/
+
+# Google OAuth client secrets
+client_secret_*.apps.googleusercontent.com.json
 
 web-ui/frontend/node_modules
 web-ui/backend/.venv-backend/
