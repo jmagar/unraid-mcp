@@ -17,20 +17,29 @@ from ..core.exceptions import ToolError
 # Standalone functions for use by subscription resources
 async def _get_system_info() -> dict[str, Any]:
     """Standalone function to get system info - used by subscriptions and tools."""
+    # Updated for Unraid API v4.21.0+ (Unraid 7.1.4+)
+    # - Removed deprecated fields: codepage (use codename), apps (removed)
+    # - Software versions nested: versions.core.{unraid,api,kernel}, versions.packages.*
+    # - CPU/PCI fields are lowercase (speedmin, speedmax, vendorname, productname)
+    # - Memory stats moved to separate metrics query (use get_metrics() for real-time usage)
     query = """
     query GetSystemInfo {
       info {
-        os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
+        os { platform distro release codename arch hostname logofile serial build uptime }
         cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache flags }
         memory {
-          # Avoid fetching problematic fields that cause type errors
-          layout { bank type clockSpeed formFactor manufacturer partNum serialNum }
+          id
         }
         baseboard { manufacturer model version serial assetTag }
         system { manufacturer model version serial uuid sku }
-        versions { kernel openssl systemOpenssl systemOpensslLib node v8 npm yarn pm2 gulp grunt git tsc mysql redis mongodb apache nginx php docker postfix postgresql perl python gcc unraid }
-        apps { installed started }
-        # Remove devices section as it has non-nullable fields that might be null
+        versions {
+          id
+          core { unraid api kernel }
+          packages { openssl node npm pm2 git nginx php docker }
+        }
+        devices {
+          pci { id vendorname productname }
+        }
         machineId
         time
       }
@@ -55,19 +64,20 @@ async def _get_system_info() -> dict[str, Any]:
             cpu_info = raw_info['cpu']
             summary['cpu'] = f"{cpu_info.get('manufacturer', '')} {cpu_info.get('brand', '')} ({cpu_info.get('cores')} cores, {cpu_info.get('threads')} threads)"
 
-        if raw_info.get('memory') and raw_info['memory'].get('layout'):
-            mem_layout = raw_info['memory']['layout']
-            summary['memory_layout_details'] = []  # Renamed for clarity
-            # The API is not returning 'size' for individual sticks in the layout, even if queried.
-            # So, we cannot calculate total from layout currently.
-            for stick in mem_layout:
-                # stick_size = stick.get('size') # This is None in the actual API response
-                summary['memory_layout_details'].append(
-                    f"Bank {stick.get('bank', '?')}: Type {stick.get('type', '?')}, Speed {stick.get('clockSpeed', '?')}MHz, Manufacturer: {stick.get('manufacturer','?')}, Part: {stick.get('partNum', '?')}"
-                )
-            summary['memory_summary'] = "Stick layout details retrieved. Overall total/used/free memory stats are unavailable due to API limitations (Int overflow or data not provided by API)."
-        else:
-            summary['memory_summary'] = "Memory information (layout or stats) not available or failed to retrieve."
+        # Note: Memory usage stats are in the metrics query (get_metrics tool)
+
+        if raw_info.get('versions'):
+            versions = raw_info['versions']
+            if versions.get('core'):
+                core = versions['core']
+                summary['unraid_version'] = core.get('unraid')
+                summary['api_version'] = core.get('api')
+                summary['kernel_version'] = core.get('kernel')
+            if versions.get('packages'):
+                pkgs = versions['packages']
+                pkg_list = [f"{k}: {v}" for k, v in pkgs.items() if v]
+                if pkg_list:
+                    summary['software_versions'] = pkg_list
 
         # Include a key for the full details if needed by an LLM for deeper dives
         return {"summary": summary, "details": raw_info}
@@ -197,6 +207,107 @@ async def _get_array_status() -> dict[str, Any]:
         raise ToolError(f"Failed to retrieve array status: {str(e)}") from e
 
 
+async def _get_metrics() -> dict[str, Any]:
+    """Standalone function to get real-time system metrics - used by subscriptions and tools."""
+    query = """
+    query GetMetrics {
+      metrics {
+        id
+        cpu {
+          id
+          percentTotal
+          cpus {
+            percentTotal
+            percentUser
+            percentSystem
+            percentNice
+            percentIdle
+            percentIrq
+            percentGuest
+            percentSteal
+          }
+        }
+        memory {
+          id
+          total
+          used
+          free
+          available
+          active
+          buffcache
+          percentTotal
+          swapTotal
+          swapUsed
+          swapFree
+          percentSwapTotal
+        }
+      }
+    }
+    """
+    try:
+        logger.info("Executing get_metrics")
+        response_data = await make_graphql_request(query)
+        raw_metrics = response_data.get("metrics", {})
+        if not raw_metrics:
+            raise ToolError("No metrics returned from Unraid API")
+
+        # Format bytes to human-readable
+        def format_bytes(b: Any) -> str:
+            if b is None:
+                return "N/A"
+            b = int(b)
+            if b >= 1024**4:
+                return f"{b / (1024**4):.2f} TB"
+            if b >= 1024**3:
+                return f"{b / (1024**3):.2f} GB"
+            if b >= 1024**2:
+                return f"{b / (1024**2):.2f} MB"
+            if b >= 1024:
+                return f"{b / 1024:.2f} KB"
+            return f"{b} B"
+
+        summary: dict[str, Any] = {}
+
+        # CPU metrics
+        if raw_metrics.get('cpu'):
+            cpu = raw_metrics['cpu']
+            percent = cpu.get('percentTotal')
+            if percent is not None:
+                summary['cpu_usage'] = f"{percent:.1f}%"
+            cpus = cpu.get('cpus')
+            if cpus and isinstance(cpus, list):
+                summary['cpu_cores'] = len(cpus)
+                summary['cpu_per_core'] = [
+                    f"{c.get('percentTotal', 0):.1f}%" if isinstance(c, dict) else "N/A"
+                    for c in cpus
+                ]
+
+        # Memory metrics
+        if raw_metrics.get('memory'):
+            mem = raw_metrics['memory']
+            percent = mem.get('percentTotal')
+            if percent is not None:
+                summary['memory_usage'] = f"{percent:.1f}%"
+            summary['memory_total'] = format_bytes(mem.get('total'))
+            summary['memory_used'] = format_bytes(mem.get('used'))
+            summary['memory_free'] = format_bytes(mem.get('free'))
+            summary['memory_available'] = format_bytes(mem.get('available'))
+
+            # Swap info
+            swap_percent = mem.get('percentSwapTotal')
+            if swap_percent is not None:
+                summary['swap_usage'] = f"{swap_percent:.1f}%"
+            summary['swap_total'] = format_bytes(mem.get('swapTotal'))
+            summary['swap_used'] = format_bytes(mem.get('swapUsed'))
+            summary['swap_free'] = format_bytes(mem.get('swapFree'))
+
+        return {"summary": summary, "details": raw_metrics}
+
+    except Exception as e:
+        logger.error(f"Error in get_metrics: {e}", exc_info=True)
+        raise ToolError(f"Failed to retrieve system metrics: {str(e)}") from e
+
+
 def register_system_tools(mcp: FastMCP) -> None:
     """Register all system tools with the FastMCP instance.
 
@@ -206,13 +317,18 @@ def register_system_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_system_info() -> dict[str, Any]:
-        """Retrieves comprehensive information about the Unraid system, OS, CPU, memory, and baseboard."""
+        """Retrieves comprehensive Unraid system information including OS details, CPU specs, baseboard/system info, software versions (Unraid, API, kernel, packages), and PCI devices."""
         return await _get_system_info()
 
     @mcp.tool()
     async def get_array_status() -> dict[str, Any]:
         """Retrieves the current status of the Unraid storage array, including its state, capacity, and details of all disks."""
         return await _get_array_status()
+
+    @mcp.tool()
+    async def get_metrics() -> dict[str, Any]:
+        """Retrieves real-time CPU and memory utilization metrics including overall CPU usage %, per-core stats, RAM total/used/free/available, and swap usage."""
+        return await _get_metrics()
 
     @mcp.tool()
     async def get_network_config() -> dict[str, Any]:
