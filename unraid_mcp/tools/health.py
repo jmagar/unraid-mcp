@@ -32,12 +32,13 @@ def register_health_tools(mcp: FastMCP) -> None:
 
         try:
             # Enhanced health check with multiple system components
+            # Updated for Unraid API v4.21.0+ (Unraid 7.1.4+)
+            # Removed deprecated versions.unraid field
             comprehensive_query = """
             query ComprehensiveHealthCheck {
               info {
                 machineId
                 time
-                versions { unraid }
                 os { uptime }
               }
               array {
@@ -91,7 +92,6 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "url": UNRAID_API_URL,
                     "machine_id": info.get("machineId"),
                     "time": info.get("time"),
-                    "version": info.get("versions", {}).get("unraid"),
                     "uptime": info.get("os", {}).get("uptime")
                 }
             else:
