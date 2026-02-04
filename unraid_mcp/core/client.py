@@ -5,6 +5,7 @@ to the Unraid API with proper timeout handling and error management.
 """
 
 import json
+import re
 from typing import Any
 
 import httpx
@@ -15,7 +16,21 @@ from ..core.exceptions import ToolError
 
 # HTTP timeout configuration
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
-DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG['disk_operations'], connect=5.0)
+DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG["disk_operations"], connect=5.0)
+
+
+def sanitize_query(query: str) -> str:
+    """Remove potential secrets from query string before logging.
+
+    Primary secret protection is performed by variables masking. This function
+    serves as defense-in-depth for type naming and definitions.
+    """
+    # Remove variable definitions and replace with placeholders
+    # This is a basic sanitization; for production, consider a proper GraphQL parser
+    # Remove variable definitions like $var: Type
+    query = re.sub(r"\$[a-zA-Z_][a-zA-Z0-9_]*\s*:\s*[^,)]+", "$VARIABLE", query)
+    # Truncate to safe length
+    return query[:500]
 
 
 def is_idempotent_error(error_message: str, operation: str) -> bool:
@@ -31,18 +46,18 @@ def is_idempotent_error(error_message: str, operation: str) -> bool:
     error_lower = error_message.lower()
 
     # Docker container operation patterns
-    if operation == 'start':
+    if operation == "start":
         return (
-            'already started' in error_lower or
-            'container already running' in error_lower or
-            'http code 304' in error_lower
+            "already started" in error_lower
+            or "container already running" in error_lower
+            or "http code 304" in error_lower
         )
-    elif operation == 'stop':
+    elif operation == "stop":
         return (
-            'already stopped' in error_lower or
-            'container already stopped' in error_lower or
-            'container not running' in error_lower or
-            'http code 304' in error_lower
+            "already stopped" in error_lower
+            or "container already stopped" in error_lower
+            or "container not running" in error_lower
+            or "http code 304" in error_lower
         )
 
     return False
@@ -52,7 +67,7 @@ async def make_graphql_request(
     query: str,
     variables: dict[str, Any] | None = None,
     custom_timeout: httpx.Timeout | None = None,
-    operation_context: dict[str, str] | None = None
+    operation_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Make GraphQL requests to the Unraid API.
 
@@ -78,7 +93,7 @@ async def make_graphql_request(
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": UNRAID_API_KEY,
-        "User-Agent": "UnraidMCPServer/0.1.0"  # Custom user-agent
+        "User-Agent": "UnraidMCPServer/0.1.0",  # Custom user-agent
     }
 
     payload: dict[str, Any] = {"query": query}
@@ -86,9 +101,27 @@ async def make_graphql_request(
         payload["variables"] = variables
 
     logger.debug(f"Making GraphQL request to {UNRAID_API_URL}:")
-    logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
+    sanitized = sanitize_query(query)
+    logger.debug(f"Query: {sanitized}")
     if variables:
-        logger.debug(f"Variables: {variables}")
+        # Mask variables to prevent logging secrets
+        def _redact_recursive(obj: Any) -> Any:
+            sensitive_keys = {"password", "pass", "token", "secret", "key"}
+            if isinstance(obj, dict):
+                return {
+                    k: "[REDACTED]"
+                    if any(s in k.lower() for s in sensitive_keys)
+                    else _redact_recursive(v)
+                    for k, v in obj.items()
+                }
+            elif isinstance(obj, list):
+                return [_redact_recursive(i) for i in obj]
+            elif isinstance(obj, tuple):
+                return tuple(_redact_recursive(i) for i in obj)
+            return obj
+
+        masked = _redact_recursive(variables)
+        logger.debug(f"Variables: {masked}")
 
     current_timeout = custom_timeout if custom_timeout is not None else DEFAULT_TIMEOUT
 
@@ -99,19 +132,23 @@ async def make_graphql_request(
 
             response_data = response.json()
             if "errors" in response_data and response_data["errors"]:
-                error_details = "; ".join([err.get("message", str(err)) for err in response_data["errors"]])
+                error_details = "; ".join(
+                    [err.get("message", str(err)) for err in response_data["errors"]]
+                )
 
                 # Check if this is an idempotent error that should be treated as success
-                if operation_context and operation_context.get('operation'):
-                    operation = operation_context['operation']
+                if operation_context and operation_context.get("operation"):
+                    operation = operation_context["operation"]
                     if is_idempotent_error(error_details, operation):
-                        logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
+                        logger.warning(
+                            f"Idempotent operation '{operation}' - treating as success: {error_details}"
+                        )
                         # Return a success response with the current state information
                         return {
                             "idempotent_success": True,
                             "operation": operation,
                             "message": error_details,
-                            "original_errors": response_data["errors"]
+                            "original_errors": response_data["errors"],
                         }
 
                 logger.error(f"GraphQL API returned errors: {response_data['errors']}")
