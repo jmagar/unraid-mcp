@@ -87,6 +87,24 @@ cleanup_pid_file() {
     fi
 }
 
+# Check if array contains element (exact match)
+contains_elem() {
+    local e match="$1"
+    shift
+    for e; do [[ "$e" == "$match" ]] && return 0; done
+    return 1
+}
+
+# Get file size portably
+get_file_size() {
+    local file="$1"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        stat -f%z "$file" 2>/dev/null || echo 0
+    else
+        stat -c%s "$file" 2>/dev/null || echo 0
+    fi
+}
+
 # Get PID from PID file if valid, otherwise return empty
 get_valid_pid_from_file() {
     local pid=$(read_pid_file)
@@ -116,7 +134,7 @@ find_server_processes() {
         if [[ -n "$line" ]]; then
             local pid=$(echo "$line" | awk '{print $2}')
             # Add to pids if not already present
-            if [[ ! " ${pids[@]:-} " =~ " $pid " ]]; then
+            if ! contains_elem "$pid" "${pids[@]}"; then
                 pids+=("$pid")
             fi
         fi
@@ -128,7 +146,7 @@ find_server_processes() {
             if [[ -n "$line" ]]; then
                 local pid=$(echo "$line" | awk '{print $2}')
                 # Add to pids if not already present
-                if [[ ! " ${pids[@]:-} " =~ " $pid " ]]; then
+                if ! contains_elem "$pid" "${pids[@]}"; then
                     pids+=("$pid")
                 fi
             fi
@@ -297,7 +315,8 @@ start_modular_server() {
     # Clear the log file and add a startup marker to capture fresh logs
     # Rotate logs if too large (e.g., >10MB) or just simple rotation
     if [[ -f "$LOG_FILE" ]]; then
-        local fsize=$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
+        local fsize
+        fsize=$(get_file_size "$LOG_FILE")
         if [[ $fsize -gt 10485760 ]]; then # 10MB
             mv "$LOG_FILE" "$LOG_FILE.old"
         fi
@@ -394,7 +413,8 @@ start_original_server() {
     # Clear the log file and add a startup marker to capture fresh logs
     # Rotate logs if too large (e.g., >10MB) or just simple rotation
     if [[ -f "$LOG_FILE" ]]; then
-        local fsize=$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
+        local fsize
+        fsize=$(get_file_size "$LOG_FILE")
         if [[ $fsize -gt 10485760 ]]; then # 10MB
             mv "$LOG_FILE" "$LOG_FILE.old"
         fi
