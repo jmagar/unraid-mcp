@@ -25,3 +25,4 @@ client_secret_*.apps.googleusercontent.com.json
 web-ui/frontend/node_modules
 web-ui/backend/.venv-backend/
 .pnpm-store/
+scripts/publish_dev_image.sh
