@@ -82,10 +82,7 @@ def register_storage_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def list_notifications(
-        type: str,
-        offset: int,
-        limit: int,
-        importance: str | None = None
+        notification_type: str, offset: int, limit: int, importance: str | None = None
     ) -> list[dict[str, Any]]:
         """Lists notifications with filtering. Type: UNREAD/ARCHIVE. Importance: INFO/WARNING/ALERT."""
         query = """
@@ -107,10 +104,10 @@ def register_storage_tools(mcp: FastMCP) -> None:
         """
         variables = {
             "filter": {
-                "type": type.upper(),
+                "type": notification_type.upper(),
                 "offset": offset,
                 "limit": limit,
-                "importance": importance.upper() if importance else None
+                "importance": importance.upper() if importance else None,
             }
         }
         # Remove null importance from variables if not provided, as GraphQL might be strict
@@ -118,7 +115,9 @@ def register_storage_tools(mcp: FastMCP) -> None:
             del variables["filter"]["importance"]
 
         try:
-            logger.info(f"Executing list_notifications: type={type}, offset={offset}, limit={limit}, importance={importance}")
+            logger.info(
+                f"Executing list_notifications: type={notification_type}, offset={offset}, limit={limit}, importance={importance}"
+            )
             response_data = await make_graphql_request(query, variables)
             if response_data.get("notifications"):
                 notifications_list = response_data["notifications"].get("list", [])
@@ -202,7 +201,9 @@ def register_storage_tools(mcp: FastMCP) -> None:
         }
         """
         try:
-            logger.info("Executing list_physical_disks tool with minimal query and increased timeout")
+            logger.info(
+                "Executing list_physical_disks tool with minimal query and increased timeout"
+            )
             # Increased read timeout for this potentially slow query
             long_timeout = httpx.Timeout(10.0, read=90.0, connect=5.0)
             response_data = await make_graphql_request(query, custom_timeout=long_timeout)
@@ -225,6 +226,10 @@ def register_storage_tools(mcp: FastMCP) -> None:
             serialNum
             size
             temperature
+            interfaceType
+            smartStatus
+            isSpinning
+            partitions { name size type fsType }
           }
         }
         """
@@ -241,33 +246,48 @@ def register_storage_tools(mcp: FastMCP) -> None:
             def format_bytes(bytes_value: int | None) -> str:
                 if bytes_value is None:
                     return "N/A"
-                value = float(int(bytes_value))
-                for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
+                try:
+                    value = float(int(bytes_value))
+                except (ValueError, TypeError):
+                    return "N/A"
+
+                for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
                     if value < 1024.0:
                         return f"{value:.2f} {unit}"
                     value /= 1024.0
                 return f"{value:.2f} EB"
 
+            partitions = raw_disk.get("partitions") or []
+
+            # Safely calculate total partition size
+            total_size_bytes = 0
+            for p in partitions:
+                if p and p.get("size"):
+                    try:
+                        total_size_bytes += int(p["size"])
+                    except (ValueError, TypeError):
+                        pass
+
             summary = {
-                'disk_id': raw_disk.get('id'),
-                'device': raw_disk.get('device'),
-                'name': raw_disk.get('name'),
-                'serial_number': raw_disk.get('serialNum'),
-                'size_formatted': format_bytes(raw_disk.get('size')),
-                'temperature': f"{raw_disk.get('temperature')}°C" if raw_disk.get('temperature') else 'N/A',
-                'interface_type': raw_disk.get('interfaceType'),
-                'smart_status': raw_disk.get('smartStatus'),
-                'is_spinning': raw_disk.get('isSpinning'),
-                'power_on_hours': raw_disk.get('powerOnHours'),
-                'reallocated_sectors': raw_disk.get('reallocatedSectorCount'),
-                'partition_count': len(raw_disk.get('partitions', [])),
-                'total_partition_size': format_bytes(sum(p.get('size', 0) for p in raw_disk.get('partitions', []) if p.get('size')))
+                "disk_id": raw_disk.get("id"),
+                "device": raw_disk.get("device"),
+                "name": raw_disk.get("name"),
+                "serial_number": raw_disk.get("serialNum"),
+                "size_formatted": format_bytes(raw_disk.get("size")),
+                "temperature": f"{raw_disk.get('temperature')}°C"
+                if raw_disk.get("temperature")
+                else "N/A",
+                "interface_type": raw_disk.get("interfaceType"),
+                "smart_status": raw_disk.get("smartStatus"),
+                "is_spinning": raw_disk.get("isSpinning"),
+                "partition_count": len(partitions),
+                "total_partition_size": format_bytes(total_size_bytes),
             }
 
             return {
-                'summary': summary,
-                'partitions': raw_disk.get('partitions', []),
-                'details': raw_disk
+                "summary": summary,
+                "partitions": partitions,
+                "details": raw_disk,
             }
 
         except Exception as e:

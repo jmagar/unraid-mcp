@@ -40,14 +40,22 @@ def register_rclone_tools(mcp: FastMCP) -> None:
 
             response_data = await make_graphql_request(query)
 
-            if "rclone" in response_data and "remotes" in response_data["rclone"]:
-                remotes = response_data["rclone"]["remotes"]
-                logger.info(f"Retrieved {len(remotes)} RClone remotes")
-                return list(remotes) if isinstance(remotes, list) else []
+            rclone_data = response_data.get("rclone")
+            # Handle case where rclone field is missing or None
+            if not rclone_data:
+                return []
 
-            return []
+            remotes = rclone_data.get("remotes")
+            # Handle case where remotes field is missing or None
+            if remotes is None:
+                return []
+
+            logger.info(f"Retrieved {len(remotes)} RClone remotes")
+            return list(remotes) if isinstance(remotes, list) else []
 
         except Exception as e:
+            if isinstance(e, ToolError):
+                raise e
             logger.error(f"Failed to list RClone remotes: {str(e)}")
             raise ToolError(f"Failed to list RClone remotes: {str(e)}") from e
 
@@ -74,23 +82,34 @@ def register_rclone_tools(mcp: FastMCP) -> None:
 
             variables = {}
             if provider_type:
-                variables["formOptions"] = {"providerType": provider_type}
+                # Sanitize provider type to prevent potential path issues
+                # The user reported "url must not start with a slash", so we strip slashes just in case
+                clean_provider_type = provider_type.strip("/")
+                variables["formOptions"] = {"providerType": clean_provider_type}
 
             response_data = await make_graphql_request(query, variables)
 
-            if "rclone" in response_data and "configForm" in response_data["rclone"]:
-                form_data = response_data["rclone"]["configForm"]
-                logger.info(f"Retrieved RClone config form for {provider_type or 'general'}")
-                return dict(form_data) if isinstance(form_data, dict) else {}
+            rclone_data = response_data.get("rclone")
+            if not rclone_data:
+                raise ToolError("No RClone data received from API")
 
-            raise ToolError("No RClone config form data received")
+            form_data = rclone_data.get("configForm")
+            if form_data is None:
+                raise ToolError("No RClone config form data received")
+
+            logger.info(f"Retrieved RClone config form for {provider_type or 'general'}")
+            return dict(form_data) if isinstance(form_data, dict) else {}
 
         except Exception as e:
-            logger.error(f"Failed to get RClone config form: {str(e)}")
-            raise ToolError(f"Failed to get RClone config form: {str(e)}") from e
+            if isinstance(e, ToolError):
+                raise e
+            logger.error(f"Failed to get RClone config form: {e}")
+            raise ToolError(f"Failed to get RClone config form: {e}") from e
 
     @mcp.tool()
-    async def create_rclone_remote(name: str, provider_type: str, config_data: dict[str, Any]) -> dict[str, Any]:
+    async def create_rclone_remote(
+        name: str, provider_type: str, config_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """
         Create a new RClone remote with the specified configuration.
 
@@ -112,13 +131,7 @@ def register_rclone_tools(mcp: FastMCP) -> None:
             }
             """
 
-            variables = {
-                "input": {
-                    "name": name,
-                    "type": provider_type,
-                    "config": config_data
-                }
-            }
+            variables = {"input": {"name": name, "type": provider_type, "config": config_data}}
 
             response_data = await make_graphql_request(mutation, variables)
 
@@ -128,12 +141,14 @@ def register_rclone_tools(mcp: FastMCP) -> None:
                 return {
                     "success": True,
                     "message": f"RClone remote '{name}' created successfully",
-                    "remote": remote_info
+                    "remote": remote_info,
                 }
 
             raise ToolError("Failed to create RClone remote")
 
         except Exception as e:
+            if isinstance(e, ToolError):
+                raise e
             logger.error(f"Failed to create RClone remote {name}: {str(e)}")
             raise ToolError(f"Failed to create RClone remote {name}: {str(e)}") from e
 
@@ -154,24 +169,19 @@ def register_rclone_tools(mcp: FastMCP) -> None:
             }
             """
 
-            variables = {
-                "input": {
-                    "name": name
-                }
-            }
+            variables = {"input": {"name": name}}
 
             response_data = await make_graphql_request(mutation, variables)
 
             if "rclone" in response_data and response_data["rclone"]["deleteRCloneRemote"]:
                 logger.info(f"Successfully deleted RClone remote: {name}")
-                return {
-                    "success": True,
-                    "message": f"RClone remote '{name}' deleted successfully"
-                }
+                return {"success": True, "message": f"RClone remote '{name}' deleted successfully"}
 
             raise ToolError(f"Failed to delete RClone remote '{name}'")
 
         except Exception as e:
+            if isinstance(e, ToolError):
+                raise e
             logger.error(f"Failed to delete RClone remote {name}: {str(e)}")
             raise ToolError(f"Failed to delete RClone remote {name}: {str(e)}") from e
 

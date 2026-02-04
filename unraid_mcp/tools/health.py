@@ -11,9 +11,36 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from ..config.logging import logger
-from ..config.settings import UNRAID_API_URL, UNRAID_MCP_HOST, UNRAID_MCP_PORT, UNRAID_MCP_TRANSPORT
-from ..core.client import make_graphql_request
+from unraid_mcp.config.logging import logger
+from unraid_mcp.config.settings import (
+    UNRAID_API_URL,
+    UNRAID_MCP_HOST,
+    UNRAID_MCP_PORT,
+    UNRAID_MCP_TRANSPORT,
+)
+from unraid_mcp.core.client import make_graphql_request
+
+_PROCESS_START_TIME = time.time()
+
+# Performance thresholds for health assessment
+API_LATENCY_WARNING_MS = 5000
+API_LATENCY_DEGRADED_MS = 10000
+
+# Severity ranking for health status aggregation
+_SEVERITY_RANK = {
+    "healthy": 0,
+    "warning": 1,
+    "degraded": 2,
+    "unhealthy": 3,
+    "critical": 3,
+}  # critical reserved for future use
+
+
+def _update_health_status(current: str, new: str) -> str:
+    """Update status only if the new status is more severe."""
+    if _SEVERITY_RANK.get(new, 0) > _SEVERITY_RANK.get(current, 0):
+        return new
+    return current
 
 
 def register_health_tools(mcp: FastMCP) -> None:
@@ -27,6 +54,7 @@ def register_health_tools(mcp: FastMCP) -> None:
     async def health_check() -> dict[str, Any]:
         """Returns comprehensive health status of the Unraid MCP server and system for monitoring purposes."""
         start_time = time.time()
+        process_start_time = _PROCESS_START_TIME  # snapshot for consistent timing
         health_status = "healthy"
         issues = []
 
@@ -37,7 +65,7 @@ def register_health_tools(mcp: FastMCP) -> None:
               info {
                 machineId
                 time
-                versions { unraid }
+                versions { core { unraid } }
                 os { uptime }
               }
               array {
@@ -64,7 +92,7 @@ def register_health_tools(mcp: FastMCP) -> None:
             # Base health info
             health_info = {
                 "status": health_status,
-                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "api_latency_ms": api_latency,
                 "server": {
                     "name": "Unraid MCP Server",
@@ -72,8 +100,8 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "transport": UNRAID_MCP_TRANSPORT,
                     "host": UNRAID_MCP_HOST,
                     "port": UNRAID_MCP_PORT,
-                    "process_uptime_seconds": time.time() - start_time  # Rough estimate
-                }
+                    "process_uptime_seconds": round(time.time() - process_start_time, 2),
+                },
             }
 
             if not response_data:
@@ -91,11 +119,11 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "url": UNRAID_API_URL,
                     "machine_id": info.get("machineId"),
                     "time": info.get("time"),
-                    "version": info.get("versions", {}).get("unraid"),
-                    "uptime": info.get("os", {}).get("uptime")
+                    "version": info.get("versions", {}).get("core", {}).get("unraid"),
+                    "uptime": info.get("os", {}).get("uptime"),
                 }
             else:
-                health_status = "degraded"
+                health_status = _update_health_status(health_status, "degraded")
                 issues.append("Unable to retrieve system info")
 
             # Array health analysis
@@ -104,13 +132,13 @@ def register_health_tools(mcp: FastMCP) -> None:
                 array_state = array_info.get("state", "unknown")
                 health_info["array_status"] = {
                     "state": array_state,
-                    "healthy": array_state in ["STARTED", "STOPPED"]
+                    "healthy": array_state in ["STARTED", "STOPPED"],
                 }
                 if array_state not in ["STARTED", "STOPPED"]:
-                    health_status = "warning"
+                    health_status = _update_health_status(health_status, "warning")
                     issues.append(f"Array in unexpected state: {array_state}")
             else:
-                health_status = "warning"
+                health_status = _update_health_status(health_status, "warning")
                 issues.append("Unable to retrieve array status")
 
             # Notifications analysis
@@ -125,11 +153,11 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "unread_total": total_unread,
                     "unread_alerts": alert_count,
                     "unread_warnings": warning_count,
-                    "has_critical_notifications": alert_count > 0
+                    "has_critical_notifications": alert_count > 0,
                 }
 
                 if alert_count > 0:
-                    health_status = "warning"
+                    health_status = _update_health_status(health_status, "warning")
                     issues.append(f"{alert_count} unread alert notification(s)")
 
             # Docker services analysis
@@ -143,16 +171,18 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "total_containers": len(containers),
                     "running_containers": len(running_containers),
                     "stopped_containers": len(stopped_containers),
-                    "containers_healthy": len([c for c in containers if c.get("status", "").startswith("Up")])
+                    "containers_healthy": len(
+                        [c for c in containers if c.get("status", "").startswith("Up")]
+                    ),
                 }
 
             # API performance assessment
-            if api_latency > 5000:  # > 5 seconds
-                health_status = "warning"
-                issues.append(f"High API latency: {api_latency}ms")
-            elif api_latency > 10000:  # > 10 seconds
-                health_status = "degraded"
+            if api_latency > API_LATENCY_DEGRADED_MS:  # > 10 seconds
+                health_status = _update_health_status(health_status, "degraded")
                 issues.append(f"Very high API latency: {api_latency}ms")
+            elif api_latency > API_LATENCY_WARNING_MS:  # > 5 seconds
+                health_status = _update_health_status(health_status, "warning")
+                issues.append(f"High API latency: {api_latency}ms")
 
             # Final status determination
             health_info["status"] = health_status
@@ -162,7 +192,7 @@ def register_health_tools(mcp: FastMCP) -> None:
             # Add performance metrics
             health_info["performance"] = {
                 "api_response_time_ms": api_latency,
-                "health_check_duration_ms": round((time.time() - start_time) * 1000, 2)
+                "health_check_duration_ms": round((time.time() - start_time) * 1000, 2),
             }
 
             return health_info
@@ -171,16 +201,16 @@ def register_health_tools(mcp: FastMCP) -> None:
             logger.error(f"Health check failed: {e}")
             return {
                 "status": "unhealthy",
-                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "error": str(e),
-                "api_latency_ms": round((time.time() - start_time) * 1000, 2) if 'start_time' in locals() else None,
+                "api_latency_ms": round((time.time() - start_time) * 1000, 2),
                 "server": {
                     "name": "Unraid MCP Server",
                     "version": "0.1.0",
                     "transport": UNRAID_MCP_TRANSPORT,
                     "host": UNRAID_MCP_HOST,
-                    "port": UNRAID_MCP_PORT
-                }
+                    "port": UNRAID_MCP_PORT,
+                },
             }
 
     logger.info("Health tools registered successfully")
