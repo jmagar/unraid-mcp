@@ -330,7 +330,9 @@ start_modular_server() {
         # Let's try to match by command line as requested by user fallback.
         
         # Look for the python process running unraid_mcp.main
-        pid=$(pgrep -f "unraid_mcp.main" | sort -n | tail -1)
+        # Look for the python process running unraid_mcp.main
+        # Constrain to current user and newest process to avoid unrelated matches
+        pid=$(pgrep -u "$(id -u)" -n -f "unraid_mcp\.main")
         
         # Verify it's new (not an old one we failed to kill) - risky if improper cleanup, but we did cleanup.
         ((attempts++))
@@ -415,7 +417,9 @@ start_original_server() {
     while [[ $attempts -lt 20 && -z "$pid" ]]; do
         sleep 0.1
         # Look for the python process running unraid_mcp_server.py
-        pid=$(pgrep -f "unraid_mcp_server.py" | sort -n | tail -1)
+        # Look for the python process running unraid_mcp_server.py
+        # Constrain to current user and newest process to avoid unrelated matches
+        pid=$(pgrep -u "$(id -u)" -n -f "unraid_mcp_server\.py")
         ((attempts++))
     done
     
