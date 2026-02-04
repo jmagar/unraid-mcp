@@ -7,7 +7,7 @@ set -euo pipefail
 
 # Configuration
 DEFAULT_PORT=6970
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="/tmp"
 LOG_FILE="$LOG_DIR/unraid-mcp.log"
 PID_FILE="$LOG_DIR/dev.pid"
@@ -23,9 +23,15 @@ log() {
     local indent="${3:-0}"
     local file_timestamp="$(date +'%Y-%m-%d %H:%M:%S')"
     
-    # Use unified Rich logger for beautiful console output - escape single quotes
-    local escaped_message="${message//\'/\'\"\'\"\'}"
-    uv run python -c "from unraid_mcp.config.logging import log_with_level_and_indent; log_with_level_and_indent('$escaped_message', '$level', $indent)"
+    # Use unified Rich logger for beautiful console output - use env vars to avoid injection
+    export LOG_MESSAGE="$message"
+    export LOG_LEVEL="$level"
+    export LOG_INDENT="$indent"
+    
+    uv run python -c "import os; from unraid_mcp.config.logging import log_with_level_and_indent; log_with_level_and_indent(os.environ.get('LOG_MESSAGE', ''), os.environ.get('LOG_LEVEL', 'info'), int(os.environ.get('LOG_INDENT', 0)))"
+    
+    # Unset env vars
+    unset LOG_MESSAGE LOG_LEVEL LOG_INDENT
     
     # File output without color
     printf "[%s] %s\n" "$file_timestamp" "$message" >> "$LOG_FILE"
@@ -110,7 +116,7 @@ find_server_processes() {
         if [[ -n "$line" ]]; then
             local pid=$(echo "$line" | awk '{print $2}')
             # Add to pids if not already present
-            if [[ ! " ${pids[@]} " =~ " $pid " ]]; then
+            if [[ ! " ${pids[@]:-} " =~ " $pid " ]]; then
                 pids+=("$pid")
             fi
         fi
@@ -122,7 +128,7 @@ find_server_processes() {
             if [[ -n "$line" ]]; then
                 local pid=$(echo "$line" | awk '{print $2}')
                 # Add to pids if not already present
-                if [[ ! " ${pids[@]} " =~ " $pid " ]]; then
+                if [[ ! " ${pids[@]:-} " =~ " $pid " ]]; then
                     pids+=("$pid")
                 fi
             fi
@@ -250,9 +256,17 @@ stop_servers() {
     log_info "⏳ Waiting for port $port to be released..."
     local port_wait=0
     while [[ $port_wait -lt 3 ]]; do
-        if ! lsof -i ":$port" >/dev/null 2>&1; then
-            log_success "✅ Port $port released" 1
-            break
+        if command -v lsof >/dev/null 2>&1; then
+            if ! lsof -i ":$port" >/dev/null 2>&1; then
+                log_success "✅ Port $port released" 1
+                break
+            fi
+        else
+             # Fallback if lsof is missing: assume success or check netstat (omitted for simplicity, just breaking loop)
+             # Realistically if lsof is missing we can't easily check, so we trust kill worked or wait blindly.
+             # For now, just break since we can't verify.
+             log_warning "⚠️  lsof not found, skipping port release check" 1
+             break
         fi
         sleep 1
         ((port_wait++))
@@ -281,13 +295,51 @@ start_modular_server() {
     fi
     
     # Clear the log file and add a startup marker to capture fresh logs
-    echo "=== Server Starting at $(date) ===" > "$LOG_FILE"
+    # Rotate logs if too large (e.g., >10MB) or just simple rotation
+    if [[ -f "$LOG_FILE" ]]; then
+        local fsize=$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
+        if [[ $fsize -gt 10485760 ]]; then # 10MB
+            mv "$LOG_FILE" "$LOG_FILE.old"
+        fi
+    fi
+    
+    # Append startup marker
+    echo "=== Server Starting at $(date) ===" >> "$LOG_FILE"
     
     # Start server in background using module syntax
     log_info "→ Executing: uv run -m unraid_mcp.main" 1
     # Start server in new process group to isolate it from parent signals
+    # Start server in new process group to isolate it from parent signals
+    # Use setsid to detach, but tracking the PID is tricky.
+    # New approach: Run in background and find the child PID.
     setsid nohup uv run -m unraid_mcp.main >> "$LOG_FILE" 2>&1 &
-    local pid=$!
+    local shell_pid=$!
+    
+    # Wait for the python process to appear
+    local attempts=0
+    local pid=""
+    while [[ $attempts -lt 20 && -z "$pid" ]]; do
+        sleep 0.1
+        # Try to find the child process of the shell_pid or the setsid process
+        # This is tricky because setsid executes the program. 
+        # Actually setsid execs, so the shell_pid should be the pid of setsid which becomes the pid of uv which becomes... 
+        # Wait, setsid forks? No, setsid command runs a program in a new session.
+        # If we used `setsid program &`, $! is the pid of `setsid`. 
+        # If `setsid` execs, then $! is the PID we want.
+        # But `uv run` might spawn python as a child. 
+        # Let's try to match by command line as requested by user fallback.
+        
+        # Look for the python process running unraid_mcp.main
+        pid=$(pgrep -f "unraid_mcp.main" | sort -n | tail -1)
+        
+        # Verify it's new (not an old one we failed to kill) - risky if improper cleanup, but we did cleanup.
+        ((attempts++))
+    done
+    
+    if [[ -z "$pid" ]]; then
+       # Fallback to the shell PID if we can't find specific python one, though it might be wrong.
+       pid=$shell_pid
+    fi
     
     # Write PID to file
     write_pid_file "$pid"
@@ -338,13 +390,39 @@ start_original_server() {
     fi
     
     # Clear the log file and add a startup marker to capture fresh logs
-    echo "=== Server Starting at $(date) ===" > "$LOG_FILE"
+    # Rotate logs if too large (e.g., >10MB) or just simple rotation
+    if [[ -f "$LOG_FILE" ]]; then
+        local fsize=$(stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)
+        if [[ $fsize -gt 10485760 ]]; then # 10MB
+            mv "$LOG_FILE" "$LOG_FILE.old"
+        fi
+    fi
+    
+    # Append startup marker
+    echo "=== Server Starting at $(date) ===" >> "$LOG_FILE"
     
     # Start server in background
     log_info "→ Executing: uv run unraid_mcp_server.py" 1
     # Start server in new process group to isolate it from parent signals
+    # Use setsid to detach, but tracking the PID is tricky.
+    # New approach: Run in background and find the child PID.
     setsid nohup uv run unraid_mcp_server.py >> "$LOG_FILE" 2>&1 &
-    local pid=$!
+    local shell_pid=$!
+    
+    # Wait for the python process to appear
+    local attempts=0
+    local pid=""
+    while [[ $attempts -lt 20 && -z "$pid" ]]; do
+        sleep 0.1
+        # Look for the python process running unraid_mcp_server.py
+        pid=$(pgrep -f "unraid_mcp_server.py" | sort -n | tail -1)
+        ((attempts++))
+    done
+    
+    if [[ -z "$pid" ]]; then
+       # Fallback to the shell PID if we can't find specific python one
+       pid=$shell_pid
+    fi
     
     # Write PID to file
     write_pid_file "$pid"
@@ -400,13 +478,13 @@ show_usage() {
     echo "  UNRAID_MCP_PORT    Port for server (default: $DEFAULT_PORT)"
     echo ""
     echo "EXAMPLES:"
-    echo "  ./dev.sh              # Restart with modular server"
-    echo "  ./dev.sh --old        # Restart with original server"
-    echo "  ./dev.sh --kill       # Stop all servers"
-    echo "  ./dev.sh --status     # Check server status"
-    echo "  ./dev.sh --logs       # Show last 50 lines of logs"
-    echo "  ./dev.sh --logs 100   # Show last 100 lines of logs"
-    echo "  ./dev.sh --tail       # Follow logs in real-time"
+    echo "  ./scripts/dev.sh              # Restart with modular server"
+    echo "  ./scripts/dev.sh --old        # Restart with original server"
+    echo "  ./scripts/dev.sh --kill       # Stop all servers"
+    echo "  ./scripts/dev.sh --status     # Check server status"
+    echo "  ./scripts/dev.sh --logs       # Show last 50 lines of logs"
+    echo "  ./scripts/dev.sh --logs 100   # Show last 100 lines of logs"
+    echo "  ./scripts/dev.sh --tail       # Follow logs in real-time"
 }
 
 # Show server status

@@ -65,7 +65,7 @@ docker compose logs -f unraid-mcp
 uv sync
 
 # Run development server
-./dev.sh
+./scripts/dev.sh
 ```
 
 ---
@@ -124,7 +124,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Run development server
-./dev.sh
+./scripts/dev.sh
 ```
 
 ---
@@ -194,7 +194,7 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 ### Monitoring & Diagnostics
 - `health_check()` - Comprehensive system health assessment
 - `get_notifications_overview()` - Notification counts by severity
-- `list_notifications(type, offset, limit)` - Filtered notification listing
+- `list_notifications(notification_type, offset, limit)` - Filtered notification listing
 - `list_available_log_files()` - Available system logs
 - `get_logs(path, tail_lines)` - Log file content retrieval
 
@@ -242,8 +242,12 @@ unraid-mcp/
 │   │   ├── virtualization.py # VM management
 │   │   └── rclone.py         # Cloud storage
 │   └── server.py             # FastMCP server setup
+├── scripts/                  # Utility scripts
+│   └── dev.sh                # Development script
+├── tests/                    # Test suite
+│   ├── integration/          # Integration & compliance tests
+│   └── unit/                 # Unit tests
 ├── logs/                     # Log files (auto-created)
-├── dev.sh                    # Development script  
 └── docker-compose.yml        # Docker Compose deployment
 ```
 
@@ -265,10 +269,10 @@ uv run pytest
 ### Development Workflow
 ```bash
 # Start development server (kills existing processes safely)
-./dev.sh
+./scripts/dev.sh
 
 # Stop server only
-./dev.sh --kill
+./scripts/dev.sh --kill
 ```
 
 ---
@@ -301,7 +305,7 @@ uv run pytest
 
 **🔥 Port Already in Use**
 ```bash
-./dev.sh  # Automatically kills existing processes
+./scripts/dev.sh  # Automatically kills existing processes
 ```
 
 **🔧 Connection Refused**

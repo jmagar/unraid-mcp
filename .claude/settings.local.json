@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(python3:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(ls:*)",
+      "Bash(uv pip list:*)",
+      "Bash(.venv/bin/pip list:*)",
+      "Bash(.venv/bin/pip show:*)",
+      "Bash(.venv/bin/python:*)",
+      "WebFetch(domain:www.lumia.security)"
+    ]
+  }
+}
