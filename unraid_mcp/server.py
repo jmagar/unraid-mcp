@@ -19,6 +19,7 @@ from .config.settings import (
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.manager import SubscriptionManager
 from .subscriptions.resources import register_subscription_resources
+from .tools.api import register_api_tools
 from .tools.docker import register_docker_tools
 from .tools.health import register_health_tools
 from .tools.rclone import register_rclone_tools
@@ -78,6 +79,9 @@ def register_all_modules() -> None:
 
         register_rclone_tools(mcp)
         logger.info("☁️  RClone tools registered")
+
+        register_api_tools(mcp)
+        logger.info("🔌 API tools registered")
 
         logger.info("🎯 All modules registered successfully - Server ready!")
 
