@@ -15,7 +15,7 @@ import websockets
 from websockets.legacy.protocol import Subprotocol
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
+from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL
 from ..core.types import SubscriptionData
 
 
@@ -162,7 +162,8 @@ class SubscriptionManager:
                     subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
                     ping_interval=20,
                     ping_timeout=10,
-                    close_timeout=10
+                    close_timeout=10,
+                    ssl=UNRAID_VERIFY_SSL
                 ) as websocket:
 
                     selected_proto = websocket.subprotocol or "none"
@@ -180,15 +181,10 @@ class SubscriptionManager:
 
                     if UNRAID_API_KEY:
                         logger.debug(f"[AUTH:{subscription_name}] Adding authentication payload")
+                        # Use standard X-API-Key header format (matching HTTP client)
                         auth_payload = {
-                            "X-API-Key": UNRAID_API_KEY,
-                            "x-api-key": UNRAID_API_KEY,
-                            "authorization": f"Bearer {UNRAID_API_KEY}",
-                            "Authorization": f"Bearer {UNRAID_API_KEY}",
                             "headers": {
-                                "X-API-Key": UNRAID_API_KEY,
-                                "x-api-key": UNRAID_API_KEY,
-                                "Authorization": f"Bearer {UNRAID_API_KEY}"
+                                "X-API-Key": UNRAID_API_KEY
                             }
                         }
                         init_payload["payload"] = auth_payload

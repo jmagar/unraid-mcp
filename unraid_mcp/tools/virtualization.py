@@ -1,11 +1,10 @@
-"""Virtual machine management tools.
+"""Virtual machine management.
 
-This module provides tools for VM lifecycle management and monitoring
-including listing VMs, VM operations (start/stop/pause/reboot/etc),
-and detailed VM information retrieval.
+Provides the `unraid_vm` tool with 9 actions for VM lifecycle management
+including start, stop, pause, resume, force stop, reboot, and reset.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
@@ -13,150 +12,148 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
-
-def register_vm_tools(mcp: FastMCP) -> None:
-    """Register all VM tools with the FastMCP instance.
-
-    Args:
-        mcp: FastMCP instance to register tools with
-    """
-
-    @mcp.tool()
-    async def list_vms() -> list[dict[str, Any]]:
-        """Lists all Virtual Machines (VMs) on the Unraid system and their current state.
-
-        Returns:
-            List of VM information dictionaries with UUID, name, and state
-        """
-        query = """
+QUERIES: dict[str, str] = {
+    "list": """
         query ListVMs {
-          vms {
-            id
-            domains {
-              id
-              name
-              state
-              uuid
-            }
-          }
+          vms { id domains { id name state uuid } }
         }
-        """
-        try:
-            logger.info("Executing list_vms tool")
-            response_data = await make_graphql_request(query)
-            logger.info(f"VM query response: {response_data}")
-            if response_data.get("vms") and response_data["vms"].get("domains"):
-                vms = response_data["vms"]["domains"]
-                logger.info(f"Found {len(vms)} VMs")
-                return list(vms) if isinstance(vms, list) else []
-            else:
-                logger.info("No VMs found in domains field")
-                return []
-        except Exception as e:
-            logger.error(f"Error in list_vms: {e}", exc_info=True)
-            error_msg = str(e)
-            if "VMs are not available" in error_msg:
-                raise ToolError("VMs are not available on this Unraid server. This could mean: 1) VM support is not enabled, 2) VM service is not running, or 3) no VMs are configured. Check Unraid VM settings.") from e
-            else:
-                raise ToolError(f"Failed to list virtual machines: {error_msg}") from e
-
-    @mcp.tool()
-    async def manage_vm(vm_uuid: str, action: str) -> dict[str, Any]:
-        """Manages a VM: start, stop, pause, resume, force_stop, reboot, reset. Uses VM UUID.
-
-        Args:
-            vm_uuid: UUID of the VM to manage
-            action: Action to perform - one of: start, stop, pause, resume, forceStop, reboot, reset
-
-        Returns:
-            Dict containing operation success status and details
-        """
-        valid_actions = ["start", "stop", "pause", "resume", "forceStop", "reboot", "reset"] # Added reset operation
-        if action not in valid_actions:
-            logger.warning(f"Invalid action '{action}' for manage_vm")
-            raise ToolError(f"Invalid action. Must be one of {valid_actions}.")
-
-        mutation_name = action
-        query = f"""
-        mutation ManageVM($id: PrefixedID!) {{
-          vm {{
-            {mutation_name}(id: $id)
-          }}
-        }}
-        """
-        variables = {"id": vm_uuid}
-        try:
-            logger.info(f"Executing manage_vm tool: action={action}, uuid={vm_uuid}")
-            response_data = await make_graphql_request(query, variables)
-            if response_data.get("vm") and mutation_name in response_data["vm"]:
-                # Mutations for VM return Boolean for success
-                success = response_data["vm"][mutation_name]
-                return {"success": success, "action": action, "vm_uuid": vm_uuid}
-            raise ToolError(f"Failed to {action} VM or unexpected response structure.")
-        except Exception as e:
-            logger.error(f"Error in manage_vm ({action}): {e}", exc_info=True)
-            raise ToolError(f"Failed to {action} virtual machine: {str(e)}") from e
-
-    @mcp.tool()
-    async def get_vm_details(vm_identifier: str) -> dict[str, Any]:
-        """Retrieves detailed information for a specific VM by its UUID or name.
-
-        Args:
-            vm_identifier: VM UUID or name to retrieve details for
-
-        Returns:
-            Dict containing detailed VM information
-        """
-        # Make direct GraphQL call instead of calling list_vms() tool
-        query = """
+    """,
+    "details": """
         query GetVmDetails {
-          vms {
-            domains {
-              id
-              name
-              state
-              uuid
-            }
-            domain {
-              id
-              name
-              state
-              uuid
-            }
-          }
+          vms { domains { id name state uuid } }
         }
+    """,
+}
+
+MUTATIONS: dict[str, str] = {
+    "start": """
+        mutation StartVM($id: PrefixedID!) { vm { start(id: $id) } }
+    """,
+    "stop": """
+        mutation StopVM($id: PrefixedID!) { vm { stop(id: $id) } }
+    """,
+    "pause": """
+        mutation PauseVM($id: PrefixedID!) { vm { pause(id: $id) } }
+    """,
+    "resume": """
+        mutation ResumeVM($id: PrefixedID!) { vm { resume(id: $id) } }
+    """,
+    "force_stop": """
+        mutation ForceStopVM($id: PrefixedID!) { vm { forceStop(id: $id) } }
+    """,
+    "reboot": """
+        mutation RebootVM($id: PrefixedID!) { vm { reboot(id: $id) } }
+    """,
+    "reset": """
+        mutation ResetVM($id: PrefixedID!) { vm { reset(id: $id) } }
+    """,
+}
+
+# Map action names to their GraphQL field names
+_MUTATION_FIELDS: dict[str, str] = {
+    "start": "start",
+    "stop": "stop",
+    "pause": "pause",
+    "resume": "resume",
+    "force_stop": "forceStop",
+    "reboot": "reboot",
+    "reset": "reset",
+}
+
+DESTRUCTIVE_ACTIONS = {"force_stop", "reset"}
+
+VM_ACTIONS = Literal[
+    "list", "details",
+    "start", "stop", "pause", "resume", "force_stop", "reboot", "reset",
+]
+
+
+def register_vm_tool(mcp: FastMCP) -> None:
+    """Register the unraid_vm tool with the FastMCP instance."""
+
+    @mcp.tool()
+    async def unraid_vm(
+        action: VM_ACTIONS,
+        vm_id: str | None = None,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        """Manage Unraid virtual machines.
+
+        Actions:
+          list - List all VMs with state
+          details - Detailed info for a VM (requires vm_id: UUID, PrefixedID, or name)
+          start - Start a VM (requires vm_id)
+          stop - Gracefully stop a VM (requires vm_id)
+          pause - Pause a VM (requires vm_id)
+          resume - Resume a paused VM (requires vm_id)
+          force_stop - Force stop a VM (requires vm_id, confirm=True)
+          reboot - Reboot a VM (requires vm_id)
+          reset - Reset a VM (requires vm_id, confirm=True)
         """
+        all_actions = set(QUERIES) | set(MUTATIONS)
+        if action not in all_actions:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+
+        if action in DESTRUCTIVE_ACTIONS and not confirm:
+            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+
+        if action != "list" and not vm_id:
+            raise ToolError(f"vm_id is required for '{action}' action")
+
         try:
-            logger.info(f"Executing get_vm_details for identifier: {vm_identifier}")
-            response_data = await make_graphql_request(query)
+            logger.info(f"Executing unraid_vm action={action}")
 
-            if response_data.get("vms"):
-                vms_data = response_data["vms"]
-                # Try to get VMs from either domains or domain field
-                vms = vms_data.get("domains") or vms_data.get("domain") or []
+            if action == "list":
+                data = await make_graphql_request(QUERIES["list"])
+                if data.get("vms") and data["vms"].get("domains"):
+                    vms = data["vms"]["domains"]
+                    return {"vms": list(vms) if isinstance(vms, list) else []}
+                return {"vms": []}
 
-                if vms:
-                    for vm_data in vms:
-                        if (vm_data.get("uuid") == vm_identifier or
-                            vm_data.get("id") == vm_identifier or
-                            vm_data.get("name") == vm_identifier):
-                            logger.info(f"Found VM {vm_identifier}")
-                            return dict(vm_data) if isinstance(vm_data, dict) else {}
+            if action == "details":
+                data = await make_graphql_request(QUERIES["details"])
+                if data.get("vms"):
+                    vms = data["vms"].get("domains") or []
+                    for vm in vms:
+                        if (
+                            vm.get("uuid") == vm_id
+                            or vm.get("id") == vm_id
+                            or vm.get("name") == vm_id
+                        ):
+                            return dict(vm) if isinstance(vm, dict) else {}
+                    available = [
+                        f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms
+                    ]
+                    raise ToolError(
+                        f"VM '{vm_id}' not found. Available: {', '.join(available)}"
+                    )
+                raise ToolError("No VM data returned from server")
 
-                    logger.warning(f"VM with identifier '{vm_identifier}' not found.")
-                    available_vms = [f"{vm.get('name')} (UUID: {vm.get('uuid')}, ID: {vm.get('id')})" for vm in vms]
-                    raise ToolError(f"VM '{vm_identifier}' not found. Available VMs: {', '.join(available_vms)}")
-                else:
-                    raise ToolError("No VMs available or VMs not accessible")
-            else:
-                raise ToolError("No VMs data returned from server")
+            # Mutations
+            if action in MUTATIONS:
+                data = await make_graphql_request(
+                    MUTATIONS[action], {"id": vm_id}
+                )
+                field = _MUTATION_FIELDS[action]
+                if data.get("vm") and field in data["vm"]:
+                    return {
+                        "success": data["vm"][field],
+                        "action": action,
+                        "vm_id": vm_id,
+                    }
+                raise ToolError(f"Failed to {action} VM or unexpected response")
 
+            return {}
+
+        except ToolError:
+            raise
         except Exception as e:
-            logger.error(f"Error in get_vm_details: {e}", exc_info=True)
-            error_msg = str(e)
-            if "VMs are not available" in error_msg:
-                raise ToolError("VMs are not available on this Unraid server. This could mean: 1) VM support is not enabled, 2) VM service is not running, or 3) no VMs are configured. Check Unraid VM settings.") from e
-            else:
-                raise ToolError(f"Failed to retrieve VM details: {error_msg}") from e
+            logger.error(f"Error in unraid_vm action={action}: {e}", exc_info=True)
+            msg = str(e)
+            if "VMs are not available" in msg:
+                raise ToolError(
+                    "VMs not available on this server. Check VM support is enabled."
+                ) from e
+            raise ToolError(f"Failed to execute vm/{action}: {msg}") from e
 
-    logger.info("VM tools registered successfully")
+    logger.info("VM tool registered successfully")

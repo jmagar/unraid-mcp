@@ -57,10 +57,14 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 ping_timeout=10
             ) as websocket:
 
-                # Send connection init
+                # Send connection init (using standard X-API-Key format)
                 await websocket.send(json.dumps({
                     "type": "connection_init",
-                    "payload": {"Authorization": f"Bearer {UNRAID_API_KEY}"}
+                    "payload": {
+                        "headers": {
+                            "X-API-Key": UNRAID_API_KEY
+                        }
+                    }
                 }))
 
                 # Wait for ack

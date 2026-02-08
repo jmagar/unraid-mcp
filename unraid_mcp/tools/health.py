@@ -1,186 +1,264 @@
-"""Comprehensive health monitoring tools.
+"""Health monitoring and diagnostics.
 
-This module provides tools for comprehensive health checks of the Unraid MCP server
-and the underlying Unraid system, including performance metrics, system status,
-notifications, Docker services, and API responsiveness.
+Provides the `unraid_health` tool with 3 actions for system health checks,
+connection testing, and subscription diagnostics.
 """
 
 import datetime
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_URL, UNRAID_MCP_HOST, UNRAID_MCP_PORT, UNRAID_MCP_TRANSPORT
+from ..config.settings import (
+    UNRAID_API_URL,
+    UNRAID_MCP_HOST,
+    UNRAID_MCP_PORT,
+    UNRAID_MCP_TRANSPORT,
+    VERSION,
+)
 from ..core.client import make_graphql_request
+from ..core.exceptions import ToolError
+
+HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose"]
+
+# Severity ordering: only upgrade, never downgrade
+_SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
 
 
-def register_health_tools(mcp: FastMCP) -> None:
-    """Register all health tools with the FastMCP instance.
-
-    Args:
-        mcp: FastMCP instance to register tools with
-    """
+def register_health_tool(mcp: FastMCP) -> None:
+    """Register the unraid_health tool with the FastMCP instance."""
 
     @mcp.tool()
-    async def health_check() -> dict[str, Any]:
-        """Returns comprehensive health status of the Unraid MCP server and system for monitoring purposes."""
-        start_time = time.time()
-        health_status = "healthy"
-        issues = []
+    async def unraid_health(
+        action: HEALTH_ACTIONS,
+    ) -> dict[str, Any]:
+        """Monitor Unraid MCP server and system health.
+
+        Actions:
+          check - Comprehensive health check (API latency, array, notifications, Docker)
+          test_connection - Quick connectivity test (just checks { online })
+          diagnose - Subscription system diagnostics
+        """
+        if action not in ("check", "test_connection", "diagnose"):
+            raise ToolError(
+                f"Invalid action '{action}'. Must be one of: check, test_connection, diagnose"
+            )
 
         try:
-            # Enhanced health check with multiple system components
-            comprehensive_query = """
-            query ComprehensiveHealthCheck {
-              info {
-                machineId
-                time
-                versions { unraid }
-                os { uptime }
-              }
-              array {
-                state
-              }
-              notifications {
-                overview {
-                  unread { alert warning total }
-                }
-              }
-              docker {
-                containers(skipCache: true) {
-                  id
-                  state
-                  status
-                }
-              }
-            }
-            """
+            logger.info(f"Executing unraid_health action={action}")
 
-            response_data = await make_graphql_request(comprehensive_query)
-            api_latency = round((time.time() - start_time) * 1000, 2)  # ms
-
-            # Base health info
-            health_info = {
-                "status": health_status,
-                "timestamp": datetime.datetime.utcnow().isoformat(),
-                "api_latency_ms": api_latency,
-                "server": {
-                    "name": "Unraid MCP Server",
-                    "version": "0.1.0",
-                    "transport": UNRAID_MCP_TRANSPORT,
-                    "host": UNRAID_MCP_HOST,
-                    "port": UNRAID_MCP_PORT,
-                    "process_uptime_seconds": time.time() - start_time  # Rough estimate
-                }
-            }
-
-            if not response_data:
-                health_status = "unhealthy"
-                issues.append("No response from Unraid API")
-                health_info["status"] = health_status
-                health_info["issues"] = issues
-                return health_info
-
-            # System info analysis
-            info = response_data.get("info", {})
-            if info:
-                health_info["unraid_system"] = {
+            if action == "test_connection":
+                start = time.time()
+                data = await make_graphql_request("query { online }")
+                latency = round((time.time() - start) * 1000, 2)
+                return {
                     "status": "connected",
-                    "url": UNRAID_API_URL,
-                    "machine_id": info.get("machineId"),
-                    "time": info.get("time"),
-                    "version": info.get("versions", {}).get("unraid"),
-                    "uptime": info.get("os", {}).get("uptime")
-                }
-            else:
-                health_status = "degraded"
-                issues.append("Unable to retrieve system info")
-
-            # Array health analysis
-            array_info = response_data.get("array", {})
-            if array_info:
-                array_state = array_info.get("state", "unknown")
-                health_info["array_status"] = {
-                    "state": array_state,
-                    "healthy": array_state in ["STARTED", "STOPPED"]
-                }
-                if array_state not in ["STARTED", "STOPPED"]:
-                    health_status = "warning"
-                    issues.append(f"Array in unexpected state: {array_state}")
-            else:
-                health_status = "warning"
-                issues.append("Unable to retrieve array status")
-
-            # Notifications analysis
-            notifications = response_data.get("notifications", {})
-            if notifications and notifications.get("overview"):
-                unread = notifications["overview"].get("unread", {})
-                alert_count = unread.get("alert", 0)
-                warning_count = unread.get("warning", 0)
-                total_unread = unread.get("total", 0)
-
-                health_info["notifications"] = {
-                    "unread_total": total_unread,
-                    "unread_alerts": alert_count,
-                    "unread_warnings": warning_count,
-                    "has_critical_notifications": alert_count > 0
+                    "online": data.get("online"),
+                    "latency_ms": latency,
                 }
 
-                if alert_count > 0:
-                    health_status = "warning"
-                    issues.append(f"{alert_count} unread alert notification(s)")
+            if action == "check":
+                return await _comprehensive_check()
 
-            # Docker services analysis
-            docker_info = response_data.get("docker", {})
-            if docker_info and docker_info.get("containers"):
-                containers = docker_info["containers"]
-                running_containers = [c for c in containers if c.get("state") == "running"]
-                stopped_containers = [c for c in containers if c.get("state") == "exited"]
+            if action == "diagnose":
+                return await _diagnose_subscriptions()
 
-                health_info["docker_services"] = {
-                    "total_containers": len(containers),
-                    "running_containers": len(running_containers),
-                    "stopped_containers": len(stopped_containers),
-                    "containers_healthy": len([c for c in containers if c.get("status", "").startswith("Up")])
-                }
+            return {}
 
-            # API performance assessment
-            if api_latency > 5000:  # > 5 seconds
-                health_status = "warning"
-                issues.append(f"High API latency: {api_latency}ms")
-            elif api_latency > 10000:  # > 10 seconds
-                health_status = "degraded"
-                issues.append(f"Very high API latency: {api_latency}ms")
+        except ToolError:
+            raise
+        except Exception as e:
+            logger.error(f"Error in unraid_health action={action}: {e}", exc_info=True)
+            raise ToolError(f"Failed to execute health/{action}: {str(e)}") from e
 
-            # Final status determination
-            health_info["status"] = health_status
-            if issues:
-                health_info["issues"] = issues
+    logger.info("Health tool registered successfully")
 
-            # Add performance metrics
-            health_info["performance"] = {
-                "api_response_time_ms": api_latency,
-                "health_check_duration_ms": round((time.time() - start_time) * 1000, 2)
-            }
 
+async def _comprehensive_check() -> dict[str, Any]:
+    """Run comprehensive health check against the Unraid system."""
+    start_time = time.time()
+    health_severity = 0  # Track as int to prevent downgrade
+    issues: list[str] = []
+
+    def _escalate(level: str) -> None:
+        nonlocal health_severity
+        health_severity = max(health_severity, _SEVERITY.get(level, 0))
+
+    try:
+        query = """
+        query ComprehensiveHealthCheck {
+          info {
+            machineId time
+            versions { unraid }
+            os { uptime }
+          }
+          array { state }
+          notifications {
+            overview { unread { alert warning total } }
+          }
+          docker {
+            containers(skipCache: true) { id state status }
+          }
+        }
+        """
+        data = await make_graphql_request(query)
+        api_latency = round((time.time() - start_time) * 1000, 2)
+
+        health_info: dict[str, Any] = {
+            "status": "healthy",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "api_latency_ms": api_latency,
+            "server": {
+                "name": "Unraid MCP Server",
+                "version": VERSION,
+                "transport": UNRAID_MCP_TRANSPORT,
+                "host": UNRAID_MCP_HOST,
+                "port": UNRAID_MCP_PORT,
+            },
+        }
+
+        if not data:
+            health_info["status"] = "unhealthy"
+            health_info["issues"] = ["No response from Unraid API"]
             return health_info
 
-        except Exception as e:
-            logger.error(f"Health check failed: {e}")
-            return {
-                "status": "unhealthy",
-                "timestamp": datetime.datetime.utcnow().isoformat(),
-                "error": str(e),
-                "api_latency_ms": round((time.time() - start_time) * 1000, 2) if 'start_time' in locals() else None,
-                "server": {
-                    "name": "Unraid MCP Server",
-                    "version": "0.1.0",
-                    "transport": UNRAID_MCP_TRANSPORT,
-                    "host": UNRAID_MCP_HOST,
-                    "port": UNRAID_MCP_PORT
-                }
+        # System info
+        info = data.get("info", {})
+        if info:
+            health_info["unraid_system"] = {
+                "status": "connected",
+                "url": UNRAID_API_URL,
+                "machine_id": info.get("machineId"),
+                "version": info.get("versions", {}).get("unraid"),
+                "uptime": info.get("os", {}).get("uptime"),
+            }
+        else:
+            _escalate("degraded")
+            issues.append("Unable to retrieve system info")
+
+        # Array
+        array_info = data.get("array", {})
+        if array_info:
+            state = array_info.get("state", "unknown")
+            health_info["array_status"] = {
+                "state": state,
+                "healthy": state in ("STARTED", "STOPPED"),
+            }
+            if state not in ("STARTED", "STOPPED"):
+                _escalate("warning")
+                issues.append(f"Array in unexpected state: {state}")
+        else:
+            _escalate("warning")
+            issues.append("Unable to retrieve array status")
+
+        # Notifications
+        notifications = data.get("notifications", {})
+        if notifications and notifications.get("overview"):
+            unread = notifications["overview"].get("unread", {})
+            alerts = unread.get("alert", 0)
+            health_info["notifications"] = {
+                "unread_total": unread.get("total", 0),
+                "unread_alerts": alerts,
+                "unread_warnings": unread.get("warning", 0),
+            }
+            if alerts > 0:
+                _escalate("warning")
+                issues.append(f"{alerts} unread alert(s)")
+
+        # Docker
+        docker = data.get("docker", {})
+        if docker and docker.get("containers"):
+            containers = docker["containers"]
+            health_info["docker_services"] = {
+                "total": len(containers),
+                "running": len([c for c in containers if c.get("state") == "running"]),
+                "stopped": len([c for c in containers if c.get("state") == "exited"]),
             }
 
-    logger.info("Health tools registered successfully")
+        # Latency assessment
+        if api_latency > 10000:
+            _escalate("degraded")
+            issues.append(f"Very high API latency: {api_latency}ms")
+        elif api_latency > 5000:
+            _escalate("warning")
+            issues.append(f"High API latency: {api_latency}ms")
+
+        # Resolve final status from severity level
+        severity_to_status = {v: k for k, v in _SEVERITY.items()}
+        health_info["status"] = severity_to_status.get(health_severity, "healthy")
+        if issues:
+            health_info["issues"] = issues
+        health_info["performance"] = {
+            "api_response_time_ms": api_latency,
+            "check_duration_ms": round((time.time() - start_time) * 1000, 2),
+        }
+
+        return health_info
+
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "error": str(e),
+            "server": {
+                "name": "Unraid MCP Server",
+                "version": VERSION,
+                "transport": UNRAID_MCP_TRANSPORT,
+                "host": UNRAID_MCP_HOST,
+                "port": UNRAID_MCP_PORT,
+            },
+        }
+
+
+async def _diagnose_subscriptions() -> dict[str, Any]:
+    """Import and run subscription diagnostics."""
+    try:
+        from ..subscriptions.manager import subscription_manager
+        from ..subscriptions.resources import ensure_subscriptions_started
+
+        await ensure_subscriptions_started()
+
+        status = subscription_manager.get_subscription_status()
+        connection_issues: list[dict[str, Any]] = []
+
+        diagnostic_info: dict[str, Any] = {
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "environment": {
+                "auto_start_enabled": subscription_manager.auto_start_enabled,
+                "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
+                "api_url_configured": bool(UNRAID_API_URL),
+            },
+            "subscriptions": status,
+            "summary": {
+                "total_configured": len(subscription_manager.subscription_configs),
+                "active_count": len(subscription_manager.active_subscriptions),
+                "with_data": len(subscription_manager.resource_data),
+                "in_error_state": 0,
+                "connection_issues": connection_issues,
+            },
+        }
+
+        for sub_name, sub_status in status.items():
+            runtime = sub_status.get("runtime", {})
+            conn_state = runtime.get("connection_state", "unknown")
+            if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded"):
+                diagnostic_info["summary"]["in_error_state"] += 1
+            if runtime.get("last_error"):
+                connection_issues.append({
+                    "subscription": sub_name,
+                    "state": conn_state,
+                    "error": runtime["last_error"],
+                })
+
+        return diagnostic_info
+
+    except ImportError:
+        return {
+            "error": "Subscription modules not available",
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+    except Exception as e:
+        raise ToolError(f"Failed to generate diagnostics: {str(e)}") from e

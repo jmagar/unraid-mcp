@@ -4,18 +4,29 @@ This module provides the HTTP client interface for making GraphQL requests
 to the Unraid API with proper timeout handling and error management.
 """
 
+import asyncio
 import json
 from typing import Any
 
 import httpx
 
 from ..config.logging import logger
-from ..config.settings import TIMEOUT_CONFIG, UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL
+from ..config.settings import (
+    TIMEOUT_CONFIG,
+    UNRAID_API_KEY,
+    UNRAID_API_URL,
+    UNRAID_VERIFY_SSL,
+    VERSION,
+)
 from ..core.exceptions import ToolError
 
 # HTTP timeout configuration
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
 DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG['disk_operations'], connect=5.0)
+
+# Global connection pool (module-level singleton)
+_http_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
 
 
 def is_idempotent_error(error_message: str, operation: str) -> bool:
@@ -48,6 +59,49 @@ def is_idempotent_error(error_message: str, operation: str) -> bool:
     return False
 
 
+async def get_http_client() -> httpx.AsyncClient:
+    """Get or create shared HTTP client with connection pooling.
+
+    Returns:
+        Singleton AsyncClient instance with connection pooling enabled
+    """
+    global _http_client
+
+    async with _client_lock:
+        if _http_client is None or _http_client.is_closed:
+            _http_client = httpx.AsyncClient(
+                # Connection pool settings
+                limits=httpx.Limits(
+                    max_keepalive_connections=20,
+                    max_connections=100,
+                    keepalive_expiry=30.0
+                ),
+                # Default timeout (can be overridden per-request)
+                timeout=DEFAULT_TIMEOUT,
+                # SSL verification
+                verify=UNRAID_VERIFY_SSL,
+                # Connection pooling headers
+                headers={
+                    "Connection": "keep-alive",
+                    "User-Agent": f"UnraidMCPServer/{VERSION}"
+                }
+            )
+            logger.info("Created shared HTTP client with connection pooling (20 keepalive, 100 max connections)")
+
+        return _http_client
+
+
+async def close_http_client() -> None:
+    """Close the shared HTTP client (call on server shutdown)."""
+    global _http_client
+
+    async with _client_lock:
+        if _http_client is not None:
+            await _http_client.aclose()
+            _http_client = None
+            logger.info("Closed shared HTTP client")
+
+
 async def make_graphql_request(
     query: str,
     variables: dict[str, Any] | None = None,
@@ -78,7 +132,7 @@ async def make_graphql_request(
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": UNRAID_API_KEY,
-        "User-Agent": "UnraidMCPServer/0.1.0"  # Custom user-agent
+        "User-Agent": f"UnraidMCPServer/{VERSION}"  # Custom user-agent
     }
 
     payload: dict[str, Any] = {"query": query}
@@ -88,39 +142,54 @@ async def make_graphql_request(
     logger.debug(f"Making GraphQL request to {UNRAID_API_URL}:")
     logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
     if variables:
-        logger.debug(f"Variables: {variables}")
-
-    current_timeout = custom_timeout if custom_timeout is not None else DEFAULT_TIMEOUT
+        _SENSITIVE_KEYS = {"password", "key", "secret", "token", "apiKey"}
+        redacted = {
+            k: ("***" if k.lower() in _SENSITIVE_KEYS else v)
+            for k, v in (variables.get("input", variables) if isinstance(variables.get("input"), dict) else variables).items()
+        }
+        logger.debug(f"Variables: {redacted}")
 
     try:
-        async with httpx.AsyncClient(timeout=current_timeout, verify=UNRAID_VERIFY_SSL) as client:
+        # Get the shared HTTP client with connection pooling
+        client = await get_http_client()
+
+        # Override timeout if custom timeout specified
+        if custom_timeout is not None:
+            response = await client.post(
+                UNRAID_API_URL,
+                json=payload,
+                headers=headers,
+                timeout=custom_timeout
+            )
+        else:
             response = await client.post(UNRAID_API_URL, json=payload, headers=headers)
-            response.raise_for_status()  # Raise an exception for HTTP error codes 4xx/5xx
 
-            response_data = response.json()
-            if "errors" in response_data and response_data["errors"]:
-                error_details = "; ".join([err.get("message", str(err)) for err in response_data["errors"]])
+        response.raise_for_status()  # Raise an exception for HTTP error codes 4xx/5xx
 
-                # Check if this is an idempotent error that should be treated as success
-                if operation_context and operation_context.get('operation'):
-                    operation = operation_context['operation']
-                    if is_idempotent_error(error_details, operation):
-                        logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
-                        # Return a success response with the current state information
-                        return {
-                            "idempotent_success": True,
-                            "operation": operation,
-                            "message": error_details,
-                            "original_errors": response_data["errors"]
-                        }
+        response_data = response.json()
+        if "errors" in response_data and response_data["errors"]:
+            error_details = "; ".join([err.get("message", str(err)) for err in response_data["errors"]])
 
-                logger.error(f"GraphQL API returned errors: {response_data['errors']}")
-                # Use ToolError for GraphQL errors to provide better feedback to LLM
-                raise ToolError(f"GraphQL API error: {error_details}")
+            # Check if this is an idempotent error that should be treated as success
+            if operation_context and operation_context.get('operation'):
+                operation = operation_context['operation']
+                if is_idempotent_error(error_details, operation):
+                    logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
+                    # Return a success response with the current state information
+                    return {
+                        "idempotent_success": True,
+                        "operation": operation,
+                        "message": error_details,
+                        "original_errors": response_data["errors"]
+                    }
 
-            logger.debug("GraphQL request successful.")
-            data = response_data.get("data", {})
-            return data if isinstance(data, dict) else {}  # Ensure we return dict
+            logger.error(f"GraphQL API returned errors: {response_data['errors']}")
+            # Use ToolError for GraphQL errors to provide better feedback to LLM
+            raise ToolError(f"GraphQL API error: {error_details}")
+
+        logger.debug("GraphQL request successful.")
+        data = response_data.get("data", {})
+        return data if isinstance(data, dict) else {}  # Ensure we return dict
 
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")

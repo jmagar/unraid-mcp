@@ -30,10 +30,10 @@ console = Console(stderr=True, force_terminal=True)
 
 class OverwriteFileHandler(logging.FileHandler):
     """Custom file handler that overwrites the log file when it reaches max size."""
-    
+
     def __init__(self, filename, max_bytes=10*1024*1024, mode='a', encoding=None, delay=False):
         """Initialize the handler.
-        
+
         Args:
             filename: Path to the log file
             max_bytes: Maximum file size in bytes before overwriting (default: 10MB)
@@ -43,7 +43,7 @@ class OverwriteFileHandler(logging.FileHandler):
         """
         self.max_bytes = max_bytes
         super().__init__(filename, mode, encoding, delay)
-    
+
     def emit(self, record):
         """Emit a record, checking file size and overwriting if needed."""
         # Check file size before writing
@@ -56,14 +56,14 @@ class OverwriteFileHandler(logging.FileHandler):
                         if self.stream:
                             self.stream.close()
                             self.stream = None
-                        
+
                         # Remove the old file and start fresh
                         if os.path.exists(self.baseFilename):
                             os.remove(self.baseFilename)
-                        
+
                         # Reopen with truncate mode
                         self.stream = self._open()
-                        
+
                         # Log a marker that the file was reset
                         reset_record = logging.LogRecord(
                             name="UnraidMCPServer.Logging",
@@ -75,11 +75,11 @@ class OverwriteFileHandler(logging.FileHandler):
                             exc_info=None
                         )
                         super().emit(reset_record)
-                        
-            except (OSError, IOError):
+
+            except OSError:
                 # If there's an issue checking file size, just continue normally
                 pass
-        
+
         # Emit the original record
         super().emit(record)
 

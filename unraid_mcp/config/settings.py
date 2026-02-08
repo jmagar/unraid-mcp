@@ -29,6 +29,9 @@ for dotenv_path in dotenv_paths:
         load_dotenv(dotenv_path=dotenv_path)
         break
 
+# Application Version
+VERSION = "0.2.0"
+
 # Core API Configuration
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
 UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")

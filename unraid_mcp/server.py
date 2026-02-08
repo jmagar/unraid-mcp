@@ -15,38 +15,29 @@ from .config.settings import (
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
     UNRAID_MCP_TRANSPORT,
+    VERSION,
 )
-from .subscriptions.diagnostics import register_diagnostic_tools
-from .subscriptions.manager import SubscriptionManager
 from .subscriptions.resources import register_subscription_resources
-from .tools.docker import register_docker_tools
-from .tools.health import register_health_tools
-from .tools.rclone import register_rclone_tools
-from .tools.storage import register_storage_tools
-from .tools.system import register_system_tools
-from .tools.virtualization import register_vm_tools
+from .tools.array import register_array_tool
+from .tools.docker import register_docker_tool
+from .tools.health import register_health_tool
+from .tools.info import register_info_tool
+from .tools.keys import register_keys_tool
+from .tools.notifications import register_notifications_tool
+from .tools.rclone import register_rclone_tool
+from .tools.storage import register_storage_tool
+from .tools.users import register_users_tool
+from .tools.virtualization import register_vm_tool
 
 # Initialize FastMCP instance
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
-    version="0.1.0",
+    version=VERSION,
 )
 
-# Initialize subscription manager
-subscription_manager = SubscriptionManager()
-
-
-async def autostart_subscriptions() -> None:
-    """Auto-start all subscriptions marked for auto-start in SubscriptionManager"""
-    logger.info("[AUTOSTART] Initiating subscription auto-start process...")
-
-    try:
-        # Use the SubscriptionManager auto-start method
-        await subscription_manager.auto_start_all_subscriptions()
-        logger.info("[AUTOSTART] Auto-start process completed successfully")
-    except Exception as e:
-        logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
+# Note: SubscriptionManager singleton is defined in subscriptions/manager.py
+# and imported by resources.py - no duplicate instance needed here
 
 
 def register_all_modules() -> None:
@@ -54,35 +45,24 @@ def register_all_modules() -> None:
     try:
         # Register subscription resources first
         register_subscription_resources(mcp)
-        logger.info("📊 Subscription resources registered")
+        logger.info("Subscription resources registered")
 
-        # Register diagnostic tools
-        register_diagnostic_tools(mcp)
-        logger.info("🔧 Diagnostic tools registered")
+        # Register all 10 consolidated tools
+        register_info_tool(mcp)
+        register_array_tool(mcp)
+        register_storage_tool(mcp)
+        register_docker_tool(mcp)
+        register_vm_tool(mcp)
+        register_notifications_tool(mcp)
+        register_rclone_tool(mcp)
+        register_users_tool(mcp)
+        register_keys_tool(mcp)
+        register_health_tool(mcp)
 
-        # Register all tool categories
-        register_system_tools(mcp)
-        logger.info("🖥️  System tools registered")
-
-        register_docker_tools(mcp)
-        logger.info("🐳 Docker tools registered")
-
-        register_vm_tools(mcp)
-        logger.info("💻 Virtualization tools registered")
-
-        register_storage_tools(mcp)
-        logger.info("💾 Storage tools registered")
-
-        register_health_tools(mcp)
-        logger.info("🏥 Health tools registered")
-
-        register_rclone_tools(mcp)
-        logger.info("☁️  RClone tools registered")
-
-        logger.info("🎯 All modules registered successfully - Server ready!")
+        logger.info("All 10 tools registered successfully - Server ready!")
 
     except Exception as e:
-        logger.error(f"❌ Failed to register modules: {e}", exc_info=True)
+        logger.error(f"Failed to register modules: {e}", exc_info=True)
         raise
 
 
@@ -106,34 +86,31 @@ def run_server() -> None:
     # Register all modules
     register_all_modules()
 
-    logger.info(f"🚀 Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport...")
+    logger.info(f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport...")
 
     try:
-        # Auto-start subscriptions on first async operation
         if UNRAID_MCP_TRANSPORT == "streamable-http":
-            # Use the recommended Streamable HTTP transport
             mcp.run(
                 transport="streamable-http",
                 host=UNRAID_MCP_HOST,
                 port=UNRAID_MCP_PORT,
-                path="/mcp"  # Standard path for MCP
+                path="/mcp"
             )
         elif UNRAID_MCP_TRANSPORT == "sse":
-            # Deprecated SSE transport - log warning
-            logger.warning("SSE transport is deprecated and may be removed in a future version. Consider switching to 'streamable-http'.")
+            logger.warning("SSE transport is deprecated. Consider switching to 'streamable-http'.")
             mcp.run(
                 transport="sse",
                 host=UNRAID_MCP_HOST,
                 port=UNRAID_MCP_PORT,
-                path="/mcp"  # Keep custom path for SSE
+                path="/mcp"
             )
         elif UNRAID_MCP_TRANSPORT == "stdio":
-            mcp.run()  # Defaults to stdio
+            mcp.run()
         else:
-            logger.error(f"Unsupported MCP_TRANSPORT: {UNRAID_MCP_TRANSPORT}. Choose 'streamable-http' (recommended), 'sse' (deprecated), or 'stdio'.")
+            logger.error(f"Unsupported MCP_TRANSPORT: {UNRAID_MCP_TRANSPORT}. Choose 'streamable-http', 'sse', or 'stdio'.")
             sys.exit(1)
     except Exception as e:
-        logger.critical(f"❌ Failed to start Unraid MCP server: {e}", exc_info=True)
+        logger.critical(f"Failed to start Unraid MCP server: {e}", exc_info=True)
         sys.exit(1)
 
 

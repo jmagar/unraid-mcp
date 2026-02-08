@@ -1,11 +1,10 @@
-"""RClone cloud storage remote management tools.
+"""RClone cloud storage remote management.
 
-This module provides tools for managing RClone remotes including listing existing
-remotes, getting configuration forms, creating new remotes, and deleting remotes
-for various cloud storage providers (S3, Google Drive, Dropbox, FTP, etc.).
+Provides the `unraid_rclone` tool with 4 actions for managing
+cloud storage remotes (S3, Google Drive, Dropbox, FTP, etc.).
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from fastmcp import FastMCP
 
@@ -13,166 +12,121 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+QUERIES: dict[str, str] = {
+    "list_remotes": """
+        query ListRCloneRemotes {
+          rclone { remotes { name type parameters config } }
+        }
+    """,
+    "config_form": """
+        query GetRCloneConfigForm($formOptions: RCloneConfigFormInput) {
+          rclone { configForm(formOptions: $formOptions) { id dataSchema uiSchema } }
+        }
+    """,
+}
 
-def register_rclone_tools(mcp: FastMCP) -> None:
-    """Register all RClone tools with the FastMCP instance.
+MUTATIONS: dict[str, str] = {
+    "create_remote": """
+        mutation CreateRCloneRemote($input: CreateRCloneRemoteInput!) {
+          rclone { createRCloneRemote(input: $input) { name type parameters } }
+        }
+    """,
+    "delete_remote": """
+        mutation DeleteRCloneRemote($input: DeleteRCloneRemoteInput!) {
+          rclone { deleteRCloneRemote(input: $input) }
+        }
+    """,
+}
 
-    Args:
-        mcp: FastMCP instance to register tools with
-    """
+DESTRUCTIVE_ACTIONS = {"delete_remote"}
 
-    @mcp.tool()
-    async def list_rclone_remotes() -> list[dict[str, Any]]:
-        """Retrieves all configured RClone remotes with their configuration details."""
-        try:
-            query = """
-            query ListRCloneRemotes {
-                rclone {
-                    remotes {
-                        name
-                        type
-                        parameters
-                        config
-                    }
-                }
-            }
-            """
+RCLONE_ACTIONS = Literal[
+    "list_remotes", "config_form", "create_remote", "delete_remote",
+]
 
-            response_data = await make_graphql_request(query)
 
-            if "rclone" in response_data and "remotes" in response_data["rclone"]:
-                remotes = response_data["rclone"]["remotes"]
-                logger.info(f"Retrieved {len(remotes)} RClone remotes")
-                return list(remotes) if isinstance(remotes, list) else []
-
-            return []
-
-        except Exception as e:
-            logger.error(f"Failed to list RClone remotes: {str(e)}")
-            raise ToolError(f"Failed to list RClone remotes: {str(e)}") from e
+def register_rclone_tool(mcp: FastMCP) -> None:
+    """Register the unraid_rclone tool with the FastMCP instance."""
 
     @mcp.tool()
-    async def get_rclone_config_form(provider_type: str | None = None) -> dict[str, Any]:
-        """
-        Get RClone configuration form schema for setting up new remotes.
+    async def unraid_rclone(
+        action: RCLONE_ACTIONS,
+        confirm: bool = False,
+        name: str | None = None,
+        provider_type: str | None = None,
+        config_data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Manage RClone cloud storage remotes.
 
-        Args:
-            provider_type: Optional provider type to get specific form (e.g., 's3', 'drive', 'dropbox')
+        Actions:
+          list_remotes - List all configured remotes
+          config_form - Get config form schema (optional provider_type for specific provider)
+          create_remote - Create a new remote (requires name, provider_type, config_data)
+          delete_remote - Delete a remote (requires name, confirm=True)
         """
+        all_actions = set(QUERIES) | set(MUTATIONS)
+        if action not in all_actions:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+
+        if action in DESTRUCTIVE_ACTIONS and not confirm:
+            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+
         try:
-            query = """
-            query GetRCloneConfigForm($formOptions: RCloneConfigFormInput) {
-                rclone {
-                    configForm(formOptions: $formOptions) {
-                        id
-                        dataSchema
-                        uiSchema
-                    }
-                }
-            }
-            """
+            logger.info(f"Executing unraid_rclone action={action}")
 
-            variables = {}
-            if provider_type:
-                variables["formOptions"] = {"providerType": provider_type}
+            if action == "list_remotes":
+                data = await make_graphql_request(QUERIES["list_remotes"])
+                remotes = data.get("rclone", {}).get("remotes", [])
+                return {"remotes": list(remotes) if isinstance(remotes, list) else []}
 
-            response_data = await make_graphql_request(query, variables)
+            if action == "config_form":
+                variables: dict[str, Any] = {}
+                if provider_type:
+                    variables["formOptions"] = {"providerType": provider_type}
+                data = await make_graphql_request(
+                    QUERIES["config_form"], variables or None
+                )
+                form = data.get("rclone", {}).get("configForm", {})
+                if not form:
+                    raise ToolError("No RClone config form data received")
+                return dict(form)
 
-            if "rclone" in response_data and "configForm" in response_data["rclone"]:
-                form_data = response_data["rclone"]["configForm"]
-                logger.info(f"Retrieved RClone config form for {provider_type or 'general'}")
-                return dict(form_data) if isinstance(form_data, dict) else {}
-
-            raise ToolError("No RClone config form data received")
-
-        except Exception as e:
-            logger.error(f"Failed to get RClone config form: {str(e)}")
-            raise ToolError(f"Failed to get RClone config form: {str(e)}") from e
-
-    @mcp.tool()
-    async def create_rclone_remote(name: str, provider_type: str, config_data: dict[str, Any]) -> dict[str, Any]:
-        """
-        Create a new RClone remote with the specified configuration.
-
-        Args:
-            name: Name for the new remote
-            provider_type: Type of provider (e.g., 's3', 'drive', 'dropbox', 'ftp')
-            config_data: Configuration parameters specific to the provider type
-        """
-        try:
-            mutation = """
-            mutation CreateRCloneRemote($input: CreateRCloneRemoteInput!) {
-                rclone {
-                    createRCloneRemote(input: $input) {
-                        name
-                        type
-                        parameters
-                    }
-                }
-            }
-            """
-
-            variables = {
-                "input": {
-                    "name": name,
-                    "type": provider_type,
-                    "config": config_data
-                }
-            }
-
-            response_data = await make_graphql_request(mutation, variables)
-
-            if "rclone" in response_data and "createRCloneRemote" in response_data["rclone"]:
-                remote_info = response_data["rclone"]["createRCloneRemote"]
-                logger.info(f"Successfully created RClone remote: {name}")
+            if action == "create_remote":
+                if name is None or provider_type is None or config_data is None:
+                    raise ToolError(
+                        "create_remote requires name, provider_type, and config_data"
+                    )
+                data = await make_graphql_request(
+                    MUTATIONS["create_remote"],
+                    {"input": {"name": name, "type": provider_type, "config": config_data}},
+                )
+                remote = data.get("rclone", {}).get("createRCloneRemote", {})
                 return {
                     "success": True,
-                    "message": f"RClone remote '{name}' created successfully",
-                    "remote": remote_info
+                    "message": f"Remote '{name}' created successfully",
+                    "remote": remote,
                 }
 
-            raise ToolError("Failed to create RClone remote")
-
-        except Exception as e:
-            logger.error(f"Failed to create RClone remote {name}: {str(e)}")
-            raise ToolError(f"Failed to create RClone remote {name}: {str(e)}") from e
-
-    @mcp.tool()
-    async def delete_rclone_remote(name: str) -> dict[str, Any]:
-        """
-        Delete an existing RClone remote by name.
-
-        Args:
-            name: Name of the remote to delete
-        """
-        try:
-            mutation = """
-            mutation DeleteRCloneRemote($input: DeleteRCloneRemoteInput!) {
-                rclone {
-                    deleteRCloneRemote(input: $input)
-                }
-            }
-            """
-
-            variables = {
-                "input": {
-                    "name": name
-                }
-            }
-
-            response_data = await make_graphql_request(mutation, variables)
-
-            if "rclone" in response_data and response_data["rclone"]["deleteRCloneRemote"]:
-                logger.info(f"Successfully deleted RClone remote: {name}")
+            if action == "delete_remote":
+                if not name:
+                    raise ToolError("name is required for 'delete_remote' action")
+                data = await make_graphql_request(
+                    MUTATIONS["delete_remote"], {"input": {"name": name}}
+                )
+                success = data.get("rclone", {}).get("deleteRCloneRemote", False)
+                if not success:
+                    raise ToolError(f"Failed to delete remote '{name}'")
                 return {
                     "success": True,
-                    "message": f"RClone remote '{name}' deleted successfully"
+                    "message": f"Remote '{name}' deleted successfully",
                 }
 
-            raise ToolError(f"Failed to delete RClone remote '{name}'")
+            return {}
 
+        except ToolError:
+            raise
         except Exception as e:
-            logger.error(f"Failed to delete RClone remote {name}: {str(e)}")
-            raise ToolError(f"Failed to delete RClone remote {name}: {str(e)}") from e
+            logger.error(f"Error in unraid_rclone action={action}: {e}", exc_info=True)
+            raise ToolError(f"Failed to execute rclone/{action}: {str(e)}") from e
 
-    logger.info("RClone tools registered successfully")
+    logger.info("RClone tool registered successfully")
