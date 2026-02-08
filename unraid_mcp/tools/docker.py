@@ -289,7 +289,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
             # Single-container mutations
             if action in MUTATIONS:
                 actual_id = await _resolve_container_id(container_id or "")
-                op_context = {"operation": action} if action in ("start", "stop") else None
+                op_context: dict[str, str] | None = {"operation": action} if action in ("start", "stop") else None
                 data = await make_graphql_request(
                     MUTATIONS[action], {"id": actual_id},
                     operation_context=op_context,
