@@ -13,6 +13,9 @@ from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
 from ..core.exceptions import ToolError
 
+
+_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
+
 QUERIES: dict[str, str] = {
     "shares": """
         query GetSharesInfo {
@@ -99,7 +102,6 @@ def register_storage_tool(mcp: FastMCP) -> None:
         if action == "logs":
             if not log_path:
                 raise ToolError("log_path is required for 'logs' action")
-            _ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
             # Normalize path to prevent traversal attacks (e.g. /var/log/../../etc/shadow)
             normalized = posixpath.normpath(log_path)
             if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
@@ -165,6 +167,6 @@ def register_storage_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_storage action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute storage/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute storage/{action}: {e!s}") from e
 
     logger.info("Storage tool registered successfully")
