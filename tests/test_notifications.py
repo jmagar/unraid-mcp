@@ -1,5 +1,6 @@
 """Tests for unraid_notifications tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +10,7 @@ from unraid_mcp.core.exceptions import ToolError
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 

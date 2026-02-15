@@ -1,5 +1,6 @@
 """Tests for unraid_info tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from unraid_mcp.tools.info import (
     _process_array_status,
     _process_system_info,
 )
+
 
 # --- Unit tests for helper functions ---
 
@@ -115,7 +117,7 @@ class TestProcessArrayStatus:
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -207,3 +209,32 @@ class TestUnraidInfoTool:
         result = await tool_fn(action="ups_devices")
         assert len(result["ups_devices"]) == 1
         assert result["ups_devices"][0]["model"] == "APC"
+
+
+class TestInfoNetworkErrors:
+    """Tests for network-level failures in info operations."""
+
+    async def test_overview_http_401_unauthorized(self, _mock_graphql: AsyncMock) -> None:
+        """HTTP 401 Unauthorized should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError("HTTP error 401: Unauthorized")
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="401"):
+            await tool_fn(action="overview")
+
+    async def test_overview_connection_refused(self, _mock_graphql: AsyncMock) -> None:
+        """Connection refused should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Network connection error: [Errno 111] Connection refused"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Connection refused"):
+            await tool_fn(action="overview")
+
+    async def test_network_json_decode_error(self, _mock_graphql: AsyncMock) -> None:
+        """Invalid JSON from API should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Invalid JSON response from Unraid API: Expecting value"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Invalid JSON"):
+            await tool_fn(action="network")

@@ -1,5 +1,6 @@
 """Tests for unraid_health tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +10,7 @@ from unraid_mcp.core.exceptions import ToolError
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.health.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -104,9 +105,8 @@ class TestHealthActions:
         with patch(
             "unraid_mcp.tools.health._diagnose_subscriptions",
             side_effect=RuntimeError("broken"),
-        ):
-            with pytest.raises(ToolError, match="broken"):
-                await tool_fn(action="diagnose")
+        ), pytest.raises(ToolError, match="broken"):
+            await tool_fn(action="diagnose")
 
     async def test_diagnose_success(self, _mock_graphql: AsyncMock) -> None:
         """Diagnose returns subscription status when modules are available."""
@@ -120,17 +120,24 @@ class TestHealthActions:
 
     async def test_diagnose_import_error_internal(self) -> None:
         """_diagnose_subscriptions catches ImportError and returns error dict."""
-        import builtins
+        import sys
 
         from unraid_mcp.tools.health import _diagnose_subscriptions
 
-        real_import = builtins.__import__
+        # Remove cached subscription modules so the import is re-triggered
+        cached = {k: v for k, v in sys.modules.items() if "unraid_mcp.subscriptions" in k}
+        for k in cached:
+            del sys.modules[k]
 
-        def fail_subscriptions(name, *args, **kwargs):
-            if "subscriptions" in name:
-                raise ImportError("no module")
-            return real_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=fail_subscriptions):
-            result = await _diagnose_subscriptions()
-            assert "error" in result
+        try:
+            # Replace the modules with objects that raise ImportError on access
+            with patch.dict(sys.modules, {
+                "unraid_mcp.subscriptions": None,
+                "unraid_mcp.subscriptions.manager": None,
+                "unraid_mcp.subscriptions.resources": None,
+            }):
+                result = await _diagnose_subscriptions()
+                assert "error" in result
+        finally:
+            # Restore cached modules
+            sys.modules.update(cached)

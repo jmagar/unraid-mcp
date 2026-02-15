@@ -3,7 +3,9 @@
 Common issues and solutions when working with the Unraid GraphQL API.
 
 ## "Cannot query field" error
+
 Field name doesn't exist in your Unraid version. Use introspection to find valid fields:
+
 ```bash
 ./scripts/unraid-query.sh -q "{ __type(name: \"TypeName\") { fields { name } } }"
 ```

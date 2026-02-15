@@ -917,7 +917,7 @@ Common differences from online documentation:
 2. **Use `array.disks` for array disks** - The top-level `disks` query includes ALL disks (USB, SSDs, etc.)
 3. **Always check errors** - GraphQL returns errors in `errors` array
 4. **Use introspection** - Field names can vary between versions
-5. **Sizes are in kilobytes** - Disk sizes and capacities are in KB, not bytes
+5. **Sizes vary by context** - Disk/array capacities are in kilobytes; memory values (from `info.memory`) are in bytes
 6. **Temperature is Celsius** - All temperature values are in Celsius
 7. **Handle empty arrays** - Many queries return `[]` when no data exists
 8. **Use viewer role** - Create API keys with "Viewer" role for read-only access
@@ -926,8 +926,8 @@ Common differences from online documentation:
 
 ## 🚫 Known Limitations
 
-1. **No Docker container logs** - Container output logs are NOT accessible via API
-2. **No real-time streaming** - All queries are request/response, no WebSocket subscriptions
+1. **No Docker container logs** - Container output logs are NOT accessible via the read-only query API (use `docker.logs` mutation)
+2. **WebSocket subscriptions are available** - The Unraid API supports real-time subscriptions (array, Docker stats, notifications, etc.) via WebSocket
 3. **Some queries require higher permissions** - Read-only "Viewer" role may not access all queries
 4. **No mutation examples included** - This guide covers read-only queries only
 

@@ -13,6 +13,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "list": """
         query ListDockerContainers {
@@ -98,7 +99,8 @@ MUTATIONS: dict[str, str] = {
 }
 
 DESTRUCTIVE_ACTIONS = {"remove"}
-CONTAINER_ACTIONS = {"start", "stop", "restart", "pause", "unpause", "remove", "update", "details", "logs"}
+_ACTIONS_REQUIRING_CONTAINER_ID = {"start", "stop", "restart", "pause", "unpause", "remove", "update", "details", "logs"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart"}
 
 DOCKER_ACTIONS = Literal[
     "list", "details", "start", "stop", "restart", "pause", "unpause",
@@ -107,7 +109,7 @@ DOCKER_ACTIONS = Literal[
 ]
 
 # Docker container IDs: 64 hex chars + optional suffix (e.g., ":local")
-_DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$")
+_DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 
 
 def find_container_by_identifier(
@@ -175,6 +177,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
         action: DOCKER_ACTIONS,
         container_id: str | None = None,
         network_id: str | None = None,
+        *,
         confirm: bool = False,
         tail_lines: int = 100,
     ) -> dict[str, Any]:
@@ -197,14 +200,13 @@ def register_docker_tool(mcp: FastMCP) -> None:
           port_conflicts - Check for port conflicts
           check_updates - Check which containers have updates available
         """
-        all_actions = set(QUERIES) | set(MUTATIONS) | {"restart"}
-        if action not in all_actions:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
-        if action in CONTAINER_ACTIONS and not container_id:
+        if action in _ACTIONS_REQUIRING_CONTAINER_ID and not container_id:
             raise ToolError(f"container_id is required for '{action}' action")
 
         if action == "network_details" and not network_id:
@@ -327,6 +329,6 @@ def register_docker_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_docker action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute docker/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute docker/{action}: {e!s}") from e
 
     logger.info("Docker tool registered successfully")

@@ -123,7 +123,7 @@ Always use `metrics` for monitoring, `info` for specifications.
 
 **List VMs:**
 ```bash
-./scripts/unraid-query.sh -q "{ vms { name state cpus memory } } }"
+./scripts/unraid-query.sh -q "{ vms { domain { name state } } }"
 ```
 
 **Note:** Container output logs are NOT accessible via API. Use `docker logs` via SSH.

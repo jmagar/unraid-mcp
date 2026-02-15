@@ -1,7 +1,7 @@
 # Unraid API Feature Gap Analysis
 
 > **Date:** 2026-02-07
-> **Purpose:** Comprehensive inventory of every API capability that could become an MCP tool, cross-referenced against our current 26 tools to identify gaps.
+> **Purpose:** Comprehensive inventory of every API capability that could become an MCP tool, cross-referenced against our current 10 tools (90 actions) to identify gaps.
 > **Sources:** 7 research documents (3,800+ lines), Unraid API source code analysis, community project reviews, official documentation crawl.
 
 ---
@@ -497,7 +497,7 @@ GRAPHQL_PUBSUB_CHANNEL {
 
 ## F. API Capabilities NOT Currently in the MCP Server
 
-The current MCP server has 26 tools. The following capabilities are available in the Unraid API but NOT covered by any existing tool.
+The current MCP server has 10 tools (90 actions) after consolidation. The following capabilities are available in the Unraid API but NOT covered by any existing tool.
 
 ### F.1 HIGH PRIORITY - New Tool Candidates
 
@@ -663,7 +663,7 @@ The current MCP server has 26 tools. The following capabilities are available in
 | **Queries** | ~30+ | 14 | ~16+ uncovered |
 | **Mutations** | ~50+ | 10 (start/stop Docker+VM, RClone CRUD) | ~40+ uncovered |
 | **Subscriptions** | ~30+ | 0 (2 diagnostic only) | ~30+ uncovered |
-| **Total Operations** | ~110+ | 24 active | ~86+ uncovered |
+| **Total Operations** | ~110+ | 90 active (10 tools) | ~20+ uncovered |
 
 **Current coverage: approximately 22% of available API operations.**
 
@@ -691,7 +691,7 @@ Capabilities this project offers that we do NOT:
 | **Update Status** | Check for OS/plugin updates | NOT available via GraphQL API |
 | **Mover Control** | Invoke the mover tool | NOT available via GraphQL API (Issue #1873) |
 | **Disk Thresholds** | Warning/critical temp settings | Partially available via `ArrayDisk.warning`/`critical` |
-| **54 MCP Tools** | Full MCP tool suite | We have 26 |
+| **54 MCP Tools** | Full MCP tool suite | We have 10 tools (90 actions) |
 | **WebSocket Events** | Real-time event stream | We have diagnostic-only subscriptions |
 
 ### G.2 PSUnraid (PowerShell Module)
@@ -828,7 +828,7 @@ Chose SSH over GraphQL API due to these gaps:
 | | **Low Priority Subtotal** | **18** | **92** |
 | | **GRAND TOTAL NEW TOOLS** | **66** | **92** |
 
-**Current tools: 26 | Potential total: 92 | Gap: 66 tools (72% of potential uncovered)**
+**Current tools: 10 (90 actions) | Potential total: ~110+ operations | Remaining gap: ~20+ uncovered operations**
 
 ---
 

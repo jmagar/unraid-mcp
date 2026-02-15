@@ -8,7 +8,6 @@ error handling, reconnection logic, and authentication.
 import asyncio
 import json
 import os
-import ssl
 from datetime import datetime
 from typing import Any
 
@@ -16,8 +15,9 @@ import websockets
 from websockets.typing import Subprotocol
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL
+from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
 from ..core.types import SubscriptionData
+from .utils import build_ws_ssl_context
 
 
 class SubscriptionManager:
@@ -141,28 +141,20 @@ class SubscriptionManager:
                 if not UNRAID_API_URL:
                     raise ValueError("UNRAID_API_URL is not configured")
 
-                if UNRAID_API_URL.startswith('https://'):
-                    ws_url = 'wss://' + UNRAID_API_URL[len('https://'):]
-                elif UNRAID_API_URL.startswith('http://'):
-                    ws_url = 'ws://' + UNRAID_API_URL[len('http://'):]
+                if UNRAID_API_URL.startswith("https://"):
+                    ws_url = "wss://" + UNRAID_API_URL[len("https://"):]
+                elif UNRAID_API_URL.startswith("http://"):
+                    ws_url = "ws://" + UNRAID_API_URL[len("http://"):]
                 else:
                     ws_url = UNRAID_API_URL
 
-                if not ws_url.endswith('/graphql'):
-                    ws_url = ws_url.rstrip('/') + '/graphql'
+                if not ws_url.endswith("/graphql"):
+                    ws_url = ws_url.rstrip("/") + "/graphql"
 
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
                 logger.debug(f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}")
 
-                # Build SSL context for wss:// connections
-                ssl_context = None
-                if ws_url.startswith('wss://'):
-                    if isinstance(UNRAID_VERIFY_SSL, str):
-                        ssl_context = ssl.create_default_context(cafile=UNRAID_VERIFY_SSL)
-                    elif UNRAID_VERIFY_SSL:
-                        ssl_context = ssl.create_default_context()
-                    else:
-                        ssl_context = ssl._create_unverified_context()
+                ssl_context = build_ws_ssl_context(ws_url)
 
                 # Connection with timeout
                 connect_timeout = 10
@@ -213,7 +205,7 @@ class SubscriptionManager:
                         init_data = json.loads(init_raw)
                         logger.debug(f"[PROTOCOL:{subscription_name}] Received init response: {init_data.get('type')}")
                     except json.JSONDecodeError as e:
-                        init_preview = init_raw[:200] if isinstance(init_raw, str) else init_raw[:200].decode('utf-8', errors='replace')
+                        init_preview = init_raw[:200] if isinstance(init_raw, str) else init_raw[:200].decode("utf-8", errors="replace")
                         logger.error(f"[PROTOCOL:{subscription_name}] Failed to decode init response: {init_preview}...")
                         self.last_error[subscription_name] = f"Invalid JSON in init response: {e}"
                         break
@@ -223,7 +215,7 @@ class SubscriptionManager:
                         logger.info(f"[PROTOCOL:{subscription_name}] Connection acknowledged successfully")
                         self.connection_states[subscription_name] = "authenticated"
                     elif init_data.get("type") == "connection_error":
-                        error_payload = init_data.get('payload', {})
+                        error_payload = init_data.get("payload", {})
                         logger.error(f"[AUTH:{subscription_name}] Authentication failed: {error_payload}")
                         self.last_error[subscription_name] = f"Authentication error: {error_payload}"
                         self.connection_states[subscription_name] = "auth_failed"
@@ -259,7 +251,7 @@ class SubscriptionManager:
                         try:
                             data = json.loads(message)
                             message_count += 1
-                            message_type = data.get('type', 'unknown')
+                            message_type = data.get("type", "unknown")
 
                             logger.debug(f"[DATA:{subscription_name}] Message #{message_count}: {message_type}")
 
@@ -288,7 +280,7 @@ class SubscriptionManager:
                                 await websocket.send(json.dumps({"type": "pong"}))
 
                             elif data.get("type") == "error":
-                                error_payload = data.get('payload', {})
+                                error_payload = data.get("payload", {})
                                 logger.error(f"[SUBSCRIPTION:{subscription_name}] Subscription error: {error_payload}")
                                 self.last_error[subscription_name] = f"Subscription error: {error_payload}"
                                 self.connection_states[subscription_name] = "error"
@@ -305,15 +297,15 @@ class SubscriptionManager:
                                 logger.debug(f"[PROTOCOL:{subscription_name}] Unhandled message type: {message_type}")
 
                         except json.JSONDecodeError as e:
-                            msg_preview = message[:200] if isinstance(message, str) else message[:200].decode('utf-8', errors='replace')
+                            msg_preview = message[:200] if isinstance(message, str) else message[:200].decode("utf-8", errors="replace")
                             logger.error(f"[PROTOCOL:{subscription_name}] Failed to decode message: {msg_preview}...")
                             logger.error(f"[PROTOCOL:{subscription_name}] JSON decode error: {e}")
                         except Exception as e:
                             logger.error(f"[DATA:{subscription_name}] Error processing message: {e}")
-                            msg_preview = message[:200] if isinstance(message, str) else message[:200].decode('utf-8', errors='replace')
+                            msg_preview = message[:200] if isinstance(message, str) else message[:200].decode("utf-8", errors="replace")
                             logger.debug(f"[DATA:{subscription_name}] Raw message: {msg_preview}...")
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 error_msg = "Connection or authentication timeout"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
                 self.last_error[subscription_name] = error_msg
@@ -353,9 +345,8 @@ class SubscriptionManager:
             age_seconds = (datetime.now() - data.last_updated).total_seconds()
             logger.debug(f"[RESOURCE:{resource_name}] Data found, age: {age_seconds:.1f}s")
             return data.data
-        else:
-            logger.debug(f"[RESOURCE:{resource_name}] No data available")
-            return None
+        logger.debug(f"[RESOURCE:{resource_name}] No data available")
+        return None
 
     def list_active_subscriptions(self) -> list[str]:
         """List all active subscriptions."""

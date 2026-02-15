@@ -7,7 +7,6 @@ development and debugging purposes.
 
 import asyncio
 import json
-import ssl
 from datetime import datetime
 from typing import Any
 
@@ -16,10 +15,11 @@ from fastmcp import FastMCP
 from websockets.typing import Subprotocol
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL
+from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
 from ..core.exceptions import ToolError
 from .manager import subscription_manager
 from .resources import ensure_subscriptions_started
+from .utils import build_ws_ssl_context
 
 
 def register_diagnostic_tools(mcp: FastMCP) -> None:
@@ -31,8 +31,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
-        """
-        Test a GraphQL subscription query directly to debug schema issues.
+        """Test a GraphQL subscription query directly to debug schema issues.
+
         Use this to find working subscription field names and structure.
 
         Args:
@@ -49,15 +49,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 raise ToolError("UNRAID_API_URL is not configured")
             ws_url = UNRAID_API_URL.replace("https://", "wss://").replace("http://", "ws://") + "/graphql"
 
-            # Build SSL context for wss:// connections
-            ssl_context = None
-            if ws_url.startswith("wss://"):
-                if isinstance(UNRAID_VERIFY_SSL, str):
-                    ssl_context = ssl.create_default_context(cafile=UNRAID_VERIFY_SSL)
-                elif UNRAID_VERIFY_SSL:
-                    ssl_context = ssl.create_default_context()
-                else:
-                    ssl_context = ssl._create_unverified_context()
+            ssl_context = build_ws_ssl_context(ws_url)
 
             # Test connection
             async with websockets.connect(
@@ -104,7 +96,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                         "query_tested": subscription_query
                     }
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     return {
                         "success": True,
                         "response": "No immediate response (subscriptions may only send data on changes)",
@@ -121,8 +113,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def diagnose_subscriptions() -> dict[str, Any]:
-        """
-        Comprehensive diagnostic tool for subscription system.
+        """Comprehensive diagnostic tool for subscription system.
+
         Shows detailed status, connection states, errors, and troubleshooting info.
 
         Returns:
@@ -163,14 +155,14 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
 
             # Calculate WebSocket URL
             if UNRAID_API_URL:
-                if UNRAID_API_URL.startswith('https://'):
-                    ws_url = 'wss://' + UNRAID_API_URL[len('https://'):]
-                elif UNRAID_API_URL.startswith('http://'):
-                    ws_url = 'ws://' + UNRAID_API_URL[len('http://'):]
+                if UNRAID_API_URL.startswith("https://"):
+                    ws_url = "wss://" + UNRAID_API_URL[len("https://"):]
+                elif UNRAID_API_URL.startswith("http://"):
+                    ws_url = "ws://" + UNRAID_API_URL[len("http://"):]
                 else:
                     ws_url = UNRAID_API_URL
-                if not ws_url.endswith('/graphql'):
-                    ws_url = ws_url.rstrip('/') + '/graphql'
+                if not ws_url.endswith("/graphql"):
+                    ws_url = ws_url.rstrip("/") + "/graphql"
                 diagnostic_info["environment"]["websocket_url"] = ws_url
 
             # Analyze issues
@@ -222,6 +214,6 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
 
         except Exception as e:
             logger.error(f"[DIAGNOSTIC] Failed to generate diagnostics: {e}")
-            raise ToolError(f"Failed to generate diagnostics: {str(e)}") from e
+            raise ToolError(f"Failed to generate diagnostics: {e!s}") from e
 
     logger.info("Subscription diagnostic tools registered successfully")

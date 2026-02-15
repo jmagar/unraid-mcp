@@ -119,7 +119,7 @@ The API implements a **multi-layered security architecture** separating authenti
 Applications can request API access via a self-service flow ([source](https://docs.unraid.net/API/api-key-app-developer-authorization-flow/)):
 
 ```
-https://[unraid-server]/ApiKeyAuthorize?name=MyApp&&scopes=docker:read,vm:*&&redirect_uri=https://myapp.com/callback&&state=abc123
+https://[unraid-server]/ApiKeyAuthorize?name=MyApp&scopes=docker:read,vm:*&redirect_uri=https://myapp.com/callback&state=abc123
 ```
 
 **Scope Format:** `resource:action` pattern
@@ -302,7 +302,7 @@ The subscription system is event-driven: file changes on disk (detected by choki
 **jmagar/unraid-mcp** (this project) is the primary MCP server for Unraid ([source](https://glama.ai/mcp/servers/@jmagar/unraid-mcp), [source](https://mcpmarket.com/server/unraid)):
 
 - Python-based MCP server using FastMCP framework
-- 26 tools for comprehensive Unraid management
+- 10 tools with 90 actions for comprehensive Unraid management
 - Read-only access by default for safety
 - Listed on Glama, MCP Market, MCPServers.com, LangDB, UBOS, JuheAPI
 - 21 GitHub stars

@@ -1,5 +1,6 @@
 """Tests for unraid_keys tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +10,7 @@ from unraid_mcp.core.exceptions import ToolError
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -88,3 +89,9 @@ class TestKeysActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="delete", key_id="k:1", confirm=True)
         assert result["success"] is True
+
+    async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.side_effect = RuntimeError("connection lost")
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="connection lost"):
+            await tool_fn(action="list")

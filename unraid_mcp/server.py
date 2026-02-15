@@ -29,6 +29,7 @@ from .tools.storage import register_storage_tool
 from .tools.users import register_users_tool
 from .tools.virtualization import register_vm_tool
 
+
 # Initialize FastMCP instance
 mcp = FastMCP(
     name="Unraid MCP Server",
@@ -48,16 +49,20 @@ def register_all_modules() -> None:
         logger.info("Subscription resources registered")
 
         # Register all 10 consolidated tools
-        register_info_tool(mcp)
-        register_array_tool(mcp)
-        register_storage_tool(mcp)
-        register_docker_tool(mcp)
-        register_vm_tool(mcp)
-        register_notifications_tool(mcp)
-        register_rclone_tool(mcp)
-        register_users_tool(mcp)
-        register_keys_tool(mcp)
-        register_health_tool(mcp)
+        registrars = [
+            register_info_tool,
+            register_array_tool,
+            register_storage_tool,
+            register_docker_tool,
+            register_vm_tool,
+            register_notifications_tool,
+            register_rclone_tool,
+            register_users_tool,
+            register_keys_tool,
+            register_health_tool,
+        ]
+        for registrar in registrars:
+            registrar(mcp)
 
         logger.info("All 10 tools registered successfully - Server ready!")
 

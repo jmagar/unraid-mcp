@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "list": """
         query ListApiKeys {
@@ -90,7 +91,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 if not key_id:
                     raise ToolError("key_id is required for 'get' action")
                 data = await make_graphql_request(QUERIES["get"], {"id": key_id})
-                return dict(data.get("apiKey", {}))
+                return dict(data.get("apiKey") or {})
 
             if action == "create":
                 if not name:
@@ -144,6 +145,6 @@ def register_keys_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_keys action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute keys/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute keys/{action}: {e!s}") from e
 
     logger.info("Keys tool registered successfully")

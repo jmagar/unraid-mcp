@@ -14,7 +14,7 @@ version = "0.2.0"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 authors = [
     {name = "jmagar", email = "jmagar@users.noreply.github.com"}
 ]
@@ -46,8 +46,6 @@ classifiers = [
 
     # Python Versions
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3 :: Only",
@@ -82,44 +80,6 @@ dependencies = [
     "pytz>=2025.2",
 ]
 
-[project.optional-dependencies]
-# Development dependencies
-dev = [
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.2.0",
-    "pytest-cov>=7.0.0",
-    "types-pytz>=2025.2.0.20250809",
-    "ty>=0.0.15",
-    "ruff>=0.12.8",
-    "black>=25.1.0",
-    "build>=1.2.2",
-    "twine>=6.0.1",
-]
-
-# Testing only
-test = [
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.2.0",
-    "pytest-cov>=7.0.0",
-]
-
-# Linting and formatting only
-lint = [
-    "ruff>=0.12.8",
-    "black>=25.1.0",
-    "ty>=0.0.15",
-]
-
-# Type checking stubs
-types = [
-    "types-pytz>=2025.2.0.20250809",
-]
-
-# All dev dependencies
-all = [
-    "unraid-mcp[dev,test,lint,types]",
-]
-
 # ============================================================================
 # Project URLs
 # ============================================================================
@@ -142,7 +102,6 @@ unraid-mcp = "unraid_mcp.main:main"
 # Build Configuration
 # ============================================================================
 [tool.hatch.build.targets.wheel]
-packages = ["unraid_mcp"]
 only-include = ["unraid_mcp"]
 
 [tool.hatch.build.targets.sdist]
@@ -167,33 +126,10 @@ exclude = [
 ]
 
 # ============================================================================
-# Tool Configuration: Black (Code Formatting)
-# ============================================================================
-[tool.black]
-line-length = 100
-target-version = ['py310', 'py311', 'py312', 'py313']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.ty_cache
-  | \.tox
-  | \.venv
-  | \.cache
-  | build
-  | dist
-  | __pycache__
-)/
-'''
-
-# ============================================================================
-# Tool Configuration: Ruff (Linting)
+# Tool Configuration: Ruff (Linting & Formatting)
 # ============================================================================
 [tool.ruff]
-target-version = "py310"
+target-version = "py312"
 line-length = 100
 cache-dir = ".cache/.ruff_cache"
 
@@ -236,7 +172,7 @@ select = [
     "RUF",
 ]
 ignore = [
-    "E501",   # line too long (handled by black)
+    "E501",   # line too long (handled by ruff formatter)
     "B008",   # function calls in argument defaults
     "C901",   # too complex
     "D100",   # missing docstring in public module
@@ -266,7 +202,7 @@ lines-after-imports = 2
 # Tool Configuration: ty (Type Checking)
 # ============================================================================
 [tool.ty.environment]
-python-version = "3.10"
+python-version = "3.12"
 
 [tool.ty.analysis]
 respect-type-ignore-comments = true
@@ -351,7 +287,6 @@ dev = [
     "types-pytz>=2025.2.0.20250809",
     "ty>=0.0.15",
     "ruff>=0.12.8",
-    "black>=25.1.0",
     "build>=1.2.2",
     "twine>=6.0.1",
 ]

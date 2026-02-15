@@ -16,6 +16,8 @@ OPTIONS:
     -k, --key KEY          API key (required)
     -q, --query QUERY      GraphQL query (required)
     -f, --format FORMAT    Output format: json (default), raw, pretty
+    --ignore-errors        Continue if GraphQL returns data alongside errors
+    --insecure             Disable TLS certificate verification
     -h, --help             Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -43,6 +45,8 @@ URL="${UNRAID_URL:-}"
 API_KEY="${UNRAID_API_KEY:-}"
 QUERY=""
 FORMAT="json"
+IGNORE_ERRORS="${IGNORE_ERRORS:-false}"
+INSECURE="false"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -62,6 +66,14 @@ while [[ $# -gt 0 ]]; do
         -f|--format)
             FORMAT="$2"
             shift 2
+            ;;
+        --ignore-errors)
+            IGNORE_ERRORS="true"
+            shift
+            ;;
+        --insecure)
+            INSECURE="true"
+            shift
             ;;
         -h|--help)
             usage
@@ -89,15 +101,22 @@ if [[ -z "$QUERY" ]]; then
     exit 1
 fi
 
+# Build JSON payload with proper escaping
+PAYLOAD=$(jq -n --arg q "$QUERY" '{"query": $q}')
+
+# Build curl flags
+CURL_FLAGS=("-sL" "-X" "POST")
+[[ "$INSECURE" == "true" ]] && CURL_FLAGS+=("-k")
+
 # Make the request
-RESPONSE=$(curl -skL -X POST "$URL" \
+RESPONSE=$(curl "${CURL_FLAGS[@]}" "$URL" \
     -H "Content-Type: application/json" \
     -H "x-api-key: $API_KEY" \
-    -d "{\"query\":\"$QUERY\"}")
+    -d "$PAYLOAD")
 
 # Check for errors
 if echo "$RESPONSE" | jq -e '.errors' > /dev/null 2>&1; then
-    # If we have data despite errors, and --ignore-errors is set, continue
+    # If we have data despite errors and --ignore-errors was passed, continue
     if [[ "$IGNORE_ERRORS" == "true" ]] && echo "$RESPONSE" | jq -e '.data' > /dev/null 2>&1; then
         echo "GraphQL Warning:" >&2
         echo "$RESPONSE" | jq -r '.errors[0].message' >&2

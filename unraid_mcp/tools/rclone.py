@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "list_remotes": """
         query ListRCloneRemotes {
@@ -39,6 +40,7 @@ MUTATIONS: dict[str, str] = {
 }
 
 DESTRUCTIVE_ACTIONS = {"delete_remote"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 RCLONE_ACTIONS = Literal[
     "list_remotes", "config_form", "create_remote", "delete_remote",
@@ -64,9 +66,8 @@ def register_rclone_tool(mcp: FastMCP) -> None:
           create_remote - Create a new remote (requires name, provider_type, config_data)
           delete_remote - Delete a remote (requires name, confirm=True)
         """
-        all_actions = set(QUERIES) | set(MUTATIONS)
-        if action not in all_actions:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
@@ -129,6 +130,6 @@ def register_rclone_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_rclone action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute rclone/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute rclone/{action}: {e!s}") from e
 
     logger.info("RClone tool registered successfully")

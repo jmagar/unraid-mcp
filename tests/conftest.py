@@ -1,5 +1,6 @@
 """Shared test fixtures and helpers for Unraid MCP server tests."""
 
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -8,7 +9,7 @@ from fastmcp import FastMCP
 
 
 @pytest.fixture
-def mock_graphql_request() -> AsyncMock:
+def mock_graphql_request() -> Generator[AsyncMock, None, None]:
     """Fixture that patches make_graphql_request at the core module.
 
     NOTE: Since each tool file imports make_graphql_request into its own
@@ -47,4 +48,4 @@ def make_tool_fn(
     register_fn = getattr(module, register_fn_name)
     test_mcp = FastMCP("test")
     register_fn(test_mcp)
-    return test_mcp._tool_manager._tools[tool_name].fn
+    return test_mcp._tool_manager._tools[tool_name].fn  # type: ignore[union-attr]

@@ -1,5 +1,6 @@
 """Tests for unraid_storage tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -36,7 +37,7 @@ class TestFormatBytes:
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.storage.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -98,7 +99,7 @@ class TestStorageActions:
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="disk_details", disk_id="d:1")
-        assert result["summary"]["temperature"] == "35C"
+        assert result["summary"]["temperature"] == "35\u00b0C"
         assert "1.00 GB" in result["summary"]["size_formatted"]
 
     async def test_disk_details_not_found(self, _mock_graphql: AsyncMock) -> None:
@@ -124,3 +125,32 @@ class TestStorageActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="logs", log_path="/var/log/syslog")
         assert result["content"] == "log line"
+
+
+class TestStorageNetworkErrors:
+    """Tests for network-level failures in storage operations."""
+
+    async def test_logs_json_decode_error(self, _mock_graphql: AsyncMock) -> None:
+        """Invalid JSON response when reading logs should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Invalid JSON response from Unraid API: Expecting value: line 1 column 1"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Invalid JSON"):
+            await tool_fn(action="logs", log_path="/var/log/syslog")
+
+    async def test_shares_connection_refused(self, _mock_graphql: AsyncMock) -> None:
+        """Connection refused when listing shares should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Network connection error: [Errno 111] Connection refused"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Connection refused"):
+            await tool_fn(action="shares")
+
+    async def test_disks_http_500(self, _mock_graphql: AsyncMock) -> None:
+        """HTTP 500 when listing disks should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError("HTTP error 500: Internal Server Error")
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="HTTP error 500"):
+            await tool_fn(action="disks")

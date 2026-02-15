@@ -468,6 +468,9 @@ unraid-api apikey --delete --name "workflow key" --json
 #!/bin/bash
 set -e
 
+# Set up cleanup trap early so it fires even if key creation fails
+cleanup() { echo "Cleaning up..."; unraid-api apikey --delete --name "temp deployment key" 2>/dev/null || true; }
+
 # 1. Create temporary API key
 echo "Creating temporary API key..."
 KEY_DATA=$(unraid-api apikey --create \
@@ -476,19 +479,19 @@ KEY_DATA=$(unraid-api apikey --create \
   --description "Temporary key for deployment $(date)" \
   --json)
 
+# Register trap after key creation succeeds
+trap cleanup EXIT
+
 # 2. Extract the API key
 API_KEY=$(echo "$KEY_DATA" | jq -r '.key')
 echo "API key created successfully"
 
 # 3. Use the key for operations
 echo "Configuring services..."
-curl -H "Authorization: Bearer $API_KEY" \
+curl -H "x-api-key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"provider": "azure", "clientId": "your-client-id"}' \
   http://localhost:3001/graphql
-
-# 4. Clean up (always runs, even on error)
-trap 'echo "Cleaning up..."; unraid-api apikey --delete --name "temp deployment key"' EXIT
 
 echo "Deployment completed successfully"
 ```
@@ -713,6 +716,8 @@ type Mutation {
     deleteUser(input: deleteUserInput!): User
 }
 ```
+
+> **Note:** The client schema above uses `ID!` for disk mutation args (e.g., `mountArrayDisk(id: ID!)`), but the actual server resolvers use `PrefixedID!`. The MCP tool code correctly uses `PrefixedID!` based on server source analysis.
 
 #### Subscription Type
 

@@ -322,6 +322,7 @@ query {
 ```
 
 #### RClone Remotes (`rclone`)
+
 ```graphql
 query {
   rclone {
@@ -334,6 +335,7 @@ query {
 ```
 
 #### Notifications
+
 ```graphql
 query {
   notifications {
@@ -343,6 +345,7 @@ query {
 ```
 
 #### Shares
+
 ```graphql
 query {
   shares {
@@ -354,6 +357,7 @@ query {
 ### Mutation Types
 
 #### Docker Container Management
+
 ```graphql
 mutation {
   docker {
@@ -366,6 +370,7 @@ mutation {
 - Mutations are idempotent (starting an already-running container returns success)
 
 #### VM Management
+
 ```graphql
 mutation {
   vm {

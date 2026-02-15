@@ -4,7 +4,7 @@ Provides the `unraid_storage` tool with 6 actions for shares, physical disks,
 unassigned devices, log files, and log content retrieval.
 """
 
-import posixpath
+from pathlib import Path
 from typing import Any, Literal
 
 from fastmcp import FastMCP
@@ -102,8 +102,8 @@ def register_storage_tool(mcp: FastMCP) -> None:
         if action == "logs":
             if not log_path:
                 raise ToolError("log_path is required for 'logs' action")
-            # Normalize path to prevent traversal attacks (e.g. /var/log/../../etc/shadow)
-            normalized = posixpath.normpath(log_path)
+            # Resolve path to prevent traversal attacks (e.g. /var/log/../../etc/shadow)
+            normalized = str(Path(log_path).resolve())
             if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
                 raise ToolError(
                     f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}. "
@@ -143,8 +143,8 @@ def register_storage_tool(mcp: FastMCP) -> None:
                     "serial_number": raw.get("serialNum"),
                     "size_formatted": format_bytes(raw.get("size")),
                     "temperature": (
-                        f"{raw.get('temperature')}C"
-                        if raw.get("temperature")
+                        f"{raw['temperature']}\u00b0C"
+                        if raw.get("temperature") is not None
                         else "N/A"
                     ),
                 }
@@ -159,7 +159,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
                 return {"log_files": list(files) if isinstance(files, list) else []}
 
             if action == "logs":
-                return dict(data.get("logFile", {}))
+                return dict(data.get("logFile") or {})
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
 

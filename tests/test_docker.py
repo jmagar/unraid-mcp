@@ -1,5 +1,6 @@
 """Tests for unraid_docker tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -7,6 +8,7 @@ from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
 from unraid_mcp.tools.docker import find_container_by_identifier, get_available_container_names
+
 
 # --- Unit tests for helpers ---
 
@@ -52,7 +54,7 @@ class TestGetAvailableContainerNames:
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -203,4 +205,93 @@ class TestDockerActions:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="unexpected failure"):
+            await tool_fn(action="list")
+
+
+class TestDockerMutationFailures:
+    """Tests for mutation responses that indicate failure or unexpected shapes."""
+
+    async def test_remove_mutation_returns_null(self, _mock_graphql: AsyncMock) -> None:
+        """removeContainer returning null instead of True."""
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["old-app"]}]}},
+            {"docker": {"removeContainer": None}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="remove", container_id="old-app", confirm=True)
+        assert result["success"] is True
+        assert result["container"] is None
+
+    async def test_start_mutation_empty_docker_response(self, _mock_graphql: AsyncMock) -> None:
+        """docker field returning empty object (missing the action sub-field)."""
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            {"docker": {}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="start", container_id="plex")
+        assert result["success"] is True
+        assert result["container"] is None
+
+    async def test_stop_mutation_returns_false_state(self, _mock_graphql: AsyncMock) -> None:
+        """Stop mutation returning a container with unexpected state."""
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            {"docker": {"stop": {"id": cid, "state": "running"}}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="stop", container_id="plex")
+        assert result["success"] is True
+        assert result["container"]["state"] == "running"
+
+    async def test_update_all_returns_empty_list(self, _mock_graphql: AsyncMock) -> None:
+        """update_all with no containers to update."""
+        _mock_graphql.return_value = {"docker": {"updateAllContainers": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="update_all")
+        assert result["success"] is True
+        assert result["containers"] == []
+
+    async def test_mutation_timeout(self, _mock_graphql: AsyncMock) -> None:
+        """Mid-operation timeout during a docker mutation."""
+
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            TimeoutError("operation timed out"),
+        ]
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="timed out"):
+            await tool_fn(action="start", container_id="plex")
+
+
+class TestDockerNetworkErrors:
+    """Tests for network-level failures in docker operations."""
+
+    async def test_list_connection_refused(self, _mock_graphql: AsyncMock) -> None:
+        """Connection refused when listing containers should be wrapped in ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Network connection error: [Errno 111] Connection refused"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Connection refused"):
+            await tool_fn(action="list")
+
+    async def test_start_http_401_unauthorized(self, _mock_graphql: AsyncMock) -> None:
+        """HTTP 401 should propagate as ToolError."""
+        _mock_graphql.side_effect = ToolError("HTTP error 401: Unauthorized")
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="401"):
+            await tool_fn(action="list")
+
+    async def test_json_decode_error_on_list(self, _mock_graphql: AsyncMock) -> None:
+        """Invalid JSON response should be wrapped in ToolError."""
+        _mock_graphql.side_effect = ToolError(
+            "Invalid JSON response from Unraid API: Expecting value: line 1 column 1"
+        )
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Invalid JSON"):
             await tool_fn(action="list")

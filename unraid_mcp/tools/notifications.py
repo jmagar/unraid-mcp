@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "overview": """
         query GetNotificationsOverview {
@@ -124,8 +125,8 @@ def register_notifications_tool(mcp: FastMCP) -> None:
 
             if action == "overview":
                 data = await make_graphql_request(QUERIES["overview"])
-                notifications = data.get("notifications", {})
-                return dict(notifications.get("overview", {}))
+                notifications = data.get("notifications") or {}
+                return dict(notifications.get("overview") or {})
 
             if action == "list":
                 filter_vars: dict[str, Any] = {
@@ -200,6 +201,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_notifications action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute notifications/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute notifications/{action}: {e!s}") from e
 
     logger.info("Notifications tool registered successfully")

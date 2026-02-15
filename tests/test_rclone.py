@@ -1,5 +1,6 @@
 """Tests for unraid_rclone tool."""
 
+from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -9,7 +10,7 @@ from unraid_mcp.core.exceptions import ToolError
 
 
 @pytest.fixture
-def _mock_graphql() -> AsyncMock:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch("unraid_mcp.tools.rclone.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
@@ -18,18 +19,19 @@ def _make_tool():
     return make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
 
 
+@pytest.mark.usefixtures("_mock_graphql")
 class TestRcloneValidation:
-    async def test_delete_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+    async def test_delete_requires_confirm(self) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="destructive"):
             await tool_fn(action="delete_remote", name="gdrive")
 
-    async def test_create_requires_fields(self, _mock_graphql: AsyncMock) -> None:
+    async def test_create_requires_fields(self) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="requires name"):
             await tool_fn(action="create_remote")
 
-    async def test_delete_requires_name(self, _mock_graphql: AsyncMock) -> None:
+    async def test_delete_requires_name(self) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="name is required"):
             await tool_fn(action="delete_remote", confirm=True)

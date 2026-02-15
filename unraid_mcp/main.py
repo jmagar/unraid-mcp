@@ -6,6 +6,7 @@ the modular server implementation from unraid_mcp.server.
 """
 
 import asyncio
+import sys
 
 
 async def shutdown_cleanup() -> None:
@@ -26,16 +27,20 @@ def main() -> None:
         print("\nServer stopped by user")
         try:
             asyncio.run(shutdown_cleanup())
-        except RuntimeError:
-            # Event loop already closed, skip cleanup
-            pass
+        except RuntimeError as e:
+            if "event loop is closed" in str(e).lower() or "no running event loop" in str(e).lower():
+                pass  # Expected during shutdown
+            else:
+                print(f"WARNING: Unexpected error during cleanup: {e}", file=sys.stderr)
     except Exception as e:
         print(f"Server failed to start: {e}")
         try:
             asyncio.run(shutdown_cleanup())
-        except RuntimeError:
-            # Event loop already closed, skip cleanup
-            pass
+        except RuntimeError as e:
+            if "event loop is closed" in str(e).lower() or "no running event loop" in str(e).lower():
+                pass  # Expected during shutdown
+            else:
+                print(f"WARNING: Unexpected error during cleanup: {e}", file=sys.stderr)
         raise
 
 

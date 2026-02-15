@@ -1,6 +1,7 @@
-[Skip to main content](https://docs.unraid.net/unraid-connect/remote-access#__docusaurus_skipToContent_fallback)
+# Remote Access (Unraid Connect)
 
-On this page
+> **Source:** [Unraid Documentation - Remote Access](https://docs.unraid.net/unraid-connect/remote-access)
+> **Scraped:** 2026-02-07 | Raw content for reference purposes
 
 Unlock secure, browser-based access to your Unraid WebGUI from anywhere with remote access. This feature is ideal for managing your server when you're away from home - no complicated networking or VPN Tunnel setup is required. For more advanced needs, such as connecting to Docker containers or accessing network drives, a VPN Tunnel remains the recommended solution.
 

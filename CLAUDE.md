@@ -21,23 +21,18 @@ uv sync --group dev
 # Local development with uv (recommended)
 uv run unraid-mcp-server
 
-# Using development script with hot reload
-./dev.sh
-
 # Direct module execution
 uv run -m unraid_mcp.main
 ```
 
 ### Code Quality
 ```bash
-# Format code with black
-uv run black unraid_mcp/
-
-# Lint with ruff
+# Lint and format with ruff
 uv run ruff check unraid_mcp/
+uv run ruff format unraid_mcp/
 
-# Type checking with mypy
-uv run mypy unraid_mcp/
+# Type checking with ty (Astral's fast type checker)
+uv run ty check unraid_mcp/
 
 # Run tests
 uv run pytest
@@ -49,13 +44,13 @@ uv run pytest
 docker build -t unraid-mcp-server .
 
 # Run with Docker Compose
-docker-compose up -d
+docker compose up -d
 
 # View logs
-docker-compose logs -f unraid-mcp
+docker compose logs -f unraid-mcp
 
 # Stop service
-docker-compose down
+docker compose down
 ```
 
 ### Environment Setup

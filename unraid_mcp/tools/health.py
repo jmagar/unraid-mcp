@@ -21,10 +21,22 @@ from ..config.settings import (
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose"]
 
 # Severity ordering: only upgrade, never downgrade
 _SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
+
+
+def _server_info() -> dict[str, Any]:
+    """Return the standard server info block used in health responses."""
+    return {
+        "name": "Unraid MCP Server",
+        "version": VERSION,
+        "transport": UNRAID_MCP_TRANSPORT,
+        "host": UNRAID_MCP_HOST,
+        "port": UNRAID_MCP_PORT,
+    }
 
 
 def register_health_tool(mcp: FastMCP) -> None:
@@ -71,7 +83,7 @@ def register_health_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_health action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute health/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute health/{action}: {e!s}") from e
 
     logger.info("Health tool registered successfully")
 
@@ -108,15 +120,9 @@ async def _comprehensive_check() -> dict[str, Any]:
 
         health_info: dict[str, Any] = {
             "status": "healthy",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "api_latency_ms": api_latency,
-            "server": {
-                "name": "Unraid MCP Server",
-                "version": VERSION,
-                "transport": UNRAID_MCP_TRANSPORT,
-                "host": UNRAID_MCP_HOST,
-                "port": UNRAID_MCP_PORT,
-            },
+            "server": _server_info(),
         }
 
         if not data:
@@ -201,15 +207,9 @@ async def _comprehensive_check() -> dict[str, Any]:
         logger.error(f"Health check failed: {e}")
         return {
             "status": "unhealthy",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "error": str(e),
-            "server": {
-                "name": "Unraid MCP Server",
-                "version": VERSION,
-                "transport": UNRAID_MCP_TRANSPORT,
-                "host": UNRAID_MCP_HOST,
-                "port": UNRAID_MCP_PORT,
-            },
+            "server": _server_info(),
         }
 
 
@@ -225,7 +225,7 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
         connection_issues: list[dict[str, Any]] = []
 
         diagnostic_info: dict[str, Any] = {
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "environment": {
                 "auto_start_enabled": subscription_manager.auto_start_enabled,
                 "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
@@ -258,7 +258,7 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
     except ImportError:
         return {
             "error": "Subscription modules not available",
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
         }
     except Exception as e:
-        raise ToolError(f"Failed to generate diagnostics: {str(e)}") from e
+        raise ToolError(f"Failed to generate diagnostics: {e!s}") from e

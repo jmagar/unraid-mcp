@@ -12,9 +12,10 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
-    "parity_history": """
-        query GetParityHistory {
+    "parity_status": """
+        query GetParityStatus {
           array { parityCheckStatus { progress speed errors } }
         }
     """,
@@ -80,10 +81,11 @@ MUTATIONS: dict[str, str] = {
 
 DESTRUCTIVE_ACTIONS = {"start", "stop", "shutdown", "reboot"}
 DISK_ACTIONS = {"mount_disk", "unmount_disk", "clear_stats"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 ARRAY_ACTIONS = Literal[
     "start", "stop",
-    "parity_start", "parity_pause", "parity_resume", "parity_cancel", "parity_history",
+    "parity_start", "parity_pause", "parity_resume", "parity_cancel", "parity_status",
     "mount_disk", "unmount_disk", "clear_stats",
     "shutdown", "reboot",
 ]
@@ -108,16 +110,15 @@ def register_array_tool(mcp: FastMCP) -> None:
           parity_pause - Pause running parity check
           parity_resume - Resume paused parity check
           parity_cancel - Cancel running parity check
-          parity_history - Get parity check status/history
+          parity_status - Get current parity check status
           mount_disk - Mount an array disk (requires disk_id)
           unmount_disk - Unmount an array disk (requires disk_id)
           clear_stats - Clear disk statistics (requires disk_id)
           shutdown - Shut down the server (destructive, requires confirm=True)
           reboot - Reboot the server (destructive, requires confirm=True)
         """
-        all_actions = set(QUERIES) | set(MUTATIONS)
-        if action not in all_actions:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(
@@ -156,6 +157,6 @@ def register_array_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_array action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute array/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute array/{action}: {e!s}") from e
 
     logger.info("Array tool registered successfully")

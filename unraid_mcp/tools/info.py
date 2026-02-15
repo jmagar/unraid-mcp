@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 # Pre-built queries keyed by action name
 QUERIES: dict[str, str] = {
     "overview": """
@@ -162,6 +163,10 @@ INFO_ACTIONS = Literal[
     "ups_devices", "ups_device", "ups_config",
 ]
 
+assert set(QUERIES.keys()) == set(INFO_ACTIONS.__args__), (
+    "QUERIES keys and INFO_ACTIONS are out of sync"
+)
+
 
 def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
     """Process raw system info into summary + details."""
@@ -179,7 +184,7 @@ def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
         cpu = raw_info["cpu"]
         summary["cpu"] = (
             f"{cpu.get('manufacturer', '')} {cpu.get('brand', '')} "
-            f"({cpu.get('cores')} cores, {cpu.get('threads')} threads)"
+            f"({cpu.get('cores', '?')} cores, {cpu.get('threads', '?')} threads)"
         )
 
     if raw_info.get("memory") and raw_info["memory"].get("layout"):
@@ -227,27 +232,31 @@ def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _format_kb(k: Any) -> str:
+    """Format kilobyte values into human-readable sizes."""
+    if k is None:
+        return "N/A"
+    try:
+        k = int(k)
+    except (ValueError, TypeError):
+        return "N/A"
+    if k >= 1024 * 1024 * 1024:
+        return f"{k / (1024 * 1024 * 1024):.2f} TB"
+    if k >= 1024 * 1024:
+        return f"{k / (1024 * 1024):.2f} GB"
+    if k >= 1024:
+        return f"{k / 1024:.2f} MB"
+    return f"{k} KB"
+
+
 def _process_array_status(raw: dict[str, Any]) -> dict[str, Any]:
     """Process raw array data into summary + details."""
-
-    def format_kb(k: Any) -> str:
-        if k is None:
-            return "N/A"
-        k = int(k)
-        if k >= 1024 * 1024 * 1024:
-            return f"{k / (1024 * 1024 * 1024):.2f} TB"
-        if k >= 1024 * 1024:
-            return f"{k / (1024 * 1024):.2f} GB"
-        if k >= 1024:
-            return f"{k / 1024:.2f} MB"
-        return f"{k} KB"
-
     summary: dict[str, Any] = {"state": raw.get("state")}
     if raw.get("capacity") and raw["capacity"].get("kilobytes"):
         kb = raw["capacity"]["kilobytes"]
-        summary["capacity_total"] = format_kb(kb.get("total"))
-        summary["capacity_used"] = format_kb(kb.get("used"))
-        summary["capacity_free"] = format_kb(kb.get("free"))
+        summary["capacity_total"] = _format_kb(kb.get("total"))
+        summary["capacity_used"] = _format_kb(kb.get("used"))
+        summary["capacity_free"] = _format_kb(kb.get("free"))
 
     summary["num_parity_disks"] = len(raw.get("parities", []))
     summary["num_data_disks"] = len(raw.get("disks", []))
@@ -320,81 +329,73 @@ def register_info_tool(mcp: FastMCP) -> None:
         if action == "ups_device":
             variables = {"id": device_id}
 
+        # Lookup tables for common response patterns
+        # Simple dict actions: action -> GraphQL response key
+        dict_actions: dict[str, str] = {
+            "network": "network",
+            "registration": "registration",
+            "connect": "connect",
+            "variables": "vars",
+            "metrics": "metrics",
+            "config": "config",
+            "owner": "owner",
+            "flash": "flash",
+            "ups_device": "upsDeviceById",
+            "ups_config": "upsConfiguration",
+        }
+        # List-wrapped actions: action -> (GraphQL response key, output key)
+        list_actions: dict[str, tuple[str, str]] = {
+            "services": ("services", "services"),
+            "servers": ("servers", "servers"),
+            "ups_devices": ("upsDevices", "ups_devices"),
+        }
+
         try:
             logger.info(f"Executing unraid_info action={action}")
             data = await make_graphql_request(query, variables)
 
-            # Action-specific response processing
+            # Special-case actions with custom processing
             if action == "overview":
-                raw = data.get("info", {})
+                raw = data.get("info") or {}
                 if not raw:
                     raise ToolError("No system info returned from Unraid API")
                 return _process_system_info(raw)
 
             if action == "array":
-                raw = data.get("array", {})
+                raw = data.get("array") or {}
                 if not raw:
                     raise ToolError("No array information returned from Unraid API")
                 return _process_array_status(raw)
 
-            if action == "network":
-                return dict(data.get("network", {}))
-
-            if action == "registration":
-                return dict(data.get("registration", {}))
-
-            if action == "connect":
-                return dict(data.get("connect", {}))
-
-            if action == "variables":
-                return dict(data.get("vars", {}))
-
-            if action == "metrics":
-                return dict(data.get("metrics", {}))
-
-            if action == "services":
-                services = data.get("services", [])
-                return {"services": list(services) if isinstance(services, list) else []}
-
             if action == "display":
-                info = data.get("info", {})
-                return dict(info.get("display", {}))
-
-            if action == "config":
-                return dict(data.get("config", {}))
+                info = data.get("info") or {}
+                return dict(info.get("display") or {})
 
             if action == "online":
                 return {"online": data.get("online")}
 
-            if action == "owner":
-                return dict(data.get("owner", {}))
-
             if action == "settings":
-                settings = data.get("settings", {})
-                if settings and settings.get("unified"):
-                    values = settings["unified"].get("values", {})
-                    return dict(values) if isinstance(values, dict) else {"raw": values}
-                return {}
+                settings = data.get("settings") or {}
+                if not settings:
+                    raise ToolError("No settings data returned from Unraid API. Check API permissions.")
+                if not settings.get("unified"):
+                    logger.warning(f"Settings returned unexpected structure: {settings.keys()}")
+                    raise ToolError(f"Unexpected settings structure. Expected 'unified' key, got: {list(settings.keys())}")
+                values = settings["unified"].get("values") or {}
+                return dict(values) if isinstance(values, dict) else {"raw": values}
 
             if action == "server":
                 return data
 
-            if action == "servers":
-                servers = data.get("servers", [])
-                return {"servers": list(servers) if isinstance(servers, list) else []}
+            # Simple dict-returning actions
+            if action in dict_actions:
+                return dict(data.get(dict_actions[action]) or {})
 
-            if action == "flash":
-                return dict(data.get("flash", {}))
-
-            if action == "ups_devices":
-                devices = data.get("upsDevices", [])
-                return {"ups_devices": list(devices) if isinstance(devices, list) else []}
-
-            if action == "ups_device":
-                return dict(data.get("upsDeviceById", {}))
-
-            if action == "ups_config":
-                return dict(data.get("upsConfiguration", {}))
+            # List-wrapped actions
+            if action in list_actions:
+                response_key, output_key = list_actions[action]
+                items = data.get(response_key) or []
+                return {output_key: list(items) if isinstance(items, list) else []}
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
@@ -402,6 +403,6 @@ def register_info_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_info action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute info/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute info/{action}: {e!s}") from e
 
     logger.info("Info tool registered successfully")

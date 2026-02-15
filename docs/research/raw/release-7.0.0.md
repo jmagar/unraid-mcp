@@ -1,6 +1,7 @@
-[Skip to main content](https://docs.unraid.net/unraid-os/release-notes/7.0.0#__docusaurus_skipToContent_fallback)
+# Unraid OS 7.0.0 Release Notes
 
-On this page
+> **Source:** [Unraid OS Release Notes - 7.0.0](https://docs.unraid.net/unraid-os/release-notes/7.0.0)
+> **Scraped:** 2026-02-07 | Raw content for reference purposes
 
 This version of Unraid OS includes significant improvements across all subsystems, while attempting to maintain backward compatibility as much as possible.
 
@@ -883,76 +884,3 @@ With the [Unraid Patch plugin](https://forums.unraid.net/topic/185560-unraid-pat
 *   Include installed patches in diagnostics
 
 Note: if you have the Mover Tuning plugin installed, you will be prompted to reboot in order to apply these patches.
-
-*   [Upgrading](https://docs.unraid.net/unraid-os/release-notes/7.0.0#upgrading)
-    *   [Known issues](https://docs.unraid.net/unraid-os/release-notes/7.0.0#known-issues)
-        
-    *   [Rolling back](https://docs.unraid.net/unraid-os/release-notes/7.0.0#rolling-back)
-        
-*   [Storage](https://docs.unraid.net/unraid-os/release-notes/7.0.0#storage)
-    *   [unRAID array optional](https://docs.unraid.net/unraid-os/release-notes/7.0.0#unraid-array-optional)
-        
-    *   [Share secondary storage may be assigned to a pool](https://docs.unraid.net/unraid-os/release-notes/7.0.0#share-secondary-storage-may-be-assigned-to-a-pool)
-        
-    *   [ReiserFS file system option has been disabled](https://docs.unraid.net/unraid-os/release-notes/7.0.0#reiserfs-file-system-option-has-been-disabled)
-        
-    *   [Using 'mover' to empty an array disk](https://docs.unraid.net/unraid-os/release-notes/7.0.0#using-mover-to-empty-an-array-disk)
-        
-    *   [Predefined shares handling](https://docs.unraid.net/unraid-os/release-notes/7.0.0#predefined-shares-handling)
-        
-    *   [ZFS implementation](https://docs.unraid.net/unraid-os/release-notes/7.0.0#zfs-implementation)
-        
-    *   [Allocation profiles for btrfs, zfs, and zfs subpools](https://docs.unraid.net/unraid-os/release-notes/7.0.0#allocation-profiles-for-btrfs-zfs-and-zfs-subpools)
-        
-    *   [Pool considerations](https://docs.unraid.net/unraid-os/release-notes/7.0.0#pool-considerations)
-        
-    *   [Other features](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-features)
-        
-*   [VM Manager](https://docs.unraid.net/unraid-os/release-notes/7.0.0#vm-manager)
-    *   [Improvements](https://docs.unraid.net/unraid-os/release-notes/7.0.0#improvements)
-        
-    *   [Other changes](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-changes)
-        
-*   [Docker](https://docs.unraid.net/unraid-os/release-notes/7.0.0#docker)
-    *   [Docker fork bomb prevention](https://docs.unraid.net/unraid-os/release-notes/7.0.0#docker-fork-bomb-prevention)
-        
-    *   [Add support for overlay2 storage driver](https://docs.unraid.net/unraid-os/release-notes/7.0.0#add-support-for-overlay2-storage-driver)
-        
-    *   [Other changes](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-changes-1)
-        
-*   [Networking](https://docs.unraid.net/unraid-os/release-notes/7.0.0#networking)
-    *   [Tailscale integration](https://docs.unraid.net/unraid-os/release-notes/7.0.0#tailscale-integration)
-        
-    *   [Support iframing the webGUI](https://docs.unraid.net/unraid-os/release-notes/7.0.0#support-iframing-the-webgui)
-        
-    *   [Other changes](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-changes-2)
-        
-*   [webGUI](https://docs.unraid.net/unraid-os/release-notes/7.0.0#webgui)
-    *   [Integrated Dynamix File Manager plugin](https://docs.unraid.net/unraid-os/release-notes/7.0.0#integrated-dynamix-file-manager-plugin)
-        
-    *   [Integrated GUI Search plugin](https://docs.unraid.net/unraid-os/release-notes/7.0.0#integrated-gui-search-plugin)
-        
-    *   [Outgoing Proxy Manager](https://docs.unraid.net/unraid-os/release-notes/7.0.0#outgoing-proxy-manager)
-        
-    *   [Notification Agents](https://docs.unraid.net/unraid-os/release-notes/7.0.0#notification-agents)
-        
-    *   [NTP Configuration](https://docs.unraid.net/unraid-os/release-notes/7.0.0#ntp-configuration)
-        
-    *   [NFS Shares](https://docs.unraid.net/unraid-os/release-notes/7.0.0#nfs-shares)
-        
-    *   [Dashboard](https://docs.unraid.net/unraid-os/release-notes/7.0.0#dashboard)
-        
-    *   [SMART improvements](https://docs.unraid.net/unraid-os/release-notes/7.0.0#smart-improvements)
-        
-    *   [Diagnostics](https://docs.unraid.net/unraid-os/release-notes/7.0.0#diagnostics)
-        
-    *   [Other changes](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-changes-3)
-        
-*   [Misc](https://docs.unraid.net/unraid-os/release-notes/7.0.0#misc)
-    *   [Other changes](https://docs.unraid.net/unraid-os/release-notes/7.0.0#other-changes-4)
-        
-*   [Linux kernel](https://docs.unraid.net/unraid-os/release-notes/7.0.0#linux-kernel)
-    
-*   [Base distro](https://docs.unraid.net/unraid-os/release-notes/7.0.0#base-distro)
-    
-*   [Patches](https://docs.unraid.net/unraid-os/release-notes/7.0.0#patches)

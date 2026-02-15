@@ -12,15 +12,11 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "list": """
         query ListVMs {
           vms { id domains { id name state uuid } }
-        }
-    """,
-    "details": """
-        query GetVmDetails {
-          vms { domains { id name state uuid } }
         }
     """,
 }
@@ -49,15 +45,9 @@ MUTATIONS: dict[str, str] = {
     """,
 }
 
-# Map action names to their GraphQL field names
+# Map action names to GraphQL field names (only where they differ)
 _MUTATION_FIELDS: dict[str, str] = {
-    "start": "start",
-    "stop": "stop",
-    "pause": "pause",
-    "resume": "resume",
     "force_stop": "forceStop",
-    "reboot": "reboot",
-    "reset": "reset",
 }
 
 DESTRUCTIVE_ACTIONS = {"force_stop", "reset"}
@@ -90,7 +80,7 @@ def register_vm_tool(mcp: FastMCP) -> None:
           reboot - Reboot a VM (requires vm_id)
           reset - Reset a VM (requires vm_id, confirm=True)
         """
-        all_actions = set(QUERIES) | set(MUTATIONS)
+        all_actions = set(QUERIES) | set(MUTATIONS) | {"details"}
         if action not in all_actions:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
 
@@ -103,39 +93,40 @@ def register_vm_tool(mcp: FastMCP) -> None:
         try:
             logger.info(f"Executing unraid_vm action={action}")
 
-            if action == "list":
+            if action in ("list", "details"):
                 data = await make_graphql_request(QUERIES["list"])
                 if data.get("vms"):
-                    vms = data["vms"].get("domains") or data["vms"].get("domain")
-                    if vms:
-                        return {"vms": list(vms) if isinstance(vms, list) else []}
-                return {"vms": []}
-
-            if action == "details":
-                data = await make_graphql_request(QUERIES["details"])
-                if data.get("vms"):
                     vms = data["vms"].get("domains") or data["vms"].get("domain") or []
+                    if isinstance(vms, dict):
+                        vms = [vms]
+
+                    if action == "list":
+                        return {"vms": vms}
+
+                    # details: find specific VM
                     for vm in vms:
                         if (
                             vm.get("uuid") == vm_id
                             or vm.get("id") == vm_id
                             or vm.get("name") == vm_id
                         ):
-                            return dict(vm) if isinstance(vm, dict) else {}
+                            return dict(vm)
                     available = [
                         f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms
                     ]
                     raise ToolError(
                         f"VM '{vm_id}' not found. Available: {', '.join(available)}"
                     )
-                raise ToolError("No VM data returned from server")
+                if action == "details":
+                    raise ToolError("No VM data returned from server")
+                return {"vms": []}
 
             # Mutations
             if action in MUTATIONS:
                 data = await make_graphql_request(
                     MUTATIONS[action], {"id": vm_id}
                 )
-                field = _MUTATION_FIELDS[action]
+                field = _MUTATION_FIELDS.get(action, action)
                 if data.get("vm") and field in data["vm"]:
                     return {
                         "success": data["vm"][field],

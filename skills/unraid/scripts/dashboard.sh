@@ -13,10 +13,23 @@ OUTPUT_FILE="$HOME/memory/bank/unraid-inventory.md"
 
 # Load credentials from .env for all servers
 load_env_file || exit 1
-for server in "TOOTIE" "SHART"; do
+
+# Discover configured servers dynamically from UNRAID_<NAME>_URL env vars
+SERVERS=()
+while IFS='=' read -r var_name _; do
+    if [[ "$var_name" =~ ^UNRAID_(.+)_URL$ ]]; then
+        SERVERS+=("${BASH_REMATCH[1]}")
+    fi
+done < <(env)
+
+if [ ${#SERVERS[@]} -eq 0 ]; then
+    echo "Error: No servers found. Set UNRAID_<NAME>_URL and UNRAID_<NAME>_API_KEY env vars."
+    exit 1
+fi
+
+for server in "${SERVERS[@]}"; do
     url_var="UNRAID_${server}_URL"
     key_var="UNRAID_${server}_API_KEY"
-    name_var="UNRAID_${server}_NAME"
     validate_env_vars "$url_var" "$key_var" || exit 1
 done
 
@@ -36,9 +49,10 @@ process_server() {
 
     echo "Querying server: $NAME..."
     
-    export UNRAID_URL="$URL"
-    export UNRAID_API_KEY="$API_KEY"
-    export IGNORE_ERRORS="true"
+    UNRAID_URL="$URL"
+    UNRAID_API_KEY="$API_KEY"
+    IGNORE_ERRORS="true"
+    export UNRAID_URL UNRAID_API_KEY IGNORE_ERRORS
 
     QUERY='query Dashboard {
       info {
@@ -73,13 +87,16 @@ process_server() {
 
     RESPONSE=$("$QUERY_SCRIPT" -q "$QUERY" -f json)
     
-    # Debug output
-    echo "$RESPONSE" > "${NAME}_debug.json"
-    
+    # Debug output (only when DEBUG is set)
+    if [ "${DEBUG:-}" = "true" ]; then
+        echo "$RESPONSE" > "/tmp/${NAME}_debug.json"
+    fi
+
     # Check if response is valid JSON
     if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
         echo "Error querying $NAME: Invalid response"
-        echo "Response saved to ${NAME}_debug.json"
+        echo "$RESPONSE" > "/tmp/${NAME}_debug.json"
+        echo "Response saved to /tmp/${NAME}_debug.json"
         echo "## Server: $NAME (⚠️ Error)" >> "$OUTPUT_FILE"
         echo "Failed to retrieve data." >> "$OUTPUT_FILE"
         return
@@ -115,32 +132,30 @@ process_server() {
 
     # Array capacity
     ARRAY_TOTAL=$(echo "$RESPONSE" | jq -r '.data.array.capacity.kilobytes.total')
-    ARRAY_FREE=$(echo "$RESPONSE" | jq -r '.data.array.capacity.kilobytes.free')
     ARRAY_USED=$(echo "$RESPONSE" | jq -r '.data.array.capacity.kilobytes.used')
     
     if [ "$ARRAY_TOTAL" != "null" ] && [ "$ARRAY_TOTAL" -gt 0 ]; then
         ARRAY_TOTAL_GB=$((ARRAY_TOTAL / 1024 / 1024))
-        ARRAY_FREE_GB=$((ARRAY_FREE / 1024 / 1024))
         ARRAY_USED_GB=$((ARRAY_USED / 1024 / 1024))
         ARRAY_USED_PCT=$((ARRAY_USED * 100 / ARRAY_TOTAL))
         echo "### Storage" >> "$OUTPUT_FILE"
         echo "- **Array:** ${ARRAY_USED_GB}GB / ${ARRAY_TOTAL_GB}GB used (${ARRAY_USED_PCT}%)" >> "$OUTPUT_FILE"
-    fi
 
-    # Cache pools
-    echo "- **Cache Pools:**" >> "$OUTPUT_FILE"
-    echo "$RESPONSE" | jq -r '.data.array.caches[] | "  - \(.name) (\(.device)): \(.temp)°C - \(.status) - \(if .fsSize then "\((.fsUsed / 1024 / 1024 | floor))GB / \((.fsSize / 1024 / 1024 | floor))GB used" else "N/A" end)"' >> "$OUTPUT_FILE"
+        # Cache pools
+        echo "- **Cache Pools:**" >> "$OUTPUT_FILE"
+        echo "$RESPONSE" | jq -r '(.data.array.caches // [])[] | "  - \(.name) (\(.device)): \(.temp)°C - \(.status) - \(if .fsSize then "\((.fsUsed / 1024 / 1024 | floor))GB / \((.fsSize / 1024 / 1024 | floor))GB used" else "N/A" end)"' >> "$OUTPUT_FILE"
+    fi
     
     # Docker
-    TOTAL_CONTAINERS=$(echo "$RESPONSE" | jq '[.data.docker.containers[]] | length')
-    RUNNING_CONTAINERS=$(echo "$RESPONSE" | jq '[.data.docker.containers[] | select(.state == "RUNNING")] | length')
+    TOTAL_CONTAINERS=$(echo "$RESPONSE" | jq '[(.data.docker.containers // [])[]] | length')
+    RUNNING_CONTAINERS=$(echo "$RESPONSE" | jq '[(.data.docker.containers // [])[] | select(.state == "RUNNING")] | length')
     
     echo "" >> "$OUTPUT_FILE"
     echo "### Workloads" >> "$OUTPUT_FILE"
     echo "- **Docker:** ${TOTAL_CONTAINERS} containers (${RUNNING_CONTAINERS} running)" >> "$OUTPUT_FILE"
     
     # Unhealthy containers
-    UNHEALTHY=$(echo "$RESPONSE" | jq -r '.data.docker.containers[] | select(.status | test("unhealthy|restarting"; "i")) | "  - ⚠️  \(.names[0]): \(.status)"')
+    UNHEALTHY=$(echo "$RESPONSE" | jq -r '(.data.docker.containers // [])[] | select(.status | test("unhealthy|restarting"; "i")) | "  - ⚠️  \(.names[0]): \(.status)"')
     if [ -n "$UNHEALTHY" ]; then
         echo "$UNHEALTHY" >> "$OUTPUT_FILE"
     fi
@@ -173,7 +188,7 @@ process_server() {
     echo "### Notifications" >> "$OUTPUT_FILE"
     
     NOTIF_COUNT=$(echo "$RESPONSE" | jq '[.data.notifications[]] | length' 2>/dev/null || echo "0")
-    if [ "$NOTIF_COUNT" -gt 0 ] && [ "$NOTIF_COUNT" != "null" ]; then
+    if [ "$NOTIF_COUNT" != "null" ] && [ -n "$NOTIF_COUNT" ] && [ "$NOTIF_COUNT" -gt 0 ]; then
         # Show recent notifications (last 10)
         ALERT_NOTIFS=$(echo "$RESPONSE" | jq -r '.data.notifications | sort_by(.timestamp) | reverse | .[0:10][] | "- [\(.importance // "info")] \(.title // .subject): \(.description // "No description") (\(.timestamp | split("T")[0]))"' 2>/dev/null)
         if [ -n "$ALERT_NOTIFS" ]; then
@@ -198,7 +213,7 @@ process_server() {
 }
 
 # Main loop - process each server from environment variables
-for server in "TOOTIE" "SHART"; do
+for server in "${SERVERS[@]}"; do
     name_var="UNRAID_${server}_NAME"
     url_var="UNRAID_${server}_URL"
     key_var="UNRAID_${server}_API_KEY"

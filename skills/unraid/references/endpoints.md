@@ -32,7 +32,7 @@ Complete list of available GraphQL read-only endpoints in Unraid 7.2+.
 19. **`isSSOEnabled`** - SSO status
 20. **`oidcProviders`** - OIDC providers
 
-## API Management (2)
+## API Management (1)
 21. **`apiKeys`** - List API keys
 
 ## Customization (3)

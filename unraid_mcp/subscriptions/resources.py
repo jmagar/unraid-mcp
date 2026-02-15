@@ -13,6 +13,7 @@ from fastmcp import FastMCP
 from ..config.logging import logger
 from .manager import subscription_manager
 
+
 # Global flag to track subscription startup
 _subscriptions_started = False
 

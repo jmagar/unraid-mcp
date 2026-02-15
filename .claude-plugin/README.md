@@ -27,10 +27,11 @@ This directory contains the Claude Code marketplace configuration for the Unraid
 ## Available Plugins
 
 ### unraid
+
 Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring.
 
 **Features:**
-- 27 read-only API endpoints
+- 10 tools with 90 actions (queries and mutations)
 - Real-time system metrics
 - Disk health and temperature monitoring
 - Docker container management
@@ -39,7 +40,7 @@ Query and monitor Unraid servers via GraphQL API - array status, disk health, co
 - Network share information
 - Notification management
 
-**Version:** 1.1.0
+**Version:** 0.2.0
 **Category:** Infrastructure
 **Tags:** unraid, monitoring, homelab, graphql, docker, virtualization
 
@@ -48,7 +49,7 @@ Query and monitor Unraid servers via GraphQL API - array status, disk health, co
 After installation, configure your Unraid server credentials:
 
 ```bash
-export UNRAID_URL="https://your-unraid-server/graphql"
+export UNRAID_API_URL="https://your-unraid-server/graphql"
 export UNRAID_API_KEY="your-api-key"
 ```
 

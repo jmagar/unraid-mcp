@@ -130,8 +130,8 @@ Before publishing to GitHub:
 
 5. **Create Release Tag** (Optional)
    ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
+   git tag -a v0.2.0 -m "Release v0.2.0"
+   git push origin v0.2.0
    ```
 
 ## User Experience

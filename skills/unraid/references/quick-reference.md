@@ -10,7 +10,7 @@ export UNRAID_URL="https://your-unraid-server/graphql"
 export UNRAID_API_KEY="your-api-key-here"
 
 # Or use the helper script directly
-./scripts/unraid-query.sh -u "$UNRAID_URL" -k "$API_KEY" -q "{ online }"
+./scripts/unraid-query.sh -u "$UNRAID_URL" -k "$UNRAID_API_KEY" -q "{ online }"
 ```
 
 ## Common Queries

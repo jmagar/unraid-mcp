@@ -60,11 +60,9 @@ rm -rf dist/ build/ *.egg-info/
 ### 2. Run Quality Checks
 
 ```bash
-# Format code
-uv run black unraid_mcp/
-
-# Lint code
+# Lint and format code
 uv run ruff check unraid_mcp/
+uv run ruff format unraid_mcp/
 
 # Type check
 uv run ty check unraid_mcp/
@@ -186,6 +184,8 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: uv run twine upload dist/*
 ```
+
+> **Tip:** Consider using [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) instead of API token secrets. Trusted Publishing uses OpenID Connect (OIDC) to authenticate directly from GitHub Actions without storing long-lived secrets.
 
 ## Troubleshooting
 

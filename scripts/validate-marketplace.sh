@@ -6,7 +6,6 @@ set -euo pipefail
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Counters
@@ -62,8 +61,14 @@ check "Marketplace has repository" "jq -e '.repository' .claude-plugin/marketpla
 check "Marketplace has owner" "jq -e '.owner' .claude-plugin/marketplace.json"
 
 # Verify source path
-PLUGIN_SOURCE=$(jq -r '.plugins[] | select(.name == "unraid") | .source' .claude-plugin/marketplace.json)
-check "Plugin source path is valid" "test -d \"$PLUGIN_SOURCE\""
+PLUGIN_SOURCE=$(jq -r '.plugins[]? | select(.name == "unraid") | .source // empty' .claude-plugin/marketplace.json 2>/dev/null || true)
+if [ -n "$PLUGIN_SOURCE" ]; then
+    check "Plugin source path is valid" "test -d \"$PLUGIN_SOURCE\""
+else
+    CHECKS=$((CHECKS + 1))
+    FAILED=$((FAILED + 1))
+    echo -e "Checking: Plugin source path is valid... ${RED}✗${NC} (plugin not found in marketplace)"
+fi
 
 echo ""
 echo "=== Results ==="
@@ -76,5 +81,5 @@ else
     echo -e "${GREEN}All checks passed!${NC}"
     echo ""
     echo "Marketplace is ready for distribution at:"
-    echo "  https://github.com/$(jq -r '.repository' .claude-plugin/marketplace.json | sed 's|https://github.com/||')"
+    echo "  $(jq -r '.repository' .claude-plugin/marketplace.json)"
 fi

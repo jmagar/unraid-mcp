@@ -34,11 +34,11 @@ logs/
 # Documentation and session artifacts
 .docs/
 .full-review/
-docs/plans/
-docs/sessions/
+/docs/plans/
+/docs/sessions/
 
 # Test planning documents
-DESTRUCTIVE_ACTIONS.md
+/DESTRUCTIVE_ACTIONS.md
 
 # Google OAuth client secrets
 client_secret_*.apps.googleusercontent.com.json

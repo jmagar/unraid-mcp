@@ -1,14 +1,14 @@
 # Competitive Analysis: Unraid Integration Projects
 
 > **Date:** 2026-02-07
-> **Purpose:** Identify features and capabilities that competing Unraid integration projects offer that our `unraid-mcp` server (26 tools, GraphQL-based) currently lacks.
+> **Purpose:** Identify features and capabilities that competing Unraid integration projects offer that our `unraid-mcp` server (10 tools, 90 actions, GraphQL-based) currently lacks.
 
 ## Table of Contents
 
 - [Executive Summary](#executive-summary)
 - [Project Profiles](#project-profiles)
   - [1. unraid-management-agent (Go plugin)](#1-unraid-management-agent)
-  - [2. domalab/unraid-api-client (Python library)](#2-domalabu nraid-api-client)
+  - [2. domalab/unraid-api-client (Python library)](#2-domalabunraid-api-client)
   - [3. mcp-ssh-sre / unraid-ssh-mcp (SSH-based MCP)](#3-mcp-ssh-sre--unraid-ssh-mcp)
   - [4. PSUnraid (PowerShell module)](#4-psunraid)
   - [5. ha-unraid (Home Assistant integration)](#5-ha-unraid)
@@ -22,7 +22,7 @@
 
 ## Executive Summary
 
-Our `unraid-mcp` server provides 26 MCP tools built on the official Unraid GraphQL API. After analyzing six competing projects, we identified several significant gaps:
+Our `unraid-mcp` server provides 10 MCP tools (90 actions) built on the official Unraid GraphQL API. After analyzing six competing projects, we identified several significant gaps:
 
 **Critical gaps (high-value features we lack):**
 1. **Array control operations** (start/stop array, parity check control, disk spin up/down)
@@ -71,7 +71,7 @@ Our `unraid-mcp` server provides 26 MCP tools built on the official Unraid Graph
 **Key differentiators from our project:**
 - Runs as an Unraid plugin directly on the server (no external dependency on GraphQL API)
 - Collects data directly from /proc, /sys, Docker SDK, and libvirt
-- 59 REST endpoints vs our 26 MCP tools
+- 59 REST endpoints vs our 10 MCP tools (90 actions)
 - 54 MCP tools with Resources and Prompts
 - Real-time WebSocket event streaming (9 event types, 5-60s intervals)
 - 41 Prometheus metrics for Grafana dashboards
@@ -341,7 +341,7 @@ The project's documentation explicitly compares SSH vs API capabilities:
 
 ### Monitoring Features
 
-| Feature | Our MCP (26 tools) | mgmt-agent (54 MCP tools) | unraid-api-client | mcp-ssh-sre (79 actions) | PSUnraid | ha-unraid | chris-mc1 |
+| Feature | Our MCP (10 tools, 90 actions) | mgmt-agent (54 MCP tools) | unraid-api-client | mcp-ssh-sre (79 actions) | PSUnraid | ha-unraid | chris-mc1 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | System info (hostname, uptime) | Y | Y | Y | Y | Y | Y | N |
 | CPU usage | Y | Y | Y | Y | Y | Y | Y |
@@ -458,7 +458,7 @@ The project's documentation explicitly compares SSH vs API capabilities:
 
 | Feature | Our MCP | mgmt-agent | unraid-api-client | mcp-ssh-sre | PSUnraid | ha-unraid | chris-mc1 |
 |---------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| MCP tools | Y (26) | Y (54) | N | Y (79 actions) | N | N | N |
+| MCP tools | Y (10 tools, 90 actions) | Y (54) | N | Y (79 actions) | N | N | N |
 | MCP Resources | N | Y (5) | N | N | N | N | N |
 | MCP Prompts | N | Y (3) | N | N | N | N | N |
 | REST API | N | Y (59) | N | N | N | N | N |

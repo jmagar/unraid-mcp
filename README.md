@@ -1,6 +1,6 @@
 # 🚀 Unraid MCP Server
 
-[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastMCP](https://img.shields.io/badge/FastMCP-2.11.2+-green.svg)](https://github.com/jlowin/fastmcp)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- 🔧 **26 Tools**: Complete Unraid management through MCP protocol
+- 🔧 **10 Tools, 90 Actions**: Complete Unraid management through MCP protocol
 - 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase  
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
 - 🔄 **Real-time Data**: WebSocket subscriptions for live log streaming
@@ -45,7 +45,7 @@
 ```
 
 This provides instant access to Unraid monitoring and management through Claude Code with:
-- 27 GraphQL API endpoints
+- 10 tools exposing 90 actions via the consolidated action pattern
 - Real-time system metrics
 - Disk health monitoring
 - Docker and VM management
@@ -58,7 +58,7 @@ This provides instant access to Unraid monitoring and management through Claude 
 
 ### Prerequisites
 - Docker and Docker Compose (recommended)
-- OR Python 3.10+ with [uv](https://github.com/astral-sh/uv) for development
+- OR Python 3.12+ with [uv](https://github.com/astral-sh/uv) for development
 - Unraid server with GraphQL API enabled
 
 ### 1. Clone Repository
@@ -88,7 +88,7 @@ docker compose logs -f unraid-mcp
 uv sync
 
 # Run development server
-./dev.sh
+uv run unraid-mcp-server
 ```
 
 ---
@@ -147,7 +147,7 @@ cp .env.example .env
 # Edit .env with your settings
 
 # Run development server
-./dev.sh
+uv run unraid-mcp-server
 ```
 
 ---
@@ -191,45 +191,22 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 
 ## 🛠️ Available Tools & Resources
 
-### System Information & Status
-- `get_system_info()` - Comprehensive system, OS, CPU, memory, hardware info
-- `get_array_status()` - Storage array status, capacity, and disk details  
-- `get_unraid_variables()` - System variables and settings
-- `get_network_config()` - Network configuration and access URLs
-- `get_registration_info()` - Unraid registration details
-- `get_connect_settings()` - Unraid Connect configuration
+Each tool uses a consolidated `action` parameter to expose multiple operations, reducing context window usage. Destructive actions require `confirm=True`.
 
-### Docker Container Management  
-- `list_docker_containers()` - List all containers with caching options
-- `manage_docker_container(id, action)` - Start/stop containers (idempotent)
-- `get_docker_container_details(identifier)` - Detailed container information
+### Tool Categories (10 Tools, 90 Actions)
 
-### Virtual Machine Management
-- `list_vms()` - List all VMs and their states  
-- `manage_vm(id, action)` - VM lifecycle (start/stop/pause/resume/reboot)
-- `get_vm_details(identifier)` - Detailed VM information
-
-### Storage & File Systems
-- `get_shares_info()` - User shares information
-- `list_physical_disks()` - Physical disk discovery
-- `get_disk_details(disk_id)` - SMART data and detailed disk info
-
-### Monitoring & Diagnostics
-- `health_check()` - Comprehensive system health assessment
-- `get_notifications_overview()` - Notification counts by severity
-- `list_notifications(type, offset, limit)` - Filtered notification listing
-- `list_available_log_files()` - Available system logs
-- `get_logs(path, tail_lines)` - Log file content retrieval
-
-### Cloud Storage (RClone)
-- `list_rclone_remotes()` - List configured remotes
-- `get_rclone_config_form(provider)` - Configuration schemas
-- `create_rclone_remote(name, type, config)` - Create new remote
-- `delete_rclone_remote(name)` - Remove existing remote
-
-### Real-time Subscriptions & Resources
-- `test_subscription_query(query)` - Test GraphQL subscriptions
-- `diagnose_subscriptions()` - Subscription system diagnostics
+| Tool | Actions | Description |
+|------|---------|-------------|
+| **`unraid_info`** | 19 | overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **`unraid_array`** | 12 | start, stop, parity_start/pause/resume/cancel/history, mount_disk, unmount_disk, clear_stats, shutdown, reboot |
+| **`unraid_storage`** | 6 | shares, disks, disk_details, unassigned, log_files, logs |
+| **`unraid_docker`** | 15 | list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates |
+| **`unraid_vm`** | 9 | list, details, start, stop, pause, resume, force_stop, reboot, reset |
+| **`unraid_notifications`** | 9 | overview, list, warnings, create, archive, unread, delete, delete_archived, archive_all |
+| **`unraid_rclone`** | 4 | list_remotes, config_form, create_remote, delete_remote |
+| **`unraid_users`** | 8 | me, list, get, add, delete, cloud, remote_access, origins |
+| **`unraid_keys`** | 5 | list, get, create, update, delete |
+| **`unraid_health`** | 3 | check, test_connection, diagnose |
 
 ### MCP Resources (Real-time Data)
 - `unraid://logs/stream` - Live log streaming from `/var/log/syslog` with WebSocket subscriptions
@@ -257,26 +234,27 @@ unraid-mcp/
 │   │   ├── manager.py        # WebSocket management
 │   │   ├── resources.py      # MCP resources
 │   │   └── diagnostics.py    # Diagnostic tools
-│   ├── tools/                # MCP tool categories
-│   │   ├── docker.py         # Container management
-│   │   ├── system.py         # System information
-│   │   ├── storage.py        # Storage & monitoring
-│   │   ├── health.py         # Health checks
-│   │   ├── virtualization.py # VM management
-│   │   └── rclone.py         # Cloud storage
+│   ├── tools/                # MCP tool categories (10 tools, 90 actions)
+│   │   ├── info.py           # System information (19 actions)
+│   │   ├── array.py          # Array management (12 actions)
+│   │   ├── storage.py        # Storage & monitoring (6 actions)
+│   │   ├── docker.py         # Container management (15 actions)
+│   │   ├── virtualization.py # VM management (9 actions)
+│   │   ├── notifications.py  # Notification management (9 actions)
+│   │   ├── rclone.py         # Cloud storage (4 actions)
+│   │   ├── users.py          # User management (8 actions)
+│   │   ├── keys.py           # API key management (5 actions)
+│   │   └── health.py         # Health checks (3 actions)
 │   └── server.py             # FastMCP server setup
 ├── logs/                     # Log files (auto-created)
-├── dev.sh                    # Development script  
 └── docker-compose.yml        # Docker Compose deployment
 ```
 
 ### Code Quality Commands
 ```bash
-# Format code
-uv run black unraid_mcp/
-
-# Lint code  
+# Lint and format code
 uv run ruff check unraid_mcp/
+uv run ruff format unraid_mcp/
 
 # Type checking
 uv run ty check unraid_mcp/
@@ -287,11 +265,11 @@ uv run pytest
 
 ### Development Workflow
 ```bash
-# Start development server (kills existing processes safely)
-./dev.sh
+# Start development server
+uv run unraid-mcp-server
 
-# Stop server only
-./dev.sh --kill
+# Or run via module directly
+uv run -m unraid_mcp.main
 ```
 
 ---
@@ -324,7 +302,8 @@ uv run pytest
 
 **🔥 Port Already in Use**
 ```bash
-./dev.sh  # Automatically kills existing processes
+# Kill existing process on port 6970, then restart
+lsof -ti :6970 | xargs kill -9 2>/dev/null; uv run unraid-mcp-server
 ```
 
 **🔧 Connection Refused**

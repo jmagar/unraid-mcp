@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError
 
+
 QUERIES: dict[str, str] = {
     "me": """
         query GetMe {
@@ -158,6 +159,6 @@ def register_users_tool(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"Error in unraid_users action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute users/{action}: {str(e)}") from e
+            raise ToolError(f"Failed to execute users/{action}: {e!s}") from e
 
     logger.info("Users tool registered successfully")

@@ -143,7 +143,7 @@ This skill activates when you mention:
 
 ## Version
 
-- **Skill Version:** 1.0.0
+- **Skill Version:** 0.2.0
 - **API Version:** Unraid 7.2 GraphQL
 - **Tested:** 2026-01-21
 - **Endpoints:** 27 working read-only queries
