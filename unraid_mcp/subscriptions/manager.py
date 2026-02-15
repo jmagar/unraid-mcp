@@ -8,6 +8,7 @@ error handling, reconnection logic, and authentication.
 import asyncio
 import json
 import os
+import ssl
 from datetime import datetime
 from typing import Any
 
@@ -153,6 +154,16 @@ class SubscriptionManager:
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
                 logger.debug(f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}")
 
+                # Build SSL context for wss:// connections
+                ssl_context = None
+                if ws_url.startswith('wss://'):
+                    if isinstance(UNRAID_VERIFY_SSL, str):
+                        ssl_context = ssl.create_default_context(cafile=UNRAID_VERIFY_SSL)
+                    elif UNRAID_VERIFY_SSL:
+                        ssl_context = ssl.create_default_context()
+                    else:
+                        ssl_context = ssl._create_unverified_context()
+
                 # Connection with timeout
                 connect_timeout = 10
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connection timeout: {connect_timeout}s")
@@ -163,7 +174,7 @@ class SubscriptionManager:
                     ping_interval=20,
                     ping_timeout=10,
                     close_timeout=10,
-                    ssl=UNRAID_VERIFY_SSL
+                    ssl=ssl_context
                 ) as websocket:
 
                     selected_proto = websocket.subprotocol or "none"

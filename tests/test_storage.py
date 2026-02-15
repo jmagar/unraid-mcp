@@ -60,6 +60,15 @@ class TestStorageValidation:
         with pytest.raises(ToolError, match="log_path must start with"):
             await tool_fn(action="logs", log_path="/etc/shadow")
 
+    async def test_logs_rejects_path_traversal(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        # Traversal that escapes /var/log/ to reach /etc/shadow
+        with pytest.raises(ToolError, match="log_path must start with"):
+            await tool_fn(action="logs", log_path="/var/log/../../etc/shadow")
+        # Traversal that escapes /mnt/ to reach /etc/passwd
+        with pytest.raises(ToolError, match="log_path must start with"):
+            await tool_fn(action="logs", log_path="/mnt/../etc/passwd")
+
     async def test_logs_allows_valid_paths(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}
         tool_fn = _make_tool()

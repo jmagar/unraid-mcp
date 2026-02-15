@@ -42,7 +42,7 @@ class TestUsersValidation:
 
 class TestUsersActions:
     async def test_me(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"me": {"id": "u:1", "name": "root", "role": "ADMIN"}}
+        _mock_graphql.return_value = {"me": {"id": "u:1", "name": "root", "description": "", "roles": ["ADMIN"]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="me")
         assert result["name"] == "root"
@@ -56,19 +56,19 @@ class TestUsersActions:
         assert len(result["users"]) == 2
 
     async def test_get(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"user": {"id": "u:1", "name": "root", "role": "ADMIN"}}
+        _mock_graphql.return_value = {"user": {"id": "u:1", "name": "root", "description": "", "roles": ["ADMIN"]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="get", user_id="u:1")
         assert result["name"] == "root"
 
     async def test_add(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"addUser": {"id": "u:3", "name": "newuser", "role": "USER"}}
+        _mock_graphql.return_value = {"addUser": {"id": "u:3", "name": "newuser", "description": "", "roles": ["USER"]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="add", name="newuser", password="pass123")
         assert result["success"] is True
 
     async def test_add_with_role(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"addUser": {"id": "u:3", "name": "admin2", "role": "ADMIN"}}
+        _mock_graphql.return_value = {"addUser": {"id": "u:3", "name": "admin2", "description": "", "roles": ["ADMIN"]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="add", name="admin2", password="pass123", role="admin")
         assert result["success"] is True
@@ -76,10 +76,12 @@ class TestUsersActions:
         assert call_args[0][1]["input"]["role"] == "ADMIN"
 
     async def test_delete(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"deleteUser": True}
+        _mock_graphql.return_value = {"deleteUser": {"id": "u:2", "name": "guest"}}
         tool_fn = _make_tool()
         result = await tool_fn(action="delete", user_id="u:2", confirm=True)
         assert result["success"] is True
+        call_args = _mock_graphql.call_args
+        assert call_args[0][1]["input"]["id"] == "u:2"
 
     async def test_cloud(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"cloud": {"status": "connected", "apiKey": "***"}}
@@ -98,3 +100,31 @@ class TestUsersActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="origins")
         assert len(result["origins"]) == 2
+
+
+class TestUsersNoneHandling:
+    """Verify actions return empty dict (not TypeError) when API returns None."""
+
+    async def test_me_returns_none(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"me": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="me")
+        assert result == {}
+
+    async def test_get_returns_none(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"user": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="get", user_id="u:1")
+        assert result == {}
+
+    async def test_cloud_returns_none(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"cloud": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="cloud")
+        assert result == {}
+
+    async def test_remote_access_returns_none(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"remoteAccess": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="remote_access")
+        assert result == {}

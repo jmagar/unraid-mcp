@@ -52,6 +52,20 @@ class TestAnalyzeDiskHealth:
         disks = [{"status": "DISK_OK", "warning": 45}]
         result = _analyze_disk_health(disks)
         assert result["warning"] == 1
+        assert result["critical"] == 0
+
+    def test_counts_critical_disks(self) -> None:
+        disks = [{"status": "DISK_OK", "critical": 55}]
+        result = _analyze_disk_health(disks)
+        assert result["critical"] == 1
+        assert result["warning"] == 0
+        assert result["healthy"] == 0
+
+    def test_critical_takes_precedence_over_warning(self) -> None:
+        disks = [{"status": "DISK_OK", "warning": 45, "critical": 55}]
+        result = _analyze_disk_health(disks)
+        assert result["critical"] == 1
+        assert result["warning"] == 0
 
     def test_counts_missing_disks(self) -> None:
         disks = [{"status": "DISK_NP"}]
@@ -75,6 +89,16 @@ class TestProcessArrayStatus:
         result = _process_array_status(raw)
         assert result["summary"]["state"] == "STARTED"
         assert result["summary"]["overall_health"] == "HEALTHY"
+
+    def test_critical_disk_threshold_array(self) -> None:
+        raw = {
+            "state": "STARTED",
+            "parities": [],
+            "disks": [{"status": "DISK_OK", "critical": 55}],
+            "caches": [],
+        }
+        result = _process_array_status(raw)
+        assert result["summary"]["overall_health"] == "CRITICAL"
 
     def test_degraded_array(self) -> None:
         raw = {

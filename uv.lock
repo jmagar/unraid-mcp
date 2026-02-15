@@ -1985,7 +1985,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=25.1.0" },
     { name = "black", marker = "extra == 'lint'", specifier = ">=25.1.0" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.2.2" },
-    { name = "fastapi", specifier = ">=0.116.1" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fastmcp", specifier = ">=2.11.2" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },

@@ -308,7 +308,13 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     }
 
                 docker_data = data.get("docker", {})
-                result = docker_data.get(action, docker_data.get("removeContainer"))
+                # Map action names to GraphQL response field names where they differ
+                response_field_map = {
+                    "update": "updateContainer",
+                    "remove": "removeContainer",
+                }
+                field = response_field_map.get(action, action)
+                result = docker_data.get(field)
                 return {
                     "success": True,
                     "action": action,

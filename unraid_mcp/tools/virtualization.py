@@ -105,15 +105,16 @@ def register_vm_tool(mcp: FastMCP) -> None:
 
             if action == "list":
                 data = await make_graphql_request(QUERIES["list"])
-                if data.get("vms") and data["vms"].get("domains"):
-                    vms = data["vms"]["domains"]
-                    return {"vms": list(vms) if isinstance(vms, list) else []}
+                if data.get("vms"):
+                    vms = data["vms"].get("domains") or data["vms"].get("domain")
+                    if vms:
+                        return {"vms": list(vms) if isinstance(vms, list) else []}
                 return {"vms": []}
 
             if action == "details":
                 data = await make_graphql_request(QUERIES["details"])
                 if data.get("vms"):
-                    vms = data["vms"].get("domains") or []
+                    vms = data["vms"].get("domains") or data["vms"].get("domain") or []
                     for vm in vms:
                         if (
                             vm.get("uuid") == vm_id

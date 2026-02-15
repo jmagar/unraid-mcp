@@ -21,6 +21,7 @@
 
 ## 📋 Table of Contents
 
+- [Claude Code Plugin](#-claude-code-plugin)
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
@@ -28,6 +29,28 @@
 - [Development](#-development)
 - [Architecture](#-architecture)
 - [Troubleshooting](#-troubleshooting)
+
+---
+
+## 🎯 Claude Code Plugin
+
+**The easiest way to use Unraid MCP is through the Claude Code marketplace:**
+
+```bash
+# Add the marketplace
+/plugin marketplace add jmagar/unraid-mcp
+
+# Install the Unraid skill
+/plugin install unraid @unraid-mcp
+```
+
+This provides instant access to Unraid monitoring and management through Claude Code with:
+- 27 GraphQL API endpoints
+- Real-time system metrics
+- Disk health monitoring
+- Docker and VM management
+
+**See [.claude-plugin/README.md](.claude-plugin/README.md) for detailed plugin documentation.**
 
 ---
 

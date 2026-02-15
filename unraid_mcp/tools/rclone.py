@@ -100,7 +100,9 @@ def register_rclone_tool(mcp: FastMCP) -> None:
                     MUTATIONS["create_remote"],
                     {"input": {"name": name, "type": provider_type, "config": config_data}},
                 )
-                remote = data.get("rclone", {}).get("createRCloneRemote", {})
+                remote = data.get("rclone", {}).get("createRCloneRemote")
+                if not remote:
+                    raise ToolError(f"Failed to create remote '{name}': no confirmation from server")
                 return {
                     "success": True,
                     "message": f"Remote '{name}' created successfully",

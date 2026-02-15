@@ -204,13 +204,18 @@ def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
 
 def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     """Analyze health status of disk arrays."""
-    counts = {"healthy": 0, "failed": 0, "missing": 0, "new": 0, "warning": 0, "unknown": 0}
+    counts = {"healthy": 0, "failed": 0, "missing": 0, "new": 0, "warning": 0, "critical": 0, "unknown": 0}
     for disk in disks:
         status = disk.get("status", "").upper()
         warning = disk.get("warning")
         critical = disk.get("critical")
         if status == "DISK_OK":
-            counts["warning" if (warning or critical) else "healthy"] += 1
+            if critical:
+                counts["critical"] += 1
+            elif warning:
+                counts["warning"] += 1
+            else:
+                counts["healthy"] += 1
         elif status in ("DISK_DSBL", "DISK_INVALID"):
             counts["failed"] += 1
         elif status == "DISK_NP":
@@ -254,10 +259,11 @@ def _process_array_status(raw: dict[str, Any]) -> dict[str, Any]:
             health_summary[label] = _analyze_disk_health(raw[key])
 
     total_failed = sum(h.get("failed", 0) for h in health_summary.values())
+    total_critical = sum(h.get("critical", 0) for h in health_summary.values())
     total_missing = sum(h.get("missing", 0) for h in health_summary.values())
     total_warning = sum(h.get("warning", 0) for h in health_summary.values())
 
-    if total_failed > 0:
+    if total_failed > 0 or total_critical > 0:
         overall = "CRITICAL"
     elif total_missing > 0:
         overall = "DEGRADED"

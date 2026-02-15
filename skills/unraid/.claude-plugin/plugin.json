@@ -1,0 +1,27 @@
+{
+  "name": "unraid",
+  "description": "Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
+  "version": "1.1.0",
+  "author": {
+    "name": "jmagar",
+    "email": "jmagar@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/jmagar/unraid-mcp",
+  "repository": "https://github.com/jmagar/unraid-mcp",
+  "mcpServers": {
+    "unraid": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}/../..",
+        "unraid-mcp-server"
+      ],
+      "env": {
+        "UNRAID_API_URL": "${UNRAID_API_URL}",
+        "UNRAID_API_KEY": "${UNRAID_API_KEY}",
+        "UNRAID_MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}

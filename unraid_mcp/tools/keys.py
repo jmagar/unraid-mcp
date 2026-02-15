@@ -111,7 +111,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
             if action == "update":
                 if not key_id:
                     raise ToolError("key_id is required for 'update' action")
-                input_data = {"id": key_id}
+                input_data: dict[str, Any] = {"id": key_id}
                 if name:
                     input_data["name"] = name
                 if roles:
@@ -130,6 +130,9 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["delete"], {"input": {"ids": [key_id]}}
                 )
+                result = data.get("deleteApiKeys")
+                if not result:
+                    raise ToolError(f"Failed to delete API key '{key_id}': no confirmation from server")
                 return {
                     "success": True,
                     "message": f"API key '{key_id}' deleted",

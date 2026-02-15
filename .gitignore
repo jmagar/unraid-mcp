@@ -37,6 +37,9 @@ logs/
 docs/plans/
 docs/sessions/
 
+# Test planning documents
+DESTRUCTIVE_ACTIONS.md
+
 # Google OAuth client secrets
 client_secret_*.apps.googleusercontent.com.json
 

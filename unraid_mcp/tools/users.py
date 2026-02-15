@@ -15,17 +15,17 @@ from ..core.exceptions import ToolError
 QUERIES: dict[str, str] = {
     "me": """
         query GetMe {
-          me { id name role email }
+          me { id name description roles }
         }
     """,
     "list": """
         query ListUsers {
-          users { id name role email }
+          users { id name description roles }
         }
     """,
     "get": """
-        query GetUser($id: PrefixedID!) {
-          user(id: $id) { id name role email }
+        query GetUser($id: ID!) {
+          user(id: $id) { id name description roles }
         }
     """,
     "cloud": """
@@ -47,13 +47,13 @@ QUERIES: dict[str, str] = {
 
 MUTATIONS: dict[str, str] = {
     "add": """
-        mutation AddUser($input: AddUserInput!) {
-          addUser(input: $input) { id name role }
+        mutation AddUser($input: addUserInput!) {
+          addUser(input: $input) { id name description roles }
         }
     """,
     "delete": """
-        mutation DeleteUser($id: PrefixedID!) {
-          deleteUser(id: $id)
+        mutation DeleteUser($input: deleteUserInput!) {
+          deleteUser(input: $input) { id name }
         }
     """,
 }
@@ -101,7 +101,7 @@ def register_users_tool(mcp: FastMCP) -> None:
 
             if action == "me":
                 data = await make_graphql_request(QUERIES["me"])
-                return dict(data.get("me", {}))
+                return data.get("me") or {}
 
             if action == "list":
                 data = await make_graphql_request(QUERIES["list"])
@@ -112,7 +112,7 @@ def register_users_tool(mcp: FastMCP) -> None:
                 if not user_id:
                     raise ToolError("user_id is required for 'get' action")
                 data = await make_graphql_request(QUERIES["get"], {"id": user_id})
-                return dict(data.get("user", {}))
+                return data.get("user") or {}
 
             if action == "add":
                 if not name or not password:
@@ -132,7 +132,7 @@ def register_users_tool(mcp: FastMCP) -> None:
                 if not user_id:
                     raise ToolError("user_id is required for 'delete' action")
                 data = await make_graphql_request(
-                    MUTATIONS["delete"], {"id": user_id}
+                    MUTATIONS["delete"], {"input": {"id": user_id}}
                 )
                 return {
                     "success": True,
@@ -141,11 +141,11 @@ def register_users_tool(mcp: FastMCP) -> None:
 
             if action == "cloud":
                 data = await make_graphql_request(QUERIES["cloud"])
-                return dict(data.get("cloud", {}))
+                return data.get("cloud") or {}
 
             if action == "remote_access":
                 data = await make_graphql_request(QUERIES["remote_access"])
-                return dict(data.get("remoteAccess", {}))
+                return data.get("remoteAccess") or {}
 
             if action == "origins":
                 data = await make_graphql_request(QUERIES["origins"])
