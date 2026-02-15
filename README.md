@@ -93,6 +93,27 @@ uv run unraid-mcp-server
 
 ---
 
+## 📂 Plugin Structure
+
+This repository is a Claude Code plugin. Key components:
+
+```
+unraid-mcp/                      # ${CLAUDE_PLUGIN_ROOT}
+├── .claude-plugin/
+│   ├── marketplace.json         # Marketplace catalog
+│   └── plugin.json              # Plugin manifest
+├── unraid_mcp/                  # MCP server Python package
+├── skills/unraid/               # Skill and documentation
+├── pyproject.toml               # Dependencies and entry points
+└── scripts/                     # Validation and helper scripts
+```
+
+- **MCP Server**: 10 tools with 90 actions via GraphQL API
+- **Skill**: `/unraid` skill for monitoring and queries
+- **Entry Point**: `unraid-mcp-server` defined in pyproject.toml
+
+---
+
 ## 📦 Installation
 
 ### 🐳 Docker Deployment (Recommended)

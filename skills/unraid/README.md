@@ -23,6 +23,17 @@ skills/unraid/
     └── quick-reference.md            # Common queries cheat sheet
 ```
 
+## Installation
+
+This skill is part of the Unraid MCP plugin. Install via the Claude Code marketplace:
+
+```bash
+/plugin marketplace add jmagar/unraid-mcp
+/plugin install unraid @unraid-mcp
+```
+
+The plugin includes both the MCP server and this skill at `skills/unraid/`.
+
 ## Quick Start
 
 1. **Set your credentials:**

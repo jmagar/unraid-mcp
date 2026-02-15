@@ -41,10 +41,10 @@ check "Marketplace has name" "jq -e '.name' .claude-plugin/marketplace.json"
 check "Marketplace has plugins array" "jq -e '.plugins | type == \"array\"' .claude-plugin/marketplace.json"
 
 # Check plugin manifest
-check "Plugin manifest exists" "test -f skills/unraid/.claude-plugin/plugin.json"
-check "Plugin manifest is valid JSON" "jq empty skills/unraid/.claude-plugin/plugin.json"
-check "Plugin has name" "jq -e '.name' skills/unraid/.claude-plugin/plugin.json"
-check "Plugin has version" "jq -e '.version' skills/unraid/.claude-plugin/plugin.json"
+check "Plugin manifest exists" "test -f .claude-plugin/plugin.json"
+check "Plugin manifest is valid JSON" "jq empty .claude-plugin/plugin.json"
+check "Plugin has name" "jq -e '.name' .claude-plugin/plugin.json"
+check "Plugin has version" "jq -e '.version' .claude-plugin/plugin.json"
 
 # Check plugin structure
 check "Plugin has SKILL.md" "test -f skills/unraid/SKILL.md"
