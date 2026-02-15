@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 
 import websockets
-from websockets.legacy.protocol import Subprotocol
+from websockets.typing import Subprotocol
 
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL

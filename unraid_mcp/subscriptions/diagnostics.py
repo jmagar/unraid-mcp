@@ -7,12 +7,13 @@ development and debugging purposes.
 
 import asyncio
 import json
+import ssl
 from datetime import datetime
 from typing import Any
 
 import websockets
 from fastmcp import FastMCP
-from websockets.legacy.protocol import Subprotocol
+from websockets.typing import Subprotocol
 
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL, UNRAID_VERIFY_SSL
@@ -48,11 +49,21 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 raise ToolError("UNRAID_API_URL is not configured")
             ws_url = UNRAID_API_URL.replace("https://", "wss://").replace("http://", "ws://") + "/graphql"
 
+            # Build SSL context for wss:// connections
+            ssl_context = None
+            if ws_url.startswith("wss://"):
+                if isinstance(UNRAID_VERIFY_SSL, str):
+                    ssl_context = ssl.create_default_context(cafile=UNRAID_VERIFY_SSL)
+                elif UNRAID_VERIFY_SSL:
+                    ssl_context = ssl.create_default_context()
+                else:
+                    ssl_context = ssl._create_unverified_context()
+
             # Test connection
             async with websockets.connect(
                 ws_url,
                 subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
-                ssl=UNRAID_VERIFY_SSL,
+                ssl=ssl_context,
                 ping_interval=30,
                 ping_timeout=10
             ) as websocket:
