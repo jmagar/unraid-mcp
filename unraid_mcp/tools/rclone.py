@@ -121,7 +121,7 @@ def register_rclone_tool(mcp: FastMCP) -> None:
                     "message": f"Remote '{name}' deleted successfully",
                 }
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

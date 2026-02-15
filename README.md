@@ -256,7 +256,7 @@ uv run black unraid_mcp/
 uv run ruff check unraid_mcp/
 
 # Type checking
-uv run mypy unraid_mcp/
+uv run ty check unraid_mcp/
 
 # Run tests
 uv run pytest

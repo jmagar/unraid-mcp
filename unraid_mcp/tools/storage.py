@@ -95,8 +95,15 @@ def register_storage_tool(mcp: FastMCP) -> None:
         if action == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for 'disk_details' action")
 
-        if action == "logs" and not log_path:
-            raise ToolError("log_path is required for 'logs' action")
+        if action == "logs":
+            if not log_path:
+                raise ToolError("log_path is required for 'logs' action")
+            _ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
+            if not any(log_path.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
+                raise ToolError(
+                    f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}. "
+                    f"Use log_files action to discover valid paths."
+                )
 
         query = QUERIES[action]
         variables: dict[str, Any] | None = None
@@ -148,7 +155,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
             if action == "logs":
                 return dict(data.get("logFile", {}))
 
-            return data
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

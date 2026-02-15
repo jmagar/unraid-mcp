@@ -32,9 +32,9 @@ class TestVmValidation:
                 await tool_fn(action=action, vm_id="uuid-1")
 
     async def test_destructive_vm_id_check_before_confirm(self, _mock_graphql: AsyncMock) -> None:
-        """Destructive actions without vm_id should fail on confirm first."""
+        """Destructive actions without vm_id should fail on vm_id first (validated before confirm)."""
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="vm_id"):
             await tool_fn(action="force_stop")
 
 
@@ -101,6 +101,27 @@ class TestVmActions:
         result = await tool_fn(action="force_stop", vm_id="uuid-1", confirm=True)
         assert result["success"] is True
         assert result["action"] == "force_stop"
+
+    async def test_stop_vm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"stop": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="stop", vm_id="uuid-1")
+        assert result["success"] is True
+        assert result["action"] == "stop"
+
+    async def test_pause_vm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"pause": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="pause", vm_id="uuid-1")
+        assert result["success"] is True
+        assert result["action"] == "pause"
+
+    async def test_resume_vm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"resume": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="resume", vm_id="uuid-1")
+        assert result["success"] is True
+        assert result["action"] == "resume"
 
     async def test_mutation_unexpected_response(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"vm": {}}

@@ -55,6 +55,17 @@ class TestStorageValidation:
         with pytest.raises(ToolError, match="log_path"):
             await tool_fn(action="logs")
 
+    async def test_logs_rejects_invalid_path(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="log_path must start with"):
+            await tool_fn(action="logs", log_path="/etc/shadow")
+
+    async def test_logs_allows_valid_paths(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="logs", log_path="/var/log/syslog")
+        assert result["content"] == "ok"
+
 
 class TestStorageActions:
     async def test_shares(self, _mock_graphql: AsyncMock) -> None:

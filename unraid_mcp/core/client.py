@@ -20,6 +20,19 @@ from ..config.settings import (
 )
 from ..core.exceptions import ToolError
 
+# Sensitive keys to redact from debug logs
+_SENSITIVE_KEYS = {"password", "key", "secret", "token", "apikey"}
+
+
+def _redact_sensitive(obj: Any) -> Any:
+    """Recursively redact sensitive values from nested dicts/lists."""
+    if isinstance(obj, dict):
+        return {k: ("***" if k.lower() in _SENSITIVE_KEYS else _redact_sensitive(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact_sensitive(item) for item in obj]
+    return obj
+
+
 # HTTP timeout configuration
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
 DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG['disk_operations'], connect=5.0)
@@ -142,12 +155,7 @@ async def make_graphql_request(
     logger.debug(f"Making GraphQL request to {UNRAID_API_URL}:")
     logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
     if variables:
-        _SENSITIVE_KEYS = {"password", "key", "secret", "token", "apiKey"}
-        redacted = {
-            k: ("***" if k.lower() in _SENSITIVE_KEYS else v)
-            for k, v in (variables.get("input", variables) if isinstance(variables.get("input"), dict) else variables).items()
-        }
-        logger.debug(f"Variables: {redacted}")
+        logger.debug(f"Variables: {_redact_sensitive(variables)}")
 
     try:
         # Get the shared HTTP client with connection pooling

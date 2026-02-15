@@ -94,11 +94,11 @@ def register_vm_tool(mcp: FastMCP) -> None:
         if action not in all_actions:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
-
         if action != "list" and not vm_id:
             raise ToolError(f"vm_id is required for '{action}' action")
+
+        if action in DESTRUCTIVE_ACTIONS and not confirm:
+            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         try:
             logger.info(f"Executing unraid_vm action={action}")
@@ -143,7 +143,7 @@ def register_vm_tool(mcp: FastMCP) -> None:
                     }
                 raise ToolError(f"Failed to {action} VM or unexpected response")
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

@@ -65,7 +65,7 @@ def register_health_tool(mcp: FastMCP) -> None:
             if action == "diagnose":
                 return await _diagnose_subscriptions()
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

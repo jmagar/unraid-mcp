@@ -15,7 +15,7 @@ logs/
 *.sqlite3
 instance/
 .pytest_cache/
-.mypy_cache/
+.ty_cache/
 .venv/
 venv/
 env/

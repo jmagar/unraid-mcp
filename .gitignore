@@ -5,6 +5,18 @@ build/
 dist/
 wheels/
 *.egg-info
+*.egg
+
+# Tool artifacts (pytest, ruff, ty, coverage all write here)
+.cache/
+
+# Legacy artifact locations (in case tools run outside pyproject config)
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+htmlcov/
+.coverage
+coverage.xml
 
 # Virtual environments
 .venv
@@ -18,6 +30,12 @@ logs/
 
 # Serena IDE configuration
 .serena/
+
+# Documentation and session artifacts
+.docs/
+.full-review/
+docs/plans/
+docs/sessions/
 
 # Google OAuth client secrets
 client_secret_*.apps.googleusercontent.com.json

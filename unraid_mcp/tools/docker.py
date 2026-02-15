@@ -107,7 +107,7 @@ DOCKER_ACTIONS = Literal[
 ]
 
 # Docker container IDs: 64 hex chars + optional suffix (e.g., ":local")
-_DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
+_DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$")
 
 
 def find_container_by_identifier(
@@ -126,7 +126,7 @@ def find_container_by_identifier(
     id_lower = identifier.lower()
     for c in containers:
         for name in c.get("names", []):
-            if id_lower in name.lower() or name.lower() in id_lower:
+            if id_lower in name.lower():
                 logger.info(f"Fuzzy match: '{identifier}' -> '{name}'")
                 return c
 
@@ -273,7 +273,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     MUTATIONS["start"], {"id": actual_id},
                     operation_context={"operation": "start"},
                 )
-                result = start_data.get("docker", {}).get("start", {})
+                if start_data.get("idempotent_success"):
+                    result = {}
+                else:
+                    result = start_data.get("docker", {}).get("start", {})
                 response: dict[str, Any] = {
                     "success": True, "action": "restart", "container": result,
                 }
@@ -312,7 +315,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     "container": result,
                 }
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

@@ -123,4 +123,4 @@ The server loads environment variables from multiple locations in order:
 - Increased timeouts for disk operations (90s read timeout)
 - Selective queries to avoid GraphQL type overflow issues
 - Optional caching controls for Docker container queries
-- Rotating log files to prevent disk space issues
+- Log file overwrite at 10MB cap to prevent disk space issues

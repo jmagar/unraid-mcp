@@ -30,7 +30,7 @@ QUERIES: dict[str, str] = {
     """,
     "cloud": """
         query GetCloud {
-          cloud { status apiKey error }
+          cloud { status error }
         }
     """,
     "remote_access": """
@@ -152,7 +152,7 @@ def register_users_tool(mcp: FastMCP) -> None:
                 origins = data.get("allowedOrigins", [])
                 return {"origins": list(origins) if isinstance(origins, list) else []}
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

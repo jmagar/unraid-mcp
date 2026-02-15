@@ -55,7 +55,6 @@ class OverwriteFileHandler(logging.FileHandler):
                         # Close current stream
                         if self.stream:
                             self.stream.close()
-                            self.stream = None
 
                         # Remove the old file and start fresh
                         if os.path.exists(self.baseFilename):

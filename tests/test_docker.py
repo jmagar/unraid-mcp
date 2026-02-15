@@ -171,6 +171,34 @@ class TestDockerActions:
         result = await tool_fn(action="remove", container_id="old-app", confirm=True)
         assert result["success"] is True
 
+    async def test_details_found(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {"containers": [{"id": "c1", "names": ["plex"], "state": "running", "image": "plexinc/pms"}]}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="details", container_id="plex")
+        assert result["names"] == ["plex"]
+
+    async def test_logs(self, _mock_graphql: AsyncMock) -> None:
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            {"docker": {"logs": "2026-02-08 log line here"}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="logs", container_id="plex")
+        assert "log line" in result["logs"]
+
+    async def test_pause_container(self, _mock_graphql: AsyncMock) -> None:
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            {"docker": {"pause": {"id": cid, "state": "paused"}}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="pause", container_id="plex")
+        assert result["success"] is True
+
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()

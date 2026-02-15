@@ -138,6 +138,13 @@ class TestNotificationsActions:
         assert filter_var["limit"] == 10
         assert filter_var["offset"] == 5
 
+    async def test_delete_archived(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"notifications": {"deleteArchivedNotifications": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="delete_archived", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "delete_archived"
+
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("boom")
         tool_fn = _make_tool()

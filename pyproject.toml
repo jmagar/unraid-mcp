@@ -1,54 +1,177 @@
+# ============================================================================
+# Build System Configuration
+# ============================================================================
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
+# ============================================================================
+# Project Metadata
+# ============================================================================
 [project]
 name = "unraid-mcp"
 version = "0.2.0"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
 authors = [
     {name = "jmagar", email = "jmagar@users.noreply.github.com"}
 ]
-readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.10"
+maintainers = [
+    {name = "jmagar", email = "jmagar@users.noreply.github.com"}
+]
+keywords = [
+    "unraid",
+    "mcp",
+    "model-context-protocol",
+    "graphql",
+    "api",
+    "server",
+    "docker",
+    "automation",
+    "monitoring",
+    "homelab",
+]
 classifiers = [
+    # Development Status
     "Development Status :: 4 - Beta",
+
+    # Audience
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+
+    # License
     "License :: OSI Approved :: MIT License",
+
+    # Python Versions
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-]
-keywords = ["unraid", "mcp", "graphql", "api", "server"]
+    "Programming Language :: Python :: 3 :: Only",
 
+    # Framework
+    "Framework :: FastAPI",
+    "Framework :: Pydantic",
+
+    # Topics
+    "Topic :: Home Automation",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+
+    # Environment
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Typing :: Typed",
+]
+
+# ============================================================================
+# Dependencies
+# ============================================================================
 dependencies = [
     "python-dotenv>=1.1.1",
     "fastmcp>=2.11.2",
     "httpx>=0.28.1",
     "fastapi>=0.116.1",
-    "uvicorn>=0.35.0",
+    "uvicorn[standard]>=0.35.0",
     "websockets>=13.1,<14.0",
     "rich>=14.1.0",
     "pytz>=2025.2",
 ]
 
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+    "types-pytz>=2025.2.0.20250809",
+    "ty>=0.0.15",
+    "ruff>=0.12.8",
+    "black>=25.1.0",
+    "build>=1.2.2",
+    "twine>=6.0.1",
+]
+
+# Testing only
+test = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
+]
+
+# Linting and formatting only
+lint = [
+    "ruff>=0.12.8",
+    "black>=25.1.0",
+    "ty>=0.0.15",
+]
+
+# Type checking stubs
+types = [
+    "types-pytz>=2025.2.0.20250809",
+]
+
+# All dev dependencies
+all = [
+    "unraid-mcp[dev,test,lint,types]",
+]
+
+# ============================================================================
+# Project URLs
+# ============================================================================
 [project.urls]
 Homepage = "https://github.com/jmagar/unraid-mcp"
+Documentation = "https://github.com/jmagar/unraid-mcp#readme"
 Repository = "https://github.com/jmagar/unraid-mcp"
 Issues = "https://github.com/jmagar/unraid-mcp/issues"
+Changelog = "https://github.com/jmagar/unraid-mcp/releases"
+Source = "https://github.com/jmagar/unraid-mcp"
 
+# ============================================================================
+# Entry Points
+# ============================================================================
 [project.scripts]
 unraid-mcp-server = "unraid_mcp.main:main"
+unraid-mcp = "unraid_mcp.main:main"
 
+# ============================================================================
+# Build Configuration
+# ============================================================================
 [tool.hatch.build.targets.wheel]
-only-include = ["unraid_mcp/"]
+packages = ["unraid_mcp"]
+only-include = ["unraid_mcp"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/unraid_mcp",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+    "/.env.example",
+]
+exclude = [
+    "/.git",
+    "/.github",
+    "/.venv",
+    "/.cache",
+    "/.docs",
+    "/.full-review",
+    "/docs",
+    "*.pyc",
+    "__pycache__",
+]
+
+# ============================================================================
+# Tool Configuration: Black (Code Formatting)
+# ============================================================================
 [tool.black]
 line-length = 100
-target-version = ['py310']
+target-version = ['py310', 'py311', 'py312', 'py313']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -56,51 +179,104 @@ extend-exclude = '''
   \.eggs
   | \.git
   | \.hg
-  | \.mypy_cache
+  | \.ty_cache
   | \.tox
   | \.venv
+  | \.cache
   | build
   | dist
+  | __pycache__
 )/
 '''
 
+# ============================================================================
+# Tool Configuration: Ruff (Linting)
+# ============================================================================
 [tool.ruff]
 target-version = "py310"
 line-length = 100
+cache-dir = ".cache/.ruff_cache"
 
 [tool.ruff.lint]
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "B",  # flake8-bugbear
-    "C4", # flake8-comprehensions
-    "UP", # pyupgrade
+    # Pyflakes
+    "F",
+    # pycodestyle
+    "E",
+    "W",
+    # isort
+    "I",
+    # pep8-naming
+    "N",
+    # pydocstyle
+    "D",
+    # pyupgrade
+    "UP",
+    # flake8-2020
+    "YTT",
+    # flake8-bugbear
+    "B",
+    # flake8-quotes
+    "Q",
+    # flake8-comprehensions
+    "C4",
+    # flake8-simplify
+    "SIM",
+    # flake8-type-checking
+    "TCH",
+    # flake8-use-pathlib
+    "PTH",
+    # flake8-async
+    "ASYNC",
+    # flake8-return
+    "RET",
+    # Perflint
+    "PERF",
+    # Ruff-specific rules
+    "RUF",
 ]
 ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+    "E501",   # line too long (handled by black)
+    "B008",   # function calls in argument defaults
+    "C901",   # too complex
+    "D100",   # missing docstring in public module
+    "D101",   # missing docstring in public class
+    "D102",   # missing docstring in public method
+    "D103",   # missing docstring in public function
+    "D104",   # missing docstring in public package
+    "D105",   # missing docstring in magic method
+    "D107",   # missing docstring in __init__
+    "D203",   # 1 blank line required before class docstring (conflicts with D211)
+    "D213",   # multi-line docstring summary should start at the second line (conflicts with D212)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
+"__init__.py" = ["F401", "D104"]
+"tests/**/*.py" = ["D", "S101", "PLR2004"]  # Allow asserts and magic values in tests
 
-[tool.mypy]
-python_version = "3.10"
-check_untyped_defs = true
-disallow_any_generics = true
-disallow_incomplete_defs = true
-disallow_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_return_any = true
-strict_equality = true
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
+[tool.ruff.lint.isort]
+known-first-party = ["unraid_mcp"]
+force-single-line = false
+lines-after-imports = 2
+
+# ============================================================================
+# Tool Configuration: ty (Type Checking)
+# ============================================================================
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.analysis]
+respect-type-ignore-comments = true
+
+# ============================================================================
+# Tool Configuration: pytest (Testing)
+# ============================================================================
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+cache_dir = ".cache/.pytest_cache"
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
@@ -109,41 +285,73 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    "--cov=unraid_mcp",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-report=xml",
+    "--tb=short",
+    "-v",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
+# ============================================================================
+# Tool Configuration: Coverage
+# ============================================================================
 [tool.coverage.run]
 source = ["unraid_mcp"]
 branch = true
+parallel = true
+data_file = ".cache/.coverage"
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+]
 
 [tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
+    "def __str__",
     "if self.debug:",
     "if settings.DEBUG",
     "raise AssertionError",
     "raise NotImplementedError",
     "if 0:",
+    "if False:",
     "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
+    "@(typing\\.)?overload",
 ]
 
+[tool.coverage.html]
+directory = ".cache/htmlcov"
+
+[tool.coverage.xml]
+output = ".cache/coverage.xml"
+
+# ============================================================================
+# Tool Configuration: Dependency Groups (uv-specific)
+# ============================================================================
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "types-pytz>=2025.2.0.20250809",
-    "mypy>=1.17.1",
+    "ty>=0.0.15",
     "ruff>=0.12.8",
     "black>=25.1.0",
+    "build>=1.2.2",
+    "twine>=6.0.1",
 ]

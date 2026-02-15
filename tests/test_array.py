@@ -70,6 +70,32 @@ class TestArrayActions:
         assert result["success"] is True
         assert result["action"] == "shutdown"
 
+    async def test_stop_array(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"setState": {"state": "STOPPED"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="stop", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "stop"
+
+    async def test_reboot(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"reboot": True}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="reboot", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "reboot"
+
+    async def test_parity_pause(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"parityCheck": {"pause": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="parity_pause")
+        assert result["success"] is True
+
+    async def test_unmount_disk(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"unmountArrayDisk": True}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="unmount_disk", disk_id="disk:1")
+        assert result["success"] is True
+
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("disk error")
         tool_fn = _make_tool()

@@ -135,7 +135,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                     "message": f"API key '{key_id}' deleted",
                 }
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

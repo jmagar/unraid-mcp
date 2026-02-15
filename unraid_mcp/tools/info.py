@@ -59,7 +59,7 @@ QUERIES: dict[str, str] = {
         query GetRegistrationInfo {
           registration {
             id type
-            keyFile { location contents }
+            keyFile { location }
             state expiration updateExpiration
           }
         }
@@ -366,7 +366,8 @@ def register_info_tool(mcp: FastMCP) -> None:
             if action == "settings":
                 settings = data.get("settings", {})
                 if settings and settings.get("unified"):
-                    return dict(settings["unified"].get("values", {}))
+                    values = settings["unified"].get("values", {})
+                    return dict(values) if isinstance(values, dict) else {"raw": values}
                 return {}
 
             if action == "server":
@@ -389,7 +390,7 @@ def register_info_tool(mcp: FastMCP) -> None:
             if action == "ups_config":
                 return dict(data.get("upsConfiguration", {}))
 
-            return data
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

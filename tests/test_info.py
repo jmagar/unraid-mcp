@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
 from unraid_mcp.tools.info import (
@@ -89,13 +90,17 @@ class TestProcessArrayStatus:
 # --- Integration tests for the tool function ---
 
 
-class TestUnraidInfoTool:
-    @pytest.fixture
-    def _mock_graphql(self) -> AsyncMock:
-        with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock) as mock:
-            yield mock
+@pytest.fixture
+def _mock_graphql() -> AsyncMock:
+    with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock) as mock:
+        yield mock
 
-    @pytest.mark.asyncio
+
+def _make_tool():
+    return make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+
+
+class TestUnraidInfoTool:
     async def test_overview_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "info": {
@@ -103,57 +108,78 @@ class TestUnraidInfoTool:
                 "cpu": {"manufacturer": "Intel", "brand": "i7", "cores": 4, "threads": 8},
             }
         }
-        # Import and call the inner function by simulating registration
-        from fastmcp import FastMCP
-        test_mcp = FastMCP("test")
-        from unraid_mcp.tools.info import register_info_tool
-        register_info_tool(test_mcp)
-        tool_fn = test_mcp._tool_manager._tools["unraid_info"].fn
+        tool_fn = _make_tool()
         result = await tool_fn(action="overview")
         assert "summary" in result
         _mock_graphql.assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_ups_device_requires_device_id(self, _mock_graphql: AsyncMock) -> None:
-        from fastmcp import FastMCP
-        test_mcp = FastMCP("test")
-        from unraid_mcp.tools.info import register_info_tool
-        register_info_tool(test_mcp)
-        tool_fn = test_mcp._tool_manager._tools["unraid_info"].fn
+        tool_fn = _make_tool()
         with pytest.raises(ToolError, match="device_id is required"):
             await tool_fn(action="ups_device")
 
-    @pytest.mark.asyncio
     async def test_network_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"network": {"id": "net:1", "accessUrls": []}}
-        from fastmcp import FastMCP
-        test_mcp = FastMCP("test")
-        from unraid_mcp.tools.info import register_info_tool
-        register_info_tool(test_mcp)
-        tool_fn = test_mcp._tool_manager._tools["unraid_info"].fn
+        tool_fn = _make_tool()
         result = await tool_fn(action="network")
         assert result["id"] == "net:1"
 
-    @pytest.mark.asyncio
     async def test_connect_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "connect": {"status": "connected", "sandbox": False, "flashGuid": "abc123"}
         }
-        from fastmcp import FastMCP
-        test_mcp = FastMCP("test")
-        from unraid_mcp.tools.info import register_info_tool
-        register_info_tool(test_mcp)
-        tool_fn = test_mcp._tool_manager._tools["unraid_info"].fn
+        tool_fn = _make_tool()
         result = await tool_fn(action="connect")
         assert result["status"] == "connected"
 
-    @pytest.mark.asyncio
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected")
-        from fastmcp import FastMCP
-        test_mcp = FastMCP("test")
-        from unraid_mcp.tools.info import register_info_tool
-        register_info_tool(test_mcp)
-        tool_fn = test_mcp._tool_manager._tools["unraid_info"].fn
+        tool_fn = _make_tool()
         with pytest.raises(ToolError, match="unexpected"):
             await tool_fn(action="online")
+
+    async def test_metrics(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"metrics": {"cpu": {"used": 25.5}, "memory": {"used": 8192, "total": 32768}}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="metrics")
+        assert result["cpu"]["used"] == 25.5
+
+    async def test_services(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"services": [{"name": "docker", "state": "running"}]}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="services")
+        assert len(result["services"]) == 1
+        assert result["services"][0]["name"] == "docker"
+
+    async def test_settings(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"settings": {"unified": {"values": {"timezone": "US/Eastern"}}}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="settings")
+        assert result["timezone"] == "US/Eastern"
+
+    async def test_settings_non_dict_values(self, _mock_graphql: AsyncMock) -> None:
+        """Settings values that are not a dict should be wrapped in {'raw': ...}."""
+        _mock_graphql.return_value = {"settings": {"unified": {"values": "raw_string"}}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="settings")
+        assert result == {"raw": "raw_string"}
+
+    async def test_servers(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"servers": [{"id": "s:1", "name": "tower", "status": "online"}]}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="servers")
+        assert len(result["servers"]) == 1
+        assert result["servers"][0]["name"] == "tower"
+
+    async def test_flash(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"flash": {"id": "f:1", "guid": "abc", "product": "SanDisk", "vendor": "SanDisk", "size": 32000000000}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="flash")
+        assert result["product"] == "SanDisk"
+
+    async def test_ups_devices(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"upsDevices": [{"id": "ups:1", "model": "APC", "status": "online", "charge": 100}]}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="ups_devices")
+        assert len(result["ups_devices"]) == 1
+        assert result["ups_devices"][0]["model"] == "APC"

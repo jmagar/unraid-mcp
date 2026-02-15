@@ -157,7 +157,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     "title": title,
                     "subject": subject,
                     "description": description,
-                    "importance": importance.upper() if importance else "INFO",
+                    "importance": importance.upper(),
                 }
                 data = await make_graphql_request(
                     MUTATIONS["create"], {"input": input_data}
@@ -194,7 +194,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["archive_all"], variables)
                 return {"success": True, "action": "archive_all", "data": data}
 
-            return {}
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
         except ToolError:
             raise

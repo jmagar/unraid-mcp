@@ -108,6 +108,16 @@ class TestHealthActions:
             with pytest.raises(ToolError, match="broken"):
                 await tool_fn(action="diagnose")
 
+    async def test_diagnose_success(self, _mock_graphql: AsyncMock) -> None:
+        """Diagnose returns subscription status when modules are available."""
+        tool_fn = _make_tool()
+        mock_status = {
+            "cpu_sub": {"runtime": {"connection_state": "connected", "last_error": None}},
+        }
+        with patch("unraid_mcp.tools.health._diagnose_subscriptions", return_value=mock_status):
+            result = await tool_fn(action="diagnose")
+        assert "cpu_sub" in result
+
     async def test_diagnose_import_error_internal(self) -> None:
         """_diagnose_subscriptions catches ImportError and returns error dict."""
         import builtins
