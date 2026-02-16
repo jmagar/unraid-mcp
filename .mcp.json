@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "unraid": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "unraid-mcp-server"],
+      "env": {
+        "UNRAID_MCP_TRANSPORT": "stdio"
+      }
+    }
+  }
+}
