@@ -31,7 +31,7 @@ This directory contains the Claude Code marketplace configuration for the Unraid
 Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring.
 
 **Features:**
-- 10 tools with 90 actions (queries and mutations)
+- 10 tools with 76 actions (queries and mutations)
 - Real-time system metrics
 - Disk health and temperature monitoring
 - Docker container management

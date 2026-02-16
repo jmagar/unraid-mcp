@@ -71,7 +71,7 @@ Users can also install from a specific commit or branch:
 
 ## Plugin Structure
 
-```
+```text
 unraid-mcp/
 ├── .claude-plugin/          # Marketplace manifest
 │   ├── marketplace.json

@@ -8,7 +8,7 @@ This skill provides complete access to all 27 read-only Unraid GraphQL API endpo
 
 ### Files
 
-```
+```text
 skills/unraid/
 ├── SKILL.md                           # Main skill documentation
 ├── README.md                          # This file
@@ -147,7 +147,7 @@ This skill activates when you mention:
 
 ## Notes
 
-- All sizes are in **kilobytes**
+- Disk/array sizes are in **kilobytes**; memory values (from `info.memory` and `metrics.memory`) are in **bytes**
 - Temperatures are in **Celsius**
 - Docker container logs are **not accessible** via API (use SSH)
 - Poll no faster than every **5 seconds** to avoid server load

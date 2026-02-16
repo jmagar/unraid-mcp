@@ -50,6 +50,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -92,6 +93,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -128,6 +130,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -149,6 +152,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -174,6 +178,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (sample):**
+
 ```json
 {
   "data": {
@@ -223,6 +228,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (sample):**
+
 ```json
 {
   "data": {
@@ -261,6 +267,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -297,6 +304,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (when no containers):**
+
 ```json
 {
   "data": {
@@ -324,6 +332,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (when no VMs):**
+
 ```json
 {
   "data": {
@@ -349,6 +358,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (sample, 32 logs found):**
+
 ```json
 {
   "data": {
@@ -388,6 +398,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -429,6 +440,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -463,6 +475,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (sample):**
+
 ```json
 {
   "data": {
@@ -503,6 +516,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (when no UPS):**
+
 ```json
 {
   "data": {
@@ -542,6 +556,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -567,6 +582,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -606,6 +622,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (sample, 4 keys found):**
+
 ```json
 {
   "data": {
@@ -681,6 +698,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -712,6 +730,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -742,6 +761,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -816,6 +836,7 @@ curl -s -X POST "https://YOUR-UNRAID/graphql" \
 ```
 
 **Response (when no plugins):**
+
 ```json
 {
   "data": {

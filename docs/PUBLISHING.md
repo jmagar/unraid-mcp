@@ -161,7 +161,39 @@ UNRAID_API_URL=https://your-server uvx unraid-mcp-server
 
 ## Automation with GitHub Actions (Future)
 
-Consider adding `.github/workflows/publish.yml`:
+### Recommended: Trusted Publishing (OIDC)
+
+[PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) uses OpenID Connect (OIDC) to authenticate directly from GitHub Actions -- no stored API tokens or long-lived secrets required. This is PyPI's recommended approach.
+
+**Setup:**
+1. Go to [pypi.org/manage/account/publishing/](https://pypi.org/manage/account/publishing/)
+2. Add a "new pending publisher" with your GitHub repository details
+3. Use the following workflow:
+
+```yaml
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Build package
+        run: uv run python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+```
+
+### Alternative: API Token
+
+If Trusted Publishing is not an option, use a stored API token:
 
 ```yaml
 name: Publish to PyPI
@@ -184,8 +216,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: uv run twine upload dist/*
 ```
-
-> **Tip:** Consider using [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/) instead of API token secrets. Trusted Publishing uses OpenID Connect (OIDC) to authenticate directly from GitHub Actions without storing long-lived secrets.
 
 ## Troubleshooting
 
