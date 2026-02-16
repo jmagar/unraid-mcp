@@ -109,6 +109,45 @@ class TestStorageActions:
         assert result["summary"]["temperature"] == "35\u00b0C"
         assert "1.00 GB" in result["summary"]["size_formatted"]
 
+    async def test_disk_details_temperature_zero(self, _mock_graphql: AsyncMock) -> None:
+        """Temperature of 0 should display as '0\u00b0C', not 'N/A'."""
+        _mock_graphql.return_value = {
+            "disk": {
+                "id": "d:1",
+                "device": "sda",
+                "name": "WD",
+                "serialNum": "SN1",
+                "size": 1073741824,
+                "temperature": 0,
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="disk_details", disk_id="d:1")
+        assert result["summary"]["temperature"] == "0\u00b0C"
+
+    async def test_disk_details_temperature_null(self, _mock_graphql: AsyncMock) -> None:
+        """Null temperature should display as 'N/A'."""
+        _mock_graphql.return_value = {
+            "disk": {
+                "id": "d:1",
+                "device": "sda",
+                "name": "WD",
+                "serialNum": "SN1",
+                "size": 1073741824,
+                "temperature": None,
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="disk_details", disk_id="d:1")
+        assert result["summary"]["temperature"] == "N/A"
+
+    async def test_logs_null_log_file(self, _mock_graphql: AsyncMock) -> None:
+        """logFile being null should return an empty dict."""
+        _mock_graphql.return_value = {"logFile": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="logs", log_path="/var/log/syslog")
+        assert result == {}
+
     async def test_disk_details_not_found(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"disk": None}
         tool_fn = _make_tool()

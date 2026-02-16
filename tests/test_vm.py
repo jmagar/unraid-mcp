@@ -158,10 +158,10 @@ class TestVmMutationFailures:
         assert result["action"] == "start"
 
     async def test_stop_mutation_returns_null(self, _mock_graphql: AsyncMock) -> None:
-        """VM stop returning None in the field should raise ToolError (field not 'in' data)."""
+        """VM stop returning None in the field should succeed (key exists, value is None)."""
         _mock_graphql.return_value = {"vm": {"stop": None}}
         tool_fn = _make_tool()
-        # The check is `field in data["vm"]` — None is truthy for `in`, so it succeeds
+        # The check is `field in data["vm"]` — `in` checks key existence, not truthiness
         result = await tool_fn(action="stop", vm_id="uuid-1")
         assert result["success"] is None
         assert result["action"] == "stop"

@@ -69,11 +69,11 @@ class TestDockerValidation:
         with pytest.raises(ToolError, match="destructive"):
             await tool_fn(action="remove", container_id="abc123")
 
-    async def test_container_actions_require_id(self, _mock_graphql: AsyncMock) -> None:
+    @pytest.mark.parametrize("action", ["start", "stop", "details", "logs", "pause", "unpause"])
+    async def test_container_actions_require_id(self, _mock_graphql: AsyncMock, action: str) -> None:
         tool_fn = _make_tool()
-        for action in ("start", "stop", "details", "logs", "pause", "unpause"):
-            with pytest.raises(ToolError, match="container_id"):
-                await tool_fn(action=action)
+        with pytest.raises(ToolError, match="container_id"):
+            await tool_fn(action=action)
 
     async def test_network_details_requires_id(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
@@ -92,18 +92,19 @@ class TestDockerActions:
 
     async def test_start_container(self, _mock_graphql: AsyncMock) -> None:
         # First call resolves ID, second performs start
+        cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {
                 "docker": {
                     "containers": [
-                        {"id": "abc123def456" * 4 + "abcd1234abcd1234:local", "names": ["plex"]}
+                        {"id": cid, "names": ["plex"]}
                     ]
                 }
             },
             {
                 "docker": {
                     "start": {
-                        "id": "abc123def456" * 4 + "abcd1234abcd1234:local",
+                        "id": cid,
                         "state": "running",
                     }
                 }
@@ -299,7 +300,7 @@ class TestDockerNetworkErrors:
         with pytest.raises(ToolError, match="Connection refused"):
             await tool_fn(action="list")
 
-    async def test_start_http_401_unauthorized(self, _mock_graphql: AsyncMock) -> None:
+    async def test_list_http_401_unauthorized(self, _mock_graphql: AsyncMock) -> None:
         """HTTP 401 should propagate as ToolError."""
         _mock_graphql.side_effect = ToolError("HTTP error 401: Unauthorized")
         tool_fn = _make_tool()
