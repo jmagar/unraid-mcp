@@ -1,14 +1,15 @@
 {
-  "name": "unraid-mcp",
-  "description": "Comprehensive Unraid server management and monitoring tools via GraphQL API",
-  "version": "0.2.0",
+  "name": "jmagar-unraid-mcp",
   "owner": {
     "name": "jmagar",
-    "email": "jmagar@users.noreply.github.com",
-    "url": "https://github.com/jmagar"
+    "email": "jmagar@users.noreply.github.com"
   },
-  "homepage": "https://github.com/jmagar/unraid-mcp",
-  "repository": "https://github.com/jmagar/unraid-mcp",
+  "metadata": {
+    "description": "Comprehensive Unraid server management and monitoring tools via GraphQL API",
+    "version": "0.2.0",
+    "homepage": "https://github.com/jmagar/unraid-mcp",
+    "repository": "https://github.com/jmagar/unraid-mcp"
+  },
   "plugins": [
     {
       "name": "unraid",
