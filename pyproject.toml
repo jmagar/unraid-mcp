@@ -71,11 +71,11 @@ classifiers = [
 # ============================================================================
 dependencies = [
     "python-dotenv>=1.1.1",
-    "fastmcp>=2.11.2",
+    "fastmcp>=2.14.5",
     "httpx>=0.28.1",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
-    "websockets>=13.1,<14.0",
+    "websockets>=15.0.1",
     "rich>=14.1.0",
     "pytz>=2025.2",
 ]
