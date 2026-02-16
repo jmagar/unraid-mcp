@@ -13,7 +13,7 @@
   "plugins": [
     {
       "name": "unraid",
-      "source": "skills/unraid",
+      "source": "https://github.com/jmagar/unraid-mcp",
       "description": "Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
       "version": "0.2.0",
       "tags": ["unraid", "monitoring", "homelab", "graphql", "docker", "virtualization"],

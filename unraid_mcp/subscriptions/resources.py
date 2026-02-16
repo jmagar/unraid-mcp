@@ -6,8 +6,8 @@ and the MCP protocol, providing fallback queries when subscription data is unava
 
 import json
 import os
-from pathlib import Path
 
+import anyio
 from fastmcp import FastMCP
 
 from ..config.logging import logger
@@ -50,7 +50,7 @@ async def autostart_subscriptions() -> None:
     if log_path is None:
         # Default to syslog if available
         default_path = "/var/log/syslog"
-        if Path(default_path).exists():
+        if await anyio.Path(default_path).exists():
             log_path = default_path
             logger.info(f"[AUTOSTART] Using default log path: {default_path}")
 

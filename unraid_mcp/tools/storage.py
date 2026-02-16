@@ -4,9 +4,9 @@ Provides the `unraid_storage` tool with 6 actions for shares, physical disks,
 unassigned devices, log files, and log content retrieval.
 """
 
-from pathlib import Path
 from typing import Any, Literal
 
+import anyio
 from fastmcp import FastMCP
 
 from ..config.logging import logger
@@ -111,7 +111,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
             if not log_path:
                 raise ToolError("log_path is required for 'logs' action")
             # Resolve path to prevent traversal attacks (e.g. /var/log/../../etc/shadow)
-            normalized = str(Path(log_path).resolve())
+            normalized = str(await anyio.Path(log_path).resolve())
             if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
                 raise ToolError(
                     f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}. "
