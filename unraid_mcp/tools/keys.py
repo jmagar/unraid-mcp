@@ -101,9 +101,9 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 if not name:
                     raise ToolError("name is required for 'create' action")
                 input_data: dict[str, Any] = {"name": name}
-                if roles:
+                if roles is not None:
                     input_data["roles"] = roles
-                if permissions:
+                if permissions is not None:
                     input_data["permissions"] = permissions
                 data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 return {
@@ -117,7 +117,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 input_data: dict[str, Any] = {"id": key_id}
                 if name:
                     input_data["name"] = name
-                if roles:
+                if roles is not None:
                     input_data["roles"] = roles
                 data = await make_graphql_request(MUTATIONS["update"], {"input": input_data})
                 return {

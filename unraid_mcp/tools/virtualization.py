@@ -64,6 +64,8 @@ VM_ACTIONS = Literal[
     "reset",
 ]
 
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"details"}
+
 
 def register_vm_tool(mcp: FastMCP) -> None:
     """Register the unraid_vm tool with the FastMCP instance."""
@@ -87,9 +89,8 @@ def register_vm_tool(mcp: FastMCP) -> None:
           reboot - Reboot a VM (requires vm_id)
           reset - Reset a VM (requires vm_id, confirm=True)
         """
-        all_actions = set(QUERIES) | set(MUTATIONS) | {"details"}
-        if action not in all_actions:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(all_actions)}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action != "list" and not vm_id:
             raise ToolError(f"vm_id is required for '{action}' action")

@@ -70,7 +70,10 @@ def format_bytes(bytes_value: int | None) -> str:
     """Format byte values into human-readable sizes."""
     if bytes_value is None:
         return "N/A"
-    value = float(int(bytes_value))
+    try:
+        value = float(int(bytes_value))
+    except (ValueError, TypeError):
+        return "N/A"
     for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
         if value < 1024.0:
             return f"{value:.2f} {unit}"
@@ -118,7 +121,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
 
         query = QUERIES[action]
         variables: dict[str, Any] | None = None
-        custom_timeout = DISK_TIMEOUT if action == "disks" else None
+        custom_timeout = DISK_TIMEOUT if action in ("disks", "disk_details") else None
 
         if action == "disk_details":
             variables = {"id": disk_id}

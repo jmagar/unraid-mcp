@@ -48,7 +48,7 @@ def register_all_modules() -> None:
         register_subscription_resources(mcp)
         logger.info("Subscription resources registered")
 
-        # Register all 10 consolidated tools
+        # Register all consolidated tools
         registrars = [
             register_info_tool,
             register_array_tool,
@@ -64,7 +64,7 @@ def register_all_modules() -> None:
         for registrar in registrars:
             registrar(mcp)
 
-        logger.info("All 10 tools registered successfully - Server ready!")
+        logger.info(f"All {len(registrars)} tools registered successfully - Server ready!")
 
     except Exception as e:
         logger.error(f"Failed to register modules: {e}", exc_info=True)

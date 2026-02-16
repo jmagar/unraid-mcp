@@ -12,7 +12,7 @@
   "plugins": [
     {
       "name": "unraid",
-      "source": "./",
+      "source": "skills/unraid",
       "description": "Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
       "version": "0.2.0",
       "tags": ["unraid", "monitoring", "homelab", "graphql", "docker", "virtualization"],

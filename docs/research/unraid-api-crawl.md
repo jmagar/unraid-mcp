@@ -81,7 +81,7 @@ The Unraid API provides a GraphQL interface that allows you to interact with you
 #### Enabling the GraphQL Sandbox
 
 **Live Documentation:**
-- View the complete API schema and documentation at [Apollo GraphQL Studio](https://studio.apollographql.com/graph/Unraid-API/variant/current/home)
+- View the complete API schema and documentation at [Apollo GraphQL Studio](https://studio.apollographql.com/graph/Unraid-API/variant/current/home) *(requires authentication; may not be publicly accessible)*
 
 **WebGUI method (recommended):**
 1. Navigate to **Settings > Management Access > Developer Options**
@@ -468,7 +468,7 @@ unraid-api apikey --delete --name "workflow key" --json
 #!/bin/bash
 set -e
 
-# Set up cleanup trap early so it fires even if key creation fails
+# Define cleanup function (deletes the temporary key)
 cleanup() { echo "Cleaning up..."; unraid-api apikey --delete --name "temp deployment key" 2>/dev/null || true; }
 
 # 1. Create temporary API key
@@ -479,7 +479,7 @@ KEY_DATA=$(unraid-api apikey --create \
   --description "Temporary key for deployment $(date)" \
   --json)
 
-# Register trap after key creation succeeds
+# Register trap only after key creation succeeds (nothing to clean up if creation failed)
 trap cleanup EXIT
 
 # 2. Extract the API key

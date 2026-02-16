@@ -204,6 +204,8 @@ async def _comprehensive_check() -> dict[str, Any]:
         return health_info
 
     except Exception as e:
+        # Intentionally broad: health checks must always return a result,
+        # even on unexpected failures, so callers never get an unhandled exception.
         logger.error(f"Health check failed: {e}")
         return {
             "status": "unhealthy",
@@ -222,6 +224,9 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
         await ensure_subscriptions_started()
 
         status = subscription_manager.get_subscription_status()
+        # This list is intentionally placed into the summary dict below and then
+        # appended to in the loop — the mutable alias ensures both references
+        # reflect the same data without a second pass.
         connection_issues: list[dict[str, Any]] = []
 
         diagnostic_info: dict[str, Any] = {

@@ -134,13 +134,34 @@ DOCKER_ACTIONS = Literal[
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 
 
+def _safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    """Safely traverse nested dict keys, handling None intermediates."""
+    current = data
+    for key in keys:
+        if not isinstance(current, dict):
+            return default
+        current = current.get(key)
+    return current if current is not None else default
+
+
 def find_container_by_identifier(
     identifier: str, containers: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
-    """Find a container by ID or name with fuzzy matching."""
+    """Find a container by ID or name with fuzzy matching.
+
+    Match priority:
+      1. Exact ID match
+      2. Exact name match (case-sensitive)
+      3. Name starts with identifier (case-insensitive)
+      4. Name contains identifier as substring (case-insensitive)
+
+    Note: Short identifiers (e.g. "db") may match unintended containers
+    via substring. Use more specific names or IDs for precision.
+    """
     if not containers:
         return None
 
+    # Priority 1 & 2: exact matches
     for c in containers:
         if c.get("id") == identifier:
             return c
@@ -148,10 +169,19 @@ def find_container_by_identifier(
             return c
 
     id_lower = identifier.lower()
+
+    # Priority 3: prefix match (more precise than substring)
+    for c in containers:
+        for name in c.get("names", []):
+            if name.lower().startswith(id_lower):
+                logger.info(f"Prefix match: '{identifier}' -> '{name}'")
+                return c
+
+    # Priority 4: substring match (least precise)
     for c in containers:
         for name in c.get("names", []):
             if id_lower in name.lower():
-                logger.info(f"Fuzzy match: '{identifier}' -> '{name}'")
+                logger.info(f"Substring match: '{identifier}' -> '{name}'")
                 return c
 
     return None
@@ -177,7 +207,7 @@ async def _resolve_container_id(container_id: str) -> str:
         }
     """
     data = await make_graphql_request(list_query)
-    containers = data.get("docker", {}).get("containers", [])
+    containers = _safe_get(data, "docker", "containers", default=[])
     resolved = find_container_by_identifier(container_id, containers)
     if resolved:
         actual_id = str(resolved.get("id", ""))
@@ -240,12 +270,12 @@ def register_docker_tool(mcp: FastMCP) -> None:
             # --- Read-only queries ---
             if action == "list":
                 data = await make_graphql_request(QUERIES["list"])
-                containers = data.get("docker", {}).get("containers", [])
+                containers = _safe_get(data, "docker", "containers", default=[])
                 return {"containers": list(containers) if isinstance(containers, list) else []}
 
             if action == "details":
                 data = await make_graphql_request(QUERIES["details"])
-                containers = data.get("docker", {}).get("containers", [])
+                containers = _safe_get(data, "docker", "containers", default=[])
                 container = find_container_by_identifier(container_id or "", containers)
                 if container:
                     return container
@@ -260,7 +290,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
                 )
-                return {"logs": data.get("docker", {}).get("logs")}
+                return {"logs": _safe_get(data, "docker", "logs")}
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
@@ -269,16 +299,16 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "network_details":
                 data = await make_graphql_request(QUERIES["network_details"], {"id": network_id})
-                return dict(data.get("dockerNetwork", {}))
+                return dict(data.get("dockerNetwork") or {})
 
             if action == "port_conflicts":
                 data = await make_graphql_request(QUERIES["port_conflicts"])
-                conflicts = data.get("docker", {}).get("portConflicts", [])
+                conflicts = _safe_get(data, "docker", "portConflicts", default=[])
                 return {"port_conflicts": list(conflicts) if isinstance(conflicts, list) else []}
 
             if action == "check_updates":
                 data = await make_graphql_request(QUERIES["check_updates"])
-                statuses = data.get("docker", {}).get("containerUpdateStatuses", [])
+                statuses = _safe_get(data, "docker", "containerUpdateStatuses", default=[])
                 return {"update_statuses": list(statuses) if isinstance(statuses, list) else []}
 
             # --- Mutations ---
@@ -300,7 +330,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if start_data.get("idempotent_success"):
                     result = {}
                 else:
-                    result = start_data.get("docker", {}).get("start", {})
+                    result = _safe_get(start_data, "docker", "start", default={})
                 response: dict[str, Any] = {
                     "success": True,
                     "action": "restart",
@@ -312,7 +342,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "update_all":
                 data = await make_graphql_request(MUTATIONS["update_all"])
-                results = data.get("docker", {}).get("updateAllContainers", [])
+                results = _safe_get(data, "docker", "updateAllContainers", default=[])
                 return {"success": True, "action": "update_all", "containers": results}
 
             # Single-container mutations
@@ -336,7 +366,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                         "message": f"Container already in desired state for '{action}'",
                     }
 
-                docker_data = data.get("docker", {})
+                docker_data = data.get("docker") or {}
                 # Map action names to GraphQL response field names where they differ
                 response_field_map = {
                     "update": "updateContainer",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Validate Claude Code marketplace and plugin structure
 
-set -euo pipefail
+set -uo pipefail
 
 # Colors for output
 RED='\033[0;31m'
