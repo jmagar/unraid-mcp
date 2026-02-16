@@ -173,8 +173,8 @@ process_server() {
     echo "" >> "$OUTPUT_FILE"
     echo "### Health" >> "$OUTPUT_FILE"
     
-    HOT_DISKS=$(echo "$RESPONSE" | jq -r '.data.array.disks[] | select(.temp > 45) | "- ⚠️  \(.name): \(.temp)°C (HIGH)"')
-    DISK_ERRORS=$(echo "$RESPONSE" | jq -r '.data.array.disks[] | select(.numErrors > 0) | "- ❌ \(.name): \(.numErrors) errors"')
+    HOT_DISKS=$(echo "$RESPONSE" | jq -r '(.data.array.disks // [])[] | select(.temp > 45) | "- ⚠️  \(.name): \(.temp)°C (HIGH)"')
+    DISK_ERRORS=$(echo "$RESPONSE" | jq -r '(.data.array.disks // [])[] | select(.numErrors > 0) | "- ❌ \(.name): \(.numErrors) errors"')
     
     if [ -z "$HOT_DISKS" ] && [ -z "$DISK_ERRORS" ]; then
         echo "- ✅ All disks healthy" >> "$OUTPUT_FILE"
@@ -218,7 +218,7 @@ for server in "${SERVERS[@]}"; do
     url_var="UNRAID_${server}_URL"
     key_var="UNRAID_${server}_API_KEY"
 
-    NAME="${!name_var}"
+    NAME="${!name_var:-$server}"
     URL="${!url_var}"
     KEY="${!key_var}"
 

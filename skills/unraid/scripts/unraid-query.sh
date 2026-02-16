@@ -112,7 +112,21 @@ CURL_FLAGS=("-sL" "-X" "POST")
 RESPONSE=$(curl "${CURL_FLAGS[@]}" "$URL" \
     -H "Content-Type: application/json" \
     -H "x-api-key: $API_KEY" \
-    -d "$PAYLOAD")
+    -d "$PAYLOAD") || {
+    echo "Error: curl request failed (exit code $?). Check URL and network connectivity." >&2
+    exit 1
+}
+
+if [[ -z "$RESPONSE" ]]; then
+    echo "Error: Empty response from server." >&2
+    exit 1
+fi
+
+if ! echo "$RESPONSE" | jq -e . > /dev/null 2>&1; then
+    echo "Error: Server returned invalid JSON. Response:" >&2
+    echo "$RESPONSE" | head -c 500 >&2
+    exit 1
+fi
 
 # Check for errors
 if echo "$RESPONSE" | jq -e '.errors' > /dev/null 2>&1; then

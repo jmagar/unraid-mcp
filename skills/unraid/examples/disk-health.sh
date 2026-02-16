@@ -5,12 +5,25 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUERY_SCRIPT="$SCRIPT_DIR/../scripts/unraid-query.sh"
 
+if [[ ! -x "$QUERY_SCRIPT" ]]; then
+    echo "Error: Query script not found or not executable: $QUERY_SCRIPT" >&2
+    exit 1
+fi
+
 QUERY='{ array { disks { name device temp status isSpinning } } }'
 
 echo "=== Disk Health Report ==="
 echo ""
 
-RESPONSE=$("$QUERY_SCRIPT" -q "$QUERY" -f raw)
+RESPONSE=$("$QUERY_SCRIPT" -q "$QUERY" -f raw) || {
+    echo "Error: Query failed." >&2
+    exit 1
+}
+
+if [[ -z "$RESPONSE" ]] || ! echo "$RESPONSE" | jq -e . > /dev/null 2>&1; then
+    echo "Error: Invalid or empty response from query." >&2
+    exit 1
+fi
 
 echo "$RESPONSE" | jq -r '.array.disks[] | "\(.name) (\(.device)): \(.temp)°C - \(.status) - \(if .isSpinning then "Spinning" else "Spun down" end)"'
 
