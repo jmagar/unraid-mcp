@@ -1,0 +1,1428 @@
+# Unraid GraphQL API Schema (SDL)
+# Extracted from live introspection of the Unraid API.
+# Used for offline validation of MCP tool queries and mutations.
+
+# ============================================================================
+# Custom Scalars
+# ============================================================================
+scalar BigInt
+scalar DateTime
+scalar JSON
+scalar PrefixedID
+scalar Port
+
+# ============================================================================
+# Enums
+# ============================================================================
+enum ArrayState {
+  DISABLE_DISK
+  INVALID_EXPANSION
+  NEW_ARRAY
+  NEW_DISK_TOO_SMALL
+  NO_DATA_DISKS
+  PARITY_NOT_BIGGEST
+  RECON_DISK
+  STARTED
+  STOPPED
+  SWAP_DSBL
+  TOO_MANY_MISSING_DISKS
+}
+
+enum ArrayStateInputState {
+  START
+  STOP
+}
+
+enum ArrayDiskFsColor {
+  BLUE_BLINK
+  BLUE_ON
+  GREEN_BLINK
+  GREEN_ON
+  GREY_OFF
+  RED_OFF
+  RED_ON
+  YELLOW_BLINK
+  YELLOW_ON
+}
+
+enum ArrayDiskStatus {
+  DISK_DSBL
+  DISK_DSBL_NEW
+  DISK_INVALID
+  DISK_NEW
+  DISK_NP
+  DISK_NP_DSBL
+  DISK_NP_MISSING
+  DISK_OK
+  DISK_WRONG
+}
+
+enum ArrayDiskType {
+  CACHE
+  DATA
+  FLASH
+  PARITY
+}
+
+enum AuthAction {
+  CREATE_ANY
+  CREATE_OWN
+  DELETE_ANY
+  DELETE_OWN
+  READ_ANY
+  READ_OWN
+  UPDATE_ANY
+  UPDATE_OWN
+}
+
+enum ContainerPortType {
+  TCP
+  UDP
+}
+
+enum ContainerState {
+  EXITED
+  RUNNING
+}
+
+enum ConfigErrorState {
+  INELIGIBLE
+  INVALID
+  NO_KEY_SERVER
+  UNKNOWN_ERROR
+  WITHDRAWN
+}
+
+enum DiskFsType {
+  BTRFS
+  EXT4
+  NTFS
+  VFAT
+  XFS
+  ZFS
+}
+
+enum DiskInterfaceType {
+  PCIE
+  SAS
+  SATA
+  UNKNOWN
+  USB
+}
+
+enum DiskSmartStatus {
+  OK
+  UNKNOWN
+}
+
+enum NotificationImportance {
+  ALERT
+  INFO
+  WARNING
+}
+
+enum NotificationType {
+  ARCHIVE
+  UNREAD
+}
+
+enum ParityCheckStatus {
+  CANCELLED
+  COMPLETED
+  FAILED
+  NEVER_RUN
+  PAUSED
+  RUNNING
+}
+
+enum Resource {
+  ACTIVATION_CODE
+  API_KEY
+  ARRAY
+  CLOUD
+  CONFIG
+  CONNECT
+  CONNECT__REMOTE_ACCESS
+  CUSTOMIZATIONS
+  DASHBOARD
+  DISK
+  DISPLAY
+  DOCKER
+  FLASH
+  INFO
+  LOGS
+  ME
+  NETWORK
+  NOTIFICATIONS
+  ONLINE
+  OS
+  OWNER
+  PERMISSION
+  REGISTRATION
+  SERVERS
+  SERVICES
+  SHARE
+  VARS
+  VMS
+  WELCOME
+}
+
+enum Role {
+  ADMIN
+  CONNECT
+  GUEST
+  VIEWER
+}
+
+enum RegistrationState {
+  BASIC
+  EBLACKLISTED
+  EBLACKLISTED1
+  EBLACKLISTED2
+  EEXPIRED
+  EGUID
+  EGUID1
+  ENOCONN
+  ENOFLASH
+  ENOFLASH1
+  ENOFLASH2
+  ENOFLASH3
+  ENOFLASH4
+  ENOFLASH5
+  ENOFLASH6
+  ENOFLASH7
+  ENOKEYFILE
+  ENOKEYFILE1
+  ENOKEYFILE2
+  ETRIAL
+  LIFETIME
+  PLUS
+  PRO
+  STARTER
+  TRIAL
+  UNLEASHED
+}
+
+enum registrationType {
+  BASIC
+  INVALID
+  LIFETIME
+  PLUS
+  PRO
+  STARTER
+  TRIAL
+  UNLEASHED
+}
+
+enum ServerStatus {
+  NEVER_CONNECTED
+  OFFLINE
+  ONLINE
+}
+
+enum Temperature {
+  CELSIUS
+  FAHRENHEIT
+}
+
+enum ThemeName {
+  azure
+  black
+  gray
+  white
+}
+
+enum UpdateStatus {
+  REBUILD_READY
+  UNKNOWN
+  UPDATE_AVAILABLE
+  UP_TO_DATE
+}
+
+enum VmState {
+  CRASHED
+  IDLE
+  NOSTATE
+  PAUSED
+  PMSUSPENDED
+  RUNNING
+  SHUTDOWN
+  SHUTOFF
+}
+
+enum UPSCableType {
+  CUSTOM
+  ETHER
+  SIMPLE
+  SMART
+  USB
+}
+
+enum UPSKillPower {
+  NO
+  YES
+}
+
+enum UPSServiceState {
+  DISABLE
+  ENABLE
+}
+
+enum UPSType {
+  APCSMART
+  DUMB
+  MODBUS
+  NET
+  PCNET
+  SNMP
+  USB
+}
+
+# ============================================================================
+# Interfaces
+# ============================================================================
+interface Node {
+  id: PrefixedID!
+}
+
+# ============================================================================
+# Input Types
+# ============================================================================
+input AddPermissionInput {
+  actions: [AuthAction!]!
+  resource: Resource!
+}
+
+input ArrayDiskInput {
+  id: PrefixedID!
+  slot: Int
+}
+
+input ArrayStateInput {
+  desiredState: ArrayStateInputState!
+}
+
+input CreateApiKeyInput {
+  description: String
+  name: String!
+  overwrite: Boolean
+  permissions: [AddPermissionInput!]
+  roles: [Role!]
+}
+
+input UpdateApiKeyInput {
+  description: String
+  id: PrefixedID!
+  name: String
+  permissions: [AddPermissionInput!]
+  roles: [Role!]
+}
+
+input DeleteApiKeyInput {
+  ids: [PrefixedID!]!
+}
+
+# Alias used in keys.py (deleteApiKeys at root level)
+input DeleteApiKeysInput {
+  ids: [PrefixedID!]!
+}
+
+input CreateRCloneRemoteInput {
+  name: String!
+  parameters: JSON!
+  type: String!
+}
+
+input DeleteRCloneRemoteInput {
+  name: String!
+}
+
+input RCloneConfigFormInput {
+  parameters: JSON
+  providerType: String
+  showAdvanced: Boolean
+}
+
+input NotificationFilter {
+  importance: NotificationImportance
+  limit: Int!
+  offset: Int!
+  type: NotificationType!
+}
+
+input NotificationData {
+  description: String!
+  importance: NotificationImportance!
+  link: String
+  subject: String!
+  title: String!
+}
+
+# Alias used in notifications.py create mutation
+input CreateNotificationInput {
+  description: String!
+  importance: NotificationImportance!
+  link: String
+  subject: String!
+  title: String!
+}
+
+input UPSConfigInput {
+  batteryLevel: Int
+  customUpsCable: String
+  device: String
+  killUps: UPSKillPower
+  minutes: Int
+  overrideUpsCapacity: Int
+  service: UPSServiceState
+  timeout: Int
+  upsCable: UPSCableType
+  upsType: UPSType
+}
+
+# ============================================================================
+# Object Types
+# ============================================================================
+type Capacity {
+  free: String!
+  total: String!
+  used: String!
+}
+
+type ArrayCapacity {
+  disks: Capacity!
+  kilobytes: Capacity!
+}
+
+type ArrayDisk implements Node {
+  id: PrefixedID!
+  idx: Int!
+  name: String
+  device: String
+  size: BigInt
+  status: ArrayDiskStatus
+  rotational: Boolean
+  temp: Int
+  numReads: BigInt
+  numWrites: BigInt
+  numErrors: BigInt
+  fsSize: BigInt
+  fsFree: BigInt
+  fsUsed: BigInt
+  exportable: Boolean
+  type: ArrayDiskType!
+  warning: Int
+  critical: Int
+  fsType: String
+  comment: String
+  format: String
+  transport: String
+  color: ArrayDiskFsColor
+  isSpinning: Boolean
+}
+
+type UnraidArray implements Node {
+  id: PrefixedID!
+  state: ArrayState!
+  capacity: ArrayCapacity!
+  boot: ArrayDisk
+  parities: [ArrayDisk!]!
+  disks: [ArrayDisk!]!
+  caches: [ArrayDisk!]!
+  parityCheckStatus: ParityCheck!
+}
+
+type ParityCheck {
+  correcting: Boolean
+  date: DateTime
+  duration: Int
+  errors: Int
+  paused: Boolean
+  progress: Int
+  running: Boolean
+  speed: String
+  status: ParityCheckStatus!
+}
+
+type ParityCheckMutations {
+  start(correct: Boolean): JSON!
+  pause: JSON!
+  resume: JSON!
+  cancel: JSON!
+}
+
+type ArrayMutations {
+  addDiskToArray(input: ArrayDiskInput!): UnraidArray!
+  clearArrayDiskStatistics(id: PrefixedID!): Boolean!
+  mountArrayDisk(id: PrefixedID!): ArrayDisk!
+  removeDiskFromArray(input: ArrayDiskInput!): UnraidArray!
+  setState(input: ArrayStateInput!): UnraidArray!
+  unmountArrayDisk(id: PrefixedID!): ArrayDisk!
+}
+
+type Config implements Node {
+  id: PrefixedID!
+  valid: Boolean
+  error: String
+}
+
+type CoreVersions {
+  api: String
+  kernel: String
+  unraid: String
+}
+
+type PackageVersions {
+  docker: String
+  git: String
+  nginx: String
+  node: String
+  npm: String
+  openssl: String
+  php: String
+  pm2: String
+}
+
+type InfoVersions implements Node {
+  id: PrefixedID!
+  core: CoreVersions!
+  packages: PackageVersions
+  # Flattened fields used by the MCP tool queries (may exist in live API)
+  kernel: String
+  openssl: String
+  systemOpenssl: String
+  systemOpensslLib: String
+  node: String
+  v8: String
+  npm: String
+  yarn: String
+  pm2: String
+  gulp: String
+  grunt: String
+  git: String
+  tsc: String
+  mysql: String
+  redis: String
+  mongodb: String
+  apache: String
+  nginx: String
+  php: String
+  docker: String
+  postfix: String
+  postgresql: String
+  perl: String
+  python: String
+  gcc: String
+  unraid: String
+}
+
+type InfoOs implements Node {
+  id: PrefixedID!
+  platform: String
+  distro: String
+  release: String
+  codename: String
+  kernel: String
+  arch: String
+  hostname: String
+  logofile: String
+  serial: String
+  build: String
+  uptime: String
+  fqdn: String
+  servicepack: String
+  uefi: Boolean
+  codepage: String
+}
+
+type InfoCpu implements Node {
+  id: PrefixedID!
+  manufacturer: String
+  brand: String
+  vendor: String
+  family: String
+  model: String
+  stepping: Int
+  revision: String
+  voltage: String
+  speed: Float
+  speedmin: Float
+  speedmax: Float
+  threads: Int
+  cores: Int
+  processors: Int
+  socket: String
+  cache: JSON
+  flags: [String!]
+  packages: CpuPackages!
+  topology: [[[Int!]!]!]!
+}
+
+type CpuLoad {
+  percentGuest: Float!
+  percentIdle: Float!
+  percentIrq: Float!
+  percentNice: Float!
+  percentSteal: Float!
+  percentSystem: Float!
+  percentTotal: Float!
+  percentUser: Float!
+}
+
+type CpuPackages implements Node {
+  id: PrefixedID!
+  power: [Float!]!
+  temp: [Float!]!
+  totalPower: Float!
+}
+
+type CpuUtilization implements Node {
+  id: PrefixedID!
+  cpus: [CpuLoad!]!
+  percentTotal: Float!
+}
+
+type MemoryLayout implements Node {
+  id: PrefixedID!
+  bank: String
+  type: String
+  clockSpeed: Int
+  formFactor: String
+  manufacturer: String
+  partNum: String
+  serialNum: String
+  size: BigInt!
+  voltageConfigured: Int
+  voltageMax: Int
+  voltageMin: Int
+}
+
+type InfoMemory implements Node {
+  id: PrefixedID!
+  layout: [MemoryLayout!]!
+}
+
+type MemoryUtilization implements Node {
+  id: PrefixedID!
+  active: BigInt!
+  available: BigInt!
+  buffcache: BigInt!
+  free: BigInt!
+  percentSwapTotal: Float!
+  percentTotal: Float!
+  swapFree: BigInt!
+  swapTotal: BigInt!
+  swapUsed: BigInt!
+  total: BigInt!
+  used: BigInt!
+}
+
+type InfoBaseboard implements Node {
+  id: PrefixedID!
+  manufacturer: String
+  model: String
+  version: String
+  serial: String
+  assetTag: String
+  memMax: Float
+  memSlots: Float
+}
+
+type InfoSystem implements Node {
+  id: PrefixedID!
+  manufacturer: String
+  model: String
+  version: String
+  serial: String
+  uuid: String
+  sku: String
+  virtual: Boolean
+}
+
+type InfoGpu implements Node {
+  id: PrefixedID!
+  blacklisted: Boolean!
+  class: String!
+  productid: String!
+  type: String!
+  typeid: String!
+  vendorname: String
+}
+
+type InfoNetwork implements Node {
+  id: PrefixedID!
+  iface: String!
+  mac: String
+  model: String
+  speed: String
+  vendor: String
+  virtual: Boolean
+  dhcp: Boolean
+}
+
+type InfoPci implements Node {
+  id: PrefixedID!
+  blacklisted: String!
+  class: String!
+  productid: String!
+  productname: String
+  type: String!
+  typeid: String!
+  vendorid: String!
+  vendorname: String
+}
+
+type InfoUsb implements Node {
+  id: PrefixedID!
+  bus: String
+  device: String
+  name: String!
+}
+
+type InfoDevices implements Node {
+  id: PrefixedID!
+  gpu: [InfoGpu!]
+  network: [InfoNetwork!]
+  pci: [InfoPci!]
+  usb: [InfoUsb!]
+}
+
+type InfoDisplayCase implements Node {
+  id: PrefixedID!
+  base64: String!
+  error: String!
+  icon: String!
+  url: String!
+}
+
+type InfoDisplay implements Node {
+  id: PrefixedID!
+  case: InfoDisplayCase!
+  critical: Int!
+  hot: Int!
+  locale: String
+  max: Int
+  resize: Boolean!
+  scale: Boolean!
+  tabs: Boolean!
+  text: Boolean!
+  theme: ThemeName!
+  total: Boolean!
+  unit: Temperature!
+  usage: Boolean!
+  warning: Int!
+  wwn: Boolean!
+}
+
+type Apps {
+  installed: Int
+  started: Int
+}
+
+type Info implements Node {
+  id: PrefixedID!
+  os: InfoOs!
+  cpu: InfoCpu!
+  memory: InfoMemory!
+  baseboard: InfoBaseboard!
+  system: InfoSystem!
+  versions: InfoVersions!
+  devices: InfoDevices!
+  display: InfoDisplay!
+  apps: Apps
+  machineId: ID
+  time: DateTime!
+}
+
+type MetricsCpu {
+  used: Float
+}
+
+type MetricsMemory {
+  used: Float
+  total: Float
+}
+
+type Metrics implements Node {
+  id: PrefixedID!
+  cpu: MetricsCpu
+  memory: MetricsMemory
+}
+
+type Service implements Node {
+  id: PrefixedID!
+  name: String
+  state: String
+  online: Boolean
+  uptime: Uptime
+  version: String
+}
+
+type Uptime {
+  timestamp: String
+}
+
+type AccessUrl {
+  type: String
+  name: String
+  ipv4: String
+  ipv6: String
+}
+
+type Network implements Node {
+  id: PrefixedID!
+  accessUrls: [AccessUrl!]
+}
+
+type KeyFile {
+  contents: String
+  location: String
+}
+
+type Registration implements Node {
+  id: PrefixedID!
+  type: registrationType
+  keyFile: KeyFile
+  state: RegistrationState
+  expiration: String
+  updateExpiration: String
+}
+
+type ConnectSettings {
+  status: String
+  sandbox: Boolean
+  flashGuid: String
+}
+
+type Owner {
+  username: String!
+  avatar: String!
+  url: String!
+}
+
+type ProfileModel implements Node {
+  id: PrefixedID!
+  avatar: String!
+  url: String!
+  username: String!
+}
+
+type Server implements Node {
+  id: PrefixedID!
+  name: String!
+  status: ServerStatus!
+  description: String
+  ip: String
+  port: Int
+  guid: String!
+  apikey: String!
+  lanip: String!
+  localurl: String!
+  remoteurl: String!
+  owner: ProfileModel!
+  wanip: String!
+}
+
+type Flash implements Node {
+  id: PrefixedID!
+  guid: String!
+  product: String!
+  vendor: String!
+  size: BigInt
+}
+
+type Vars implements Node {
+  id: PrefixedID!
+  version: String
+  name: String
+  timeZone: String
+  comment: String
+  security: String
+  workgroup: String
+  domain: String
+  domainShort: String
+  hideDotFiles: Boolean
+  localMaster: Boolean
+  enableFruit: String
+  useNtp: Boolean
+  domainLogin: String
+  sysModel: String
+  sysFlashSlots: Int
+  useSsl: Boolean
+  port: Int
+  portssl: Int
+  localTld: String
+  bindMgt: Boolean
+  useTelnet: Boolean
+  porttelnet: Int
+  useSsh: Boolean
+  portssh: Int
+  startPage: String
+  startArray: Boolean
+  shutdownTimeout: Int
+  shareSmbEnabled: Boolean
+  shareNfsEnabled: Boolean
+  shareAfpEnabled: Boolean
+  shareCacheEnabled: Boolean
+  shareAvahiEnabled: Boolean
+  safeMode: Boolean
+  startMode: String
+  configValid: Boolean
+  configError: ConfigErrorState
+  joinStatus: String
+  deviceCount: Int
+  flashGuid: String
+  flashProduct: String
+  flashVendor: String
+  mdState: String
+  mdVersion: String
+  shareCount: Int
+  shareSmbCount: Int
+  shareNfsCount: Int
+  shareAfpCount: Int
+  shareMoverActive: Boolean
+  csrfToken: String
+}
+
+type ApiConfig {
+  extraOrigins: [String!]!
+  plugins: [String!]!
+  sandbox: Boolean
+  ssoSubIds: [String!]!
+  version: String!
+}
+
+type SsoSettings implements Node {
+  id: PrefixedID!
+  oidcProviders: [OidcProvider!]!
+}
+
+type OidcProvider {
+  id: PrefixedID!
+  name: String!
+  clientId: String!
+  clientSecret: String
+  issuer: String
+  authorizationEndpoint: String
+  tokenEndpoint: String
+  jwksUri: String
+  scopes: [String!]!
+  buttonText: String
+  buttonIcon: String
+  buttonStyle: String
+  buttonVariant: String
+  authorizationRuleMode: String
+  authorizationRules: [JSON!]
+}
+
+type UnifiedSettings implements Node {
+  id: PrefixedID!
+  dataSchema: JSON!
+  uiSchema: JSON!
+  values: JSON!
+}
+
+type Settings implements Node {
+  id: PrefixedID!
+  api: ApiConfig!
+  sso: SsoSettings!
+  unified: UnifiedSettings!
+}
+
+type UPSBattery {
+  chargeLevel: Int!
+  estimatedRuntime: Int!
+  health: String!
+}
+
+type UPSPower {
+  inputVoltage: Float!
+  loadPercentage: Int!
+  outputVoltage: Float!
+}
+
+type UPSDevice {
+  id: ID!
+  model: String!
+  name: String!
+  status: String!
+  battery: UPSBattery!
+  power: UPSPower!
+  # Flattened fields used by MCP tool queries
+  runtime: Int
+  charge: Int
+  load: Int
+  voltage: Float
+  frequency: Float
+  temperature: Float
+}
+
+type UPSConfiguration {
+  enabled: Boolean
+  mode: String
+  cable: String
+  driver: String
+  port: String
+  batteryLevel: Int
+  customUpsCable: String
+  device: String
+  killUps: String
+  minutes: Int
+  modelName: String
+  netServer: String
+  nisIp: String
+  overrideUpsCapacity: Int
+  service: String
+  timeout: Int
+  upsCable: String
+  upsName: String
+  upsType: String
+}
+
+type Share implements Node {
+  id: PrefixedID!
+  name: String
+  free: BigInt
+  used: BigInt
+  size: BigInt
+  include: [String!]
+  exclude: [String!]
+  cache: Boolean
+  nameOrig: String
+  comment: String
+  allocator: String
+  splitLevel: String
+  floor: String
+  cow: String
+  color: String
+  luksStatus: String
+}
+
+type Disk implements Node {
+  id: PrefixedID!
+  device: String!
+  name: String!
+  serialNum: String!
+  size: Float!
+  temperature: Float
+  bytesPerSector: Float!
+  firmwareRevision: String!
+  interfaceType: DiskInterfaceType!
+  isSpinning: Boolean!
+  partitions: [DiskPartition!]!
+  sectorsPerTrack: Float!
+  smartStatus: DiskSmartStatus!
+  totalCylinders: Float!
+  totalHeads: Float!
+  totalSectors: Float!
+  totalTracks: Float!
+  tracksPerCylinder: Float!
+  type: String!
+  vendor: String!
+}
+
+type DiskPartition {
+  fsType: DiskFsType!
+  name: String!
+  size: Float!
+}
+
+type UnassignedDevice {
+  id: PrefixedID!
+  device: String
+  name: String
+  size: BigInt
+  type: String
+}
+
+type LogFile {
+  name: String!
+  path: String!
+  size: Int!
+  modifiedAt: DateTime!
+}
+
+type LogFileContent {
+  path: String!
+  content: String!
+  totalLines: Int!
+  startLine: Int
+}
+
+type ContainerPort {
+  ip: String
+  privatePort: Port
+  publicPort: Port
+  type: ContainerPortType!
+}
+
+type ContainerHostConfig {
+  networkMode: String!
+}
+
+type DockerContainer implements Node {
+  id: PrefixedID!
+  names: [String!]!
+  image: String!
+  imageId: String!
+  command: String!
+  created: Int!
+  ports: [ContainerPort!]!
+  sizeRootFs: BigInt
+  labels: JSON
+  state: ContainerState!
+  status: String!
+  hostConfig: ContainerHostConfig
+  networkSettings: JSON
+  mounts: [JSON!]
+  autoStart: Boolean!
+}
+
+type PortConflict {
+  containerName: String
+  port: Int
+  conflictsWith: String
+}
+
+type ExplicitStatusItem {
+  name: String!
+  updateStatus: UpdateStatus!
+}
+
+type ContainerUpdateStatus {
+  id: PrefixedID!
+  name: String
+  updateAvailable: Boolean
+  currentVersion: String
+  latestVersion: String
+}
+
+type DockerMutations {
+  start(id: PrefixedID!): DockerContainer!
+  stop(id: PrefixedID!): DockerContainer!
+  pause(id: PrefixedID!): DockerContainer!
+  unpause(id: PrefixedID!): DockerContainer!
+  removeContainer(id: PrefixedID!): Boolean!
+  updateContainer(id: PrefixedID!): DockerContainer!
+  updateAllContainers: [DockerContainer!]!
+  logs(id: PrefixedID!, tail: Int): String
+}
+
+type DockerNetwork implements Node {
+  id: PrefixedID!
+  name: String!
+  driver: String!
+  scope: String!
+  containers: JSON!
+  attachable: Boolean!
+  configFrom: JSON!
+  configOnly: Boolean!
+  created: String!
+  enableIPv6: Boolean!
+  ingress: Boolean!
+  internal: Boolean!
+  ipam: JSON!
+  labels: JSON!
+  options: JSON!
+}
+
+type Docker implements Node {
+  id: PrefixedID!
+  containers(skipCache: Boolean! = false): [DockerContainer!]!
+  networks(skipCache: Boolean! = false): [DockerNetwork!]!
+  portConflicts: [PortConflict!]
+  containerUpdateStatuses: [ContainerUpdateStatus!]
+  logs(id: PrefixedID!, tail: Int): String
+}
+
+type VmDomain implements Node {
+  id: PrefixedID!
+  name: String
+  state: VmState!
+  uuid: String
+}
+
+type VmMutations {
+  start(id: PrefixedID!): Boolean!
+  stop(id: PrefixedID!): Boolean!
+  pause(id: PrefixedID!): Boolean!
+  resume(id: PrefixedID!): Boolean!
+  forceStop(id: PrefixedID!): Boolean!
+  reboot(id: PrefixedID!): Boolean!
+  reset(id: PrefixedID!): Boolean!
+}
+
+type Vms implements Node {
+  id: PrefixedID!
+  domain: [VmDomain!]
+  domains: [VmDomain!]
+}
+
+type Permission {
+  actions: [AuthAction!]!
+  resource: Resource!
+}
+
+type ApiKey implements Node {
+  id: PrefixedID!
+  name: String!
+  key: String!
+  roles: JSON
+  permissions: JSON
+  createdAt: String!
+  description: String
+  lastUsed: String
+}
+
+type ApiKeyMutations {
+  create(input: CreateApiKeyInput!): ApiKey!
+  update(input: UpdateApiKeyInput!): ApiKey!
+  delete(input: DeleteApiKeyInput!): Boolean!
+  addRole(input: JSON!): Boolean!
+  removeRole(input: JSON!): Boolean!
+}
+
+type NotificationCounts {
+  info: Int!
+  warning: Int!
+  alert: Int!
+  total: Int!
+}
+
+type NotificationOverview {
+  unread: NotificationCounts!
+  archive: NotificationCounts!
+}
+
+type Notification implements Node {
+  id: PrefixedID!
+  title: String!
+  subject: String!
+  description: String!
+  importance: NotificationImportance!
+  link: String
+  type: NotificationType!
+  timestamp: String
+  formattedTimestamp: String
+}
+
+type Notifications implements Node {
+  id: PrefixedID!
+  overview: NotificationOverview!
+  list(filter: NotificationFilter!): [Notification!]!
+  warningsAndAlerts: [Notification!]
+  # Mutation-like fields used by MCP notification mutations
+  createNotification(input: CreateNotificationInput!): Notification
+  archiveNotification(id: PrefixedID!): Boolean
+  unreadNotification(id: PrefixedID!): Boolean
+  deleteNotification(id: PrefixedID!, type: NotificationType!): Boolean
+  deleteArchivedNotifications: Boolean
+  archiveAll(importance: NotificationImportance): Boolean
+}
+
+type UserAccount implements Node {
+  id: PrefixedID!
+  name: String!
+  description: String!
+  roles: [Role!]!
+  permissions: [Permission!]
+}
+
+type RCloneRemote {
+  name: String!
+  type: String!
+  parameters: JSON!
+  config: JSON!
+}
+
+type RCloneDrive {
+  name: String!
+  options: JSON!
+}
+
+type RCloneBackupConfigForm {
+  id: ID!
+  dataSchema: JSON!
+  uiSchema: JSON!
+}
+
+type RCloneBackupSettings {
+  remotes: [RCloneRemote!]!
+  drives: [RCloneDrive!]!
+  configForm(formOptions: RCloneConfigFormInput): RCloneBackupConfigForm!
+}
+
+type RCloneMutations {
+  createRCloneRemote(input: CreateRCloneRemoteInput!): RCloneRemote!
+  deleteRCloneRemote(input: DeleteRCloneRemoteInput!): Boolean!
+}
+
+type Theme {
+  name: ThemeName!
+  headerBackgroundColor: String
+  headerPrimaryTextColor: String
+  headerSecondaryTextColor: String
+  showBannerGradient: Boolean!
+  showBannerImage: Boolean!
+  showHeaderDescription: Boolean!
+}
+
+type FlashBackupStatus {
+  jobId: String
+  status: String!
+}
+
+type UpdateSettingsResponse {
+  restartRequired: Boolean!
+  values: JSON!
+  warnings: [String!]
+}
+
+# ============================================================================
+# Root Query Type
+# ============================================================================
+type Query {
+  # Array
+  array: UnraidArray!
+  parityHistory: [ParityCheck!]!
+
+  # Config
+  config: Config!
+
+  # Disks
+  disk(id: PrefixedID!): Disk!
+  disks: [Disk!]!
+
+  # Docker
+  docker: Docker!
+  dockerNetwork(id: PrefixedID!): DockerNetwork
+  dockerNetworks: [DockerNetwork!]
+
+  # Flash
+  flash: Flash!
+
+  # Info
+  info: Info!
+
+  # Logs
+  logFile(path: String!, lines: Int, startLine: Int): LogFileContent!
+  logFiles: [LogFile!]!
+
+  # Metrics
+  metrics: Metrics!
+
+  # Notifications
+  notifications: Notifications!
+
+  # Online
+  online: Boolean!
+
+  # Owner
+  owner: Owner!
+
+  # API Keys
+  apiKey(id: PrefixedID!): ApiKey
+  apiKeys: [ApiKey!]!
+
+  # RClone
+  rclone: RCloneBackupSettings!
+
+  # Registration
+  registration: Registration
+
+  # Servers
+  server: Server
+  servers: [Server!]!
+
+  # Services
+  services: [Service!]!
+
+  # Settings
+  settings: Settings!
+
+  # Shares
+  shares: [Share!]!
+
+  # Unassigned devices
+  unassignedDevices: [UnassignedDevice!]
+
+  # UPS
+  upsConfiguration: UPSConfiguration!
+  upsDeviceById(id: PrefixedID!): UPSDevice
+  upsDevices: [UPSDevice!]!
+
+  # User
+  me: UserAccount!
+
+  # Vars
+  vars: Vars!
+
+  # VMs
+  vms: Vms!
+
+  # Network (used by MCP tool)
+  network: Network
+
+  # Connect (used by MCP tool)
+  connect: ConnectSettings
+}
+
+# ============================================================================
+# Root Mutation Type
+# ============================================================================
+type Mutation {
+  # Array
+  array: ArrayMutations!
+
+  # Parity
+  parityCheck: ParityCheckMutations!
+
+  # Docker
+  docker: DockerMutations!
+
+  # Notifications (root-level)
+  createNotification(input: NotificationData!): Notification!
+  archiveNotification(id: PrefixedID!): Notification!
+  archiveAll(importance: NotificationImportance): NotificationOverview!
+  deleteNotification(id: PrefixedID!, type: NotificationType!): NotificationOverview!
+  deleteArchivedNotifications: NotificationOverview!
+  unreadNotification(id: PrefixedID!): Notification!
+  # Also accessible as nested (used by MCP tools)
+  notifications: Notifications!
+
+  # API Keys (root-level aliases used by keys.py)
+  createApiKey(input: CreateApiKeyInput!): ApiKey!
+  updateApiKey(input: UpdateApiKeyInput!): ApiKey!
+  deleteApiKeys(input: DeleteApiKeysInput!): Boolean!
+  # Nested API key mutations
+  apiKey: ApiKeyMutations!
+
+  # RClone
+  rclone: RCloneMutations!
+
+  # VM
+  vm: VmMutations!
+
+  # Settings
+  updateSettings(input: JSON!): UpdateSettingsResponse!
+
+  # UPS
+  configureUps(config: UPSConfigInput!): Boolean!
+}
+
+# ============================================================================
+# Root Subscription Type
+# ============================================================================
+type Subscription {
+  arraySubscription: UnraidArray!
+  logFile(path: String!): LogFileContent!
+  notificationAdded: Notification!
+  notificationsOverview: NotificationOverview!
+  ownerSubscription: Owner!
+  parityHistorySubscription: ParityCheck!
+  serversSubscription: Server!
+  systemMetricsCpu: CpuUtilization!
+  systemMetricsCpuTelemetry: CpuPackages!
+  systemMetricsMemory: MemoryUtilization!
+  upsUpdates: UPSDevice!
+}
