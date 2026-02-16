@@ -10,13 +10,17 @@
   "repository": "https://github.com/jmagar/unraid-mcp",
   "mcpServers": {
     "unraid": {
+      "type": "stdio",
       "command": "uv",
       "args": [
         "run",
         "--directory",
         "${CLAUDE_PLUGIN_ROOT}",
         "unraid-mcp-server"
-      ]
+      ],
+      "env": {
+        "UNRAID_MCP_TRANSPORT": "stdio"
+      }
     }
   }
 }
