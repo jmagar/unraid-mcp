@@ -368,9 +368,7 @@ class TestGraphQLErrorHandling:
     async def test_graphql_error_raises_tool_error(self) -> None:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "errors": [{"message": "Field 'bogus' not found"}]
-        }
+        mock_response.json.return_value = {"errors": [{"message": "Field 'bogus' not found"}]}
 
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response
@@ -403,9 +401,7 @@ class TestGraphQLErrorHandling:
     async def test_idempotent_start_returns_success(self) -> None:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "errors": [{"message": "Container already running"}]
-        }
+        mock_response.json.return_value = {"errors": [{"message": "Container already running"}]}
 
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response
@@ -421,9 +417,7 @@ class TestGraphQLErrorHandling:
     async def test_idempotent_stop_returns_success(self) -> None:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "errors": [{"message": "Container not running"}]
-        }
+        mock_response.json.return_value = {"errors": [{"message": "Container not running"}]}
 
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response
@@ -440,9 +434,7 @@ class TestGraphQLErrorHandling:
         """An error that doesn't match idempotent patterns still raises even with context."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
-        mock_response.json.return_value = {
-            "errors": [{"message": "Permission denied"}]
-        }
+        mock_response.json.return_value = {"errors": [{"message": "Permission denied"}]}
 
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_response

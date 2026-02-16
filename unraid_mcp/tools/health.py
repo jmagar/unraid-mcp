@@ -247,11 +247,13 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
             if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded"):
                 diagnostic_info["summary"]["in_error_state"] += 1
             if runtime.get("last_error"):
-                connection_issues.append({
-                    "subscription": sub_name,
-                    "state": conn_state,
-                    "error": runtime["last_error"],
-                })
+                connection_issues.append(
+                    {
+                        "subscription": sub_name,
+                        "state": conn_state,
+                        "error": runtime["last_error"],
+                    }
+                )
 
         return diagnostic_info
 

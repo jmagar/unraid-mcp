@@ -93,8 +93,21 @@ class TestDockerActions:
     async def test_start_container(self, _mock_graphql: AsyncMock) -> None:
         # First call resolves ID, second performs start
         _mock_graphql.side_effect = [
-            {"docker": {"containers": [{"id": "abc123def456" * 4 + "abcd1234abcd1234:local", "names": ["plex"]}]}},
-            {"docker": {"start": {"id": "abc123def456" * 4 + "abcd1234abcd1234:local", "state": "running"}}},
+            {
+                "docker": {
+                    "containers": [
+                        {"id": "abc123def456" * 4 + "abcd1234abcd1234:local", "names": ["plex"]}
+                    ]
+                }
+            },
+            {
+                "docker": {
+                    "start": {
+                        "id": "abc123def456" * 4 + "abcd1234abcd1234:local",
+                        "state": "running",
+                    }
+                }
+            },
         ]
         tool_fn = _make_tool()
         result = await tool_fn(action="start", container_id="plex")
@@ -114,7 +127,9 @@ class TestDockerActions:
 
     async def test_check_updates(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "docker": {"containerUpdateStatuses": [{"id": "c1", "name": "plex", "updateAvailable": True}]}
+            "docker": {
+                "containerUpdateStatuses": [{"id": "c1", "name": "plex", "updateAvailable": True}]
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="check_updates")
@@ -175,7 +190,11 @@ class TestDockerActions:
 
     async def test_details_found(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "docker": {"containers": [{"id": "c1", "names": ["plex"], "state": "running", "image": "plexinc/pms"}]}
+            "docker": {
+                "containers": [
+                    {"id": "c1", "names": ["plex"], "state": "running", "image": "plexinc/pms"}
+                ]
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="details", container_id="plex")

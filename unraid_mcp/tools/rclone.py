@@ -43,7 +43,10 @@ DESTRUCTIVE_ACTIONS = {"delete_remote"}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 RCLONE_ACTIONS = Literal[
-    "list_remotes", "config_form", "create_remote", "delete_remote",
+    "list_remotes",
+    "config_form",
+    "create_remote",
+    "delete_remote",
 ]
 
 
@@ -84,9 +87,7 @@ def register_rclone_tool(mcp: FastMCP) -> None:
                 variables: dict[str, Any] = {}
                 if provider_type:
                     variables["formOptions"] = {"providerType": provider_type}
-                data = await make_graphql_request(
-                    QUERIES["config_form"], variables or None
-                )
+                data = await make_graphql_request(QUERIES["config_form"], variables or None)
                 form = data.get("rclone", {}).get("configForm", {})
                 if not form:
                     raise ToolError("No RClone config form data received")
@@ -94,16 +95,16 @@ def register_rclone_tool(mcp: FastMCP) -> None:
 
             if action == "create_remote":
                 if name is None or provider_type is None or config_data is None:
-                    raise ToolError(
-                        "create_remote requires name, provider_type, and config_data"
-                    )
+                    raise ToolError("create_remote requires name, provider_type, and config_data")
                 data = await make_graphql_request(
                     MUTATIONS["create_remote"],
                     {"input": {"name": name, "type": provider_type, "config": config_data}},
                 )
                 remote = data.get("rclone", {}).get("createRCloneRemote")
                 if not remote:
-                    raise ToolError(f"Failed to create remote '{name}': no confirmation from server")
+                    raise ToolError(
+                        f"Failed to create remote '{name}': no confirmation from server"
+                    )
                 return {
                     "success": True,
                     "message": f"Remote '{name}' created successfully",

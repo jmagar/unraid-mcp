@@ -59,7 +59,9 @@ async def autostart_subscriptions() -> None:
             logger.info(f"[AUTOSTART] Starting log file subscription for: {log_path}")
             config = subscription_manager.subscription_configs.get("logFileSubscription")
             if config:
-                await subscription_manager.start_subscription("logFileSubscription", str(config["query"]), {"path": log_path})
+                await subscription_manager.start_subscription(
+                    "logFileSubscription", str(config["query"]), {"path": log_path}
+                )
                 logger.info(f"[AUTOSTART] Log file subscription started for: {log_path}")
             else:
                 logger.error("[AUTOSTART] logFileSubscription config not found")
@@ -83,9 +85,11 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         data = subscription_manager.get_resource_data("logFileSubscription")
         if data:
             return json.dumps(data, indent=2)
-        return json.dumps({
-            "status": "No subscription data yet",
-            "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues."
-        })
+        return json.dumps(
+            {
+                "status": "No subscription data yet",
+                "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
+            }
+        )
 
     logger.info("Subscription resources registered successfully")

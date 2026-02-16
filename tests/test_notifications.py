@@ -11,7 +11,9 @@ from unraid_mcp.core.exceptions import ToolError
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch(
+        "unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock
+    ) as mock:
         yield mock
 
 
@@ -64,9 +66,7 @@ class TestNotificationsActions:
 
     async def test_list(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "notifications": {
-                "list": [{"id": "n:1", "title": "Test", "importance": "INFO"}]
-            }
+            "notifications": {"list": [{"id": "n:1", "title": "Test", "importance": "INFO"}]}
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="list")
@@ -82,7 +82,9 @@ class TestNotificationsActions:
 
     async def test_create(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "notifications": {"createNotification": {"id": "n:new", "title": "Test", "importance": "INFO"}}
+            "notifications": {
+                "createNotification": {"id": "n:new", "title": "Test", "importance": "INFO"}
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(
@@ -126,9 +128,7 @@ class TestNotificationsActions:
 
     async def test_list_with_importance_filter(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "notifications": {
-                "list": [{"id": "n:1", "title": "Alert", "importance": "WARNING"}]
-            }
+            "notifications": {"list": [{"id": "n:1", "title": "Alert", "importance": "WARNING"}]}
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="list", importance="warning", limit=10, offset=5)

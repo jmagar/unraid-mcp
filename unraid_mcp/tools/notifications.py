@@ -78,8 +78,15 @@ MUTATIONS: dict[str, str] = {
 DESTRUCTIVE_ACTIONS = {"delete", "delete_archived"}
 
 NOTIFICATION_ACTIONS = Literal[
-    "overview", "list", "warnings",
-    "create", "archive", "unread", "delete", "delete_archived", "archive_all",
+    "overview",
+    "list",
+    "warnings",
+    "create",
+    "archive",
+    "unread",
+    "delete",
+    "delete_archived",
+    "archive_all",
 ]
 
 
@@ -115,7 +122,9 @@ def register_notifications_tool(mcp: FastMCP) -> None:
         """
         all_actions = {**QUERIES, **MUTATIONS}
         if action not in all_actions:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {list(all_actions.keys())}")
+            raise ToolError(
+                f"Invalid action '{action}'. Must be one of: {list(all_actions.keys())}"
+            )
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
@@ -136,9 +145,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 }
                 if importance:
                     filter_vars["importance"] = importance.upper()
-                data = await make_graphql_request(
-                    QUERIES["list"], {"filter": filter_vars}
-                )
+                data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
                 notifications = data.get("notifications", {})
                 result = notifications.get("list", [])
                 return {"notifications": list(result) if isinstance(result, list) else []}
@@ -151,33 +158,25 @@ def register_notifications_tool(mcp: FastMCP) -> None:
 
             if action == "create":
                 if title is None or subject is None or description is None or importance is None:
-                    raise ToolError(
-                        "create requires title, subject, description, and importance"
-                    )
+                    raise ToolError("create requires title, subject, description, and importance")
                 input_data = {
                     "title": title,
                     "subject": subject,
                     "description": description,
                     "importance": importance.upper(),
                 }
-                data = await make_graphql_request(
-                    MUTATIONS["create"], {"input": input_data}
-                )
+                data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 return {"success": True, "data": data}
 
             if action in ("archive", "unread"):
                 if not notification_id:
                     raise ToolError(f"notification_id is required for '{action}' action")
-                data = await make_graphql_request(
-                    MUTATIONS[action], {"id": notification_id}
-                )
+                data = await make_graphql_request(MUTATIONS[action], {"id": notification_id})
                 return {"success": True, "action": action, "data": data}
 
             if action == "delete":
                 if not notification_id or not notification_type:
-                    raise ToolError(
-                        "delete requires notification_id and notification_type"
-                    )
+                    raise ToolError("delete requires notification_id and notification_type")
                 data = await make_graphql_request(
                     MUTATIONS["delete"],
                     {"id": notification_id, "type": notification_type.upper()},

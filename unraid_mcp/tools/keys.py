@@ -47,7 +47,11 @@ MUTATIONS: dict[str, str] = {
 DESTRUCTIVE_ACTIONS = {"delete"}
 
 KEY_ACTIONS = Literal[
-    "list", "get", "create", "update", "delete",
+    "list",
+    "get",
+    "create",
+    "update",
+    "delete",
 ]
 
 
@@ -101,9 +105,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                     input_data["roles"] = roles
                 if permissions:
                     input_data["permissions"] = permissions
-                data = await make_graphql_request(
-                    MUTATIONS["create"], {"input": input_data}
-                )
+                data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 return {
                     "success": True,
                     "key": data.get("createApiKey", {}),
@@ -117,9 +119,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                     input_data["name"] = name
                 if roles:
                     input_data["roles"] = roles
-                data = await make_graphql_request(
-                    MUTATIONS["update"], {"input": input_data}
-                )
+                data = await make_graphql_request(MUTATIONS["update"], {"input": input_data})
                 return {
                     "success": True,
                     "key": data.get("updateApiKey", {}),
@@ -128,12 +128,12 @@ def register_keys_tool(mcp: FastMCP) -> None:
             if action == "delete":
                 if not key_id:
                     raise ToolError("key_id is required for 'delete' action")
-                data = await make_graphql_request(
-                    MUTATIONS["delete"], {"input": {"ids": [key_id]}}
-                )
+                data = await make_graphql_request(MUTATIONS["delete"], {"input": {"ids": [key_id]}})
                 result = data.get("deleteApiKeys")
                 if not result:
-                    raise ToolError(f"Failed to delete API key '{key_id}': no confirmation from server")
+                    raise ToolError(
+                        f"Failed to delete API key '{key_id}': no confirmation from server"
+                    )
                 return {
                     "success": True,
                     "message": f"API key '{key_id}' deleted",

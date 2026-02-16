@@ -34,7 +34,9 @@ def _is_sensitive_key(key: str) -> bool:
 def _redact_sensitive(obj: Any) -> Any:
     """Recursively redact sensitive values from nested dicts/lists."""
     if isinstance(obj, dict):
-        return {k: ("***" if _is_sensitive_key(k) else _redact_sensitive(v)) for k, v in obj.items()}
+        return {
+            k: ("***" if _is_sensitive_key(k) else _redact_sensitive(v)) for k, v in obj.items()
+        }
     if isinstance(obj, list):
         return [_redact_sensitive(item) for item in obj]
     return obj
@@ -62,6 +64,7 @@ def get_timeout_for_operation(profile: str) -> httpx.Timeout:
     """
     return _TIMEOUT_PROFILES.get(profile, DEFAULT_TIMEOUT)
 
+
 # Global connection pool (module-level singleton)
 _http_client: httpx.AsyncClient | None = None
 _client_lock = asyncio.Lock()
@@ -82,16 +85,16 @@ def is_idempotent_error(error_message: str, operation: str) -> bool:
     # Docker container operation patterns
     if operation == "start":
         return (
-            "already started" in error_lower or
-            "container already running" in error_lower or
-            "http code 304" in error_lower
+            "already started" in error_lower
+            or "container already running" in error_lower
+            or "http code 304" in error_lower
         )
     if operation == "stop":
         return (
-            "already stopped" in error_lower or
-            "container already stopped" in error_lower or
-            "container not running" in error_lower or
-            "http code 304" in error_lower
+            "already stopped" in error_lower
+            or "container already stopped" in error_lower
+            or "container not running" in error_lower
+            or "http code 304" in error_lower
         )
 
     return False
@@ -106,19 +109,14 @@ async def _create_http_client() -> httpx.AsyncClient:
     return httpx.AsyncClient(
         # Connection pool settings
         limits=httpx.Limits(
-            max_keepalive_connections=20,
-            max_connections=100,
-            keepalive_expiry=30.0
+            max_keepalive_connections=20, max_connections=100, keepalive_expiry=30.0
         ),
         # Default timeout (can be overridden per-request)
         timeout=DEFAULT_TIMEOUT,
         # SSL verification
         verify=UNRAID_VERIFY_SSL,
         # Connection pooling headers
-        headers={
-            "Connection": "keep-alive",
-            "User-Agent": f"UnraidMCPServer/{VERSION}"
-        }
+        headers={"Connection": "keep-alive", "User-Agent": f"UnraidMCPServer/{VERSION}"},
     )
 
 
@@ -136,7 +134,9 @@ async def get_http_client() -> httpx.AsyncClient:
     async with _client_lock:
         if _http_client is None or _http_client.is_closed:
             _http_client = await _create_http_client()
-            logger.info("Created shared HTTP client with connection pooling (20 keepalive, 100 max connections)")
+            logger.info(
+                "Created shared HTTP client with connection pooling (20 keepalive, 100 max connections)"
+            )
 
         client = _http_client
 
@@ -167,7 +167,7 @@ async def make_graphql_request(
     query: str,
     variables: dict[str, Any] | None = None,
     custom_timeout: httpx.Timeout | None = None,
-    operation_context: dict[str, str] | None = None
+    operation_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Make GraphQL requests to the Unraid API.
 
@@ -193,7 +193,7 @@ async def make_graphql_request(
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": UNRAID_API_KEY,
-        "User-Agent": f"UnraidMCPServer/{VERSION}"  # Custom user-agent
+        "User-Agent": f"UnraidMCPServer/{VERSION}",  # Custom user-agent
     }
 
     payload: dict[str, Any] = {"query": query}
@@ -212,10 +212,7 @@ async def make_graphql_request(
         # Override timeout if custom timeout specified
         if custom_timeout is not None:
             response = await client.post(
-                UNRAID_API_URL,
-                json=payload,
-                headers=headers,
-                timeout=custom_timeout
+                UNRAID_API_URL, json=payload, headers=headers, timeout=custom_timeout
             )
         else:
             response = await client.post(UNRAID_API_URL, json=payload, headers=headers)
@@ -224,19 +221,23 @@ async def make_graphql_request(
 
         response_data = response.json()
         if response_data.get("errors"):
-            error_details = "; ".join([err.get("message", str(err)) for err in response_data["errors"]])
+            error_details = "; ".join(
+                [err.get("message", str(err)) for err in response_data["errors"]]
+            )
 
             # Check if this is an idempotent error that should be treated as success
             if operation_context and operation_context.get("operation"):
                 operation = operation_context["operation"]
                 if is_idempotent_error(error_details, operation):
-                    logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
+                    logger.warning(
+                        f"Idempotent operation '{operation}' - treating as success: {error_details}"
+                    )
                     # Return a success response with the current state information
                     return {
                         "idempotent_success": True,
                         "operation": operation,
                         "message": error_details,
-                        "original_errors": response_data["errors"]
+                        "original_errors": response_data["errors"],
                     }
 
             logger.error(f"GraphQL API returned errors: {response_data['errors']}")

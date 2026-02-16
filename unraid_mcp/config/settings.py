@@ -22,7 +22,7 @@ dotenv_paths = [
     Path("/app/.env.local"),  # Container mount point
     PROJECT_ROOT / ".env.local",  # Project root .env.local
     PROJECT_ROOT / ".env",  # Project root .env
-    UNRAID_MCP_DIR / ".env"  # Local .env in unraid_mcp/
+    UNRAID_MCP_DIR / ".env",  # Local .env in unraid_mcp/
 ]
 
 for dotenv_path in dotenv_paths:
@@ -73,10 +73,7 @@ def validate_required_config() -> tuple[bool, list[str]]:
     Returns:
         bool: True if all required config is present, False otherwise.
     """
-    required_vars = [
-        ("UNRAID_API_URL", UNRAID_API_URL),
-        ("UNRAID_API_KEY", UNRAID_API_KEY)
-    ]
+    required_vars = [("UNRAID_API_URL", UNRAID_API_URL), ("UNRAID_API_KEY", UNRAID_API_KEY)]
 
     missing = []
     for name, value in required_vars:
@@ -105,5 +102,5 @@ def get_config_summary() -> dict[str, Any]:
         "log_level": LOG_LEVEL_STR,
         "log_file": str(LOG_FILE_PATH),
         "config_valid": is_valid,
-        "missing_config": missing if not is_valid else None
+        "missing_config": missing if not is_valid else None,
     }

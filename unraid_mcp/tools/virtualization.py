@@ -53,8 +53,15 @@ _MUTATION_FIELDS: dict[str, str] = {
 DESTRUCTIVE_ACTIONS = {"force_stop", "reset"}
 
 VM_ACTIONS = Literal[
-    "list", "details",
-    "start", "stop", "pause", "resume", "force_stop", "reboot", "reset",
+    "list",
+    "details",
+    "start",
+    "stop",
+    "pause",
+    "resume",
+    "force_stop",
+    "reboot",
+    "reset",
 ]
 
 
@@ -111,21 +118,15 @@ def register_vm_tool(mcp: FastMCP) -> None:
                             or vm.get("name") == vm_id
                         ):
                             return dict(vm)
-                    available = [
-                        f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms
-                    ]
-                    raise ToolError(
-                        f"VM '{vm_id}' not found. Available: {', '.join(available)}"
-                    )
+                    available = [f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms]
+                    raise ToolError(f"VM '{vm_id}' not found. Available: {', '.join(available)}")
                 if action == "details":
                     raise ToolError("No VM data returned from server")
                 return {"vms": []}
 
             # Mutations
             if action in MUTATIONS:
-                data = await make_graphql_request(
-                    MUTATIONS[action], {"id": vm_id}
-                )
+                data = await make_graphql_request(MUTATIONS[action], {"id": vm_id})
                 field = _MUTATION_FIELDS.get(action, action)
                 if data.get("vm") and field in data["vm"]:
                     return {

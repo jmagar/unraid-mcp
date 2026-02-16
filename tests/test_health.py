@@ -44,12 +44,8 @@ class TestHealthActions:
                 "os": {"uptime": 86400},
             },
             "array": {"state": "STARTED"},
-            "notifications": {
-                "overview": {"unread": {"alert": 0, "warning": 0, "total": 3}}
-            },
-            "docker": {
-                "containers": [{"id": "c1", "state": "running", "status": "Up 2 days"}]
-            },
+            "notifications": {"overview": {"unread": {"alert": 0, "warning": 0, "total": 3}}},
+            "docker": {"containers": [{"id": "c1", "state": "running", "status": "Up 2 days"}]},
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="check")
@@ -60,9 +56,7 @@ class TestHealthActions:
         _mock_graphql.return_value = {
             "info": {"machineId": "abc", "versions": {"unraid": "7.2"}, "os": {"uptime": 100}},
             "array": {"state": "STARTED"},
-            "notifications": {
-                "overview": {"unread": {"alert": 3, "warning": 0, "total": 3}}
-            },
+            "notifications": {"overview": {"unread": {"alert": 3, "warning": 0, "total": 3}}},
             "docker": {"containers": []},
         }
         tool_fn = _make_tool()
@@ -88,9 +82,7 @@ class TestHealthActions:
         _mock_graphql.return_value = {
             "info": {},
             "array": {"state": "STARTED"},
-            "notifications": {
-                "overview": {"unread": {"alert": 5, "warning": 0, "total": 5}}
-            },
+            "notifications": {"overview": {"unread": {"alert": 5, "warning": 0, "total": 5}}},
             "docker": {"containers": []},
         }
         tool_fn = _make_tool()
@@ -102,10 +94,13 @@ class TestHealthActions:
     async def test_diagnose_wraps_exception(self, _mock_graphql: AsyncMock) -> None:
         """When _diagnose_subscriptions raises, tool wraps in ToolError."""
         tool_fn = _make_tool()
-        with patch(
-            "unraid_mcp.tools.health._diagnose_subscriptions",
-            side_effect=RuntimeError("broken"),
-        ), pytest.raises(ToolError, match="broken"):
+        with (
+            patch(
+                "unraid_mcp.tools.health._diagnose_subscriptions",
+                side_effect=RuntimeError("broken"),
+            ),
+            pytest.raises(ToolError, match="broken"),
+        ):
             await tool_fn(action="diagnose")
 
     async def test_diagnose_success(self, _mock_graphql: AsyncMock) -> None:
@@ -131,11 +126,14 @@ class TestHealthActions:
 
         try:
             # Replace the modules with objects that raise ImportError on access
-            with patch.dict(sys.modules, {
-                "unraid_mcp.subscriptions": None,
-                "unraid_mcp.subscriptions.manager": None,
-                "unraid_mcp.subscriptions.resources": None,
-            }):
+            with patch.dict(
+                sys.modules,
+                {
+                    "unraid_mcp.subscriptions": None,
+                    "unraid_mcp.subscriptions.manager": None,
+                    "unraid_mcp.subscriptions.resources": None,
+                },
+            ):
                 result = await _diagnose_subscriptions()
                 assert "error" in result
         finally:

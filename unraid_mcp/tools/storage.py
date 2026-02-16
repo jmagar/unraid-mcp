@@ -57,7 +57,12 @@ QUERIES: dict[str, str] = {
 }
 
 STORAGE_ACTIONS = Literal[
-    "shares", "disks", "disk_details", "unassigned", "log_files", "logs",
+    "shares",
+    "disks",
+    "disk_details",
+    "unassigned",
+    "log_files",
+    "logs",
 ]
 
 

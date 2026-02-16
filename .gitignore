@@ -21,12 +21,22 @@ coverage.xml
 # Virtual environments
 .venv
 .venv-backend
+
+# Environment files (only .env.example is tracked)
 .env
-.env.local
+.env.*
+!.env.example
+
+# Logs
 *.log
 logs/
+
+# IDE/Editor
 .bivvy
 .cursor
+
+# Claude Code user settings (gitignore local settings)
+.claude/settings.local.json
 
 # Serena IDE configuration
 .serena/
@@ -36,6 +46,7 @@ logs/
 .full-review/
 /docs/plans/
 /docs/sessions/
+/docs/reports/
 
 # Test planning documents
 /DESTRUCTIVE_ACTIONS.md

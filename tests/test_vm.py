@@ -11,7 +11,9 @@ from unraid_mcp.core.exceptions import ToolError
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.virtualization.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch(
+        "unraid_mcp.tools.virtualization.make_graphql_request", new_callable=AsyncMock
+    ) as mock:
         yield mock
 
 
@@ -67,7 +69,9 @@ class TestVmActions:
 
     async def test_details_by_uuid(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "vms": {"domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]}
+            "vms": {
+                "domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="details", vm_id="uuid-1")
@@ -75,7 +79,9 @@ class TestVmActions:
 
     async def test_details_by_name(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "vms": {"domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]}
+            "vms": {
+                "domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="details", vm_id="Win11")
@@ -83,7 +89,9 @@ class TestVmActions:
 
     async def test_details_not_found(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "vms": {"domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]}
+            "vms": {
+                "domains": [{"id": "vm:1", "name": "Win11", "state": "RUNNING", "uuid": "uuid-1"}]
+            }
         }
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="not found"):

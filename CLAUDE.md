@@ -84,15 +84,15 @@ docker compose down
 - **Health Monitoring**: Comprehensive health check tool for system monitoring
 - **Real-time Subscriptions**: WebSocket-based live data streaming
 
-### Tool Categories (10 Tools, 90 Actions)
+### Tool Categories (10 Tools, 76 Actions)
 1. **`unraid_info`** (19 actions): overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
-2. **`unraid_array`** (12 actions): start, stop, parity_start/pause/resume/cancel/history, mount_disk, unmount_disk, clear_stats, shutdown, reboot
+2. **`unraid_array`** (5 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status
 3. **`unraid_storage`** (6 actions): shares, disks, disk_details, unassigned, log_files, logs
 4. **`unraid_docker`** (15 actions): list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates
 5. **`unraid_vm`** (9 actions): list, details, start, stop, pause, resume, force_stop, reboot, reset
 6. **`unraid_notifications`** (9 actions): overview, list, warnings, create, archive, unread, delete, delete_archived, archive_all
 7. **`unraid_rclone`** (4 actions): list_remotes, config_form, create_remote, delete_remote
-8. **`unraid_users`** (8 actions): me, list, get, add, delete, cloud, remote_access, origins
+8. **`unraid_users`** (1 action): me
 9. **`unraid_keys`** (5 actions): list, get, create, update, delete
 10. **`unraid_health`** (3 actions): check, test_connection, diagnose
 

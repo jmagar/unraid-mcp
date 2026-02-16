@@ -157,10 +157,25 @@ QUERIES: dict[str, str] = {
 }
 
 INFO_ACTIONS = Literal[
-    "overview", "array", "network", "registration", "connect", "variables",
-    "metrics", "services", "display", "config", "online", "owner",
-    "settings", "server", "servers", "flash",
-    "ups_devices", "ups_device", "ups_config",
+    "overview",
+    "array",
+    "network",
+    "registration",
+    "connect",
+    "variables",
+    "metrics",
+    "services",
+    "display",
+    "config",
+    "online",
+    "owner",
+    "settings",
+    "server",
+    "servers",
+    "flash",
+    "ups_devices",
+    "ups_device",
+    "ups_config",
 ]
 
 assert set(QUERIES.keys()) == set(INFO_ACTIONS.__args__), (
@@ -209,7 +224,15 @@ def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
 
 def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     """Analyze health status of disk arrays."""
-    counts = {"healthy": 0, "failed": 0, "missing": 0, "new": 0, "warning": 0, "critical": 0, "unknown": 0}
+    counts = {
+        "healthy": 0,
+        "failed": 0,
+        "missing": 0,
+        "new": 0,
+        "warning": 0,
+        "critical": 0,
+        "unknown": 0,
+    }
     for disk in disks:
         status = disk.get("status", "").upper()
         warning = disk.get("warning")
@@ -263,7 +286,11 @@ def _process_array_status(raw: dict[str, Any]) -> dict[str, Any]:
     summary["num_cache_pools"] = len(raw.get("caches", []))
 
     health_summary: dict[str, Any] = {}
-    for key, label in [("parities", "parity_health"), ("disks", "data_health"), ("caches", "cache_health")]:
+    for key, label in [
+        ("parities", "parity_health"),
+        ("disks", "data_health"),
+        ("caches", "cache_health"),
+    ]:
         if raw.get(key):
             health_summary[label] = _analyze_disk_health(raw[key])
 
@@ -377,10 +404,14 @@ def register_info_tool(mcp: FastMCP) -> None:
             if action == "settings":
                 settings = data.get("settings") or {}
                 if not settings:
-                    raise ToolError("No settings data returned from Unraid API. Check API permissions.")
+                    raise ToolError(
+                        "No settings data returned from Unraid API. Check API permissions."
+                    )
                 if not settings.get("unified"):
                     logger.warning(f"Settings returned unexpected structure: {settings.keys()}")
-                    raise ToolError(f"Unexpected settings structure. Expected 'unified' key, got: {list(settings.keys())}")
+                    raise ToolError(
+                        f"Unexpected settings structure. Expected 'unified' key, got: {list(settings.keys())}"
+                    )
                 values = settings["unified"].get("values") or {}
                 return dict(values) if isinstance(values, dict) else {"raw": values}
 

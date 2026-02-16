@@ -20,7 +20,14 @@ from unraid_mcp.tools.info import (
 class TestProcessSystemInfo:
     def test_processes_os_info(self) -> None:
         raw = {
-            "os": {"distro": "Unraid", "release": "7.2", "platform": "linux", "arch": "x86_64", "hostname": "tower", "uptime": 3600},
+            "os": {
+                "distro": "Unraid",
+                "release": "7.2",
+                "platform": "linux",
+                "arch": "x86_64",
+                "hostname": "tower",
+                "uptime": 3600,
+            },
             "cpu": {"manufacturer": "AMD", "brand": "Ryzen", "cores": 8, "threads": 16},
         }
         result = _process_system_info(raw)
@@ -34,7 +41,19 @@ class TestProcessSystemInfo:
         assert result["summary"] == {"memory_summary": "Memory information not available."}
 
     def test_processes_memory_layout(self) -> None:
-        raw = {"memory": {"layout": [{"bank": "0", "type": "DDR4", "clockSpeed": 3200, "manufacturer": "G.Skill", "partNum": "XYZ"}]}}
+        raw = {
+            "memory": {
+                "layout": [
+                    {
+                        "bank": "0",
+                        "type": "DDR4",
+                        "clockSpeed": 3200,
+                        "manufacturer": "G.Skill",
+                        "partNum": "XYZ",
+                    }
+                ]
+            }
+        }
         result = _process_system_info(raw)
         assert len(result["summary"]["memory_layout_details"]) == 1
 
@@ -130,7 +149,13 @@ class TestUnraidInfoTool:
     async def test_overview_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "info": {
-                "os": {"distro": "Unraid", "release": "7.2", "platform": "linux", "arch": "x86_64", "hostname": "test"},
+                "os": {
+                    "distro": "Unraid",
+                    "release": "7.2",
+                    "platform": "linux",
+                    "arch": "x86_64",
+                    "hostname": "test",
+                },
                 "cpu": {"manufacturer": "Intel", "brand": "i7", "cores": 4, "threads": 8},
             }
         }
@@ -165,7 +190,9 @@ class TestUnraidInfoTool:
             await tool_fn(action="online")
 
     async def test_metrics(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"metrics": {"cpu": {"used": 25.5}, "memory": {"used": 8192, "total": 32768}}}
+        _mock_graphql.return_value = {
+            "metrics": {"cpu": {"used": 25.5}, "memory": {"used": 8192, "total": 32768}}
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="metrics")
         assert result["cpu"]["used"] == 25.5
@@ -178,7 +205,9 @@ class TestUnraidInfoTool:
         assert result["services"][0]["name"] == "docker"
 
     async def test_settings(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"settings": {"unified": {"values": {"timezone": "US/Eastern"}}}}
+        _mock_graphql.return_value = {
+            "settings": {"unified": {"values": {"timezone": "US/Eastern"}}}
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="settings")
         assert result["timezone"] == "US/Eastern"
@@ -191,20 +220,32 @@ class TestUnraidInfoTool:
         assert result == {"raw": "raw_string"}
 
     async def test_servers(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"servers": [{"id": "s:1", "name": "tower", "status": "online"}]}
+        _mock_graphql.return_value = {
+            "servers": [{"id": "s:1", "name": "tower", "status": "online"}]
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="servers")
         assert len(result["servers"]) == 1
         assert result["servers"][0]["name"] == "tower"
 
     async def test_flash(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"flash": {"id": "f:1", "guid": "abc", "product": "SanDisk", "vendor": "SanDisk", "size": 32000000000}}
+        _mock_graphql.return_value = {
+            "flash": {
+                "id": "f:1",
+                "guid": "abc",
+                "product": "SanDisk",
+                "vendor": "SanDisk",
+                "size": 32000000000,
+            }
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="flash")
         assert result["product"] == "SanDisk"
 
     async def test_ups_devices(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"upsDevices": [{"id": "ups:1", "model": "APC", "status": "online", "charge": 100}]}
+        _mock_graphql.return_value = {
+            "upsDevices": [{"id": "ups:1", "model": "APC", "status": "online", "charge": 100}]
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="ups_devices")
         assert len(result["ups_devices"]) == 1

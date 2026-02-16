@@ -91,28 +91,24 @@ def run_server() -> None:
     # Register all modules
     register_all_modules()
 
-    logger.info(f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport...")
+    logger.info(
+        f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport..."
+    )
 
     try:
         if UNRAID_MCP_TRANSPORT == "streamable-http":
             mcp.run(
-                transport="streamable-http",
-                host=UNRAID_MCP_HOST,
-                port=UNRAID_MCP_PORT,
-                path="/mcp"
+                transport="streamable-http", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp"
             )
         elif UNRAID_MCP_TRANSPORT == "sse":
             logger.warning("SSE transport is deprecated. Consider switching to 'streamable-http'.")
-            mcp.run(
-                transport="sse",
-                host=UNRAID_MCP_HOST,
-                port=UNRAID_MCP_PORT,
-                path="/mcp"
-            )
+            mcp.run(transport="sse", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp")
         elif UNRAID_MCP_TRANSPORT == "stdio":
             mcp.run()
         else:
-            logger.error(f"Unsupported MCP_TRANSPORT: {UNRAID_MCP_TRANSPORT}. Choose 'streamable-http', 'sse', or 'stdio'.")
+            logger.error(
+                f"Unsupported MCP_TRANSPORT: {UNRAID_MCP_TRANSPORT}. Choose 'streamable-http', 'sse', or 'stdio'."
+            )
             sys.exit(1)
     except Exception as e:
         logger.critical(f"Failed to start Unraid MCP server: {e}", exc_info=True)

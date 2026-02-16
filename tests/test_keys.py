@@ -56,7 +56,9 @@ class TestKeysActions:
         assert len(result["keys"]) == 1
 
     async def test_get(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"apiKey": {"id": "k:1", "name": "mcp-key", "roles": ["admin"]}}
+        _mock_graphql.return_value = {
+            "apiKey": {"id": "k:1", "name": "mcp-key", "roles": ["admin"]}
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="get", key_id="k:1")
         assert result["name"] == "mcp-key"
@@ -72,7 +74,12 @@ class TestKeysActions:
 
     async def test_create_with_roles(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "createApiKey": {"id": "k:new", "name": "admin-key", "key": "secret", "roles": ["admin"]}
+            "createApiKey": {
+                "id": "k:new",
+                "name": "admin-key",
+                "key": "secret",
+                "roles": ["admin"],
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="create", name="admin-key", roles=["admin"])

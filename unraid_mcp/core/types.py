@@ -12,6 +12,7 @@ from typing import Any
 @dataclass
 class SubscriptionData:
     """Container for subscription data with metadata."""
+
     data: dict[str, Any]
     last_updated: datetime
     subscription_type: str
@@ -20,6 +21,7 @@ class SubscriptionData:
 @dataclass
 class SystemHealth:
     """Container for system health status information."""
+
     is_healthy: bool
     issues: list[str]
     warnings: list[str]
@@ -30,6 +32,7 @@ class SystemHealth:
 @dataclass
 class APIResponse:
     """Container for standardized API response data."""
+
     success: bool
     data: dict[str, Any] | None = None
     error: str | None = None

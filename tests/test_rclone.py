@@ -39,9 +39,7 @@ class TestRcloneValidation:
 
 class TestRcloneActions:
     async def test_list_remotes(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "rclone": {"remotes": [{"name": "gdrive", "type": "drive"}]}
-        }
+        _mock_graphql.return_value = {"rclone": {"remotes": [{"name": "gdrive", "type": "drive"}]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="list_remotes")
         assert len(result["remotes"]) == 1

@@ -16,12 +16,7 @@
         "--directory",
         "${CLAUDE_PLUGIN_ROOT}",
         "unraid-mcp-server"
-      ],
-      "env": {
-        "UNRAID_API_URL": "${UNRAID_API_URL}",
-        "UNRAID_API_KEY": "${UNRAID_API_KEY}",
-        "UNRAID_MCP_TRANSPORT": "stdio"
-      }
+      ]
     }
   }
 }

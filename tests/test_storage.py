@@ -95,7 +95,14 @@ class TestStorageActions:
 
     async def test_disk_details(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "disk": {"id": "d:1", "device": "sda", "name": "WD", "serialNum": "SN1", "size": 1073741824, "temperature": 35}
+            "disk": {
+                "id": "d:1",
+                "device": "sda",
+                "name": "WD",
+                "serialNum": "SN1",
+                "size": 1073741824,
+                "temperature": 35,
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="disk_details", disk_id="d:1")
@@ -121,7 +128,9 @@ class TestStorageActions:
         assert len(result["log_files"]) == 1
 
     async def test_logs(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "log line", "totalLines": 1}}
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": "log line", "totalLines": 1}
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="logs", log_path="/var/log/syslog")
         assert result["content"] == "log line"

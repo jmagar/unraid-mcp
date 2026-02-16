@@ -99,13 +99,35 @@ MUTATIONS: dict[str, str] = {
 }
 
 DESTRUCTIVE_ACTIONS = {"remove"}
-_ACTIONS_REQUIRING_CONTAINER_ID = {"start", "stop", "restart", "pause", "unpause", "remove", "update", "details", "logs"}
+_ACTIONS_REQUIRING_CONTAINER_ID = {
+    "start",
+    "stop",
+    "restart",
+    "pause",
+    "unpause",
+    "remove",
+    "update",
+    "details",
+    "logs",
+}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart"}
 
 DOCKER_ACTIONS = Literal[
-    "list", "details", "start", "stop", "restart", "pause", "unpause",
-    "remove", "update", "update_all", "logs",
-    "networks", "network_details", "port_conflicts", "check_updates",
+    "list",
+    "details",
+    "start",
+    "stop",
+    "restart",
+    "pause",
+    "unpause",
+    "remove",
+    "update",
+    "update_all",
+    "logs",
+    "networks",
+    "network_details",
+    "port_conflicts",
+    "check_updates",
 ]
 
 # Docker container IDs: 64 hex chars + optional suffix (e.g., ":local")
@@ -246,9 +268,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 return {"networks": list(networks) if isinstance(networks, list) else []}
 
             if action == "network_details":
-                data = await make_graphql_request(
-                    QUERIES["network_details"], {"id": network_id}
-                )
+                data = await make_graphql_request(QUERIES["network_details"], {"id": network_id})
                 return dict(data.get("dockerNetwork", {}))
 
             if action == "port_conflicts":
@@ -266,13 +286,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 actual_id = await _resolve_container_id(container_id or "")
                 # Stop (idempotent: treat "already stopped" as success)
                 stop_data = await make_graphql_request(
-                    MUTATIONS["stop"], {"id": actual_id},
+                    MUTATIONS["stop"],
+                    {"id": actual_id},
                     operation_context={"operation": "stop"},
                 )
                 stop_was_idempotent = stop_data.get("idempotent_success", False)
                 # Start (idempotent: treat "already running" as success)
                 start_data = await make_graphql_request(
-                    MUTATIONS["start"], {"id": actual_id},
+                    MUTATIONS["start"],
+                    {"id": actual_id},
                     operation_context={"operation": "start"},
                 )
                 if start_data.get("idempotent_success"):
@@ -280,7 +302,9 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 else:
                     result = start_data.get("docker", {}).get("start", {})
                 response: dict[str, Any] = {
-                    "success": True, "action": "restart", "container": result,
+                    "success": True,
+                    "action": "restart",
+                    "container": result,
                 }
                 if stop_was_idempotent:
                     response["note"] = "Container was already stopped before restart"
@@ -294,9 +318,12 @@ def register_docker_tool(mcp: FastMCP) -> None:
             # Single-container mutations
             if action in MUTATIONS:
                 actual_id = await _resolve_container_id(container_id or "")
-                op_context: dict[str, str] | None = {"operation": action} if action in ("start", "stop") else None
+                op_context: dict[str, str] | None = (
+                    {"operation": action} if action in ("start", "stop") else None
+                )
                 data = await make_graphql_request(
-                    MUTATIONS[action], {"id": actual_id},
+                    MUTATIONS[action],
+                    {"id": actual_id},
                     operation_context=op_context,
                 )
 

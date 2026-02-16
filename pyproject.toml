@@ -284,9 +284,11 @@ dev = [
     "pytest>=8.4.2",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
+    "respx>=0.22.0",
     "types-pytz>=2025.2.0.20250809",
     "ty>=0.0.15",
     "ruff>=0.12.8",
     "build>=1.2.2",
     "twine>=6.0.1",
+    "graphql-core>=3.2.0",
 ]
