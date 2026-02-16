@@ -193,7 +193,6 @@ async def make_graphql_request(
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": UNRAID_API_KEY,
-        "User-Agent": f"UnraidMCPServer/{VERSION}",  # Custom user-agent
     }
 
     payload: dict[str, Any] = {"query": query}
