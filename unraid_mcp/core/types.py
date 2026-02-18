@@ -9,27 +9,33 @@ from datetime import datetime
 from typing import Any
 
 
-@dataclass
+@dataclass(slots=True)
 class SubscriptionData:
-    """Container for subscription data with metadata."""
+    """Container for subscription data with metadata.
+
+    Note: last_updated must be timezone-aware (use datetime.now(UTC)).
+    """
 
     data: dict[str, Any]
-    last_updated: datetime
+    last_updated: datetime  # Must be timezone-aware (UTC)
     subscription_type: str
 
 
-@dataclass
+@dataclass(slots=True)
 class SystemHealth:
-    """Container for system health status information."""
+    """Container for system health status information.
+
+    Note: last_checked must be timezone-aware (use datetime.now(UTC)).
+    """
 
     is_healthy: bool
     issues: list[str]
     warnings: list[str]
-    last_checked: datetime
+    last_checked: datetime  # Must be timezone-aware (UTC)
     component_status: dict[str, str]
 
 
-@dataclass
+@dataclass(slots=True)
 class APIResponse:
     """Container for standardized API response data."""
 

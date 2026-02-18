@@ -7,7 +7,7 @@ data management without requiring a live Unraid server.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -83,7 +83,7 @@ SAMPLE_QUERY = "subscription { test { value } }"
 
 # Shared patch targets
 _WS_CONNECT = "unraid_mcp.subscriptions.manager.websockets.connect"
-_API_URL = "unraid_mcp.subscriptions.manager.UNRAID_API_URL"
+_API_URL = "unraid_mcp.subscriptions.utils.UNRAID_API_URL"
 _API_KEY = "unraid_mcp.subscriptions.manager.UNRAID_API_KEY"
 _SSL_CTX = "unraid_mcp.subscriptions.manager.build_ws_ssl_context"
 _SLEEP = "unraid_mcp.subscriptions.manager.asyncio.sleep"
@@ -100,7 +100,7 @@ class TestSubscriptionManagerInit:
         mgr = SubscriptionManager()
         assert mgr.active_subscriptions == {}
         assert mgr.resource_data == {}
-        assert mgr.websocket is None
+        assert not hasattr(mgr, "websocket")
 
     def test_default_auto_start_enabled(self) -> None:
         mgr = SubscriptionManager()
@@ -720,20 +720,20 @@ class TestWebSocketURLConstruction:
 
 class TestResourceData:
 
-    def test_get_resource_data_returns_none_when_empty(self) -> None:
+    async def test_get_resource_data_returns_none_when_empty(self) -> None:
         mgr = SubscriptionManager()
-        assert mgr.get_resource_data("nonexistent") is None
+        assert await mgr.get_resource_data("nonexistent") is None
 
-    def test_get_resource_data_returns_stored_data(self) -> None:
+    async def test_get_resource_data_returns_stored_data(self) -> None:
         from unraid_mcp.core.types import SubscriptionData
 
         mgr = SubscriptionManager()
         mgr.resource_data["test"] = SubscriptionData(
             data={"key": "value"},
-            last_updated=datetime.now(),
+            last_updated=datetime.now(UTC),
             subscription_type="test",
         )
-        result = mgr.get_resource_data("test")
+        result = await mgr.get_resource_data("test")
         assert result == {"key": "value"}
 
     def test_list_active_subscriptions_empty(self) -> None:
@@ -755,46 +755,46 @@ class TestResourceData:
 
 class TestSubscriptionStatus:
 
-    def test_status_includes_all_configured_subscriptions(self) -> None:
+    async def test_status_includes_all_configured_subscriptions(self) -> None:
         mgr = SubscriptionManager()
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         for name in mgr.subscription_configs:
             assert name in status
 
-    def test_status_default_connection_state(self) -> None:
+    async def test_status_default_connection_state(self) -> None:
         mgr = SubscriptionManager()
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         for sub_status in status.values():
             assert sub_status["runtime"]["connection_state"] == "not_started"
 
-    def test_status_shows_active_flag(self) -> None:
+    async def test_status_shows_active_flag(self) -> None:
         mgr = SubscriptionManager()
         mgr.active_subscriptions["logFileSubscription"] = MagicMock()
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         assert status["logFileSubscription"]["runtime"]["active"] is True
 
-    def test_status_shows_data_availability(self) -> None:
+    async def test_status_shows_data_availability(self) -> None:
         from unraid_mcp.core.types import SubscriptionData
 
         mgr = SubscriptionManager()
         mgr.resource_data["logFileSubscription"] = SubscriptionData(
             data={"log": "content"},
-            last_updated=datetime.now(),
+            last_updated=datetime.now(UTC),
             subscription_type="logFileSubscription",
         )
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         assert status["logFileSubscription"]["data"]["available"] is True
 
-    def test_status_shows_error_info(self) -> None:
+    async def test_status_shows_error_info(self) -> None:
         mgr = SubscriptionManager()
         mgr.last_error["logFileSubscription"] = "Test error message"
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         assert status["logFileSubscription"]["runtime"]["last_error"] == "Test error message"
 
-    def test_status_reconnect_attempts_tracked(self) -> None:
+    async def test_status_reconnect_attempts_tracked(self) -> None:
         mgr = SubscriptionManager()
         mgr.reconnect_attempts["logFileSubscription"] = 3
-        status = mgr.get_subscription_status()
+        status = await mgr.get_subscription_status()
         assert status["logFileSubscription"]["runtime"]["reconnect_attempts"] == 3
 
 

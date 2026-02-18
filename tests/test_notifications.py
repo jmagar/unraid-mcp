@@ -92,7 +92,7 @@ class TestNotificationsActions:
             title="Test",
             subject="Test Subject",
             description="Test Desc",
-            importance="info",
+            importance="normal",
         )
         assert result["success"] is True
 

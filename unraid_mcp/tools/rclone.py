@@ -4,13 +4,14 @@ Provides the `unraid_rclone` tool with 4 actions for managing
 cloud storage remotes (S3, Google Drive, Dropbox, FTP, etc.).
 """
 
+import re
 from typing import Any, Literal
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
@@ -49,6 +50,51 @@ RCLONE_ACTIONS = Literal[
     "delete_remote",
 ]
 
+# Max config entries to prevent abuse
+_MAX_CONFIG_KEYS = 50
+# Pattern for suspicious key names (path traversal, shell metacharacters)
+_DANGEROUS_KEY_PATTERN = re.compile(r"[.]{2}|[/\\;|`$(){}]")
+# Max length for individual config values
+_MAX_VALUE_LENGTH = 4096
+
+
+def _validate_config_data(config_data: dict[str, Any]) -> dict[str, str]:
+    """Validate and sanitize rclone config_data before passing to GraphQL.
+
+    Ensures all keys and values are safe strings with no injection vectors.
+
+    Raises:
+        ToolError: If config_data contains invalid keys or values
+    """
+    if len(config_data) > _MAX_CONFIG_KEYS:
+        raise ToolError(f"config_data has {len(config_data)} keys (max {_MAX_CONFIG_KEYS})")
+
+    validated: dict[str, str] = {}
+    for key, value in config_data.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ToolError(
+                f"config_data keys must be non-empty strings, got: {type(key).__name__}"
+            )
+        if _DANGEROUS_KEY_PATTERN.search(key):
+            raise ToolError(
+                f"config_data key '{key}' contains disallowed characters "
+                f"(path traversal or shell metacharacters)"
+            )
+        if not isinstance(value, (str, int, float, bool)):
+            raise ToolError(
+                f"config_data['{key}'] must be a string, number, or boolean, "
+                f"got: {type(value).__name__}"
+            )
+        str_value = str(value)
+        if len(str_value) > _MAX_VALUE_LENGTH:
+            raise ToolError(
+                f"config_data['{key}'] value exceeds max length "
+                f"({len(str_value)} > {_MAX_VALUE_LENGTH})"
+            )
+        validated[key] = str_value
+
+    return validated
+
 
 def register_rclone_tool(mcp: FastMCP) -> None:
     """Register the unraid_rclone tool with the FastMCP instance."""
@@ -75,7 +121,7 @@ def register_rclone_tool(mcp: FastMCP) -> None:
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
-        try:
+        with tool_error_handler("rclone", action, logger):
             logger.info(f"Executing unraid_rclone action={action}")
 
             if action == "list_remotes":
@@ -96,9 +142,10 @@ def register_rclone_tool(mcp: FastMCP) -> None:
             if action == "create_remote":
                 if name is None or provider_type is None or config_data is None:
                     raise ToolError("create_remote requires name, provider_type, and config_data")
+                validated_config = _validate_config_data(config_data)
                 data = await make_graphql_request(
                     MUTATIONS["create_remote"],
-                    {"input": {"name": name, "type": provider_type, "config": config_data}},
+                    {"input": {"name": name, "type": provider_type, "config": validated_config}},
                 )
                 remote = data.get("rclone", {}).get("createRCloneRemote")
                 if not remote:
@@ -126,11 +173,5 @@ def register_rclone_tool(mcp: FastMCP) -> None:
                 }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_rclone action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute rclone/{action}: {e!s}") from e
 
     logger.info("RClone tool registered successfully")

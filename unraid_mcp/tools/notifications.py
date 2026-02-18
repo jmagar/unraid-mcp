@@ -10,7 +10,7 @@ from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
@@ -76,6 +76,8 @@ MUTATIONS: dict[str, str] = {
 }
 
 DESTRUCTIVE_ACTIONS = {"delete", "delete_archived"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
+_VALID_IMPORTANCE = {"ALERT", "WARNING", "NORMAL"}
 
 NOTIFICATION_ACTIONS = Literal[
     "overview",
@@ -120,16 +122,13 @@ def register_notifications_tool(mcp: FastMCP) -> None:
           delete_archived - Delete all archived notifications (requires confirm=True)
           archive_all - Archive all notifications (optional importance filter)
         """
-        all_actions = {**QUERIES, **MUTATIONS}
-        if action not in all_actions:
-            raise ToolError(
-                f"Invalid action '{action}'. Must be one of: {list(all_actions.keys())}"
-            )
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
-        try:
+        with tool_error_handler("notifications", action, logger):
             logger.info(f"Executing unraid_notifications action={action}")
 
             if action == "overview":
@@ -147,18 +146,29 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     filter_vars["importance"] = importance.upper()
                 data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
                 notifications = data.get("notifications", {})
-                result = notifications.get("list", [])
-                return {"notifications": list(result) if isinstance(result, list) else []}
+                return {"notifications": notifications.get("list", [])}
 
             if action == "warnings":
                 data = await make_graphql_request(QUERIES["warnings"])
                 notifications = data.get("notifications", {})
-                result = notifications.get("warningsAndAlerts", [])
-                return {"warnings": list(result) if isinstance(result, list) else []}
+                return {"warnings": notifications.get("warningsAndAlerts", [])}
 
             if action == "create":
                 if title is None or subject is None or description is None or importance is None:
                     raise ToolError("create requires title, subject, description, and importance")
+                if importance.upper() not in _VALID_IMPORTANCE:
+                    raise ToolError(
+                        f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}. "
+                        f"Got: '{importance}'"
+                    )
+                if len(title) > 200:
+                    raise ToolError(f"title must be at most 200 characters (got {len(title)})")
+                if len(subject) > 500:
+                    raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
+                if len(description) > 2000:
+                    raise ToolError(
+                        f"description must be at most 2000 characters (got {len(description)})"
+                    )
                 input_data = {
                     "title": title,
                     "subject": subject,
@@ -195,11 +205,5 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 return {"success": True, "action": "archive_all", "data": data}
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_notifications action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute notifications/{action}: {e!s}") from e
 
     logger.info("Notifications tool registered successfully")

@@ -4,6 +4,10 @@ This module defines custom exception classes for consistent error handling
 throughout the application, with proper integration to FastMCP's error system.
 """
 
+import contextlib
+import logging
+from collections.abc import Generator
+
 from fastmcp.exceptions import ToolError as FastMCPToolError
 
 
@@ -19,36 +23,26 @@ class ToolError(FastMCPToolError):
     pass
 
 
-class ConfigurationError(ToolError):
-    """Raised when there are configuration-related errors."""
+@contextlib.contextmanager
+def tool_error_handler(
+    tool_name: str,
+    action: str,
+    logger: logging.Logger,
+) -> Generator[None]:
+    """Context manager that standardizes tool error handling.
 
-    pass
+    Re-raises ToolError as-is. Catches all other exceptions, logs them
+    with full traceback, and wraps them in ToolError with a descriptive message.
 
-
-class UnraidAPIError(ToolError):
-    """Raised when the Unraid API returns an error or is unreachable."""
-
-    pass
-
-
-class SubscriptionError(ToolError):
-    """Raised when there are WebSocket subscription-related errors."""
-
-    pass
-
-
-class ValidationError(ToolError):
-    """Raised when input validation fails."""
-
-    pass
-
-
-class IdempotentOperationError(ToolError):
-    """Raised when an operation is idempotent (already in desired state).
-
-    This is used internally to signal that an operation was already complete,
-    which should typically be converted to a success response rather than
-    propagated as an error to the user.
+    Args:
+        tool_name: The tool name for error messages (e.g., "docker", "vm").
+        action: The current action being executed.
+        logger: The logger instance to use for error logging.
     """
-
-    pass
+    try:
+        yield
+    except ToolError:
+        raise
+    except Exception as e:
+        logger.error(f"Error in unraid_{tool_name} action={action}: {e}", exc_info=True)
+        raise ToolError(f"Failed to execute {tool_name}/{action}: {e!s}") from e

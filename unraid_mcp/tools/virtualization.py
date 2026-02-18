@@ -10,11 +10,18 @@ from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
     "list": """
+        query ListVMs {
+          vms { id domains { id name state uuid } }
+        }
+    """,
+    # NOTE: The Unraid GraphQL API does not expose a single-VM query.
+    # The details query is identical to list; client-side filtering is required.
+    "details": """
         query ListVMs {
           vms { id domains { id name state uuid } }
         }
@@ -64,7 +71,7 @@ VM_ACTIONS = Literal[
     "reset",
 ]
 
-ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"details"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 
 def register_vm_tool(mcp: FastMCP) -> None:
@@ -98,20 +105,26 @@ def register_vm_tool(mcp: FastMCP) -> None:
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
-        try:
-            logger.info(f"Executing unraid_vm action={action}")
+        with tool_error_handler("vm", action, logger):
+            try:
+                logger.info(f"Executing unraid_vm action={action}")
 
-            if action in ("list", "details"):
-                data = await make_graphql_request(QUERIES["list"])
-                if data.get("vms"):
+                if action == "list":
+                    data = await make_graphql_request(QUERIES["list"])
+                    if data.get("vms"):
+                        vms = data["vms"].get("domains") or data["vms"].get("domain") or []
+                        if isinstance(vms, dict):
+                            vms = [vms]
+                        return {"vms": vms}
+                    return {"vms": []}
+
+                if action == "details":
+                    data = await make_graphql_request(QUERIES["details"])
+                    if not data.get("vms"):
+                        raise ToolError("No VM data returned from server")
                     vms = data["vms"].get("domains") or data["vms"].get("domain") or []
                     if isinstance(vms, dict):
                         vms = [vms]
-
-                    if action == "list":
-                        return {"vms": vms}
-
-                    # details: find specific VM
                     for vm in vms:
                         if (
                             vm.get("uuid") == vm_id
@@ -121,33 +134,28 @@ def register_vm_tool(mcp: FastMCP) -> None:
                             return dict(vm)
                     available = [f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms]
                     raise ToolError(f"VM '{vm_id}' not found. Available: {', '.join(available)}")
-                if action == "details":
-                    raise ToolError("No VM data returned from server")
-                return {"vms": []}
 
-            # Mutations
-            if action in MUTATIONS:
-                data = await make_graphql_request(MUTATIONS[action], {"id": vm_id})
-                field = _MUTATION_FIELDS.get(action, action)
-                if data.get("vm") and field in data["vm"]:
-                    return {
-                        "success": data["vm"][field],
-                        "action": action,
-                        "vm_id": vm_id,
-                    }
-                raise ToolError(f"Failed to {action} VM or unexpected response")
+                # Mutations
+                if action in MUTATIONS:
+                    data = await make_graphql_request(MUTATIONS[action], {"id": vm_id})
+                    field = _MUTATION_FIELDS.get(action, action)
+                    if data.get("vm") and field in data["vm"]:
+                        return {
+                            "success": data["vm"][field],
+                            "action": action,
+                            "vm_id": vm_id,
+                        }
+                    raise ToolError(f"Failed to {action} VM or unexpected response")
 
-            raise ToolError(f"Unhandled action '{action}' — this is a bug")
+                raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_vm action={action}: {e}", exc_info=True)
-            msg = str(e)
-            if "VMs are not available" in msg:
-                raise ToolError(
-                    "VMs not available on this server. Check VM support is enabled."
-                ) from e
-            raise ToolError(f"Failed to execute vm/{action}: {msg}") from e
+            except ToolError:
+                raise
+            except Exception as e:
+                if "VMs are not available" in str(e):
+                    raise ToolError(
+                        "VMs not available on this server. Check VM support is enabled."
+                    ) from e
+                raise
 
     logger.info("VM tool registered successfully")

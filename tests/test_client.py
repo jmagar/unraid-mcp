@@ -274,7 +274,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="HTTP error 401"),
+            pytest.raises(ToolError, match="Unraid API returned HTTP 401"),
         ):
             await make_graphql_request("{ info }")
 
@@ -292,7 +292,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="HTTP error 500"),
+            pytest.raises(ToolError, match="Unraid API returned HTTP 500"),
         ):
             await make_graphql_request("{ info }")
 
@@ -310,7 +310,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="HTTP error 503"),
+            pytest.raises(ToolError, match="Unraid API returned HTTP 503"),
         ):
             await make_graphql_request("{ info }")
 
@@ -320,7 +320,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="Network connection error"),
+            pytest.raises(ToolError, match="Network error connecting to Unraid API"),
         ):
             await make_graphql_request("{ info }")
 
@@ -330,7 +330,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="Network connection error"),
+            pytest.raises(ToolError, match="Network error connecting to Unraid API"),
         ):
             await make_graphql_request("{ info }")
 
@@ -344,7 +344,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="Invalid JSON response"),
+            pytest.raises(ToolError, match="invalid response.*not valid JSON"),
         ):
             await make_graphql_request("{ info }")
 

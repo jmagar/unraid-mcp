@@ -5,6 +5,7 @@ and provides all configuration constants used throughout the application.
 """
 
 import os
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -30,8 +31,11 @@ for dotenv_path in dotenv_paths:
         load_dotenv(dotenv_path=dotenv_path)
         break
 
-# Application Version
-VERSION = "0.2.0"
+# Application Version (single source of truth: pyproject.toml)
+try:
+    VERSION = version("unraid-mcp")
+except PackageNotFoundError:
+    VERSION = "0.0.0"
 
 # Core API Configuration
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
@@ -39,7 +43,7 @@ UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
 
 # Server Configuration
 UNRAID_MCP_PORT = int(os.getenv("UNRAID_MCP_PORT", "6970"))
-UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")
+UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
 UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
 
 # SSL Configuration
@@ -54,7 +58,8 @@ else:  # Path to CA bundle
 # Logging Configuration
 LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
 LOG_FILE_NAME = os.getenv("UNRAID_MCP_LOG_FILE", "unraid-mcp.log")
-LOGS_DIR = Path("/tmp")
+# Use /app/logs in Docker, project-relative logs/ directory otherwise
+LOGS_DIR = Path("/app/logs") if Path("/app").is_dir() else PROJECT_ROOT / "logs"
 LOG_FILE_PATH = LOGS_DIR / LOG_FILE_NAME
 
 # Ensure logs directory exists

@@ -5,16 +5,10 @@ that cap at 10MB and start over (no rotation) for consistent use across all modu
 """
 
 import logging
-from datetime import datetime
 from pathlib import Path
 
-import pytz
-from rich.align import Align
 from rich.console import Console
 from rich.logging import RichHandler
-from rich.panel import Panel
-from rich.rule import Rule
-from rich.text import Text
 
 
 try:
@@ -28,7 +22,7 @@ from .settings import LOG_FILE_PATH, LOG_LEVEL_STR
 
 
 # Global Rich console for consistent formatting
-console = Console(stderr=True, force_terminal=True)
+console = Console(stderr=True)
 
 
 class OverwriteFileHandler(logging.FileHandler):
@@ -45,12 +39,18 @@ class OverwriteFileHandler(logging.FileHandler):
             delay: Whether to delay file opening
         """
         self.max_bytes = max_bytes
+        self._emit_count = 0
+        self._check_interval = 100
         super().__init__(filename, mode, encoding, delay)
 
     def emit(self, record):
-        """Emit a record, checking file size and overwriting if needed."""
-        # Check file size before writing
-        if self.stream and hasattr(self.stream, "name"):
+        """Emit a record, checking file size periodically and overwriting if needed."""
+        self._emit_count += 1
+        if (
+            self._emit_count % self._check_interval == 0
+            and self.stream
+            and hasattr(self.stream, "name")
+        ):
             try:
                 base_path = Path(self.baseFilename)
                 if base_path.exists():
@@ -91,6 +91,28 @@ class OverwriteFileHandler(logging.FileHandler):
         super().emit(record)
 
 
+def _create_shared_file_handler() -> OverwriteFileHandler:
+    """Create the single shared file handler for all loggers.
+
+    Returns:
+        Configured OverwriteFileHandler instance
+    """
+    numeric_log_level = getattr(logging, LOG_LEVEL_STR, logging.INFO)
+    handler = OverwriteFileHandler(LOG_FILE_PATH, max_bytes=10 * 1024 * 1024, encoding="utf-8")
+    handler.setLevel(numeric_log_level)
+    handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(lineno)d - %(message)s"
+        )
+    )
+    return handler
+
+
+# Single shared file handler — all loggers reuse this instance to avoid
+# race conditions from multiple OverwriteFileHandler instances on the same file.
+_shared_file_handler = _create_shared_file_handler()
+
+
 def setup_logger(name: str = "UnraidMCPServer") -> logging.Logger:
     """Set up and configure the logger with console and file handlers.
 
@@ -118,19 +140,13 @@ def setup_logger(name: str = "UnraidMCPServer") -> logging.Logger:
         show_level=True,
         show_path=False,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
     )
     console_handler.setLevel(numeric_log_level)
     logger.addHandler(console_handler)
 
-    # File Handler with 10MB cap (overwrites instead of rotating)
-    file_handler = OverwriteFileHandler(LOG_FILE_PATH, max_bytes=10 * 1024 * 1024, encoding="utf-8")
-    file_handler.setLevel(numeric_log_level)
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(lineno)d - %(message)s"
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
+    # Reuse the shared file handler
+    logger.addHandler(_shared_file_handler)
 
     return logger
 
@@ -157,20 +173,14 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
         show_level=True,
         show_path=False,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
         markup=True,
     )
     console_handler.setLevel(numeric_log_level)
     fastmcp_logger.addHandler(console_handler)
 
-    # File Handler with 10MB cap (overwrites instead of rotating)
-    file_handler = OverwriteFileHandler(LOG_FILE_PATH, max_bytes=10 * 1024 * 1024, encoding="utf-8")
-    file_handler.setLevel(numeric_log_level)
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(funcName)s - %(lineno)d - %(message)s"
-    )
-    file_handler.setFormatter(file_formatter)
-    fastmcp_logger.addHandler(file_handler)
+    # Reuse the shared file handler
+    fastmcp_logger.addHandler(_shared_file_handler)
 
     fastmcp_logger.setLevel(numeric_log_level)
 
@@ -186,28 +196,17 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
         show_level=True,
         show_path=False,
         rich_tracebacks=True,
-        tracebacks_show_locals=True,
+        tracebacks_show_locals=False,
         markup=True,
     )
     root_console_handler.setLevel(numeric_log_level)
     root_logger.addHandler(root_console_handler)
 
-    # File Handler for root logger with 10MB cap (overwrites instead of rotating)
-    root_file_handler = OverwriteFileHandler(
-        LOG_FILE_PATH, max_bytes=10 * 1024 * 1024, encoding="utf-8"
-    )
-    root_file_handler.setLevel(numeric_log_level)
-    root_file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(root_file_handler)
+    # Reuse the shared file handler for root logger
+    root_logger.addHandler(_shared_file_handler)
     root_logger.setLevel(numeric_log_level)
 
     return fastmcp_logger
-
-
-def setup_uvicorn_logging() -> logging.Logger | None:
-    """Configure uvicorn and other third-party loggers to use Rich formatting."""
-    # This function is kept for backward compatibility but now delegates to FastMCP
-    return configure_fastmcp_logger_with_rich()
 
 
 def log_configuration_status(logger: logging.Logger) -> None:
@@ -242,97 +241,6 @@ def log_configuration_status(logger: logging.Logger) -> None:
         logger.error(f"Missing required configuration: {config['missing_config']}")
 
 
-# Development logging helpers for Rich formatting
-def get_est_timestamp() -> str:
-    """Get current timestamp in EST timezone with YY/MM/DD format."""
-    est = pytz.timezone("US/Eastern")
-    now = datetime.now(est)
-    return now.strftime("%y/%m/%d %H:%M:%S")
-
-
-def log_header(title: str) -> None:
-    """Print a beautiful header panel with Nordic blue styling."""
-    panel = Panel(
-        Align.center(Text(title, style="bold white")),
-        style="#5E81AC",  # Nordic blue
-        padding=(0, 2),
-        border_style="#81A1C1",  # Light Nordic blue
-    )
-    console.print(panel)
-
-
-def log_with_level_and_indent(message: str, level: str = "info", indent: int = 0) -> None:
-    """Log a message with specific level and indentation."""
-    timestamp = get_est_timestamp()
-    indent_str = "  " * indent
-
-    # Enhanced Nordic color scheme with more blues
-    level_config = {
-        "error": {"color": "#BF616A", "icon": "❌", "style": "bold"},  # Nordic red
-        "warning": {"color": "#EBCB8B", "icon": "⚠️", "style": ""},  # Nordic yellow
-        "success": {"color": "#A3BE8C", "icon": "✅", "style": "bold"},  # Nordic green
-        "info": {"color": "#5E81AC", "icon": "\u2139\ufe0f", "style": "bold"},  # Nordic blue (bold)
-        "status": {"color": "#81A1C1", "icon": "🔍", "style": ""},  # Light Nordic blue
-        "debug": {"color": "#4C566A", "icon": "🐛", "style": ""},  # Nordic dark gray
-    }
-
-    config = level_config.get(
-        level, {"color": "#81A1C1", "icon": "•", "style": ""}
-    )  # Default to light Nordic blue
-
-    # Create beautifully formatted text
-    text = Text()
-
-    # Timestamp with Nordic blue styling
-    text.append(f"[{timestamp}]", style="#81A1C1")  # Light Nordic blue for timestamps
-    text.append(" ")
-
-    # Indentation with Nordic blue styling
-    if indent > 0:
-        text.append(indent_str, style="#81A1C1")
-
-    # Level icon (only for certain levels)
-    if level in ["error", "warning", "success"]:
-        # Extract emoji from message if it starts with one, to avoid duplication
-        if message and len(message) > 0 and ord(message[0]) >= 0x1F600:  # Emoji range
-            # Message already has emoji, don't add icon
-            pass
-        else:
-            text.append(f"{config['icon']} ", style=config["color"])
-
-    # Message content
-    message_style = f"{config['color']} {config['style']}".strip()
-    text.append(message, style=message_style)
-
-    console.print(text)
-
-
-def log_separator() -> None:
-    """Print a beautiful separator line with Nordic blue styling."""
-    console.print(Rule(style="#81A1C1"))
-
-
-# Convenience functions for different log levels
-def log_error(message: str, indent: int = 0) -> None:
-    log_with_level_and_indent(message, "error", indent)
-
-
-def log_warning(message: str, indent: int = 0) -> None:
-    log_with_level_and_indent(message, "warning", indent)
-
-
-def log_success(message: str, indent: int = 0) -> None:
-    log_with_level_and_indent(message, "success", indent)
-
-
-def log_info(message: str, indent: int = 0) -> None:
-    log_with_level_and_indent(message, "info", indent)
-
-
-def log_status(message: str, indent: int = 0) -> None:
-    log_with_level_and_indent(message, "status", indent)
-
-
 # Global logger instance - modules can import this directly
 if FASTMCP_AVAILABLE:
     # Use FastMCP logger with Rich formatting
@@ -341,5 +249,5 @@ if FASTMCP_AVAILABLE:
 else:
     # Fallback to our custom logger if FastMCP is not available
     logger = setup_logger()
-    # Setup uvicorn logging when module is imported
-    setup_uvicorn_logging()
+    # Also configure FastMCP logger for consistency
+    configure_fastmcp_logger_with_rich()

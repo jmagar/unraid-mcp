@@ -77,7 +77,6 @@ dependencies = [
     "uvicorn[standard]>=0.35.0",
     "websockets>=15.0.1",
     "rich>=14.1.0",
-    "pytz>=2025.2",
 ]
 
 # ============================================================================
@@ -170,6 +169,8 @@ select = [
     "PERF",
     # Ruff-specific rules
     "RUF",
+    # flake8-bandit (security)
+    "S",
 ]
 ignore = [
     "E501",   # line too long (handled by ruff formatter)
@@ -285,7 +286,6 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "respx>=0.22.0",
-    "types-pytz>=2025.2.0.20250809",
     "ty>=0.0.15",
     "ruff>=0.12.8",
     "build>=1.2.2",

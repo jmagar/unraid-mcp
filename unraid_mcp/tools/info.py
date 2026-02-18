@@ -10,7 +10,8 @@ from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import format_kb
 
 
 # Pre-built queries keyed by action name
@@ -19,7 +20,7 @@ QUERIES: dict[str, str] = {
         query GetSystemInfo {
           info {
             os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
-            cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache flags }
+            cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache }
             memory {
               layout { bank type clockSpeed formFactor manufacturer partNum serialNum }
             }
@@ -81,7 +82,6 @@ QUERIES: dict[str, str] = {
             shareAvahiEnabled safeMode startMode configValid configError joinStatus
             deviceCount flashGuid flashProduct flashVendor mdState mdVersion
             shareCount shareSmbCount shareNfsCount shareAfpCount shareMoverActive
-            csrfToken
           }
         }
     """,
@@ -156,6 +156,8 @@ QUERIES: dict[str, str] = {
     """,
 }
 
+ALL_ACTIONS = set(QUERIES)
+
 INFO_ACTIONS = Literal[
     "overview",
     "array",
@@ -178,9 +180,13 @@ INFO_ACTIONS = Literal[
     "ups_config",
 ]
 
-assert set(QUERIES.keys()) == set(INFO_ACTIONS.__args__), (
-    "QUERIES keys and INFO_ACTIONS are out of sync"
-)
+if set(INFO_ACTIONS.__args__) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(INFO_ACTIONS.__args__)
+    _extra = set(INFO_ACTIONS.__args__) - ALL_ACTIONS
+    raise RuntimeError(
+        f"QUERIES keys and INFO_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
@@ -189,17 +195,17 @@ def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
     if raw_info.get("os"):
         os_info = raw_info["os"]
         summary["os"] = (
-            f"{os_info.get('distro', '')} {os_info.get('release', '')} "
-            f"({os_info.get('platform', '')}, {os_info.get('arch', '')})"
+            f"{os_info.get('distro') or 'unknown'} {os_info.get('release') or 'unknown'} "
+            f"({os_info.get('platform') or 'unknown'}, {os_info.get('arch') or 'unknown'})"
         )
-        summary["hostname"] = os_info.get("hostname")
+        summary["hostname"] = os_info.get("hostname") or "unknown"
         summary["uptime"] = os_info.get("uptime")
 
     if raw_info.get("cpu"):
         cpu = raw_info["cpu"]
         summary["cpu"] = (
-            f"{cpu.get('manufacturer', '')} {cpu.get('brand', '')} "
-            f"({cpu.get('cores', '?')} cores, {cpu.get('threads', '?')} threads)"
+            f"{cpu.get('manufacturer') or 'unknown'} {cpu.get('brand') or 'unknown'} "
+            f"({cpu.get('cores') or '?'} cores, {cpu.get('threads') or '?'} threads)"
         )
 
     if raw_info.get("memory") and raw_info["memory"].get("layout"):
@@ -207,10 +213,10 @@ def _process_system_info(raw_info: dict[str, Any]) -> dict[str, Any]:
         summary["memory_layout_details"] = []
         for stick in mem_layout:
             summary["memory_layout_details"].append(
-                f"Bank {stick.get('bank', '?')}: Type {stick.get('type', '?')}, "
-                f"Speed {stick.get('clockSpeed', '?')}MHz, "
-                f"Manufacturer: {stick.get('manufacturer', '?')}, "
-                f"Part: {stick.get('partNum', '?')}"
+                f"Bank {stick.get('bank') or '?'}: Type {stick.get('type') or '?'}, "
+                f"Speed {stick.get('clockSpeed') or '?'}MHz, "
+                f"Manufacturer: {stick.get('manufacturer') or '?'}, "
+                f"Part: {stick.get('partNum') or '?'}"
             )
         summary["memory_summary"] = (
             "Stick layout details retrieved. Overall total/used/free memory stats "
@@ -255,31 +261,14 @@ def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def _format_kb(k: Any) -> str:
-    """Format kilobyte values into human-readable sizes."""
-    if k is None:
-        return "N/A"
-    try:
-        k = int(k)
-    except (ValueError, TypeError):
-        return "N/A"
-    if k >= 1024 * 1024 * 1024:
-        return f"{k / (1024 * 1024 * 1024):.2f} TB"
-    if k >= 1024 * 1024:
-        return f"{k / (1024 * 1024):.2f} GB"
-    if k >= 1024:
-        return f"{k / 1024:.2f} MB"
-    return f"{k} KB"
-
-
 def _process_array_status(raw: dict[str, Any]) -> dict[str, Any]:
     """Process raw array data into summary + details."""
     summary: dict[str, Any] = {"state": raw.get("state")}
     if raw.get("capacity") and raw["capacity"].get("kilobytes"):
         kb = raw["capacity"]["kilobytes"]
-        summary["capacity_total"] = _format_kb(kb.get("total"))
-        summary["capacity_used"] = _format_kb(kb.get("used"))
-        summary["capacity_free"] = _format_kb(kb.get("free"))
+        summary["capacity_total"] = format_kb(kb.get("total"))
+        summary["capacity_used"] = format_kb(kb.get("used"))
+        summary["capacity_free"] = format_kb(kb.get("free"))
 
     summary["num_parity_disks"] = len(raw.get("parities", []))
     summary["num_data_disks"] = len(raw.get("disks", []))
@@ -345,8 +334,8 @@ def register_info_tool(mcp: FastMCP) -> None:
           ups_device - Single UPS device (requires device_id)
           ups_config - UPS configuration
         """
-        if action not in QUERIES:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {list(QUERIES.keys())}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action == "ups_device" and not device_id:
             raise ToolError("device_id is required for ups_device action")
@@ -377,7 +366,7 @@ def register_info_tool(mcp: FastMCP) -> None:
             "ups_devices": ("upsDevices", "ups_devices"),
         }
 
-        try:
+        with tool_error_handler("info", action, logger):
             logger.info(f"Executing unraid_info action={action}")
             data = await make_graphql_request(query, variables)
 
@@ -426,14 +415,8 @@ def register_info_tool(mcp: FastMCP) -> None:
             if action in list_actions:
                 response_key, output_key = list_actions[action]
                 items = data.get(response_key) or []
-                return {output_key: list(items) if isinstance(items, list) else []}
+                return {output_key: items}
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_info action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute info/{action}: {e!s}") from e
 
     logger.info("Info tool registered successfully")

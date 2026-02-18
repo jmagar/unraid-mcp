@@ -8,16 +8,50 @@ error handling, reconnection logic, and authentication.
 import asyncio
 import json
 import os
-from datetime import datetime
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 import websockets
 from websockets.typing import Subprotocol
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
+from ..config.settings import UNRAID_API_KEY
+from ..core.client import _redact_sensitive
 from ..core.types import SubscriptionData
-from .utils import build_ws_ssl_context
+from .utils import build_ws_ssl_context, build_ws_url
+
+
+# Resource data size limits to prevent unbounded memory growth
+_MAX_RESOURCE_DATA_BYTES = 1_048_576  # 1MB
+_MAX_RESOURCE_DATA_LINES = 5_000
+# Minimum stable connection duration (seconds) before resetting reconnect counter
+_STABLE_CONNECTION_SECONDS = 30
+
+
+def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
+    """Cap log content in subscription data to prevent unbounded memory growth.
+
+    If the data contains a 'content' field (from log subscriptions) that exceeds
+    size limits, truncate to the most recent _MAX_RESOURCE_DATA_LINES lines.
+    """
+    for key, value in data.items():
+        if isinstance(value, dict):
+            data[key] = _cap_log_content(value)
+        elif (
+            key == "content"
+            and isinstance(value, str)
+            and len(value.encode("utf-8", errors="replace")) > _MAX_RESOURCE_DATA_BYTES
+        ):
+            lines = value.splitlines()
+            if len(lines) > _MAX_RESOURCE_DATA_LINES:
+                truncated = "\n".join(lines[-_MAX_RESOURCE_DATA_LINES:])
+                logger.warning(
+                    f"[RESOURCE] Capped log content from {len(lines)} to "
+                    f"{_MAX_RESOURCE_DATA_LINES} lines ({len(value)} -> {len(truncated)} chars)"
+                )
+                data[key] = truncated
+    return data
 
 
 class SubscriptionManager:
@@ -26,7 +60,6 @@ class SubscriptionManager:
     def __init__(self) -> None:
         self.active_subscriptions: dict[str, asyncio.Task[None]] = {}
         self.resource_data: dict[str, SubscriptionData] = {}
-        self.websocket: websockets.WebSocketServerProtocol | None = None
         self.subscription_lock = asyncio.Lock()
 
         # Configuration
@@ -37,6 +70,7 @@ class SubscriptionManager:
         self.max_reconnect_attempts = int(os.getenv("UNRAID_MAX_RECONNECT_ATTEMPTS", "10"))
         self.connection_states: dict[str, str] = {}  # Track connection state per subscription
         self.last_error: dict[str, str] = {}  # Track last error per subscription
+        self._connection_start_times: dict[str, float] = {}  # Track when connections started
 
         # Define subscription configurations
         self.subscription_configs = {
@@ -165,20 +199,7 @@ class SubscriptionManager:
                 break
 
             try:
-                # Build WebSocket URL with detailed logging
-                if not UNRAID_API_URL:
-                    raise ValueError("UNRAID_API_URL is not configured")
-
-                if UNRAID_API_URL.startswith("https://"):
-                    ws_url = "wss://" + UNRAID_API_URL[len("https://") :]
-                elif UNRAID_API_URL.startswith("http://"):
-                    ws_url = "ws://" + UNRAID_API_URL[len("http://") :]
-                else:
-                    ws_url = UNRAID_API_URL
-
-                if not ws_url.endswith("/graphql"):
-                    ws_url = ws_url.rstrip("/") + "/graphql"
-
+                ws_url = build_ws_url()
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
                 logger.debug(
                     f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}"
@@ -195,6 +216,7 @@ class SubscriptionManager:
                 async with websockets.connect(
                     ws_url,
                     subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
+                    open_timeout=connect_timeout,
                     ping_interval=20,
                     ping_timeout=10,
                     close_timeout=10,
@@ -206,9 +228,9 @@ class SubscriptionManager:
                     )
                     self.connection_states[subscription_name] = "connected"
 
-                    # Reset retry count on successful connection
-                    self.reconnect_attempts[subscription_name] = 0
-                    retry_delay = 5  # Reset delay
+                    # Track connection start time — only reset retry counter
+                    # after the connection proves stable (>30s connected)
+                    self._connection_start_times[subscription_name] = time.monotonic()
 
                     # Initialize GraphQL-WS protocol
                     logger.debug(
@@ -290,7 +312,9 @@ class SubscriptionManager:
                         f"[SUBSCRIPTION:{subscription_name}] Subscription message type: {start_type}"
                     )
                     logger.debug(f"[SUBSCRIPTION:{subscription_name}] Query: {query[:100]}...")
-                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Variables: {variables}")
+                    logger.debug(
+                        f"[SUBSCRIPTION:{subscription_name}] Variables: {_redact_sensitive(variables)}"
+                    )
 
                     await websocket.send(json.dumps(subscription_message))
                     logger.info(
@@ -326,9 +350,14 @@ class SubscriptionManager:
                                     logger.info(
                                         f"[DATA:{subscription_name}] Received subscription data update"
                                     )
+                                    capped_data = (
+                                        _cap_log_content(payload["data"])
+                                        if isinstance(payload["data"], dict)
+                                        else payload["data"]
+                                    )
                                     self.resource_data[subscription_name] = SubscriptionData(
-                                        data=payload["data"],
-                                        last_updated=datetime.now(),
+                                        data=capped_data,
+                                        last_updated=datetime.now(UTC),
                                         subscription_type=subscription_name,
                                     )
                                     logger.debug(
@@ -427,6 +456,26 @@ class SubscriptionManager:
                 self.last_error[subscription_name] = error_msg
                 self.connection_states[subscription_name] = "error"
 
+            # Check if connection was stable before deciding on retry behavior
+            start_time = self._connection_start_times.get(subscription_name)
+            if start_time is not None:
+                connected_duration = time.monotonic() - start_time
+                if connected_duration >= _STABLE_CONNECTION_SECONDS:
+                    # Connection was stable — reset retry counter and backoff
+                    logger.info(
+                        f"[WEBSOCKET:{subscription_name}] Connection was stable "
+                        f"({connected_duration:.0f}s >= {_STABLE_CONNECTION_SECONDS}s), "
+                        f"resetting retry counter"
+                    )
+                    self.reconnect_attempts[subscription_name] = 0
+                    retry_delay = 5
+                else:
+                    logger.warning(
+                        f"[WEBSOCKET:{subscription_name}] Connection was unstable "
+                        f"({connected_duration:.0f}s < {_STABLE_CONNECTION_SECONDS}s), "
+                        f"keeping retry counter at {self.reconnect_attempts.get(subscription_name, 0)}"
+                    )
+
             # Calculate backoff delay
             retry_delay = min(retry_delay * 1.5, max_retry_delay)
             logger.info(
@@ -435,15 +484,16 @@ class SubscriptionManager:
             self.connection_states[subscription_name] = "reconnecting"
             await asyncio.sleep(retry_delay)
 
-    def get_resource_data(self, resource_name: str) -> dict[str, Any] | None:
+    async def get_resource_data(self, resource_name: str) -> dict[str, Any] | None:
         """Get current resource data with enhanced logging."""
         logger.debug(f"[RESOURCE:{resource_name}] Resource data requested")
 
-        if resource_name in self.resource_data:
-            data = self.resource_data[resource_name]
-            age_seconds = (datetime.now() - data.last_updated).total_seconds()
-            logger.debug(f"[RESOURCE:{resource_name}] Data found, age: {age_seconds:.1f}s")
-            return data.data
+        async with self.subscription_lock:
+            if resource_name in self.resource_data:
+                data = self.resource_data[resource_name]
+                age_seconds = (datetime.now(UTC) - data.last_updated).total_seconds()
+                logger.debug(f"[RESOURCE:{resource_name}] Data found, age: {age_seconds:.1f}s")
+                return data.data
         logger.debug(f"[RESOURCE:{resource_name}] No data available")
         return None
 
@@ -453,38 +503,39 @@ class SubscriptionManager:
         logger.debug(f"[SUBSCRIPTION_MANAGER] Active subscriptions: {active}")
         return active
 
-    def get_subscription_status(self) -> dict[str, dict[str, Any]]:
+    async def get_subscription_status(self) -> dict[str, dict[str, Any]]:
         """Get detailed status of all subscriptions for diagnostics."""
         status = {}
 
-        for sub_name, config in self.subscription_configs.items():
-            sub_status = {
-                "config": {
-                    "resource": config["resource"],
-                    "description": config["description"],
-                    "auto_start": config.get("auto_start", False),
-                },
-                "runtime": {
-                    "active": sub_name in self.active_subscriptions,
-                    "connection_state": self.connection_states.get(sub_name, "not_started"),
-                    "reconnect_attempts": self.reconnect_attempts.get(sub_name, 0),
-                    "last_error": self.last_error.get(sub_name, None),
-                },
-            }
-
-            # Add data info if available
-            if sub_name in self.resource_data:
-                data_info = self.resource_data[sub_name]
-                age_seconds = (datetime.now() - data_info.last_updated).total_seconds()
-                sub_status["data"] = {
-                    "available": True,
-                    "last_updated": data_info.last_updated.isoformat(),
-                    "age_seconds": age_seconds,
+        async with self.subscription_lock:
+            for sub_name, config in self.subscription_configs.items():
+                sub_status = {
+                    "config": {
+                        "resource": config["resource"],
+                        "description": config["description"],
+                        "auto_start": config.get("auto_start", False),
+                    },
+                    "runtime": {
+                        "active": sub_name in self.active_subscriptions,
+                        "connection_state": self.connection_states.get(sub_name, "not_started"),
+                        "reconnect_attempts": self.reconnect_attempts.get(sub_name, 0),
+                        "last_error": self.last_error.get(sub_name, None),
+                    },
                 }
-            else:
-                sub_status["data"] = {"available": False}
 
-            status[sub_name] = sub_status
+                # Add data info if available
+                if sub_name in self.resource_data:
+                    data_info = self.resource_data[sub_name]
+                    age_seconds = (datetime.now(UTC) - data_info.last_updated).total_seconds()
+                    sub_status["data"] = {
+                        "available": True,
+                        "last_updated": data_info.last_updated.isoformat(),
+                        "age_seconds": age_seconds,
+                    }
+                else:
+                    sub_status["data"] = {"available": False}
+
+                status[sub_name] = sub_status
 
         logger.debug(f"[SUBSCRIPTION_MANAGER] Generated status for {len(status)} subscriptions")
         return status

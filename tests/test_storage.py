@@ -7,7 +7,7 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.storage import format_bytes
+from unraid_mcp.core.utils import format_bytes
 
 
 # --- Unit tests for helpers ---

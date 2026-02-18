@@ -1707,15 +1707,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-pytz"
-version = "2025.2.0.20251108"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/40/ff/c047ddc68c803b46470a357454ef76f4acd8c1088f5cc4891cdd909bfcf6/types_pytz-2025.2.0.20251108.tar.gz", hash = "sha256:fca87917836ae843f07129567b74c1929f1870610681b4c92cb86a3df5817bdb", size = 10961, upload-time = "2025-11-08T02:55:57.001Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/c1/56ef16bf5dcd255155cc736d276efa6ae0a5c26fd685e28f0412a4013c01/types_pytz-2025.2.0.20251108-py3-none-any.whl", hash = "sha256:0f1c9792cab4eb0e46c52f8845c8f77cf1e313cb3d68bf826aa867fe4717d91c", size = 10116, upload-time = "2025-11-08T02:55:56.194Z" },
-]
-
-[[package]]
 name = "typing-extensions"
 version = "4.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1745,7 +1736,6 @@ dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
     { name = "python-dotenv" },
-    { name = "pytz" },
     { name = "rich" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "websockets" },
@@ -1762,7 +1752,6 @@ dev = [
     { name = "ruff" },
     { name = "twine" },
     { name = "ty" },
-    { name = "types-pytz" },
 ]
 
 [package.metadata]
@@ -1771,7 +1760,6 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.14.5" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
-    { name = "pytz", specifier = ">=2025.2" },
     { name = "rich", specifier = ">=14.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35.0" },
     { name = "websockets", specifier = ">=15.0.1" },
@@ -1788,7 +1776,6 @@ dev = [
     { name = "ruff", specifier = ">=0.12.8" },
     { name = "twine", specifier = ">=6.0.1" },
     { name = "ty", specifier = ">=0.0.15" },
-    { name = "types-pytz", specifier = ">=2025.2.0.20250809" },
 ]
 
 [[package]]
