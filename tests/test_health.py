@@ -7,6 +7,7 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
+from unraid_mcp.tools.health import _safe_display_url
 
 
 @pytest.fixture
@@ -139,3 +140,55 @@ class TestHealthActions:
         finally:
             # Restore cached modules
             sys.modules.update(cached)
+
+
+# ---------------------------------------------------------------------------
+# _safe_display_url — URL redaction helper
+# ---------------------------------------------------------------------------
+
+
+class TestSafeDisplayUrl:
+    """Verify that _safe_display_url strips credentials/path and preserves scheme+host+port."""
+
+    def test_none_returns_none(self) -> None:
+        assert _safe_display_url(None) is None
+
+    def test_empty_string_returns_none(self) -> None:
+        assert _safe_display_url("") is None
+
+    def test_simple_url_scheme_and_host(self) -> None:
+        assert _safe_display_url("https://unraid.local/graphql") == "https://unraid.local"
+
+    def test_preserves_port(self) -> None:
+        assert _safe_display_url("https://10.1.0.2:31337/api/graphql") == "https://10.1.0.2:31337"
+
+    def test_strips_path(self) -> None:
+        result = _safe_display_url("http://unraid.local/some/deep/path?query=1")
+        assert "path" not in result
+        assert "query" not in result
+
+    def test_strips_credentials(self) -> None:
+        result = _safe_display_url("https://user:password@unraid.local/graphql")
+        assert "user" not in result
+        assert "password" not in result
+        assert result == "https://unraid.local"
+
+    def test_strips_query_params(self) -> None:
+        result = _safe_display_url("http://host.local?token=abc&key=xyz")
+        assert "token" not in result
+        assert "abc" not in result
+
+    def test_http_scheme_preserved(self) -> None:
+        result = _safe_display_url("http://10.0.0.1:8080/api")
+        assert result == "http://10.0.0.1:8080"
+
+    def test_tailscale_url(self) -> None:
+        result = _safe_display_url("https://100.118.209.1:31337/graphql")
+        assert result == "https://100.118.209.1:31337"
+
+    def test_malformed_ipv6_url_returns_unparseable(self) -> None:
+        """Malformed IPv6 brackets in netloc cause urlparse.hostname to raise ValueError."""
+        # urlparse("https://[invalid") parses without error, but accessing .hostname
+        # raises ValueError: Invalid IPv6 URL — this triggers the except branch.
+        result = _safe_display_url("https://[invalid")
+        assert result == "<unparseable>"

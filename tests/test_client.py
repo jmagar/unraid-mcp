@@ -1,6 +1,7 @@
 """Tests for unraid_mcp.core.client — GraphQL client infrastructure."""
 
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -9,6 +10,8 @@ import pytest
 from unraid_mcp.core.client import (
     DEFAULT_TIMEOUT,
     DISK_TIMEOUT,
+    _QueryCache,
+    _RateLimiter,
     _redact_sensitive,
     is_idempotent_error,
     make_graphql_request,
@@ -462,5 +465,233 @@ class TestGraphQLErrorHandling:
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
             pytest.raises(ToolError, match="GraphQL API error"),
+        ):
+            await make_graphql_request("{ info }")
+
+
+# ---------------------------------------------------------------------------
+# _RateLimiter
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiter:
+    """Unit tests for the token bucket rate limiter."""
+
+    async def test_acquire_consumes_one_token(self) -> None:
+        limiter = _RateLimiter(max_tokens=10, refill_rate=1.0)
+        initial = limiter.tokens
+        await limiter.acquire()
+        assert limiter.tokens == initial - 1
+
+    async def test_acquire_succeeds_when_tokens_available(self) -> None:
+        limiter = _RateLimiter(max_tokens=5, refill_rate=1.0)
+        # Should complete without sleeping
+        for _ in range(5):
+            await limiter.acquire()
+        # _refill() runs during each acquire() call and adds a tiny time-based
+        # amount; check < 1.0 (not enough for another immediate request) rather
+        # than == 0.0 to avoid flakiness from timing.
+        assert limiter.tokens < 1.0
+
+    async def test_tokens_do_not_exceed_max(self) -> None:
+        limiter = _RateLimiter(max_tokens=10, refill_rate=1.0)
+        # Force refill with large elapsed time
+        limiter.last_refill = time.monotonic() - 100.0  # 100 seconds ago
+        limiter._refill()
+        assert limiter.tokens == 10.0  # Capped at max_tokens
+
+    async def test_refill_adds_tokens_based_on_elapsed(self) -> None:
+        limiter = _RateLimiter(max_tokens=100, refill_rate=10.0)
+        limiter.tokens = 0.0
+        limiter.last_refill = time.monotonic() - 1.0  # 1 second ago
+        limiter._refill()
+        # Should have refilled ~10 tokens (10.0 rate * 1.0 sec)
+        assert 9.5 < limiter.tokens < 10.5
+
+    async def test_acquire_sleeps_when_no_tokens(self) -> None:
+        """When tokens are exhausted, acquire should sleep before consuming."""
+        limiter = _RateLimiter(max_tokens=1, refill_rate=1.0)
+        limiter.tokens = 0.0
+
+        sleep_calls = []
+
+        async def fake_sleep(duration: float) -> None:
+            sleep_calls.append(duration)
+            # Simulate refill by advancing last_refill so tokens replenish
+            limiter.tokens = 1.0
+            limiter.last_refill = time.monotonic()
+
+        with patch("unraid_mcp.core.client.asyncio.sleep", side_effect=fake_sleep):
+            await limiter.acquire()
+
+        assert len(sleep_calls) == 1
+        assert sleep_calls[0] > 0
+
+    async def test_default_params_match_api_limits(self) -> None:
+        """Default rate limiter must use 90 tokens at 9.0/sec (10% headroom from 100/10s)."""
+        limiter = _RateLimiter()
+        assert limiter.max_tokens == 90
+        assert limiter.refill_rate == 9.0
+
+
+# ---------------------------------------------------------------------------
+# _QueryCache
+# ---------------------------------------------------------------------------
+
+
+class TestQueryCache:
+    """Unit tests for the TTL query cache."""
+
+    def test_miss_on_empty_cache(self) -> None:
+        cache = _QueryCache()
+        assert cache.get("{ info }", None) is None
+
+    def test_put_and_get_hit(self) -> None:
+        cache = _QueryCache()
+        data = {"result": "ok"}
+        cache.put("GetNetworkConfig { }", None, data)
+        result = cache.get("GetNetworkConfig { }", None)
+        assert result == data
+
+    def test_expired_entry_returns_none(self) -> None:
+        cache = _QueryCache()
+        data = {"result": "ok"}
+        cache.put("GetNetworkConfig { }", None, data)
+        # Manually expire the entry
+        key = cache._cache_key("GetNetworkConfig { }", None)
+        cache._store[key] = (time.monotonic() - 1.0, data)  # expired 1 sec ago
+        assert cache.get("GetNetworkConfig { }", None) is None
+
+    def test_invalidate_all_clears_store(self) -> None:
+        cache = _QueryCache()
+        cache.put("GetNetworkConfig { }", None, {"x": 1})
+        cache.put("GetOwner { }", None, {"y": 2})
+        assert len(cache._store) == 2
+        cache.invalidate_all()
+        assert len(cache._store) == 0
+
+    def test_variables_affect_cache_key(self) -> None:
+        """Different variables produce different cache keys."""
+        cache = _QueryCache()
+        q = "GetNetworkConfig($id: ID!) { network(id: $id) { name } }"
+        cache.put(q, {"id": "1"}, {"name": "eth0"})
+        cache.put(q, {"id": "2"}, {"name": "eth1"})
+        assert cache.get(q, {"id": "1"}) == {"name": "eth0"}
+        assert cache.get(q, {"id": "2"}) == {"name": "eth1"}
+
+    def test_is_cacheable_returns_true_for_known_prefixes(self) -> None:
+        assert _QueryCache.is_cacheable("GetNetworkConfig { ... }") is True
+        assert _QueryCache.is_cacheable("GetRegistrationInfo { ... }") is True
+        assert _QueryCache.is_cacheable("GetOwner { ... }") is True
+        assert _QueryCache.is_cacheable("GetFlash { ... }") is True
+
+    def test_is_cacheable_returns_false_for_mutations(self) -> None:
+        assert _QueryCache.is_cacheable('mutation { docker { start(id: "x") } }') is False
+
+    def test_is_cacheable_returns_false_for_unlisted_queries(self) -> None:
+        assert _QueryCache.is_cacheable("{ docker { containers { id } } }") is False
+        assert _QueryCache.is_cacheable("{ info { os } }") is False
+
+    def test_is_cacheable_mutation_check_is_prefix(self) -> None:
+        """Queries that start with 'mutation' after whitespace are not cacheable."""
+        assert _QueryCache.is_cacheable("  mutation { ... }") is False
+
+    def test_expired_entry_removed_from_store(self) -> None:
+        """Accessing an expired entry should remove it from the internal store."""
+        cache = _QueryCache()
+        cache.put("GetOwner { }", None, {"owner": "root"})
+        key = cache._cache_key("GetOwner { }", None)
+        cache._store[key] = (time.monotonic() - 1.0, {"owner": "root"})
+        assert key in cache._store
+        cache.get("GetOwner { }", None)  # triggers deletion
+        assert key not in cache._store
+
+
+# ---------------------------------------------------------------------------
+# make_graphql_request — 429 retry behavior
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimitRetry:
+    """Tests for the 429 retry loop in make_graphql_request."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_config(self):
+        with (
+            patch("unraid_mcp.core.client.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.core.client.UNRAID_API_KEY", "test-key"),
+            patch("unraid_mcp.core.client.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            yield
+
+    def _make_429_response(self) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = 429
+        resp.raise_for_status = MagicMock()
+        return resp
+
+    def _make_ok_response(self, data: dict) -> MagicMock:
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = {"data": data}
+        return resp
+
+    async def test_single_429_then_success_retries(self) -> None:
+        """One 429 followed by a success should return the data."""
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [
+            self._make_429_response(),
+            self._make_ok_response({"info": {"os": "Unraid"}}),
+        ]
+
+        with patch("unraid_mcp.core.client.get_http_client", return_value=mock_client):
+            result = await make_graphql_request("{ info { os } }")
+
+        assert result == {"info": {"os": "Unraid"}}
+        assert mock_client.post.call_count == 2
+
+    async def test_two_429s_then_success(self) -> None:
+        """Two 429s followed by success returns data after 2 retries."""
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [
+            self._make_429_response(),
+            self._make_429_response(),
+            self._make_ok_response({"x": 1}),
+        ]
+
+        with patch("unraid_mcp.core.client.get_http_client", return_value=mock_client):
+            result = await make_graphql_request("{ x }")
+
+        assert result == {"x": 1}
+        assert mock_client.post.call_count == 3
+
+    async def test_three_429s_raises_tool_error(self) -> None:
+        """Three consecutive 429s (all retries exhausted) raises ToolError."""
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [
+            self._make_429_response(),
+            self._make_429_response(),
+            self._make_429_response(),
+        ]
+
+        with (
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+            pytest.raises(ToolError, match="rate limiting"),
+        ):
+            await make_graphql_request("{ info }")
+
+    async def test_rate_limit_error_message_advises_wait(self) -> None:
+        """The ToolError message should tell the user to wait ~10 seconds."""
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [
+            self._make_429_response(),
+            self._make_429_response(),
+            self._make_429_response(),
+        ]
+
+        with (
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+            pytest.raises(ToolError, match="10 seconds"),
         ):
             await make_graphql_request("{ info }")

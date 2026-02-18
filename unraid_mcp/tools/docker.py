@@ -99,8 +99,7 @@ MUTATIONS: dict[str, str] = {
     """,
 }
 
-DESTRUCTIVE_ACTIONS = {"remove"}
-_MUTATION_ACTIONS = {"start", "stop", "restart", "pause", "unpause", "remove", "update"}
+DESTRUCTIVE_ACTIONS = {"remove", "update_all"}
 # NOTE (Code-M-07): "details" and "logs" are listed here because they require a
 # container_id parameter, but unlike mutations they use fuzzy name matching (not
 # strict). This is intentional: read-only queries are safe with fuzzy matching.

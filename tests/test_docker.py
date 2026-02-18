@@ -175,7 +175,7 @@ class TestDockerActions:
             "docker": {"updateAllContainers": [{"id": "c1", "state": "running"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert len(result["containers"]) == 1
 
@@ -271,9 +271,15 @@ class TestDockerMutationFailures:
         """update_all with no containers to update."""
         _mock_graphql.return_value = {"docker": {"updateAllContainers": []}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert result["containers"] == []
+
+    async def test_update_all_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        """update_all is destructive and requires confirm=True."""
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destructive"):
+            await tool_fn(action="update_all")
 
     async def test_mutation_timeout(self, _mock_graphql: AsyncMock) -> None:
         """Mid-operation timeout during a docker mutation."""

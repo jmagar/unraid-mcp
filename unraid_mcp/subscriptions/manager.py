@@ -32,12 +32,17 @@ _STABLE_CONNECTION_SECONDS = 30
 def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
     """Cap log content in subscription data to prevent unbounded memory growth.
 
-    If the data contains a 'content' field (from log subscriptions) that exceeds
-    size limits, truncate to the most recent _MAX_RESOURCE_DATA_LINES lines.
+    Returns a new dict — does NOT mutate the input. If any nested 'content'
+    field (from log subscriptions) exceeds the byte limit, truncate it to the
+    most recent _MAX_RESOURCE_DATA_LINES lines.
+
+    Note: single lines larger than _MAX_RESOURCE_DATA_BYTES are not split and
+    will still be stored at full size; only multi-line content is truncated.
     """
+    result: dict[str, Any] = {}
     for key, value in data.items():
         if isinstance(value, dict):
-            data[key] = _cap_log_content(value)
+            result[key] = _cap_log_content(value)
         elif (
             key == "content"
             and isinstance(value, str)
@@ -50,8 +55,12 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
                     f"[RESOURCE] Capped log content from {len(lines)} to "
                     f"{_MAX_RESOURCE_DATA_LINES} lines ({len(value)} -> {len(truncated)} chars)"
                 )
-                data[key] = truncated
-    return data
+                result[key] = truncated
+            else:
+                result[key] = value
+        else:
+            result[key] = value
+    return result
 
 
 class SubscriptionManager:
@@ -355,11 +364,13 @@ class SubscriptionManager:
                                         if isinstance(payload["data"], dict)
                                         else payload["data"]
                                     )
-                                    self.resource_data[subscription_name] = SubscriptionData(
+                                    new_entry = SubscriptionData(
                                         data=capped_data,
                                         last_updated=datetime.now(UTC),
                                         subscription_type=subscription_name,
                                     )
+                                    async with self.subscription_lock:
+                                        self.resource_data[subscription_name] = new_entry
                                     logger.debug(
                                         f"[RESOURCE:{subscription_name}] Resource data updated successfully"
                                     )
@@ -483,6 +494,16 @@ class SubscriptionManager:
             )
             self.connection_states[subscription_name] = "reconnecting"
             await asyncio.sleep(retry_delay)
+
+        # The while loop exited (via break or max_retries exceeded).
+        # Remove from active_subscriptions so start_subscription() can restart it.
+        async with self.subscription_lock:
+            self.active_subscriptions.pop(subscription_name, None)
+        logger.info(
+            f"[SUBSCRIPTION:{subscription_name}] Subscription loop ended — "
+            f"removed from active_subscriptions. Final state: "
+            f"{self.connection_states.get(subscription_name, 'unknown')}"
+        )
 
     async def get_resource_data(self, resource_name: str) -> dict[str, Any] | None:
         """Get current resource data with enhanced logging."""

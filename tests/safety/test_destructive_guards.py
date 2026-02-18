@@ -39,7 +39,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str]]] = {
         "module": "unraid_mcp.tools.docker",
         "register_fn": "register_docker_tool",
         "tool_name": "unraid_docker",
-        "actions": {"remove"},
+        "actions": {"remove", "update_all"},
         "runtime_set": DOCKER_DESTRUCTIVE,
     },
     "vm": {
@@ -143,6 +143,7 @@ class TestDestructiveActionRegistries:
 _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Docker
     ("docker", "remove", {"container_id": "abc123"}),
+    ("docker", "update_all", {}),
     # VM
     ("vm", "force_stop", {"vm_id": "test-vm-uuid"}),
     ("vm", "reset", {"vm_id": "test-vm-uuid"}),

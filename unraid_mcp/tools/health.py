@@ -37,8 +37,8 @@ def _safe_display_url(url: str | None) -> str | None:
         if parsed.port:
             return f"{parsed.scheme}://{host}:{parsed.port}"
         return f"{parsed.scheme}://{host}"
-    except Exception:
-        # If parsing fails, show nothing rather than leaking the raw URL
+    except ValueError:
+        # urlparse raises ValueError for invalid URLs (e.g. contains control chars)
         return "<unparseable>"
 
 
@@ -235,9 +235,9 @@ def _analyze_subscription_status(
     """Analyze subscription status dict, returning error count and connection issues.
 
     This is the canonical implementation of subscription status analysis.
-    TODO: subscriptions/diagnostics.py (lines 168-182) duplicates this logic.
-    That module should be refactored to call this helper once file ownership
-    allows cross-agent edits. See Code-H05.
+    TODO: subscriptions/diagnostics.py has a similar status-analysis pattern
+    in diagnose_subscriptions(). That module could import and call this helper
+    directly to avoid divergence. See Code-H05.
 
     Args:
         status: Dict of subscription name -> status info from get_subscription_status().

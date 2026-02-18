@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import json
 import time
-from typing import Any
+from typing import Any, Final
 
 import httpx
 
@@ -23,20 +23,22 @@ from ..config.settings import (
 from ..core.exceptions import ToolError
 
 
-# Sensitive keys to redact from debug logs
-_SENSITIVE_KEYS = {
-    "password",
-    "key",
-    "secret",
-    "token",
-    "apikey",
-    "authorization",
-    "cookie",
-    "session",
-    "credential",
-    "passphrase",
-    "jwt",
-}
+# Sensitive keys to redact from debug logs (frozenset — immutable, Final — no accidental reassignment)
+_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "password",
+        "key",
+        "secret",
+        "token",
+        "apikey",
+        "authorization",
+        "cookie",
+        "session",
+        "credential",
+        "passphrase",
+        "jwt",
+    }
+)
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -80,16 +82,9 @@ def get_timeout_for_operation(profile: str) -> httpx.Timeout:
 
 
 # Global connection pool (module-level singleton)
+# Python 3.12+ asyncio.Lock() is safe at module level — no running event loop required
 _http_client: httpx.AsyncClient | None = None
-_client_lock: asyncio.Lock | None = None
-
-
-def _get_client_lock() -> asyncio.Lock:
-    """Get or create the client lock (lazy init to avoid event loop issues)."""
-    global _client_lock
-    if _client_lock is None:
-        _client_lock = asyncio.Lock()
-    return _client_lock
+_client_lock: Final[asyncio.Lock] = asyncio.Lock()
 
 
 class _RateLimiter:
@@ -103,12 +98,8 @@ class _RateLimiter:
         self.tokens = float(max_tokens)
         self.refill_rate = refill_rate  # tokens per second
         self.last_refill = time.monotonic()
-        self._lock: asyncio.Lock | None = None
-
-    def _get_lock(self) -> asyncio.Lock:
-        if self._lock is None:
-            self._lock = asyncio.Lock()
-        return self._lock
+        # asyncio.Lock() is safe to create at __init__ time (Python 3.12+)
+        self._lock: Final[asyncio.Lock] = asyncio.Lock()
 
     def _refill(self) -> None:
         """Refill tokens based on elapsed time."""
@@ -120,7 +111,7 @@ class _RateLimiter:
     async def acquire(self) -> None:
         """Consume one token, waiting if necessary for refill."""
         while True:
-            async with self._get_lock():
+            async with self._lock:
                 self._refill()
                 if self.tokens >= 1:
                     self.tokens -= 1
@@ -266,7 +257,7 @@ async def get_http_client() -> httpx.AsyncClient:
         return client
 
     # Slow-path: acquire lock for initialization
-    async with _get_client_lock():
+    async with _client_lock:
         if _http_client is None or _http_client.is_closed:
             _http_client = await _create_http_client()
             logger.info(
@@ -279,7 +270,7 @@ async def close_http_client() -> None:
     """Close the shared HTTP client (call on server shutdown)."""
     global _http_client
 
-    async with _get_client_lock():
+    async with _client_lock:
         if _http_client is not None:
             await _http_client.aclose()
             _http_client = None
@@ -361,6 +352,14 @@ async def make_graphql_request(
 
         if response is None:  # pragma: no cover — guaranteed by loop
             raise ToolError("No response received after retry attempts")
+
+        # Provide a clear message when all retries are exhausted on 429
+        if response.status_code == 429:
+            logger.error("Rate limit (429) persisted after 3 retries — request aborted")
+            raise ToolError(
+                "Unraid API is rate limiting requests. Wait ~10 seconds before retrying."
+            )
+
         response.raise_for_status()  # Raise an exception for HTTP error codes 4xx/5xx
 
         response_data = response.json()

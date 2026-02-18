@@ -6,7 +6,7 @@ throughout the application, with proper integration to FastMCP's error system.
 
 import contextlib
 import logging
-from collections.abc import Generator
+from collections.abc import Iterator
 
 from fastmcp.exceptions import ToolError as FastMCPToolError
 
@@ -28,11 +28,12 @@ def tool_error_handler(
     tool_name: str,
     action: str,
     logger: logging.Logger,
-) -> Generator[None]:
+) -> Iterator[None]:
     """Context manager that standardizes tool error handling.
 
-    Re-raises ToolError as-is. Catches all other exceptions, logs them
-    with full traceback, and wraps them in ToolError with a descriptive message.
+    Re-raises ToolError as-is. Gives TimeoutError a descriptive message.
+    Catches all other exceptions, logs them with full traceback, and wraps them
+    in ToolError with a descriptive message.
 
     Args:
         tool_name: The tool name for error messages (e.g., "docker", "vm").
@@ -43,6 +44,14 @@ def tool_error_handler(
         yield
     except ToolError:
         raise
+    except TimeoutError as e:
+        logger.error(
+            f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit",
+            exc_info=True,
+        )
+        raise ToolError(
+            f"Request timed out executing {tool_name}/{action}. The Unraid API did not respond in time."
+        ) from e
     except Exception as e:
         logger.error(f"Error in unraid_{tool_name} action={action}: {e}", exc_info=True)
         raise ToolError(f"Failed to execute {tool_name}/{action}: {e!s}") from e

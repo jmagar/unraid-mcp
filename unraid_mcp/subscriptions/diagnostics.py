@@ -37,8 +37,10 @@ _ALLOWED_SUBSCRIPTION_NAMES = frozenset(
     }
 )
 
-# Pattern: must start with "subscription", contain only a known subscription name,
-# and not contain mutation/query keywords or semicolons (prevents injection).
+# Pattern: must start with "subscription" and contain only a known subscription name.
+# _FORBIDDEN_KEYWORDS rejects any query that contains standalone "mutation" or "query"
+# as distinct words. Word boundaries (\b) ensure "mutationField"-style identifiers are
+# not rejected — only bare "mutation" or "query" operation keywords are blocked.
 _SUBSCRIPTION_NAME_PATTERN = re.compile(r"^\s*subscription\b[^{]*\{\s*(\w+)", re.IGNORECASE)
 _FORBIDDEN_KEYWORDS = re.compile(r"\b(mutation|query)\b", re.IGNORECASE)
 

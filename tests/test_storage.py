@@ -7,7 +7,7 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.core.utils import format_bytes
+from unraid_mcp.core.utils import format_bytes, format_kb, safe_get
 
 
 # --- Unit tests for helpers ---
@@ -76,6 +76,70 @@ class TestStorageValidation:
         tool_fn = _make_tool()
         result = await tool_fn(action="logs", log_path="/var/log/syslog")
         assert result["content"] == "ok"
+
+    async def test_logs_tail_lines_too_large(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="tail_lines must be between"):
+            await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=10_001)
+
+    async def test_logs_tail_lines_zero_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="tail_lines must be between"):
+            await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=0)
+
+    async def test_logs_tail_lines_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=10_000)
+        assert result["content"] == "ok"
+
+
+class TestFormatKb:
+    def test_none_returns_na(self) -> None:
+        assert format_kb(None) == "N/A"
+
+    def test_invalid_string_returns_na(self) -> None:
+        assert format_kb("not-a-number") == "N/A"
+
+    def test_kilobytes_range(self) -> None:
+        assert format_kb(512) == "512 KB"
+
+    def test_megabytes_range(self) -> None:
+        assert format_kb(2048) == "2.00 MB"
+
+    def test_gigabytes_range(self) -> None:
+        assert format_kb(1_048_576) == "1.00 GB"
+
+    def test_terabytes_range(self) -> None:
+        assert format_kb(1_073_741_824) == "1.00 TB"
+
+    def test_boundary_exactly_1024_kb(self) -> None:
+        # 1024 KB = 1 MB
+        assert format_kb(1024) == "1.00 MB"
+
+
+class TestSafeGet:
+    def test_simple_key_access(self) -> None:
+        assert safe_get({"a": 1}, "a") == 1
+
+    def test_nested_key_access(self) -> None:
+        assert safe_get({"a": {"b": "val"}}, "a", "b") == "val"
+
+    def test_missing_key_returns_none(self) -> None:
+        assert safe_get({"a": 1}, "missing") is None
+
+    def test_none_intermediate_returns_default(self) -> None:
+        assert safe_get({"a": None}, "a", "b") is None
+
+    def test_custom_default_returned(self) -> None:
+        assert safe_get({}, "x", default="fallback") == "fallback"
+
+    def test_non_dict_intermediate_returns_default(self) -> None:
+        assert safe_get({"a": "string"}, "a", "b") is None
+
+    def test_empty_list_default(self) -> None:
+        result = safe_get({}, "missing", default=[])
+        assert result == []
 
 
 class TestStorageActions:
