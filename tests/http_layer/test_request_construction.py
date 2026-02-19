@@ -195,7 +195,7 @@ class TestHttpErrorHandling:
     @respx.mock
     async def test_invalid_json_response(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(200, text="not json"))
-        with pytest.raises(ToolError, match="invalid response"):
+        with pytest.raises(ToolError, match=r"invalid response.*not valid JSON"):
             await make_graphql_request("query { online }")
 
 

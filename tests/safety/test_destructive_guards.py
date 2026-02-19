@@ -10,8 +10,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-# Centralized import for make_tool_fn helper
-# conftest.py sits in tests/ and is importable without __init__.py
+# conftest.py is the shared test-helper module for this project.
+# pytest automatically adds tests/ to sys.path, making it importable here
+# without a package __init__.py. Do NOT add tests/__init__.py — it breaks
+# conftest.py's fixture auto-discovery.
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
@@ -270,6 +272,15 @@ class TestConfirmationGuards:
 
 class TestConfirmAllowsExecution:
     """Destructive actions with confirm=True should reach the GraphQL layer."""
+
+    async def test_docker_update_all_with_confirm(self, _mock_docker_graphql: AsyncMock) -> None:
+        _mock_docker_graphql.return_value = {
+            "docker": {"updateAllContainers": [{"id": "c1", "names": ["app"], "state": "running", "status": "Up"}]}
+        }
+        tool_fn = make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+        result = await tool_fn(action="update_all", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "update_all"
 
     async def test_docker_remove_with_confirm(self, _mock_docker_graphql: AsyncMock) -> None:
         cid = "a" * 64 + ":local"
