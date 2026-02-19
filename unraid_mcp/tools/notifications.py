@@ -4,7 +4,7 @@ Provides the `unraid_notifications` tool with 9 actions for viewing,
 creating, archiving, and deleting system notifications.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -90,6 +90,14 @@ NOTIFICATION_ACTIONS = Literal[
     "delete_archived",
     "archive_all",
 ]
+
+if set(get_args(NOTIFICATION_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(NOTIFICATION_ACTIONS))
+    _extra = set(get_args(NOTIFICATION_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"NOTIFICATION_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_notifications_tool(mcp: FastMCP) -> None:

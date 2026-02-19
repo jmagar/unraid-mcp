@@ -1,6 +1,7 @@
 """Shared utility functions for Unraid MCP tools."""
 
 from typing import Any
+from urllib.parse import urlparse
 
 
 def safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
@@ -43,6 +44,25 @@ def format_bytes(bytes_value: int | None) -> str:
             return f"{value:.2f} {unit}"
         value /= 1024.0
     return f"{value:.2f} EB"
+
+
+def safe_display_url(url: str | None) -> str | None:
+    """Return a redacted URL showing only scheme + host + port.
+
+    Strips path, query parameters, credentials, and fragments to avoid
+    leaking internal network topology or embedded secrets (CWE-200).
+    """
+    if not url:
+        return None
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or "unknown"
+        if parsed.port:
+            return f"{parsed.scheme}://{host}:{parsed.port}"
+        return f"{parsed.scheme}://{host}"
+    except ValueError:
+        # urlparse raises ValueError for invalid URLs (e.g. contains control chars)
+        return "<unparseable>"
 
 
 def format_kb(k: Any) -> str:

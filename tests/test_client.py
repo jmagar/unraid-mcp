@@ -12,9 +12,9 @@ from unraid_mcp.core.client import (
     DISK_TIMEOUT,
     _QueryCache,
     _RateLimiter,
-    _redact_sensitive,
     is_idempotent_error,
     make_graphql_request,
+    redact_sensitive,
 )
 from unraid_mcp.core.exceptions import ToolError
 
@@ -60,7 +60,7 @@ class TestIsIdempotentError:
 
 
 # ---------------------------------------------------------------------------
-# _redact_sensitive
+# redact_sensitive
 # ---------------------------------------------------------------------------
 
 
@@ -69,36 +69,36 @@ class TestRedactSensitive:
 
     def test_flat_dict(self) -> None:
         data = {"username": "admin", "password": "hunter2", "host": "10.0.0.1"}
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result["username"] == "admin"
         assert result["password"] == "***"
         assert result["host"] == "10.0.0.1"
 
     def test_nested_dict(self) -> None:
         data = {"config": {"apiKey": "abc123", "url": "http://host"}}
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result["config"]["apiKey"] == "***"
         assert result["config"]["url"] == "http://host"
 
     def test_list_of_dicts(self) -> None:
         data = [{"token": "t1"}, {"name": "safe"}]
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result[0]["token"] == "***"
         assert result[1]["name"] == "safe"
 
     def test_deeply_nested(self) -> None:
         data = {"a": {"b": {"c": {"secret": "deep"}}}}
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result["a"]["b"]["c"]["secret"] == "***"
 
     def test_non_dict_passthrough(self) -> None:
-        assert _redact_sensitive("plain_string") == "plain_string"
-        assert _redact_sensitive(42) == 42
-        assert _redact_sensitive(None) is None
+        assert redact_sensitive("plain_string") == "plain_string"
+        assert redact_sensitive(42) == 42
+        assert redact_sensitive(None) is None
 
     def test_case_insensitive_keys(self) -> None:
         data = {"Password": "p1", "TOKEN": "t1", "ApiKey": "k1", "Secret": "s1", "Key": "x1"}
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         for v in result.values():
             assert v == "***"
 
@@ -112,7 +112,7 @@ class TestRedactSensitive:
             "username": "safe",
             "host": "safe",
         }
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result["user_password"] == "***"
         assert result["api_key_value"] == "***"
         assert result["auth_token_expiry"] == "***"
@@ -122,11 +122,25 @@ class TestRedactSensitive:
 
     def test_mixed_list_content(self) -> None:
         data = [{"key": "val"}, "string", 123, [{"token": "inner"}]]
-        result = _redact_sensitive(data)
+        result = redact_sensitive(data)
         assert result[0]["key"] == "***"
         assert result[1] == "string"
         assert result[2] == 123
         assert result[3][0]["token"] == "***"
+
+    def test_new_sensitive_keys_are_redacted(self) -> None:
+        """PR-added keys: authorization, cookie, session, credential, passphrase, jwt."""
+        data = {
+            "authorization": "Bearer token123",
+            "cookie": "session=abc",
+            "jwt": "eyJ...",
+            "credential": "secret_cred",
+            "passphrase": "hunter2",
+            "session": "sess_id",
+        }
+        result = redact_sensitive(data)
+        for key, val in result.items():
+            assert val == "***", f"Key '{key}' was not redacted"
 
 
 # ---------------------------------------------------------------------------
@@ -347,7 +361,7 @@ class TestMakeGraphQLRequestErrors:
 
         with (
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
-            pytest.raises(ToolError, match="invalid response.*not valid JSON"),
+            pytest.raises(ToolError, match=r"invalid response.*not valid JSON"),
         ):
             await make_graphql_request("{ info }")
 
@@ -481,7 +495,7 @@ class TestRateLimiter:
         limiter = _RateLimiter(max_tokens=10, refill_rate=1.0)
         initial = limiter.tokens
         await limiter.acquire()
-        assert limiter.tokens == initial - 1
+        assert limiter.tokens == pytest.approx(initial - 1, abs=1e-3)
 
     async def test_acquire_succeeds_when_tokens_available(self) -> None:
         limiter = _RateLimiter(max_tokens=5, refill_rate=1.0)
@@ -595,6 +609,15 @@ class TestQueryCache:
     def test_is_cacheable_mutation_check_is_prefix(self) -> None:
         """Queries that start with 'mutation' after whitespace are not cacheable."""
         assert _QueryCache.is_cacheable("  mutation { ... }") is False
+
+    def test_is_cacheable_with_explicit_query_keyword(self) -> None:
+        """Operation names after explicit 'query' keyword must be recognized."""
+        assert _QueryCache.is_cacheable("query GetNetworkConfig { network { name } }") is True
+        assert _QueryCache.is_cacheable("query GetOwner { owner { name } }") is True
+
+    def test_is_cacheable_anonymous_query_returns_false(self) -> None:
+        """Anonymous 'query { ... }' has no operation name — must not be cached."""
+        assert _QueryCache.is_cacheable("query { network { name } }") is False
 
     def test_expired_entry_removed_from_store(self) -> None:
         """Accessing an expired entry should remove it from the internal store."""

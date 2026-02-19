@@ -5,11 +5,12 @@ and provides all configuration constants used throughout the application.
 """
 
 import os
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+
+from ..version import VERSION as APP_VERSION
 
 
 # Get the script directory (config module location)
@@ -30,12 +31,6 @@ for dotenv_path in dotenv_paths:
     if dotenv_path.exists():
         load_dotenv(dotenv_path=dotenv_path)
         break
-
-# Application Version (single source of truth: pyproject.toml)
-try:
-    VERSION = version("unraid-mcp")
-except PackageNotFoundError:
-    VERSION = "0.0.0"
 
 # Core API Configuration
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
@@ -58,12 +53,18 @@ else:  # Path to CA bundle
 # Logging Configuration
 LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
 LOG_FILE_NAME = os.getenv("UNRAID_MCP_LOG_FILE", "unraid-mcp.log")
-# Use /app/logs in Docker, project-relative logs/ directory otherwise
-LOGS_DIR = Path("/app/logs") if Path("/app").is_dir() else PROJECT_ROOT / "logs"
+# Use /.dockerenv as the container indicator for robust Docker detection.
+IS_DOCKER = Path("/.dockerenv").exists()
+LOGS_DIR = Path("/app/logs") if IS_DOCKER else PROJECT_ROOT / "logs"
 LOG_FILE_PATH = LOGS_DIR / LOG_FILE_NAME
 
-# Ensure logs directory exists
-LOGS_DIR.mkdir(parents=True, exist_ok=True)
+# Ensure logs directory exists; if creation fails, fall back to /tmp.
+try:
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    LOGS_DIR = PROJECT_ROOT / ".cache" / "logs"
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    LOG_FILE_PATH = LOGS_DIR / LOG_FILE_NAME
 
 # HTTP Client Configuration
 TIMEOUT_CONFIG = {
@@ -109,3 +110,5 @@ def get_config_summary() -> dict[str, Any]:
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
     }
+# Re-export application version from a single source of truth.
+VERSION = APP_VERSION

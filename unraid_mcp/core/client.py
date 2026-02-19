@@ -7,6 +7,7 @@ to the Unraid API with proper timeout handling and error management.
 import asyncio
 import hashlib
 import json
+import re
 import time
 from typing import Any, Final
 
@@ -47,14 +48,14 @@ def _is_sensitive_key(key: str) -> bool:
     return any(s in key_lower for s in _SENSITIVE_KEYS)
 
 
-def _redact_sensitive(obj: Any) -> Any:
+def redact_sensitive(obj: Any) -> Any:
     """Recursively redact sensitive values from nested dicts/lists."""
     if isinstance(obj, dict):
         return {
-            k: ("***" if _is_sensitive_key(k) else _redact_sensitive(v)) for k, v in obj.items()
+            k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()
         }
     if isinstance(obj, list):
-        return [_redact_sensitive(item) for item in obj]
+        return [redact_sensitive(item) for item in obj]
     return obj
 
 
@@ -139,6 +140,7 @@ _CACHEABLE_QUERY_PREFIXES = frozenset(
 )
 
 _CACHE_TTL_SECONDS = 60.0
+_OPERATION_NAME_PATTERN = re.compile(r"^(?:query\s+)?([_A-Za-z][_0-9A-Za-z]*)\b")
 
 
 class _QueryCache:
@@ -160,9 +162,13 @@ class _QueryCache:
     @staticmethod
     def is_cacheable(query: str) -> bool:
         """Check if a query is eligible for caching based on its operation name."""
-        if query.lstrip().startswith("mutation"):
+        normalized = query.lstrip()
+        if normalized.startswith("mutation"):
             return False
-        return any(prefix in query for prefix in _CACHEABLE_QUERY_PREFIXES)
+        match = _OPERATION_NAME_PATTERN.match(normalized)
+        if not match:
+            return False
+        return match.group(1) in _CACHEABLE_QUERY_PREFIXES
 
     def get(self, query: str, variables: dict[str, Any] | None) -> dict[str, Any] | None:
         """Return cached result if present and not expired, else None."""
@@ -324,7 +330,7 @@ async def make_graphql_request(
     logger.debug(f"Making GraphQL request to {UNRAID_API_URL}:")
     logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
     if variables:
-        logger.debug(f"Variables: {_redact_sensitive(variables)}")
+        logger.debug(f"Variables: {redact_sensitive(variables)}")
 
     try:
         # Rate limit: consume a token before making the request

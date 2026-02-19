@@ -3,7 +3,7 @@
 Provides the `unraid_array` tool with 5 actions for parity check management.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -52,6 +52,14 @@ ARRAY_ACTIONS = Literal[
     "parity_cancel",
     "parity_status",
 ]
+
+if set(get_args(ARRAY_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(ARRAY_ACTIONS))
+    _extra = set(get_args(ARRAY_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"ARRAY_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_array_tool(mcp: FastMCP) -> None:

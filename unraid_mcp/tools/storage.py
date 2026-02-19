@@ -5,7 +5,7 @@ unassigned devices, log files, and log content retrieval.
 """
 
 import os
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -69,6 +69,14 @@ STORAGE_ACTIONS = Literal[
     "logs",
 ]
 
+if set(get_args(STORAGE_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(STORAGE_ACTIONS))
+    _extra = set(get_args(STORAGE_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"STORAGE_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
+
 
 def register_storage_tool(mcp: FastMCP) -> None:
     """Register the unraid_storage tool with the FastMCP instance."""
@@ -96,7 +104,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
         if action == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for 'disk_details' action")
 
-        if tail_lines < 1 or tail_lines > _MAX_TAIL_LINES:
+        if action == "logs" and (tail_lines < 1 or tail_lines > _MAX_TAIL_LINES):
             raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
 
         if action == "logs":

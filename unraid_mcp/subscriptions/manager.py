@@ -17,7 +17,7 @@ from websockets.typing import Subprotocol
 
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_KEY
-from ..core.client import _redact_sensitive
+from ..core.client import redact_sensitive
 from ..core.types import SubscriptionData
 from .utils import build_ws_ssl_context, build_ws_url
 
@@ -36,8 +36,7 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
     field (from log subscriptions) exceeds the byte limit, truncate it to the
     most recent _MAX_RESOURCE_DATA_LINES lines.
 
-    Note: single lines larger than _MAX_RESOURCE_DATA_BYTES are not split and
-    will still be stored at full size; only multi-line content is truncated.
+    The final content is guaranteed to be <= _MAX_RESOURCE_DATA_BYTES.
     """
     result: dict[str, Any] = {}
     for key, value in data.items():
@@ -49,15 +48,31 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
             and len(value.encode("utf-8", errors="replace")) > _MAX_RESOURCE_DATA_BYTES
         ):
             lines = value.splitlines()
+            original_line_count = len(lines)
+
+            # Keep most recent lines first.
             if len(lines) > _MAX_RESOURCE_DATA_LINES:
-                truncated = "\n".join(lines[-_MAX_RESOURCE_DATA_LINES:])
-                logger.warning(
-                    f"[RESOURCE] Capped log content from {len(lines)} to "
-                    f"{_MAX_RESOURCE_DATA_LINES} lines ({len(value)} -> {len(truncated)} chars)"
+                lines = lines[-_MAX_RESOURCE_DATA_LINES:]
+
+            # Enforce byte cap while preserving whole-line boundaries where possible.
+            truncated = "\n".join(lines)
+            truncated_bytes = truncated.encode("utf-8", errors="replace")
+            while len(lines) > 1 and len(truncated_bytes) > _MAX_RESOURCE_DATA_BYTES:
+                lines = lines[1:]
+                truncated = "\n".join(lines)
+                truncated_bytes = truncated.encode("utf-8", errors="replace")
+
+            # Last resort: if a single line still exceeds cap, hard-cap bytes.
+            if len(truncated_bytes) > _MAX_RESOURCE_DATA_BYTES:
+                truncated = truncated_bytes[-_MAX_RESOURCE_DATA_BYTES :].decode(
+                    "utf-8", errors="ignore"
                 )
-                result[key] = truncated
-            else:
-                result[key] = value
+
+            logger.warning(
+                f"[RESOURCE] Capped log content from {original_line_count} to "
+                f"{len(lines)} lines ({len(value)} -> {len(truncated)} chars)"
+            )
+            result[key] = truncated
         else:
             result[key] = value
     return result
@@ -148,6 +163,7 @@ class SubscriptionManager:
         # Reset connection tracking
         self.reconnect_attempts[subscription_name] = 0
         self.connection_states[subscription_name] = "starting"
+        self._connection_start_times.pop(subscription_name, None)
 
         async with self.subscription_lock:
             try:
@@ -181,6 +197,7 @@ class SubscriptionManager:
                     logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
                 del self.active_subscriptions[subscription_name]
                 self.connection_states[subscription_name] = "stopped"
+                self._connection_start_times.pop(subscription_name, None)
                 logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
             else:
                 logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
@@ -322,7 +339,7 @@ class SubscriptionManager:
                     )
                     logger.debug(f"[SUBSCRIPTION:{subscription_name}] Query: {query[:100]}...")
                     logger.debug(
-                        f"[SUBSCRIPTION:{subscription_name}] Variables: {_redact_sensitive(variables)}"
+                        f"[SUBSCRIPTION:{subscription_name}] Variables: {redact_sensitive(variables)}"
                     )
 
                     await websocket.send(json.dumps(subscription_message))
@@ -431,7 +448,8 @@ class SubscriptionManager:
                             logger.error(f"[PROTOCOL:{subscription_name}] JSON decode error: {e}")
                         except Exception as e:
                             logger.error(
-                                f"[DATA:{subscription_name}] Error processing message: {e}"
+                                f"[DATA:{subscription_name}] Error processing message: {e}",
+                                exc_info=True,
                             )
                             msg_preview = (
                                 message[:200]
@@ -461,14 +479,22 @@ class SubscriptionManager:
                 self.connection_states[subscription_name] = "invalid_uri"
                 break  # Don't retry on invalid URI
 
+            except ValueError as e:
+                # Non-retryable configuration error (e.g. UNRAID_API_URL not set)
+                error_msg = f"Configuration error: {e}"
+                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                self.last_error[subscription_name] = error_msg
+                self.connection_states[subscription_name] = "error"
+                break  # Don't retry on configuration errors
+
             except Exception as e:
                 error_msg = f"Unexpected error: {e}"
-                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
+                logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}", exc_info=True)
                 self.last_error[subscription_name] = error_msg
                 self.connection_states[subscription_name] = "error"
 
             # Check if connection was stable before deciding on retry behavior
-            start_time = self._connection_start_times.get(subscription_name)
+            start_time = self._connection_start_times.pop(subscription_name, None)
             if start_time is not None:
                 connected_duration = time.monotonic() - start_time
                 if connected_duration >= _STABLE_CONNECTION_SECONDS:

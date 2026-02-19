@@ -5,7 +5,7 @@ logs, networks, and update management.
 """
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -135,6 +135,14 @@ DOCKER_ACTIONS = Literal[
     "check_updates",
 ]
 
+if set(get_args(DOCKER_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(DOCKER_ACTIONS))
+    _extra = set(get_args(DOCKER_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"DOCKER_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
+
 # Full PrefixedID: 64 hex chars + optional suffix (e.g., ":local")
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 
@@ -199,11 +207,6 @@ def get_available_container_names(containers: list[dict[str, Any]]) -> list[str]
     return names
 
 
-def _looks_like_container_id(identifier: str) -> bool:
-    """Check if an identifier looks like a container ID (full or short hex prefix)."""
-    return bool(_DOCKER_ID_PATTERN.match(identifier) or _DOCKER_SHORT_ID_PATTERN.match(identifier))
-
-
 async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
     """Resolve a container name/identifier to its actual PrefixedID.
 
@@ -233,12 +236,21 @@ async def _resolve_container_id(container_id: str, *, strict: bool = False) -> s
     # Short hex prefix: match by ID prefix before trying name matching
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
+        matches: list[dict[str, Any]] = []
         for c in containers:
             cid = (c.get("id") or "").lower()
             if cid.startswith(id_lower) or cid.split(":")[0].startswith(id_lower):
-                actual_id = str(c.get("id", ""))
-                logger.info(f"Resolved short ID '{container_id}' -> '{actual_id}'")
-                return actual_id
+                matches.append(c)
+        if len(matches) == 1:
+            actual_id = str(matches[0].get("id", ""))
+            logger.info(f"Resolved short ID '{container_id}' -> '{actual_id}'")
+            return actual_id
+        if len(matches) > 1:
+            candidate_ids = [str(c.get("id", "")) for c in matches[:5]]
+            raise ToolError(
+                f"Short container ID prefix '{container_id}' is ambiguous. "
+                f"Matches: {', '.join(candidate_ids)}. Use a longer ID or exact name."
+            )
 
     resolved = find_container_by_identifier(container_id, containers, strict=strict)
     if resolved:
@@ -303,7 +315,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
         if action == "network_details" and not network_id:
             raise ToolError("network_id is required for 'network_details' action")
 
-        if tail_lines < 1 or tail_lines > _MAX_TAIL_LINES:
+        if action == "logs" and (tail_lines < 1 or tail_lines > _MAX_TAIL_LINES):
             raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
 
         with tool_error_handler("docker", action, logger):
@@ -335,12 +347,12 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
-                networks = data.get("dockerNetworks", [])
+                networks = safe_get(data, "dockerNetworks", default=[])
                 return {"networks": networks}
 
             if action == "network_details":
                 data = await make_graphql_request(QUERIES["network_details"], {"id": network_id})
-                return dict(data.get("dockerNetwork") or {})
+                return dict(safe_get(data, "dockerNetwork", default={}) or {})
 
             if action == "port_conflicts":
                 data = await make_graphql_request(QUERIES["port_conflicts"])

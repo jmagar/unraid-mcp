@@ -6,8 +6,7 @@ connection testing, and subscription diagnostics.
 
 import datetime
 import time
-from typing import Any, Literal
-from urllib.parse import urlparse
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -21,30 +20,20 @@ from ..config.settings import (
 )
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
-
-
-def _safe_display_url(url: str | None) -> str | None:
-    """Return a redacted URL showing only scheme + host + port.
-
-    Strips path, query parameters, credentials, and fragments to avoid
-    leaking internal network topology or embedded secrets (CWE-200).
-    """
-    if not url:
-        return None
-    try:
-        parsed = urlparse(url)
-        host = parsed.hostname or "unknown"
-        if parsed.port:
-            return f"{parsed.scheme}://{host}:{parsed.port}"
-        return f"{parsed.scheme}://{host}"
-    except ValueError:
-        # urlparse raises ValueError for invalid URLs (e.g. contains control chars)
-        return "<unparseable>"
+from ..core.utils import safe_display_url
 
 
 ALL_ACTIONS = {"check", "test_connection", "diagnose"}
 
 HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose"]
+
+if set(get_args(HEALTH_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(HEALTH_ACTIONS))
+    _extra = set(get_args(HEALTH_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        "HEALTH_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing in HEALTH_ACTIONS: {_missing}; extra in HEALTH_ACTIONS: {_extra}"
+    )
 
 # Severity ordering: only upgrade, never downgrade
 _SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
@@ -149,7 +138,7 @@ async def _comprehensive_check() -> dict[str, Any]:
         if info:
             health_info["unraid_system"] = {
                 "status": "connected",
-                "url": _safe_display_url(UNRAID_API_URL),
+                "url": safe_display_url(UNRAID_API_URL),
                 "machine_id": info.get("machineId"),
                 "version": info.get("versions", {}).get("unraid"),
                 "uptime": info.get("os", {}).get("uptime"),
@@ -220,7 +209,7 @@ async def _comprehensive_check() -> dict[str, Any]:
     except Exception as e:
         # Intentionally broad: health checks must always return a result,
         # even on unexpected failures, so callers never get an unhandled exception.
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Health check failed: {e}", exc_info=True)
         return {
             "status": "unhealthy",
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
@@ -293,10 +282,7 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
             },
         }
 
-    except ImportError:
-        return {
-            "error": "Subscription modules not available",
-            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
-        }
+    except ImportError as e:
+        raise ToolError("Subscription modules not available") from e
     except Exception as e:
         raise ToolError(f"Failed to generate diagnostics: {e!s}") from e

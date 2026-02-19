@@ -4,7 +4,7 @@ Provides the `unraid_vm` tool with 9 actions for VM lifecycle management
 including start, stop, pause, resume, force stop, reboot, and reset.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -72,6 +72,14 @@ VM_ACTIONS = Literal[
 ]
 
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
+
+if set(get_args(VM_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(VM_ACTIONS))
+    _extra = set(get_args(VM_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"VM_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_vm_tool(mcp: FastMCP) -> None:

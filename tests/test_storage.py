@@ -149,6 +149,15 @@ class TestSafeGet:
         result = safe_get({}, "missing", default=[])
         assert result == []
 
+    def test_zero_value_not_replaced_by_default(self) -> None:
+        assert safe_get({"temp": 0}, "temp", default="N/A") == 0
+
+    def test_false_value_not_replaced_by_default(self) -> None:
+        assert safe_get({"active": False}, "active", default=True) is False
+
+    def test_empty_string_not_replaced_by_default(self) -> None:
+        assert safe_get({"name": ""}, "name", default="unknown") == ""
+
 
 class TestStorageActions:
     async def test_shares(self, _mock_graphql: AsyncMock) -> None:

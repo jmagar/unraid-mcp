@@ -60,8 +60,8 @@ class TestCapLogContentSmallData:
 class TestCapLogContentTruncation:
     """Content exceeding both byte AND line limits must be truncated to the last N lines."""
 
-    def test_oversized_content_truncated_to_last_n_lines(self) -> None:
-        # 200 lines, limit 50 lines, byte limit effectively 0 → should keep last 50 lines
+    def test_oversized_content_truncated_and_byte_capped(self) -> None:
+        # 200 lines, tiny byte limit: must keep recent content within byte cap.
         lines = [f"line {i}" for i in range(200)]
         data = {"content": "\n".join(lines)}
         with (
@@ -70,14 +70,13 @@ class TestCapLogContentTruncation:
         ):
             result = _cap_log_content(data)
         result_lines = result["content"].splitlines()
-        assert len(result_lines) == 50
-        # Must be the LAST 50 lines
-        assert result_lines[0] == "line 150"
+        assert len(result["content"].encode("utf-8", errors="replace")) <= 10
+        # Must keep the most recent line suffix.
         assert result_lines[-1] == "line 199"
 
-    def test_content_with_fewer_lines_than_limit_not_truncated(self) -> None:
-        """If byte limit exceeded but line count ≤ limit → keep original (not truncated)."""
-        # 30 lines but byte limit 10 and line limit 50 → 30 < 50 so no truncation
+    def test_content_with_fewer_lines_than_limit_still_honors_byte_cap(self) -> None:
+        """If byte limit is exceeded, output must still be capped even with few lines."""
+        # 30 lines, byte limit 10, line limit 50 -> must cap bytes regardless of line count
         lines = [f"line {i}" for i in range(30)]
         data = {"content": "\n".join(lines)}
         with (
@@ -85,8 +84,7 @@ class TestCapLogContentTruncation:
             patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_LINES", 50),
         ):
             result = _cap_log_content(data)
-        # Original content preserved
-        assert result["content"] == data["content"]
+        assert len(result["content"].encode("utf-8", errors="replace")) <= 10
 
     def test_non_content_keys_preserved_alongside_truncated_content(self) -> None:
         lines = [f"line {i}" for i in range(200)]
@@ -98,7 +96,7 @@ class TestCapLogContentTruncation:
             result = _cap_log_content(data)
         assert result["path"] == "/var/log/syslog"
         assert result["total_lines"] == 200
-        assert len(result["content"].splitlines()) == 50
+        assert len(result["content"].encode("utf-8", errors="replace")) <= 10
 
 
 class TestCapLogContentNested:
@@ -112,7 +110,7 @@ class TestCapLogContentNested:
             patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_LINES", 50),
         ):
             result = _cap_log_content(data)
-        assert len(result["logFile"]["content"].splitlines()) == 50
+        assert len(result["logFile"]["content"].encode("utf-8", errors="replace")) <= 10
         assert result["logFile"]["path"] == "/var/log/syslog"
 
     def test_deeply_nested_content_capped(self) -> None:
@@ -123,9 +121,36 @@ class TestCapLogContentNested:
             patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_LINES", 50),
         ):
             result = _cap_log_content(data)
-        assert len(result["outer"]["inner"]["content"].splitlines()) == 50
+        assert len(result["outer"]["inner"]["content"].encode("utf-8", errors="replace")) <= 10
 
     def test_nested_non_content_keys_unaffected(self) -> None:
         data = {"metrics": {"cpu": 42.5, "memory": 8192}}
         result = _cap_log_content(data)
         assert result == data
+
+
+class TestCapLogContentSingleMassiveLine:
+    """A single line larger than the byte cap must be hard-capped at byte level."""
+
+    def test_single_massive_line_hard_caps_bytes(self) -> None:
+        # One line, no newlines, larger than the byte cap.
+        # The while-loop can't reduce it (len(lines) == 1), so the
+        # last-resort byte-slice path at manager.py:65-69 must fire.
+        huge_content = "x" * 200
+        data = {"content": huge_content}
+        with (
+            patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_BYTES", 10),
+            patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_LINES", 5_000),
+        ):
+            result = _cap_log_content(data)
+        assert len(result["content"].encode("utf-8", errors="replace")) <= 10
+
+    def test_single_massive_line_input_not_mutated(self) -> None:
+        huge_content = "x" * 200
+        data = {"content": huge_content}
+        with (
+            patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_BYTES", 10),
+            patch("unraid_mcp.subscriptions.manager._MAX_RESOURCE_DATA_LINES", 5_000),
+        ):
+            _cap_log_content(data)
+        assert data["content"] == huge_content

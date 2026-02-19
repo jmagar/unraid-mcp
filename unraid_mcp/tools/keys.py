@@ -4,7 +4,7 @@ Provides the `unraid_keys` tool with 5 actions for listing, viewing,
 creating, updating, and deleting API keys.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -54,6 +54,14 @@ KEY_ACTIONS = Literal[
     "update",
     "delete",
 ]
+
+if set(get_args(KEY_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(KEY_ACTIONS))
+    _extra = set(get_args(KEY_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"KEY_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_keys_tool(mcp: FastMCP) -> None:

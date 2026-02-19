@@ -4,7 +4,7 @@ Provides the `unraid_info` tool with 19 read-only actions for retrieving
 system information, array status, network config, and server metadata.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -180,9 +180,9 @@ INFO_ACTIONS = Literal[
     "ups_config",
 ]
 
-if set(INFO_ACTIONS.__args__) != ALL_ACTIONS:
-    _missing = ALL_ACTIONS - set(INFO_ACTIONS.__args__)
-    _extra = set(INFO_ACTIONS.__args__) - ALL_ACTIONS
+if set(get_args(INFO_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(INFO_ACTIONS))
+    _extra = set(get_args(INFO_ACTIONS)) - ALL_ACTIONS
     raise RuntimeError(
         f"QUERIES keys and INFO_ACTIONS are out of sync. "
         f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
@@ -415,7 +415,8 @@ def register_info_tool(mcp: FastMCP) -> None:
             if action in list_actions:
                 response_key, output_key = list_actions[action]
                 items = data.get(response_key) or []
-                return {output_key: items}
+                normalized_items = list(items) if isinstance(items, list) else []
+                return {output_key: normalized_items}
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
 

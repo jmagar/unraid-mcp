@@ -19,6 +19,7 @@ from websockets.typing import Subprotocol
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
 from ..core.exceptions import ToolError
+from ..core.utils import safe_display_url
 from .manager import subscription_manager
 from .resources import ensure_subscriptions_started
 from .utils import build_ws_ssl_context, build_ws_url
@@ -162,6 +163,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                         "note": "Connection successful, subscription may be waiting for events",
                     }
 
+        except ToolError:
+            raise
         except Exception as e:
             logger.error(f"[TEST_SUBSCRIPTION] Error: {e}", exc_info=True)
             return {"error": str(e), "query_tested": subscription_query}
@@ -193,7 +196,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 "environment": {
                     "auto_start_enabled": subscription_manager.auto_start_enabled,
                     "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
-                    "unraid_api_url": UNRAID_API_URL[:50] + "..." if UNRAID_API_URL else None,
+                    "unraid_api_url": safe_display_url(UNRAID_API_URL),
                     "api_key_configured": bool(UNRAID_API_KEY),
                     "websocket_url": None,
                 },

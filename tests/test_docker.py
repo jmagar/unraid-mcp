@@ -80,6 +80,14 @@ class TestDockerValidation:
         with pytest.raises(ToolError, match="network_id"):
             await tool_fn(action="network_details")
 
+    async def test_non_logs_action_ignores_tail_lines_validation(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"docker": {"containers": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="list", tail_lines=0)
+        assert result["containers"] == []
+
 
 class TestDockerActions:
     async def test_list(self, _mock_graphql: AsyncMock) -> None:
@@ -224,8 +232,21 @@ class TestDockerActions:
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="unexpected failure"):
+        with pytest.raises(ToolError, match="Failed to execute docker/list"):
             await tool_fn(action="list")
+
+    async def test_short_id_prefix_ambiguous_rejected(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {"id": "abcdef1234560000000000000000000000000000000000000000000000000000:local", "names": ["plex"]},
+                    {"id": "abcdef1234561111111111111111111111111111111111111111111111111111:local", "names": ["sonarr"]},
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="ambiguous"):
+            await tool_fn(action="logs", container_id="abcdef123456")
 
 
 class TestDockerMutationFailures:

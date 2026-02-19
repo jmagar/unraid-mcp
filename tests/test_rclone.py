@@ -19,7 +19,6 @@ def _make_tool():
     return make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
 
 
-@pytest.mark.usefixtures("_mock_graphql")
 class TestRcloneValidation:
     async def test_delete_requires_confirm(self) -> None:
         tool_fn = _make_tool()

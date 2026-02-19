@@ -44,6 +44,7 @@ async def autostart_subscriptions() -> None:
         logger.info("[AUTOSTART] Auto-start process completed successfully")
     except Exception as e:
         logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
+        raise  # Propagate so ensure_subscriptions_started doesn't mark as started
 
     # Optional log file subscription
     log_path = os.getenv("UNRAID_AUTOSTART_LOG_PATH")

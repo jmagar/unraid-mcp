@@ -16,6 +16,7 @@ import websockets.exceptions
 
 from unraid_mcp.subscriptions.manager import SubscriptionManager
 
+
 pytestmark = pytest.mark.integration
 
 

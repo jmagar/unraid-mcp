@@ -45,13 +45,12 @@ def tool_error_handler(
     except ToolError:
         raise
     except TimeoutError as e:
-        logger.error(
-            f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit",
-            exc_info=True,
-        )
+        logger.exception(f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit")
         raise ToolError(
             f"Request timed out executing {tool_name}/{action}. The Unraid API did not respond in time."
         ) from e
     except Exception as e:
-        logger.error(f"Error in unraid_{tool_name} action={action}: {e}", exc_info=True)
-        raise ToolError(f"Failed to execute {tool_name}/{action}: {e!s}") from e
+        logger.exception(f"Error in unraid_{tool_name} action={action}")
+        raise ToolError(
+            f"Failed to execute {tool_name}/{action}. Check server logs for details."
+        ) from e

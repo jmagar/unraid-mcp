@@ -7,7 +7,7 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.health import _safe_display_url
+from unraid_mcp.core.utils import safe_display_url
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ class TestHealthActions:
                 "unraid_mcp.tools.health._diagnose_subscriptions",
                 side_effect=RuntimeError("broken"),
             ),
-            pytest.raises(ToolError, match="broken"),
+            pytest.raises(ToolError, match="Failed to execute health/diagnose"),
         ):
             await tool_fn(action="diagnose")
 
@@ -115,7 +115,7 @@ class TestHealthActions:
         assert "cpu_sub" in result
 
     async def test_diagnose_import_error_internal(self) -> None:
-        """_diagnose_subscriptions catches ImportError and returns error dict."""
+        """_diagnose_subscriptions raises ToolError when subscription modules are unavailable."""
         import sys
 
         from unraid_mcp.tools.health import _diagnose_subscriptions
@@ -127,16 +127,18 @@ class TestHealthActions:
 
         try:
             # Replace the modules with objects that raise ImportError on access
-            with patch.dict(
-                sys.modules,
-                {
-                    "unraid_mcp.subscriptions": None,
-                    "unraid_mcp.subscriptions.manager": None,
-                    "unraid_mcp.subscriptions.resources": None,
-                },
+            with (
+                patch.dict(
+                    sys.modules,
+                    {
+                        "unraid_mcp.subscriptions": None,
+                        "unraid_mcp.subscriptions.manager": None,
+                        "unraid_mcp.subscriptions.resources": None,
+                    },
+                ),
+                pytest.raises(ToolError, match="Subscription modules not available"),
             ):
-                result = await _diagnose_subscriptions()
-                assert "error" in result
+                await _diagnose_subscriptions()
         finally:
             # Restore cached modules
             sys.modules.update(cached)
@@ -148,47 +150,47 @@ class TestHealthActions:
 
 
 class TestSafeDisplayUrl:
-    """Verify that _safe_display_url strips credentials/path and preserves scheme+host+port."""
+    """Verify that safe_display_url strips credentials/path and preserves scheme+host+port."""
 
     def test_none_returns_none(self) -> None:
-        assert _safe_display_url(None) is None
+        assert safe_display_url(None) is None
 
     def test_empty_string_returns_none(self) -> None:
-        assert _safe_display_url("") is None
+        assert safe_display_url("") is None
 
     def test_simple_url_scheme_and_host(self) -> None:
-        assert _safe_display_url("https://unraid.local/graphql") == "https://unraid.local"
+        assert safe_display_url("https://unraid.local/graphql") == "https://unraid.local"
 
     def test_preserves_port(self) -> None:
-        assert _safe_display_url("https://10.1.0.2:31337/api/graphql") == "https://10.1.0.2:31337"
+        assert safe_display_url("https://10.1.0.2:31337/api/graphql") == "https://10.1.0.2:31337"
 
     def test_strips_path(self) -> None:
-        result = _safe_display_url("http://unraid.local/some/deep/path?query=1")
+        result = safe_display_url("http://unraid.local/some/deep/path?query=1")
         assert "path" not in result
         assert "query" not in result
 
     def test_strips_credentials(self) -> None:
-        result = _safe_display_url("https://user:password@unraid.local/graphql")
+        result = safe_display_url("https://user:password@unraid.local/graphql")
         assert "user" not in result
         assert "password" not in result
         assert result == "https://unraid.local"
 
     def test_strips_query_params(self) -> None:
-        result = _safe_display_url("http://host.local?token=abc&key=xyz")
+        result = safe_display_url("http://host.local?token=abc&key=xyz")
         assert "token" not in result
         assert "abc" not in result
 
     def test_http_scheme_preserved(self) -> None:
-        result = _safe_display_url("http://10.0.0.1:8080/api")
+        result = safe_display_url("http://10.0.0.1:8080/api")
         assert result == "http://10.0.0.1:8080"
 
     def test_tailscale_url(self) -> None:
-        result = _safe_display_url("https://100.118.209.1:31337/graphql")
+        result = safe_display_url("https://100.118.209.1:31337/graphql")
         assert result == "https://100.118.209.1:31337"
 
     def test_malformed_ipv6_url_returns_unparseable(self) -> None:
         """Malformed IPv6 brackets in netloc cause urlparse.hostname to raise ValueError."""
         # urlparse("https://[invalid") parses without error, but accessing .hostname
         # raises ValueError: Invalid IPv6 URL — this triggers the except branch.
-        result = _safe_display_url("https://[invalid")
+        result = safe_display_url("https://[invalid")
         assert result == "<unparseable>"

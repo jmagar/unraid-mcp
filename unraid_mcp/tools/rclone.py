@@ -5,7 +5,7 @@ cloud storage remotes (S3, Google Drive, Dropbox, FTP, etc.).
 """
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -50,10 +50,18 @@ RCLONE_ACTIONS = Literal[
     "delete_remote",
 ]
 
+if set(get_args(RCLONE_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(RCLONE_ACTIONS))
+    _extra = set(get_args(RCLONE_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"RCLONE_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
+
 # Max config entries to prevent abuse
 _MAX_CONFIG_KEYS = 50
 # Pattern for suspicious key names (path traversal, shell metacharacters)
-_DANGEROUS_KEY_PATTERN = re.compile(r"[.]{2}|[/\\;|`$(){}]")
+_DANGEROUS_KEY_PATTERN = re.compile(r"\.\.|[/\\;|`$(){}]")
 # Max length for individual config values
 _MAX_VALUE_LENGTH = 4096
 

@@ -47,7 +47,7 @@ class OverwriteFileHandler(logging.FileHandler):
         """Emit a record, checking file size periodically and overwriting if needed."""
         self._emit_count += 1
         if (
-            self._emit_count % self._check_interval == 0
+            (self._emit_count == 1 or self._emit_count % self._check_interval == 0)
             and self.stream
             and hasattr(self.stream, "name")
         ):
@@ -249,5 +249,3 @@ if FASTMCP_AVAILABLE:
 else:
     # Fallback to our custom logger if FastMCP is not available
     logger = setup_logger()
-    # Also configure FastMCP logger for consistency
-    configure_fastmcp_logger_with_rich()
