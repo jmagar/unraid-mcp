@@ -13,6 +13,7 @@ def safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
 
     Returns:
         The value at the end of the key chain, or default if unreachable.
+        Explicit ``None`` values at the final key also return ``default``.
     """
     current = data
     for key in keys:
@@ -65,4 +66,4 @@ def format_kb(k: Any) -> str:
         return f"{k / (1024 * 1024):.2f} GB"
     if k >= 1024:
         return f"{k / 1024:.2f} MB"
-    return f"{k} KB"
+    return f"{k:.2f} KB"

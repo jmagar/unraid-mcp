@@ -10,6 +10,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+# Centralized import for make_tool_fn helper
+# conftest.py sits in tests/ and is importable without __init__.py
+from conftest import make_tool_fn
+
 from unraid_mcp.core.exceptions import ToolError
 
 # Import DESTRUCTIVE_ACTIONS sets from every tool module that defines one
@@ -23,10 +27,6 @@ from unraid_mcp.tools.rclone import DESTRUCTIVE_ACTIONS as RCLONE_DESTRUCTIVE
 from unraid_mcp.tools.rclone import MUTATIONS as RCLONE_MUTATIONS
 from unraid_mcp.tools.virtualization import DESTRUCTIVE_ACTIONS as VM_DESTRUCTIVE
 from unraid_mcp.tools.virtualization import MUTATIONS as VM_MUTATIONS
-
-# Centralized import for make_tool_fn helper
-# conftest.py sits in tests/ and is importable without __init__.py
-from conftest import make_tool_fn
 
 
 # ---------------------------------------------------------------------------
@@ -126,9 +126,11 @@ class TestDestructiveActionRegistries:
         missing: list[str] = []
         for tool_key, mutations in all_mutations.items():
             destructive = all_destructive[tool_key]
-            for action_name in mutations:
-                if ("delete" in action_name or "remove" in action_name) and action_name not in destructive:
-                    missing.append(f"{tool_key}/{action_name}")
+            missing.extend(
+                f"{tool_key}/{action_name}"
+                for action_name in mutations
+                if ("delete" in action_name or "remove" in action_name) and action_name not in destructive
+            )
         assert not missing, (
             f"Mutations with 'delete'/'remove' not in DESTRUCTIVE_ACTIONS: {missing}"
         )

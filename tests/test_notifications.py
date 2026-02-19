@@ -149,7 +149,7 @@ class TestNotificationsActions:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("boom")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="boom"):
+        with pytest.raises(ToolError, match="Failed to execute notifications/overview"):
             await tool_fn(action="overview")
 
 

@@ -93,6 +93,14 @@ class TestStorageValidation:
         result = await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=10_000)
         assert result["content"] == "ok"
 
+    async def test_non_logs_action_ignores_tail_lines_validation(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"shares": []}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="shares", tail_lines=0)
+        assert result["shares"] == []
+
 
 class TestFormatKb:
     def test_none_returns_na(self) -> None:
@@ -102,7 +110,7 @@ class TestFormatKb:
         assert format_kb("not-a-number") == "N/A"
 
     def test_kilobytes_range(self) -> None:
-        assert format_kb(512) == "512 KB"
+        assert format_kb(512) == "512.00 KB"
 
     def test_megabytes_range(self) -> None:
         assert format_kb(2048) == "2.00 MB"

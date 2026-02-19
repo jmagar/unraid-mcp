@@ -19,6 +19,7 @@ from tests.conftest import make_tool_fn
 from unraid_mcp.core.client import DEFAULT_TIMEOUT, DISK_TIMEOUT, make_graphql_request
 from unraid_mcp.core.exceptions import ToolError
 
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -582,7 +583,7 @@ class TestVMToolRequests:
             return_value=_graphql_response({"vm": {"stop": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="stop", vm_id="vm-456")
+        await tool(action="stop", vm_id="vm-456")
         body = _extract_request_body(route.calls.last.request)
         assert "StopVM" in body["query"]
         assert body["variables"] == {"id": "vm-456"}
