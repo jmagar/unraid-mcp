@@ -19,6 +19,7 @@ from tests.conftest import make_tool_fn
 from unraid_mcp.core.client import DEFAULT_TIMEOUT, DISK_TIMEOUT, make_graphql_request
 from unraid_mcp.core.exceptions import ToolError
 
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
@@ -158,43 +159,43 @@ class TestHttpErrorHandling:
     @respx.mock
     async def test_http_401_raises_tool_error(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(401, text="Unauthorized"))
-        with pytest.raises(ToolError, match="HTTP error 401"):
+        with pytest.raises(ToolError, match="Unraid API returned HTTP 401"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_http_403_raises_tool_error(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(403, text="Forbidden"))
-        with pytest.raises(ToolError, match="HTTP error 403"):
+        with pytest.raises(ToolError, match="Unraid API returned HTTP 403"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_http_500_raises_tool_error(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(500, text="Internal Server Error"))
-        with pytest.raises(ToolError, match="HTTP error 500"):
+        with pytest.raises(ToolError, match="Unraid API returned HTTP 500"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_http_503_raises_tool_error(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(503, text="Service Unavailable"))
-        with pytest.raises(ToolError, match="HTTP error 503"):
+        with pytest.raises(ToolError, match="Unraid API returned HTTP 503"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_network_connection_error(self) -> None:
         respx.post(API_URL).mock(side_effect=httpx.ConnectError("Connection refused"))
-        with pytest.raises(ToolError, match="Network connection error"):
+        with pytest.raises(ToolError, match="Network error connecting to Unraid API"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_network_timeout_error(self) -> None:
         respx.post(API_URL).mock(side_effect=httpx.ReadTimeout("Read timed out"))
-        with pytest.raises(ToolError, match="Network connection error"):
+        with pytest.raises(ToolError, match="Network error connecting to Unraid API"):
             await make_graphql_request("query { online }")
 
     @respx.mock
     async def test_invalid_json_response(self) -> None:
         respx.post(API_URL).mock(return_value=httpx.Response(200, text="not json"))
-        with pytest.raises(ToolError, match="Invalid JSON response"):
+        with pytest.raises(ToolError, match=r"invalid response.*not valid JSON"):
             await make_graphql_request("query { online }")
 
 
@@ -582,7 +583,7 @@ class TestVMToolRequests:
             return_value=_graphql_response({"vm": {"stop": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="stop", vm_id="vm-456")
+        await tool(action="stop", vm_id="vm-456")
         body = _extract_request_body(route.calls.last.request)
         assert "StopVM" in body["query"]
         assert body["variables"] == {"id": "vm-456"}
@@ -868,14 +869,14 @@ class TestNotificationsToolRequests:
             title="Test",
             subject="Sub",
             description="Desc",
-            importance="info",
+            importance="normal",
         )
         body = _extract_request_body(route.calls.last.request)
         assert "CreateNotification" in body["query"]
         inp = body["variables"]["input"]
         assert inp["title"] == "Test"
         assert inp["subject"] == "Sub"
-        assert inp["importance"] == "INFO"  # uppercased
+        assert inp["importance"] == "NORMAL"  # uppercased from "normal"
 
     @respx.mock
     async def test_archive_sends_id_variable(self) -> None:
@@ -1256,7 +1257,7 @@ class TestCrossCuttingConcerns:
         tool = make_tool_fn(
             "unraid_mcp.tools.info", "register_info_tool", "unraid_info"
         )
-        with pytest.raises(ToolError, match="HTTP error 500"):
+        with pytest.raises(ToolError, match="Unraid API returned HTTP 500"):
             await tool(action="online")
 
     @respx.mock
@@ -1268,7 +1269,7 @@ class TestCrossCuttingConcerns:
         tool = make_tool_fn(
             "unraid_mcp.tools.info", "register_info_tool", "unraid_info"
         )
-        with pytest.raises(ToolError, match="Network connection error"):
+        with pytest.raises(ToolError, match="Network error connecting to Unraid API"):
             await tool(action="online")
 
     @respx.mock

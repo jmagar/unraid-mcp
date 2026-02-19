@@ -80,6 +80,14 @@ class TestDockerValidation:
         with pytest.raises(ToolError, match="network_id"):
             await tool_fn(action="network_details")
 
+    async def test_non_logs_action_ignores_tail_lines_validation(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"docker": {"containers": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="list", tail_lines=0)
+        assert result["containers"] == []
+
 
 class TestDockerActions:
     async def test_list(self, _mock_graphql: AsyncMock) -> None:
@@ -175,7 +183,7 @@ class TestDockerActions:
             "docker": {"updateAllContainers": [{"id": "c1", "state": "running"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert len(result["containers"]) == 1
 
@@ -224,8 +232,21 @@ class TestDockerActions:
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="unexpected failure"):
+        with pytest.raises(ToolError, match="Failed to execute docker/list"):
             await tool_fn(action="list")
+
+    async def test_short_id_prefix_ambiguous_rejected(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {"id": "abcdef1234560000000000000000000000000000000000000000000000000000:local", "names": ["plex"]},
+                    {"id": "abcdef1234561111111111111111111111111111111111111111111111111111:local", "names": ["sonarr"]},
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="ambiguous"):
+            await tool_fn(action="logs", container_id="abcdef123456")
 
 
 class TestDockerMutationFailures:
@@ -271,9 +292,15 @@ class TestDockerMutationFailures:
         """update_all with no containers to update."""
         _mock_graphql.return_value = {"docker": {"updateAllContainers": []}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert result["containers"] == []
+
+    async def test_update_all_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        """update_all is destructive and requires confirm=True."""
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destructive"):
+            await tool_fn(action="update_all")
 
     async def test_mutation_timeout(self, _mock_graphql: AsyncMock) -> None:
         """Mid-operation timeout during a docker mutation."""

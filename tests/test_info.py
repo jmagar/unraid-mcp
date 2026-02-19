@@ -186,7 +186,7 @@ class TestUnraidInfoTool:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="unexpected"):
+        with pytest.raises(ToolError, match="Failed to execute info/online"):
             await tool_fn(action="online")
 
     async def test_metrics(self, _mock_graphql: AsyncMock) -> None:
@@ -201,6 +201,7 @@ class TestUnraidInfoTool:
         _mock_graphql.return_value = {"services": [{"name": "docker", "state": "running"}]}
         tool_fn = _make_tool()
         result = await tool_fn(action="services")
+        assert "services" in result
         assert len(result["services"]) == 1
         assert result["services"][0]["name"] == "docker"
 
@@ -225,6 +226,7 @@ class TestUnraidInfoTool:
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="servers")
+        assert "servers" in result
         assert len(result["servers"]) == 1
         assert result["servers"][0]["name"] == "tower"
 
@@ -248,6 +250,7 @@ class TestUnraidInfoTool:
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="ups_devices")
+        assert "ups_devices" in result
         assert len(result["ups_devices"]) == 1
         assert result["ups_devices"][0]["model"] == "APC"
 

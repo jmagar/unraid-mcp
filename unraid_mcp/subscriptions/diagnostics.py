@@ -6,8 +6,10 @@ development and debugging purposes.
 """
 
 import asyncio
+import contextlib
 import json
-from datetime import datetime
+import re
+from datetime import UTC, datetime
 from typing import Any
 
 import websockets
@@ -17,9 +19,63 @@ from websockets.typing import Subprotocol
 from ..config.logging import logger
 from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
 from ..core.exceptions import ToolError
+from ..core.utils import safe_display_url
 from .manager import subscription_manager
 from .resources import ensure_subscriptions_started
-from .utils import build_ws_ssl_context
+from .utils import build_ws_ssl_context, build_ws_url
+
+
+_ALLOWED_SUBSCRIPTION_NAMES = frozenset(
+    {
+        "logFileSubscription",
+        "containerStatsSubscription",
+        "cpuSubscription",
+        "memorySubscription",
+        "arraySubscription",
+        "networkSubscription",
+        "dockerSubscription",
+        "vmSubscription",
+    }
+)
+
+# Pattern: must start with "subscription" and contain only a known subscription name.
+# _FORBIDDEN_KEYWORDS rejects any query that contains standalone "mutation" or "query"
+# as distinct words. Word boundaries (\b) ensure "mutationField"-style identifiers are
+# not rejected — only bare "mutation" or "query" operation keywords are blocked.
+_SUBSCRIPTION_NAME_PATTERN = re.compile(r"^\s*subscription\b[^{]*\{\s*(\w+)", re.IGNORECASE)
+_FORBIDDEN_KEYWORDS = re.compile(r"\b(mutation|query)\b", re.IGNORECASE)
+
+
+def _validate_subscription_query(query: str) -> str:
+    """Validate that a subscription query is safe to execute.
+
+    Only allows subscription operations targeting whitelisted subscription names.
+    Rejects any query containing mutation/query keywords.
+
+    Returns:
+        The extracted subscription name.
+
+    Raises:
+        ToolError: If the query fails validation.
+    """
+    if _FORBIDDEN_KEYWORDS.search(query):
+        raise ToolError("Query rejected: must be a subscription, not a mutation or query.")
+
+    match = _SUBSCRIPTION_NAME_PATTERN.match(query)
+    if not match:
+        raise ToolError(
+            "Query rejected: must start with 'subscription' and contain a valid "
+            "subscription operation. Example: subscription { logFileSubscription { ... } }"
+        )
+
+    sub_name = match.group(1)
+    if sub_name not in _ALLOWED_SUBSCRIPTION_NAMES:
+        raise ToolError(
+            f"Subscription '{sub_name}' is not allowed. "
+            f"Allowed subscriptions: {sorted(_ALLOWED_SUBSCRIPTION_NAMES)}"
+        )
+
+    return sub_name
 
 
 def register_diagnostic_tools(mcp: FastMCP) -> None:
@@ -34,6 +90,10 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
         """Test a GraphQL subscription query directly to debug schema issues.
 
         Use this to find working subscription field names and structure.
+        Only whitelisted subscriptions are allowed (logFileSubscription,
+        containerStatsSubscription, cpuSubscription, memorySubscription,
+        arraySubscription, networkSubscription, dockerSubscription,
+        vmSubscription).
 
         Args:
             subscription_query: The GraphQL subscription query to test
@@ -41,16 +101,16 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
         Returns:
             Dict containing test results and response data
         """
-        try:
-            logger.info(f"[TEST_SUBSCRIPTION] Testing query: {subscription_query}")
+        # Validate before any network I/O
+        sub_name = _validate_subscription_query(subscription_query)
 
-            # Build WebSocket URL
-            if not UNRAID_API_URL:
-                raise ToolError("UNRAID_API_URL is not configured")
-            ws_url = (
-                UNRAID_API_URL.replace("https://", "wss://").replace("http://", "ws://")
-                + "/graphql"
-            )
+        try:
+            logger.info(f"[TEST_SUBSCRIPTION] Testing validated subscription '{sub_name}'")
+
+            try:
+                ws_url = build_ws_url()
+            except ValueError as e:
+                raise ToolError(str(e)) from e
 
             ssl_context = build_ws_ssl_context(ws_url)
 
@@ -59,6 +119,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 ws_url,
                 subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
                 ssl=ssl_context,
+                open_timeout=10,
                 ping_interval=30,
                 ping_timeout=10,
             ) as websocket:
@@ -102,6 +163,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                         "note": "Connection successful, subscription may be waiting for events",
                     }
 
+        except ToolError:
+            raise
         except Exception as e:
             logger.error(f"[TEST_SUBSCRIPTION] Error: {e}", exc_info=True)
             return {"error": str(e), "query_tested": subscription_query}
@@ -122,18 +185,18 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             logger.info("[DIAGNOSTIC] Running subscription diagnostics...")
 
             # Get comprehensive status
-            status = subscription_manager.get_subscription_status()
+            status = await subscription_manager.get_subscription_status()
 
             # Initialize connection issues list with proper type
             connection_issues: list[dict[str, Any]] = []
 
             # Add environment info with explicit typing
             diagnostic_info: dict[str, Any] = {
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "environment": {
                     "auto_start_enabled": subscription_manager.auto_start_enabled,
                     "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
-                    "unraid_api_url": UNRAID_API_URL[:50] + "..." if UNRAID_API_URL else None,
+                    "unraid_api_url": safe_display_url(UNRAID_API_URL),
                     "api_key_configured": bool(UNRAID_API_KEY),
                     "websocket_url": None,
                 },
@@ -152,17 +215,9 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 },
             }
 
-            # Calculate WebSocket URL
-            if UNRAID_API_URL:
-                if UNRAID_API_URL.startswith("https://"):
-                    ws_url = "wss://" + UNRAID_API_URL[len("https://") :]
-                elif UNRAID_API_URL.startswith("http://"):
-                    ws_url = "ws://" + UNRAID_API_URL[len("http://") :]
-                else:
-                    ws_url = UNRAID_API_URL
-                if not ws_url.endswith("/graphql"):
-                    ws_url = ws_url.rstrip("/") + "/graphql"
-                diagnostic_info["environment"]["websocket_url"] = ws_url
+            # Calculate WebSocket URL (stays None if UNRAID_API_URL not configured)
+            with contextlib.suppress(ValueError):
+                diagnostic_info["environment"]["websocket_url"] = build_ws_url()
 
             # Analyze issues
             for sub_name, sub_status in status.items():

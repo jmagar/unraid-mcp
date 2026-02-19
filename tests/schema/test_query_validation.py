@@ -384,10 +384,16 @@ class TestVmQueries:
         errors = _validate_operation(schema, QUERIES["list"])
         assert not errors, f"list query validation failed: {errors}"
 
+    def test_details_query(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.virtualization import QUERIES
+
+        errors = _validate_operation(schema, QUERIES["details"])
+        assert not errors, f"details query validation failed: {errors}"
+
     def test_all_vm_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.virtualization import QUERIES
 
-        assert set(QUERIES.keys()) == {"list"}
+        assert set(QUERIES.keys()) == {"list", "details"}
 
 
 class TestVmMutations:

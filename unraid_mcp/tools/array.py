@@ -3,13 +3,13 @@
 Provides the `unraid_array` tool with 5 actions for parity check management.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
@@ -53,6 +53,14 @@ ARRAY_ACTIONS = Literal[
     "parity_status",
 ]
 
+if set(get_args(ARRAY_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(ARRAY_ACTIONS))
+    _extra = set(get_args(ARRAY_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"ARRAY_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
+
 
 def register_array_tool(mcp: FastMCP) -> None:
     """Register the unraid_array tool with the FastMCP instance."""
@@ -74,7 +82,7 @@ def register_array_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        try:
+        with tool_error_handler("array", action, logger):
             logger.info(f"Executing unraid_array action={action}")
 
             if action in QUERIES:
@@ -94,11 +102,5 @@ def register_array_tool(mcp: FastMCP) -> None:
                 "action": action,
                 "data": data,
             }
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_array action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute array/{action}: {e!s}") from e
 
     logger.info("Array tool registered successfully")

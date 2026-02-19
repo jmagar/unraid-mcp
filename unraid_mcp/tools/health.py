@@ -6,7 +6,7 @@ connection testing, and subscription diagnostics.
 
 import datetime
 import time
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
@@ -19,10 +19,21 @@ from ..config.settings import (
     VERSION,
 )
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import safe_display_url
 
+
+ALL_ACTIONS = {"check", "test_connection", "diagnose"}
 
 HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose"]
+
+if set(get_args(HEALTH_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(HEALTH_ACTIONS))
+    _extra = set(get_args(HEALTH_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        "HEALTH_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing in HEALTH_ACTIONS: {_missing}; extra in HEALTH_ACTIONS: {_extra}"
+    )
 
 # Severity ordering: only upgrade, never downgrade
 _SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
@@ -53,12 +64,10 @@ def register_health_tool(mcp: FastMCP) -> None:
           test_connection - Quick connectivity test (just checks { online })
           diagnose - Subscription system diagnostics
         """
-        if action not in ("check", "test_connection", "diagnose"):
-            raise ToolError(
-                f"Invalid action '{action}'. Must be one of: check, test_connection, diagnose"
-            )
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        try:
+        with tool_error_handler("health", action, logger):
             logger.info(f"Executing unraid_health action={action}")
 
             if action == "test_connection":
@@ -78,12 +87,6 @@ def register_health_tool(mcp: FastMCP) -> None:
                 return await _diagnose_subscriptions()
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_health action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute health/{action}: {e!s}") from e
 
     logger.info("Health tool registered successfully")
 
@@ -111,7 +114,7 @@ async def _comprehensive_check() -> dict[str, Any]:
             overview { unread { alert warning total } }
           }
           docker {
-            containers(skipCache: true) { id state status }
+            containers { id state status }
           }
         }
         """
@@ -135,7 +138,7 @@ async def _comprehensive_check() -> dict[str, Any]:
         if info:
             health_info["unraid_system"] = {
                 "status": "connected",
-                "url": UNRAID_API_URL,
+                "url": safe_display_url(UNRAID_API_URL),
                 "machine_id": info.get("machineId"),
                 "version": info.get("versions", {}).get("unraid"),
                 "uptime": info.get("os", {}).get("uptime"),
@@ -206,13 +209,49 @@ async def _comprehensive_check() -> dict[str, Any]:
     except Exception as e:
         # Intentionally broad: health checks must always return a result,
         # even on unexpected failures, so callers never get an unhandled exception.
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Health check failed: {e}", exc_info=True)
         return {
             "status": "unhealthy",
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "error": str(e),
             "server": _server_info(),
         }
+
+
+def _analyze_subscription_status(
+    status: dict[str, Any],
+) -> tuple[int, list[dict[str, Any]]]:
+    """Analyze subscription status dict, returning error count and connection issues.
+
+    This is the canonical implementation of subscription status analysis.
+    TODO: subscriptions/diagnostics.py has a similar status-analysis pattern
+    in diagnose_subscriptions(). That module could import and call this helper
+    directly to avoid divergence. See Code-H05.
+
+    Args:
+        status: Dict of subscription name -> status info from get_subscription_status().
+
+    Returns:
+        Tuple of (error_count, connection_issues_list).
+    """
+    error_count = 0
+    connection_issues: list[dict[str, Any]] = []
+
+    for sub_name, sub_status in status.items():
+        runtime = sub_status.get("runtime", {})
+        conn_state = runtime.get("connection_state", "unknown")
+        if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded"):
+            error_count += 1
+        if runtime.get("last_error"):
+            connection_issues.append(
+                {
+                    "subscription": sub_name,
+                    "state": conn_state,
+                    "error": runtime["last_error"],
+                }
+            )
+
+    return error_count, connection_issues
 
 
 async def _diagnose_subscriptions() -> dict[str, Any]:
@@ -223,13 +262,10 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
 
         await ensure_subscriptions_started()
 
-        status = subscription_manager.get_subscription_status()
-        # This list is intentionally placed into the summary dict below and then
-        # appended to in the loop — the mutable alias ensures both references
-        # reflect the same data without a second pass.
-        connection_issues: list[dict[str, Any]] = []
+        status = await subscription_manager.get_subscription_status()
+        error_count, connection_issues = _analyze_subscription_status(status)
 
-        diagnostic_info: dict[str, Any] = {
+        return {
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "environment": {
                 "auto_start_enabled": subscription_manager.auto_start_enabled,
@@ -241,31 +277,12 @@ async def _diagnose_subscriptions() -> dict[str, Any]:
                 "total_configured": len(subscription_manager.subscription_configs),
                 "active_count": len(subscription_manager.active_subscriptions),
                 "with_data": len(subscription_manager.resource_data),
-                "in_error_state": 0,
+                "in_error_state": error_count,
                 "connection_issues": connection_issues,
             },
         }
 
-        for sub_name, sub_status in status.items():
-            runtime = sub_status.get("runtime", {})
-            conn_state = runtime.get("connection_state", "unknown")
-            if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded"):
-                diagnostic_info["summary"]["in_error_state"] += 1
-            if runtime.get("last_error"):
-                connection_issues.append(
-                    {
-                        "subscription": sub_name,
-                        "state": conn_state,
-                        "error": runtime["last_error"],
-                    }
-                )
-
-        return diagnostic_info
-
-    except ImportError:
-        return {
-            "error": "Subscription modules not available",
-            "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
-        }
+    except ImportError as e:
+        raise ToolError("Subscription modules not available") from e
     except Exception as e:
         raise ToolError(f"Failed to generate diagnostics: {e!s}") from e

@@ -4,17 +4,19 @@ Provides the `unraid_storage` tool with 6 actions for shares, physical disks,
 unassigned devices, log files, and log content retrieval.
 """
 
-from typing import Any, Literal
+import os
+from typing import Any, Literal, get_args
 
-import anyio
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import format_bytes
 
 
 _ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
+_MAX_TAIL_LINES = 10_000
 
 QUERIES: dict[str, str] = {
     "shares": """
@@ -56,6 +58,8 @@ QUERIES: dict[str, str] = {
     """,
 }
 
+ALL_ACTIONS = set(QUERIES)
+
 STORAGE_ACTIONS = Literal[
     "shares",
     "disks",
@@ -65,20 +69,13 @@ STORAGE_ACTIONS = Literal[
     "logs",
 ]
 
-
-def format_bytes(bytes_value: int | None) -> str:
-    """Format byte values into human-readable sizes."""
-    if bytes_value is None:
-        return "N/A"
-    try:
-        value = float(int(bytes_value))
-    except (ValueError, TypeError):
-        return "N/A"
-    for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
-        if value < 1024.0:
-            return f"{value:.2f} {unit}"
-        value /= 1024.0
-    return f"{value:.2f} EB"
+if set(get_args(STORAGE_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(STORAGE_ACTIONS))
+    _extra = set(get_args(STORAGE_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"STORAGE_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_storage_tool(mcp: FastMCP) -> None:
@@ -101,17 +98,22 @@ def register_storage_tool(mcp: FastMCP) -> None:
           log_files - List available log files
           logs - Retrieve log content (requires log_path, optional tail_lines)
         """
-        if action not in QUERIES:
-            raise ToolError(f"Invalid action '{action}'. Must be one of: {list(QUERIES.keys())}")
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for 'disk_details' action")
 
+        if action == "logs" and (tail_lines < 1 or tail_lines > _MAX_TAIL_LINES):
+            raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
+
         if action == "logs":
             if not log_path:
                 raise ToolError("log_path is required for 'logs' action")
-            # Resolve path to prevent traversal attacks (e.g. /var/log/../../etc/shadow)
-            normalized = str(await anyio.Path(log_path).resolve())
+            # Resolve path synchronously to prevent traversal attacks.
+            # Using os.path.realpath instead of anyio.Path.resolve() because the
+            # async variant blocks on NFS-mounted paths under /mnt/ (Perf-AI-1).
+            normalized = os.path.realpath(log_path)  # noqa: ASYNC240
             if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
                 raise ToolError(
                     f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}. "
@@ -128,17 +130,15 @@ def register_storage_tool(mcp: FastMCP) -> None:
         elif action == "logs":
             variables = {"path": log_path, "lines": tail_lines}
 
-        try:
+        with tool_error_handler("storage", action, logger):
             logger.info(f"Executing unraid_storage action={action}")
             data = await make_graphql_request(query, variables, custom_timeout=custom_timeout)
 
             if action == "shares":
-                shares = data.get("shares", [])
-                return {"shares": list(shares) if isinstance(shares, list) else []}
+                return {"shares": data.get("shares", [])}
 
             if action == "disks":
-                disks = data.get("disks", [])
-                return {"disks": list(disks) if isinstance(disks, list) else []}
+                return {"disks": data.get("disks", [])}
 
             if action == "disk_details":
                 raw = data.get("disk", {})
@@ -159,22 +159,14 @@ def register_storage_tool(mcp: FastMCP) -> None:
                 return {"summary": summary, "details": raw}
 
             if action == "unassigned":
-                devices = data.get("unassignedDevices", [])
-                return {"devices": list(devices) if isinstance(devices, list) else []}
+                return {"devices": data.get("unassignedDevices", [])}
 
             if action == "log_files":
-                files = data.get("logFiles", [])
-                return {"log_files": list(files) if isinstance(files, list) else []}
+                return {"log_files": data.get("logFiles", [])}
 
             if action == "logs":
                 return dict(data.get("logFile") or {})
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_storage action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute storage/{action}: {e!s}") from e
 
     logger.info("Storage tool registered successfully")

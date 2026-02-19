@@ -92,7 +92,7 @@ class TestNotificationsActions:
             title="Test",
             subject="Test Subject",
             description="Test Desc",
-            importance="info",
+            importance="normal",
         )
         assert result["success"] is True
 
@@ -149,5 +149,89 @@ class TestNotificationsActions:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("boom")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="boom"):
+        with pytest.raises(ToolError, match="Failed to execute notifications/overview"):
             await tool_fn(action="overview")
+
+
+class TestNotificationsCreateValidation:
+    """Tests for importance enum and field length validation added in this PR."""
+
+    async def test_invalid_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="importance must be one of"):
+            await tool_fn(
+                action="create",
+                title="T",
+                subject="S",
+                description="D",
+                importance="invalid",
+            )
+
+    async def test_info_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
+        """INFO is listed in old docstring examples but rejected by the validator."""
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="importance must be one of"):
+            await tool_fn(
+                action="create",
+                title="T",
+                subject="S",
+                description="D",
+                importance="info",
+            )
+
+    async def test_alert_importance_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "notifications": {"createNotification": {"id": "n:1", "importance": "ALERT"}}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create", title="T", subject="S", description="D", importance="alert"
+        )
+        assert result["success"] is True
+
+    async def test_title_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="title must be at most 200"):
+            await tool_fn(
+                action="create",
+                title="x" * 201,
+                subject="S",
+                description="D",
+                importance="normal",
+            )
+
+    async def test_subject_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="subject must be at most 500"):
+            await tool_fn(
+                action="create",
+                title="T",
+                subject="x" * 501,
+                description="D",
+                importance="normal",
+            )
+
+    async def test_description_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="description must be at most 2000"):
+            await tool_fn(
+                action="create",
+                title="T",
+                subject="S",
+                description="x" * 2001,
+                importance="normal",
+            )
+
+    async def test_title_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "notifications": {"createNotification": {"id": "n:1", "importance": "NORMAL"}}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create",
+            title="x" * 200,
+            subject="S",
+            description="D",
+            importance="normal",
+        )
+        assert result["success"] is True

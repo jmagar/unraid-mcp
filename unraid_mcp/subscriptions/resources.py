@@ -44,6 +44,7 @@ async def autostart_subscriptions() -> None:
         logger.info("[AUTOSTART] Auto-start process completed successfully")
     except Exception as e:
         logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
+        raise  # Propagate so ensure_subscriptions_started doesn't mark as started
 
     # Optional log file subscription
     log_path = os.getenv("UNRAID_AUTOSTART_LOG_PATH")
@@ -82,7 +83,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
     async def logs_stream_resource() -> str:
         """Real-time log stream data from subscription."""
         await ensure_subscriptions_started()
-        data = subscription_manager.get_resource_data("logFileSubscription")
+        data = await subscription_manager.get_resource_data("logFileSubscription")
         if data:
             return json.dumps(data, indent=2)
         return json.dumps(

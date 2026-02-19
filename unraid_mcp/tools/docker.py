@@ -5,13 +5,14 @@ logs, networks, and update management.
 """
 
 import re
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import safe_get
 
 
 QUERIES: dict[str, str] = {
@@ -98,7 +99,10 @@ MUTATIONS: dict[str, str] = {
     """,
 }
 
-DESTRUCTIVE_ACTIONS = {"remove"}
+DESTRUCTIVE_ACTIONS = {"remove", "update_all"}
+# NOTE (Code-M-07): "details" and "logs" are listed here because they require a
+# container_id parameter, but unlike mutations they use fuzzy name matching (not
+# strict). This is intentional: read-only queries are safe with fuzzy matching.
 _ACTIONS_REQUIRING_CONTAINER_ID = {
     "start",
     "stop",
@@ -111,6 +115,7 @@ _ACTIONS_REQUIRING_CONTAINER_ID = {
     "logs",
 }
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart"}
+_MAX_TAIL_LINES = 10_000
 
 DOCKER_ACTIONS = Literal[
     "list",
@@ -130,33 +135,36 @@ DOCKER_ACTIONS = Literal[
     "check_updates",
 ]
 
-# Docker container IDs: 64 hex chars + optional suffix (e.g., ":local")
+if set(get_args(DOCKER_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(DOCKER_ACTIONS))
+    _extra = set(get_args(DOCKER_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"DOCKER_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
+
+# Full PrefixedID: 64 hex chars + optional suffix (e.g., ":local")
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 
-
-def _safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
-    """Safely traverse nested dict keys, handling None intermediates."""
-    current = data
-    for key in keys:
-        if not isinstance(current, dict):
-            return default
-        current = current.get(key)
-    return current if current is not None else default
+# Short hex prefix: at least 12 hex chars (standard Docker short ID length)
+_DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
 
 
 def find_container_by_identifier(
-    identifier: str, containers: list[dict[str, Any]]
+    identifier: str, containers: list[dict[str, Any]], *, strict: bool = False
 ) -> dict[str, Any] | None:
-    """Find a container by ID or name with fuzzy matching.
+    """Find a container by ID or name with optional fuzzy matching.
 
     Match priority:
       1. Exact ID match
       2. Exact name match (case-sensitive)
+
+    When strict=False (default), also tries:
       3. Name starts with identifier (case-insensitive)
       4. Name contains identifier as substring (case-insensitive)
 
-    Note: Short identifiers (e.g. "db") may match unintended containers
-    via substring. Use more specific names or IDs for precision.
+    When strict=True, only exact matches (1 & 2) are used.
+    Use strict=True for mutations to prevent targeting the wrong container.
     """
     if not containers:
         return None
@@ -168,20 +176,24 @@ def find_container_by_identifier(
         if identifier in c.get("names", []):
             return c
 
+    # Strict mode: no fuzzy matching allowed
+    if strict:
+        return None
+
     id_lower = identifier.lower()
 
     # Priority 3: prefix match (more precise than substring)
     for c in containers:
         for name in c.get("names", []):
             if name.lower().startswith(id_lower):
-                logger.info(f"Prefix match: '{identifier}' -> '{name}'")
+                logger.debug(f"Prefix match: '{identifier}' -> '{name}'")
                 return c
 
     # Priority 4: substring match (least precise)
     for c in containers:
         for name in c.get("names", []):
             if id_lower in name.lower():
-                logger.info(f"Substring match: '{identifier}' -> '{name}'")
+                logger.debug(f"Substring match: '{identifier}' -> '{name}'")
                 return c
 
     return None
@@ -195,27 +207,66 @@ def get_available_container_names(containers: list[dict[str, Any]]) -> list[str]
     return names
 
 
-async def _resolve_container_id(container_id: str) -> str:
-    """Resolve a container name/identifier to its actual PrefixedID."""
+async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
+    """Resolve a container name/identifier to its actual PrefixedID.
+
+    Optimization: if the identifier is a full 64-char hex ID (with optional
+    :suffix), skip the container list fetch entirely and use it directly.
+    If it's a short hex prefix (12-63 chars), fetch the list and match by
+    ID prefix. Only fetch the container list for name-based lookups.
+
+    Args:
+        container_id: Container name or ID to resolve
+        strict: When True, only exact name/ID matches are allowed (no fuzzy).
+                Use for mutations to prevent targeting the wrong container.
+    """
+    # Full PrefixedID: skip the list fetch entirely
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
 
-    logger.info(f"Resolving container identifier '{container_id}'")
+    logger.info(f"Resolving container identifier '{container_id}' (strict={strict})")
     list_query = """
         query ResolveContainerID {
           docker { containers(skipCache: true) { id names } }
         }
     """
     data = await make_graphql_request(list_query)
-    containers = _safe_get(data, "docker", "containers", default=[])
-    resolved = find_container_by_identifier(container_id, containers)
+    containers = safe_get(data, "docker", "containers", default=[])
+
+    # Short hex prefix: match by ID prefix before trying name matching
+    if _DOCKER_SHORT_ID_PATTERN.match(container_id):
+        id_lower = container_id.lower()
+        matches: list[dict[str, Any]] = []
+        for c in containers:
+            cid = (c.get("id") or "").lower()
+            if cid.startswith(id_lower) or cid.split(":")[0].startswith(id_lower):
+                matches.append(c)
+        if len(matches) == 1:
+            actual_id = str(matches[0].get("id", ""))
+            logger.info(f"Resolved short ID '{container_id}' -> '{actual_id}'")
+            return actual_id
+        if len(matches) > 1:
+            candidate_ids = [str(c.get("id", "")) for c in matches[:5]]
+            raise ToolError(
+                f"Short container ID prefix '{container_id}' is ambiguous. "
+                f"Matches: {', '.join(candidate_ids)}. Use a longer ID or exact name."
+            )
+
+    resolved = find_container_by_identifier(container_id, containers, strict=strict)
     if resolved:
         actual_id = str(resolved.get("id", ""))
         logger.info(f"Resolved '{container_id}' -> '{actual_id}'")
         return actual_id
 
     available = get_available_container_names(containers)
-    msg = f"Container '{container_id}' not found."
+    if strict:
+        msg = (
+            f"Container '{container_id}' not found by exact match. "
+            f"Mutations require an exact container name or full ID — "
+            f"fuzzy/substring matching is not allowed for safety."
+        )
+    else:
+        msg = f"Container '{container_id}' not found."
     if available:
         msg += f" Available: {', '.join(available[:10])}"
     raise ToolError(msg)
@@ -264,56 +315,58 @@ def register_docker_tool(mcp: FastMCP) -> None:
         if action == "network_details" and not network_id:
             raise ToolError("network_id is required for 'network_details' action")
 
-        try:
+        if action == "logs" and (tail_lines < 1 or tail_lines > _MAX_TAIL_LINES):
+            raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
+
+        with tool_error_handler("docker", action, logger):
             logger.info(f"Executing unraid_docker action={action}")
 
             # --- Read-only queries ---
             if action == "list":
                 data = await make_graphql_request(QUERIES["list"])
-                containers = _safe_get(data, "docker", "containers", default=[])
-                return {"containers": list(containers) if isinstance(containers, list) else []}
+                containers = safe_get(data, "docker", "containers", default=[])
+                return {"containers": containers}
 
             if action == "details":
+                # Resolve name -> ID first (skips list fetch if already an ID)
+                actual_id = await _resolve_container_id(container_id or "")
                 data = await make_graphql_request(QUERIES["details"])
-                containers = _safe_get(data, "docker", "containers", default=[])
-                container = find_container_by_identifier(container_id or "", containers)
-                if container:
-                    return container
-                available = get_available_container_names(containers)
-                msg = f"Container '{container_id}' not found."
-                if available:
-                    msg += f" Available: {', '.join(available[:10])}"
-                raise ToolError(msg)
+                containers = safe_get(data, "docker", "containers", default=[])
+                # Match by resolved ID (exact match, no second list fetch needed)
+                for c in containers:
+                    if c.get("id") == actual_id:
+                        return c
+                raise ToolError(f"Container '{container_id}' not found in details response.")
 
             if action == "logs":
                 actual_id = await _resolve_container_id(container_id or "")
                 data = await make_graphql_request(
                     QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
                 )
-                return {"logs": _safe_get(data, "docker", "logs")}
+                return {"logs": safe_get(data, "docker", "logs")}
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
-                networks = data.get("dockerNetworks", [])
-                return {"networks": list(networks) if isinstance(networks, list) else []}
+                networks = safe_get(data, "dockerNetworks", default=[])
+                return {"networks": networks}
 
             if action == "network_details":
                 data = await make_graphql_request(QUERIES["network_details"], {"id": network_id})
-                return dict(data.get("dockerNetwork") or {})
+                return dict(safe_get(data, "dockerNetwork", default={}) or {})
 
             if action == "port_conflicts":
                 data = await make_graphql_request(QUERIES["port_conflicts"])
-                conflicts = _safe_get(data, "docker", "portConflicts", default=[])
-                return {"port_conflicts": list(conflicts) if isinstance(conflicts, list) else []}
+                conflicts = safe_get(data, "docker", "portConflicts", default=[])
+                return {"port_conflicts": conflicts}
 
             if action == "check_updates":
                 data = await make_graphql_request(QUERIES["check_updates"])
-                statuses = _safe_get(data, "docker", "containerUpdateStatuses", default=[])
-                return {"update_statuses": list(statuses) if isinstance(statuses, list) else []}
+                statuses = safe_get(data, "docker", "containerUpdateStatuses", default=[])
+                return {"update_statuses": statuses}
 
-            # --- Mutations ---
+            # --- Mutations (strict matching: no fuzzy/substring) ---
             if action == "restart":
-                actual_id = await _resolve_container_id(container_id or "")
+                actual_id = await _resolve_container_id(container_id or "", strict=True)
                 # Stop (idempotent: treat "already stopped" as success)
                 stop_data = await make_graphql_request(
                     MUTATIONS["stop"],
@@ -330,7 +383,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if start_data.get("idempotent_success"):
                     result = {}
                 else:
-                    result = _safe_get(start_data, "docker", "start", default={})
+                    result = safe_get(start_data, "docker", "start", default={})
                 response: dict[str, Any] = {
                     "success": True,
                     "action": "restart",
@@ -342,12 +395,12 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "update_all":
                 data = await make_graphql_request(MUTATIONS["update_all"])
-                results = _safe_get(data, "docker", "updateAllContainers", default=[])
+                results = safe_get(data, "docker", "updateAllContainers", default=[])
                 return {"success": True, "action": "update_all", "containers": results}
 
             # Single-container mutations
             if action in MUTATIONS:
-                actual_id = await _resolve_container_id(container_id or "")
+                actual_id = await _resolve_container_id(container_id or "", strict=True)
                 op_context: dict[str, str] | None = (
                     {"operation": action} if action in ("start", "stop") else None
                 )
@@ -381,11 +434,5 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_docker action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute docker/{action}: {e!s}") from e
 
     logger.info("Docker tool registered successfully")

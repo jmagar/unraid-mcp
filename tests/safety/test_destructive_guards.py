@@ -10,6 +10,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+# conftest.py is the shared test-helper module for this project.
+# pytest automatically adds tests/ to sys.path, making it importable here
+# without a package __init__.py. Do NOT add tests/__init__.py — it breaks
+# conftest.py's fixture auto-discovery.
+from conftest import make_tool_fn
+
 from unraid_mcp.core.exceptions import ToolError
 
 # Import DESTRUCTIVE_ACTIONS sets from every tool module that defines one
@@ -24,10 +30,6 @@ from unraid_mcp.tools.rclone import MUTATIONS as RCLONE_MUTATIONS
 from unraid_mcp.tools.virtualization import DESTRUCTIVE_ACTIONS as VM_DESTRUCTIVE
 from unraid_mcp.tools.virtualization import MUTATIONS as VM_MUTATIONS
 
-# Centralized import for make_tool_fn helper
-# conftest.py sits in tests/ and is importable without __init__.py
-from conftest import make_tool_fn
-
 
 # ---------------------------------------------------------------------------
 # Known destructive actions registry (ground truth for this audit)
@@ -39,7 +41,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str]]] = {
         "module": "unraid_mcp.tools.docker",
         "register_fn": "register_docker_tool",
         "tool_name": "unraid_docker",
-        "actions": {"remove"},
+        "actions": {"remove", "update_all"},
         "runtime_set": DOCKER_DESTRUCTIVE,
     },
     "vm": {
@@ -126,9 +128,11 @@ class TestDestructiveActionRegistries:
         missing: list[str] = []
         for tool_key, mutations in all_mutations.items():
             destructive = all_destructive[tool_key]
-            for action_name in mutations:
-                if ("delete" in action_name or "remove" in action_name) and action_name not in destructive:
-                    missing.append(f"{tool_key}/{action_name}")
+            missing.extend(
+                f"{tool_key}/{action_name}"
+                for action_name in mutations
+                if ("delete" in action_name or "remove" in action_name) and action_name not in destructive
+            )
         assert not missing, (
             f"Mutations with 'delete'/'remove' not in DESTRUCTIVE_ACTIONS: {missing}"
         )
@@ -143,6 +147,7 @@ class TestDestructiveActionRegistries:
 _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Docker
     ("docker", "remove", {"container_id": "abc123"}),
+    ("docker", "update_all", {}),
     # VM
     ("vm", "force_stop", {"vm_id": "test-vm-uuid"}),
     ("vm", "reset", {"vm_id": "test-vm-uuid"}),
@@ -267,6 +272,15 @@ class TestConfirmationGuards:
 
 class TestConfirmAllowsExecution:
     """Destructive actions with confirm=True should reach the GraphQL layer."""
+
+    async def test_docker_update_all_with_confirm(self, _mock_docker_graphql: AsyncMock) -> None:
+        _mock_docker_graphql.return_value = {
+            "docker": {"updateAllContainers": [{"id": "c1", "names": ["app"], "state": "running", "status": "Up"}]}
+        }
+        tool_fn = make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+        result = await tool_fn(action="update_all", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "update_all"
 
     async def test_docker_remove_with_confirm(self, _mock_docker_graphql: AsyncMock) -> None:
         cid = "a" * 64 + ":local"

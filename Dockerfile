@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -7,13 +7,22 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
-# Copy dependency files
-COPY pyproject.toml .
-COPY uv.lock .
-COPY README.md .
+# Create non-root user with home directory and give ownership of /app
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid 1000 --create-home --shell /bin/false appuser && \
+    chown appuser:appuser /app
+
+# Copy dependency files (owned by appuser via --chown)
+COPY --chown=appuser:appuser pyproject.toml .
+COPY --chown=appuser:appuser uv.lock .
+COPY --chown=appuser:appuser README.md .
+COPY --chown=appuser:appuser LICENSE .
 
 # Copy the source code
-COPY unraid_mcp/ ./unraid_mcp/
+COPY --chown=appuser:appuser unraid_mcp/ ./unraid_mcp/
+
+# Switch to non-root user before installing dependencies
+USER appuser
 
 # Install dependencies and the package
 RUN uv sync --frozen
@@ -31,5 +40,9 @@ ENV UNRAID_API_KEY=""
 ENV UNRAID_VERIFY_SSL="true"
 ENV UNRAID_MCP_LOG_LEVEL="INFO"
 
-# Run unraid-mcp-server.py when the container launches
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6970/mcp')"]
+
+# Run unraid-mcp-server when the container launches
 CMD ["uv", "run", "unraid-mcp-server"]

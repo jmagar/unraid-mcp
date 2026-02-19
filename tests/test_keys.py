@@ -100,5 +100,5 @@ class TestKeysActions:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("connection lost")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="connection lost"):
+        with pytest.raises(ToolError, match="Failed to execute keys/list"):
             await tool_fn(action="list")
