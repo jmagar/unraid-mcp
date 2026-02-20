@@ -18,15 +18,14 @@ QUERIES: dict[str, str] = {
     "overview": """
         query GetSystemInfo {
           info {
-            os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
+            os { platform distro release codename kernel arch hostname logofile serial build uptime }
             cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache flags }
             memory {
               layout { bank type clockSpeed formFactor manufacturer partNum serialNum }
             }
             baseboard { manufacturer model version serial assetTag }
             system { manufacturer model version serial uuid sku }
-            versions { kernel openssl systemOpenssl systemOpensslLib node v8 npm yarn pm2 gulp grunt git tsc mysql redis mongodb apache nginx php docker postfix postgresql perl python gcc unraid }
-            apps { installed started }
+            versions { id core { unraid api kernel } packages { openssl node npm pm2 git nginx php docker } }
             machineId
             time
           }
@@ -87,7 +86,7 @@ QUERIES: dict[str, str] = {
     """,
     "metrics": """
         query GetMetrics {
-          metrics { cpu { used } memory { used total } }
+          metrics { cpu { percentTotal } memory { used total } }
         }
     """,
     "services": """
@@ -122,7 +121,7 @@ QUERIES: dict[str, str] = {
         query GetServer {
           info {
             os { hostname uptime }
-            versions { unraid }
+            versions { core { unraid } }
             machineId time
           }
           array { state }
