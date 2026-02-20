@@ -49,9 +49,8 @@ QUERIES: dict[str, str] = {
     """,
     "network": """
         query GetNetworkConfig {
-          network {
-            id
-            accessUrls { type name ipv4 ipv6 }
+          vars {
+            id useSsl port portssl localTld
           }
         }
     """,
@@ -66,7 +65,7 @@ QUERIES: dict[str, str] = {
     """,
     "connect": """
         query GetConnectSettings {
-          connect { status sandbox flashGuid }
+          vars { id flashGuid flashProduct flashVendor }
         }
     """,
     "variables": """
@@ -91,7 +90,7 @@ QUERIES: dict[str, str] = {
     """,
     "services": """
         query GetServices {
-          services { name state }
+          services { name }
         }
     """,
     "display": """
@@ -130,12 +129,12 @@ QUERIES: dict[str, str] = {
     """,
     "servers": """
         query GetServers {
-          servers { id name status description ip port }
+          servers { id name status }
         }
     """,
     "flash": """
         query GetFlash {
-          flash { id guid product vendor size }
+          flash { id product vendor }
         }
     """,
     "ups_devices": """
@@ -358,9 +357,9 @@ def register_info_tool(mcp: FastMCP) -> None:
         # Lookup tables for common response patterns
         # Simple dict actions: action -> GraphQL response key
         dict_actions: dict[str, str] = {
-            "network": "network",
+            "network": "vars",
             "registration": "registration",
-            "connect": "connect",
+            "connect": "vars",
             "variables": "vars",
             "metrics": "metrics",
             "config": "config",
