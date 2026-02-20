@@ -18,15 +18,14 @@ QUERIES: dict[str, str] = {
     "overview": """
         query GetSystemInfo {
           info {
-            os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
+            os { platform distro release codename kernel arch hostname logofile serial build uptime }
             cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache flags }
             memory {
               layout { bank type clockSpeed formFactor manufacturer partNum serialNum }
             }
             baseboard { manufacturer model version serial assetTag }
             system { manufacturer model version serial uuid sku }
-            versions { kernel openssl systemOpenssl systemOpensslLib node v8 npm yarn pm2 gulp grunt git tsc mysql redis mongodb apache nginx php docker postfix postgresql perl python gcc unraid }
-            apps { installed started }
+            versions { id core { unraid api kernel } packages { openssl node npm pm2 git nginx php docker } }
             machineId
             time
           }
@@ -50,9 +49,8 @@ QUERIES: dict[str, str] = {
     """,
     "network": """
         query GetNetworkConfig {
-          network {
-            id
-            accessUrls { type name ipv4 ipv6 }
+          vars {
+            id useSsl port portssl localTld
           }
         }
     """,
@@ -67,7 +65,7 @@ QUERIES: dict[str, str] = {
     """,
     "connect": """
         query GetConnectSettings {
-          connect { status sandbox flashGuid }
+          vars { id flashGuid flashProduct flashVendor }
         }
     """,
     "variables": """
@@ -87,12 +85,12 @@ QUERIES: dict[str, str] = {
     """,
     "metrics": """
         query GetMetrics {
-          metrics { cpu { used } memory { used total } }
+          metrics { cpu { percentTotal } memory { used total } }
         }
     """,
     "services": """
         query GetServices {
-          services { name state }
+          services { name }
         }
     """,
     "display": """
@@ -122,7 +120,7 @@ QUERIES: dict[str, str] = {
         query GetServer {
           info {
             os { hostname uptime }
-            versions { unraid }
+            versions { core { unraid } }
             machineId time
           }
           array { state }
@@ -131,12 +129,12 @@ QUERIES: dict[str, str] = {
     """,
     "servers": """
         query GetServers {
-          servers { id name status description ip port }
+          servers { id name status }
         }
     """,
     "flash": """
         query GetFlash {
-          flash { id guid product vendor size }
+          flash { id product vendor }
         }
     """,
     "ups_devices": """
@@ -359,9 +357,9 @@ def register_info_tool(mcp: FastMCP) -> None:
         # Lookup tables for common response patterns
         # Simple dict actions: action -> GraphQL response key
         dict_actions: dict[str, str] = {
-            "network": "network",
+            "network": "vars",
             "registration": "registration",
-            "connect": "connect",
+            "connect": "vars",
             "variables": "vars",
             "metrics": "metrics",
             "config": "config",

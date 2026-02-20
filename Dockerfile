@@ -11,6 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY pyproject.toml .
 COPY uv.lock .
 COPY README.md .
+COPY LICENSE .
 
 # Copy the source code
 COPY unraid_mcp/ ./unraid_mcp/

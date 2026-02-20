@@ -33,11 +33,6 @@ QUERIES: dict[str, str] = {
           } }
         }
     """,
-    "logs": """
-        query GetContainerLogs($id: PrefixedID!, $tail: Int) {
-          docker { logs(id: $id, tail: $tail) }
-        }
-    """,
     "networks": """
         query GetDockerNetworks {
           dockerNetworks { id name driver scope }
@@ -286,11 +281,11 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 raise ToolError(msg)
 
             if action == "logs":
-                actual_id = await _resolve_container_id(container_id or "")
-                data = await make_graphql_request(
-                    QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
+                raise ToolError(
+                    "Container logs are not available via the Unraid GraphQL API. "
+                    "Use the Unraid web UI (Docker tab → container → Logs) or SSH: "
+                    f"`docker logs {container_id} --tail {tail_lines}`"
                 )
-                return {"logs": _safe_get(data, "docker", "logs")}
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
