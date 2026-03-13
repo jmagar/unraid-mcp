@@ -66,7 +66,16 @@ class OverwriteFileHandler(logging.FileHandler):
                         try:
                             self.stream = self._open()
                         except OSError:
-                            self.stream = old_stream  # Last resort: restore original
+                            # old_stream is already closed — do NOT restore it.
+                            # Leave self.stream = None so super().emit() skips output
+                            # rather than writing to a closed file descriptor.
+                            import sys
+
+                            print(
+                                "WARNING: Failed to reopen log file after rotation. "
+                                "File logging suspended until next successful open.",
+                                file=sys.stderr,
+                            )
 
                     if self.stream is not None:
                         reset_record = logging.LogRecord(
@@ -185,8 +194,13 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
 
     fastmcp_logger.setLevel(numeric_log_level)
 
-    # Set root logger level to avoid suppressing library warnings entirely
-    logging.getLogger().setLevel(numeric_log_level)
+    # Attach shared file handler to the root logger so that library/third-party
+    # loggers (httpx, websockets, etc.) whose propagate=True flows up to root
+    # will also be written to the log file, not just the console.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_log_level)
+    if _shared_file_handler not in root_logger.handlers:
+        root_logger.addHandler(_shared_file_handler)
 
     return fastmcp_logger
 
