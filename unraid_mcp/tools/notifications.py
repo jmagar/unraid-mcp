@@ -187,11 +187,33 @@ def register_notifications_tool(mcp: FastMCP) -> None:
           unarchive_all - Move all archived notifications to unread (optional importance filter)
           recalculate - Recompute overview counts from disk
         """
+        _VALID_LIST_TYPES = frozenset({"UNREAD", "ARCHIVE"})
+        _VALID_IMPORTANCE = frozenset({"INFO", "WARNING", "ALERT"})
+        _VALID_NOTIFICATION_TYPES = frozenset({"UNREAD", "ARCHIVE"})
+
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+
+        # Validate enum parameters before dispatching to GraphQL (SEC-M04).
+        # Invalid values here would waste a rate-limited request and may leak schema details.
+        if list_type.upper() not in _VALID_LIST_TYPES:
+            raise ToolError(
+                f"Invalid list_type '{list_type}'. Must be one of: {sorted(_VALID_LIST_TYPES)}"
+            )
+        if importance is not None and importance.upper() not in _VALID_IMPORTANCE:
+            raise ToolError(
+                f"Invalid importance '{importance}'. Must be one of: {sorted(_VALID_IMPORTANCE)}"
+            )
+        if (
+            notification_type is not None
+            and notification_type.upper() not in _VALID_NOTIFICATION_TYPES
+        ):
+            raise ToolError(
+                f"Invalid notification_type '{notification_type}'. Must be one of: {sorted(_VALID_NOTIFICATION_TYPES)}"
+            )
 
         with tool_error_handler("notifications", action, logger):
             logger.info(f"Executing unraid_notifications action={action}")

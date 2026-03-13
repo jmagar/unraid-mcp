@@ -4,24 +4,32 @@ from typing import Any
 from urllib.parse import urlparse
 
 
+_MISSING: object = object()
+
+
 def safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
-    """Safely traverse nested dict keys, handling None intermediates.
+    """Safely traverse nested dict keys, handling missing keys and None intermediates.
 
     Args:
         data: The root dictionary to traverse.
         *keys: Sequence of keys to follow.
-        default: Value to return if any key is missing or None.
+        default: Value to return if any key is absent or any intermediate value
+            is not a dict.
 
     Returns:
-        The value at the end of the key chain, or default if unreachable.
-        Explicit ``None`` values at the final key also return ``default``.
+        The value at the end of the key chain (including explicit ``None``),
+        or ``default`` if a key is missing or an intermediate is not a dict.
+        This preserves the distinction between ``{"k": None}`` (returns ``None``)
+        and ``{}`` (returns ``default``).
     """
-    current = data
+    current: Any = data
     for key in keys:
         if not isinstance(current, dict):
             return default
-        current = current.get(key)
-    return current if current is not None else default
+        current = current.get(key, _MISSING)
+        if current is _MISSING:
+            return default
+    return current
 
 
 def format_bytes(bytes_value: int | None) -> str:

@@ -26,6 +26,7 @@ from .tools.info import register_info_tool
 from .tools.keys import register_keys_tool
 from .tools.notifications import register_notifications_tool
 from .tools.rclone import register_rclone_tool
+from .tools.settings import register_settings_tool
 from .tools.storage import register_storage_tool
 from .tools.users import register_users_tool
 from .tools.virtualization import register_vm_tool
@@ -62,6 +63,7 @@ def register_all_modules() -> None:
             register_users_tool,
             register_keys_tool,
             register_health_tool,
+            register_settings_tool,
         ]
         for registrar in registrars:
             registrar(mcp)
