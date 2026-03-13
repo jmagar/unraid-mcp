@@ -1,7 +1,7 @@
 """Docker container management.
 
-Provides the `unraid_docker` tool with 15 actions for container lifecycle,
-logs, networks, and update management.
+Provides the `unraid_docker` tool with 26 actions for container lifecycle,
+logs, networks, update management, and Docker organizer operations.
 """
 
 import re
@@ -395,6 +395,17 @@ def register_docker_tool(mcp: FastMCP) -> None:
           network_details - Details of a network (requires network_id)
           port_conflicts - Check for port conflicts
           check_updates - Check which containers have updates available
+          create_folder - Create Docker organizer folder (requires folder_name)
+          set_folder_children - Set children of a folder (requires children_ids)
+          delete_entries - Delete organizer entries (requires entry_ids, confirm=True)
+          move_to_folder - Move entries to a folder (requires source_entry_ids, destination_folder_id)
+          move_to_position - Move entries to position in folder (requires source_entry_ids, destination_folder_id, position)
+          rename_folder - Rename a folder (requires folder_id, new_folder_name)
+          create_folder_with_items - Create folder with items (requires folder_name)
+          update_view_prefs - Update organizer view preferences (requires view_prefs)
+          sync_templates - Sync Docker template paths
+          reset_template_mappings - Reset template mappings (confirm=True)
+          refresh_digests - Refresh container image digests
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
@@ -436,7 +447,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
                 )
-                return {"logs": safe_get(data, "docker", "logs")}
+                logs = safe_get(data, "docker", "logs")
+                if logs is None:
+                    raise ToolError(f"No logs returned for container '{container_id}'")
+                return {"logs": logs}
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
@@ -506,11 +520,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if children_ids is not None:
                     _vars["childrenIds"] = children_ids
                 data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
-                return {
-                    "success": True,
-                    "action": "create_folder",
-                    "organizer": data.get("createDockerFolder"),
-                }
+                organizer = data.get("createDockerFolder")
+                if organizer is None:
+                    raise ToolError("create_folder failed: server returned no data")
+                return {"success": True, "action": "create_folder", "organizer": organizer}
 
             if action == "set_folder_children":
                 if children_ids is None:
@@ -519,11 +532,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if folder_id is not None:
                     _vars["folderId"] = folder_id
                 data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
-                return {
-                    "success": True,
-                    "action": "set_folder_children",
-                    "organizer": data.get("setDockerFolderChildren"),
-                }
+                organizer = data.get("setDockerFolderChildren")
+                if organizer is None:
+                    raise ToolError("set_folder_children failed: server returned no data")
+                return {"success": True, "action": "set_folder_children", "organizer": organizer}
 
             if action == "delete_entries":
                 if not entry_ids:
@@ -531,11 +543,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["delete_entries"], {"entryIds": entry_ids}
                 )
-                return {
-                    "success": True,
-                    "action": "delete_entries",
-                    "organizer": data.get("deleteDockerEntries"),
-                }
+                organizer = data.get("deleteDockerEntries")
+                if organizer is None:
+                    raise ToolError("delete_entries failed: server returned no data")
+                return {"success": True, "action": "delete_entries", "organizer": organizer}
 
             if action == "move_to_folder":
                 if not source_entry_ids:
@@ -549,11 +560,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                         "destinationFolderId": destination_folder_id,
                     },
                 )
-                return {
-                    "success": True,
-                    "action": "move_to_folder",
-                    "organizer": data.get("moveDockerEntriesToFolder"),
-                }
+                organizer = data.get("moveDockerEntriesToFolder")
+                if organizer is None:
+                    raise ToolError("move_to_folder failed: server returned no data")
+                return {"success": True, "action": "move_to_folder", "organizer": organizer}
 
             if action == "move_to_position":
                 if not source_entry_ids:
@@ -572,11 +582,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                         "position": position,
                     },
                 )
-                return {
-                    "success": True,
-                    "action": "move_to_position",
-                    "organizer": data.get("moveDockerItemsToPosition"),
-                }
+                organizer = data.get("moveDockerItemsToPosition")
+                if organizer is None:
+                    raise ToolError("move_to_position failed: server returned no data")
+                return {"success": True, "action": "move_to_position", "organizer": organizer}
 
             if action == "rename_folder":
                 if not folder_id:
@@ -586,11 +595,10 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["rename_folder"], {"folderId": folder_id, "newName": new_folder_name}
                 )
-                return {
-                    "success": True,
-                    "action": "rename_folder",
-                    "organizer": data.get("renameDockerFolder"),
-                }
+                organizer = data.get("renameDockerFolder")
+                if organizer is None:
+                    raise ToolError("rename_folder failed: server returned no data")
+                return {"success": True, "action": "rename_folder", "organizer": organizer}
 
             if action == "create_folder_with_items":
                 if not folder_name:
@@ -603,10 +611,13 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if position is not None:
                     _vars["position"] = position
                 data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
+                organizer = data.get("createDockerFolderWithItems")
+                if organizer is None:
+                    raise ToolError("create_folder_with_items failed: server returned no data")
                 return {
                     "success": True,
                     "action": "create_folder_with_items",
-                    "organizer": data.get("createDockerFolderWithItems"),
+                    "organizer": organizer,
                 }
 
             if action == "update_view_prefs":
@@ -615,19 +626,17 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["update_view_prefs"], {"viewId": view_id, "prefs": view_prefs}
                 )
-                return {
-                    "success": True,
-                    "action": "update_view_prefs",
-                    "organizer": data.get("updateDockerViewPreferences"),
-                }
+                organizer = data.get("updateDockerViewPreferences")
+                if organizer is None:
+                    raise ToolError("update_view_prefs failed: server returned no data")
+                return {"success": True, "action": "update_view_prefs", "organizer": organizer}
 
             if action == "sync_templates":
                 data = await make_graphql_request(MUTATIONS["sync_templates"])
-                return {
-                    "success": True,
-                    "action": "sync_templates",
-                    "result": data.get("syncDockerTemplatePaths"),
-                }
+                result = data.get("syncDockerTemplatePaths")
+                if result is None:
+                    raise ToolError("sync_templates failed: server returned no data")
+                return {"success": True, "action": "sync_templates", "result": result}
 
             if action == "reset_template_mappings":
                 data = await make_graphql_request(MUTATIONS["reset_template_mappings"])

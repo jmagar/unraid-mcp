@@ -204,7 +204,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
                 return {"summary": summary, "details": raw}
 
             if action == "unassigned":
-                return {"devices": data.get("unassignedDevices", [])}
+                return {"devices": data.get("disks", [])}
 
             if action == "log_files":
                 return {"log_files": data.get("logFiles", [])}

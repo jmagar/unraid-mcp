@@ -261,7 +261,10 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     "importance": importance.upper(),
                 }
                 data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
-                return {"success": True, "data": data}
+                notification = data.get("createNotification")
+                if notification is None:
+                    raise ToolError("Notification creation failed: server returned no data")
+                return {"success": True, "notification": notification}
 
             if action in ("archive", "unread"):
                 if not notification_id:

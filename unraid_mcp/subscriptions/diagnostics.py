@@ -101,13 +101,11 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
         Returns:
             Dict containing test results and response data
         """
-        # Validate before any network I/O (Bug 1 fix)
         field_name = _validate_subscription_query(subscription_query)
 
         try:
             logger.info(f"[TEST_SUBSCRIPTION] Testing validated subscription field '{field_name}'")
 
-            # Build WebSocket URL — raises ValueError on invalid/missing scheme (Bug 4 fix)
             try:
                 ws_url = build_ws_url()
             except ValueError as e:
@@ -139,7 +137,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 init_response = json.loads(response)
 
                 if init_response.get("type") != "connection_ack":
-                    return {"error": f"Connection failed: {init_response}"}
+                    raise ToolError(f"Connection failed: {init_response}")
 
                 # Send subscription
                 await websocket.send(
@@ -168,7 +166,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             raise
         except Exception as e:
             logger.error(f"[TEST_SUBSCRIPTION] Error: {e}", exc_info=True)
-            return {"error": str(e), "query_tested": subscription_query}
+            raise ToolError(f"Subscription test failed: {e!s}") from e
 
     @mcp.tool()
     async def diagnose_subscriptions() -> dict[str, Any]:
