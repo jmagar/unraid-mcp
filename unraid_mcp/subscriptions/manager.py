@@ -74,6 +74,57 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# Resource data size limits to prevent unbounded memory growth
+_MAX_RESOURCE_DATA_BYTES = 1_048_576  # 1 MB
+_MAX_RESOURCE_DATA_LINES = 5_000
+
+
+def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
+    """Cap log content in subscription data to prevent unbounded memory growth.
+
+    Returns a new dict — does NOT mutate the input. If any nested 'content'
+    field (from log subscriptions) exceeds the byte limit, truncate it to the
+    most recent _MAX_RESOURCE_DATA_LINES lines.
+
+    The final content is guaranteed to be <= _MAX_RESOURCE_DATA_BYTES.
+    """
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            result[key] = _cap_log_content(value)
+        elif (
+            key == "content"
+            and isinstance(value, str)
+            # Pre-check uses byte count so multibyte UTF-8 chars cannot bypass the cap
+            and len(value.encode("utf-8", errors="replace")) > _MAX_RESOURCE_DATA_BYTES
+        ):
+            lines = value.splitlines()
+            original_line_count = len(lines)
+
+            # Keep most recent lines first.
+            if len(lines) > _MAX_RESOURCE_DATA_LINES:
+                lines = lines[-_MAX_RESOURCE_DATA_LINES:]
+
+            truncated = "\n".join(lines)
+            # Encode once and slice bytes instead of an O(n²) line-trim loop
+            encoded = truncated.encode("utf-8", errors="replace")
+            if len(encoded) > _MAX_RESOURCE_DATA_BYTES:
+                truncated = encoded[-_MAX_RESOURCE_DATA_BYTES:].decode("utf-8", errors="ignore")
+                # Strip partial first line that may have been cut mid-character
+                nl_pos = truncated.find("\n")
+                if nl_pos != -1:
+                    truncated = truncated[nl_pos + 1 :]
+
+            logger.warning(
+                f"[RESOURCE] Capped log content from {original_line_count} to "
+                f"{len(lines)} lines ({len(value)} -> {len(truncated)} chars)"
+            )
+            result[key] = truncated
+        else:
+            result[key] = value
+    return result
+
+
 class SubscriptionManager:
     """Manages GraphQL subscriptions and converts them to MCP resources."""
 

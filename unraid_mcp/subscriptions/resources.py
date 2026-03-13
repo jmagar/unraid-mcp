@@ -48,7 +48,7 @@ async def autostart_subscriptions() -> None:
     logger.info("[AUTOSTART] Initiating subscription auto-start process...")
 
     try:
-        # Use the new SubscriptionManager auto-start method
+        # Use the SubscriptionManager auto-start method
         await subscription_manager.auto_start_all_subscriptions()
         logger.info("[AUTOSTART] Auto-start process completed successfully")
     except Exception as e:
