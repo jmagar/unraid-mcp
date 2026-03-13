@@ -116,11 +116,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 created_key = (data.get("apiKey") or {}).get("create")
                 if not created_key:
-                    return {
-                        "success": False,
-                        "key": {},
-                        "message": "API key creation failed: no data returned from server",
-                    }
+                    raise ToolError("Failed to create API key: no data returned from server")
                 return {"success": True, "key": created_key}
 
             if action == "update":
@@ -134,11 +130,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["update"], {"input": input_data})
                 updated_key = (data.get("apiKey") or {}).get("update")
                 if not updated_key:
-                    return {
-                        "success": False,
-                        "key": {},
-                        "message": "API key update failed: no data returned from server",
-                    }
+                    raise ToolError("Failed to update API key: no data returned from server")
                 return {"success": True, "key": updated_key}
 
             if action == "delete":

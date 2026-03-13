@@ -307,6 +307,14 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                         f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}. "
                         f"Got: '{importance}'"
                     )
+                if len(title) > 200:
+                    raise ToolError(f"title must be at most 200 characters (got {len(title)})")
+                if len(subject) > 500:
+                    raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
+                if len(description) > 2000:
+                    raise ToolError(
+                        f"description must be at most 2000 characters (got {len(description)})"
+                    )
                 input_data = {
                     "title": title,
                     "subject": subject,
