@@ -5,7 +5,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install uv (pinned tag to avoid mutable latest)
-COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /uvx /usr/local/bin/
 
 # Create non-root user with home directory and give ownership of /app
 RUN groupadd --gid 1000 appuser && \
