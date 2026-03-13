@@ -556,42 +556,42 @@ class TestRateLimiter:
 class TestQueryCache:
     """Unit tests for the TTL query cache."""
 
-    def test_miss_on_empty_cache(self) -> None:
+    async def test_miss_on_empty_cache(self) -> None:
         cache = _QueryCache()
-        assert cache.get("{ info }", None) is None
+        assert await cache.get("{ info }", None) is None
 
-    def test_put_and_get_hit(self) -> None:
+    async def test_put_and_get_hit(self) -> None:
         cache = _QueryCache()
         data = {"result": "ok"}
-        cache.put("GetNetworkConfig { }", None, data)
-        result = cache.get("GetNetworkConfig { }", None)
+        await cache.put("GetNetworkConfig { }", None, data)
+        result = await cache.get("GetNetworkConfig { }", None)
         assert result == data
 
-    def test_expired_entry_returns_none(self) -> None:
+    async def test_expired_entry_returns_none(self) -> None:
         cache = _QueryCache()
         data = {"result": "ok"}
-        cache.put("GetNetworkConfig { }", None, data)
+        await cache.put("GetNetworkConfig { }", None, data)
         # Manually expire the entry
         key = cache._cache_key("GetNetworkConfig { }", None)
         cache._store[key] = (time.monotonic() - 1.0, data)  # expired 1 sec ago
-        assert cache.get("GetNetworkConfig { }", None) is None
+        assert await cache.get("GetNetworkConfig { }", None) is None
 
-    def test_invalidate_all_clears_store(self) -> None:
+    async def test_invalidate_all_clears_store(self) -> None:
         cache = _QueryCache()
-        cache.put("GetNetworkConfig { }", None, {"x": 1})
-        cache.put("GetOwner { }", None, {"y": 2})
+        await cache.put("GetNetworkConfig { }", None, {"x": 1})
+        await cache.put("GetOwner { }", None, {"y": 2})
         assert len(cache._store) == 2
-        cache.invalidate_all()
+        await cache.invalidate_all()
         assert len(cache._store) == 0
 
-    def test_variables_affect_cache_key(self) -> None:
+    async def test_variables_affect_cache_key(self) -> None:
         """Different variables produce different cache keys."""
         cache = _QueryCache()
         q = "GetNetworkConfig($id: ID!) { network(id: $id) { name } }"
-        cache.put(q, {"id": "1"}, {"name": "eth0"})
-        cache.put(q, {"id": "2"}, {"name": "eth1"})
-        assert cache.get(q, {"id": "1"}) == {"name": "eth0"}
-        assert cache.get(q, {"id": "2"}) == {"name": "eth1"}
+        await cache.put(q, {"id": "1"}, {"name": "eth0"})
+        await cache.put(q, {"id": "2"}, {"name": "eth1"})
+        assert await cache.get(q, {"id": "1"}) == {"name": "eth0"}
+        assert await cache.get(q, {"id": "2"}) == {"name": "eth1"}
 
     def test_is_cacheable_returns_true_for_known_prefixes(self) -> None:
         assert _QueryCache.is_cacheable("GetNetworkConfig { ... }") is True
@@ -619,14 +619,14 @@ class TestQueryCache:
         """Anonymous 'query { ... }' has no operation name — must not be cached."""
         assert _QueryCache.is_cacheable("query { network { name } }") is False
 
-    def test_expired_entry_removed_from_store(self) -> None:
+    async def test_expired_entry_removed_from_store(self) -> None:
         """Accessing an expired entry should remove it from the internal store."""
         cache = _QueryCache()
-        cache.put("GetOwner { }", None, {"owner": "root"})
+        await cache.put("GetOwner { }", None, {"owner": "root"})
         key = cache._cache_key("GetOwner { }", None)
         cache._store[key] = (time.monotonic() - 1.0, {"owner": "root"})
         assert key in cache._store
-        cache.get("GetOwner { }", None)  # triggers deletion
+        await cache.get("GetOwner { }", None)  # triggers deletion
         assert key not in cache._store
 
 
