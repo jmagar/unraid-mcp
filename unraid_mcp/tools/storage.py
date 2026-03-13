@@ -157,10 +157,13 @@ def register_storage_tool(mcp: FastMCP) -> None:
             with tool_error_handler("storage", action, logger):
                 logger.info("Executing unraid_storage action=flash_backup")
                 data = await make_graphql_request(MUTATIONS["flash_backup"], {"input": input_data})
+                backup = data.get("initiateFlashBackup")
+                if not backup:
+                    raise ToolError("Failed to start flash backup: no confirmation from server")
                 return {
                     "success": True,
                     "action": "flash_backup",
-                    "data": data.get("initiateFlashBackup"),
+                    "data": backup,
                 }
 
         query = QUERIES[action]

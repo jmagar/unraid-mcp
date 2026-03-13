@@ -148,6 +148,8 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Docker
     ("docker", "remove", {"container_id": "abc123"}),
     ("docker", "update_all", {}),
+    ("docker", "delete_entries", {"entry_ids": ["e1"]}),
+    ("docker", "reset_template_mappings", {}),
     # VM
     ("vm", "force_stop", {"vm_id": "test-vm-uuid"}),
     ("vm", "reset", {"vm_id": "test-vm-uuid"}),
@@ -289,6 +291,28 @@ class TestConfirmAllowsExecution:
         result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert result["action"] == "update_all"
+
+    async def test_docker_delete_entries_with_confirm(
+        self, _mock_docker_graphql: AsyncMock
+    ) -> None:
+        organizer_response = {
+            "version": 1.0,
+            "views": [{"id": "default", "name": "Default", "rootId": "root", "flatEntries": []}],
+        }
+        _mock_docker_graphql.return_value = {"deleteDockerEntries": organizer_response}
+        tool_fn = make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+        result = await tool_fn(action="delete_entries", entry_ids=["e1"], confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "delete_entries"
+
+    async def test_docker_reset_template_mappings_with_confirm(
+        self, _mock_docker_graphql: AsyncMock
+    ) -> None:
+        _mock_docker_graphql.return_value = {"resetDockerTemplateMappings": True}
+        tool_fn = make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+        result = await tool_fn(action="reset_template_mappings", confirm=True)
+        assert result["success"] is True
+        assert result["action"] == "reset_template_mappings"
 
     async def test_docker_remove_with_confirm(self, _mock_docker_graphql: AsyncMock) -> None:
         cid = "a" * 64 + ":local"

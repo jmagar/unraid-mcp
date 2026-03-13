@@ -327,11 +327,12 @@ class TestNewNotificationMutations:
         assert result["success"] is True
 
     async def test_unarchive_all_with_importance(self, _mock_graphql: AsyncMock) -> None:
+        """Lowercase importance input must be uppercased before being sent to GraphQL."""
         _mock_graphql.return_value = {
             "unarchiveAll": {"unread": {"total": 1}, "archive": {"total": 0}}
         }
         tool_fn = _make_tool()
-        await tool_fn(action="unarchive_all", importance="WARNING")
+        await tool_fn(action="unarchive_all", importance="warning")
         call_args = _mock_graphql.call_args
         assert call_args[0][1] == {"importance": "WARNING"}
 

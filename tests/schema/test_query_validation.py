@@ -537,6 +537,36 @@ class TestNotificationMutations:
         errors = _validate_operation(schema, MUTATIONS["archive_all"])
         assert not errors, f"archive_all mutation validation failed: {errors}"
 
+    def test_archive_many_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.notifications import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["archive_many"])
+        assert not errors, f"archive_many mutation validation failed: {errors}"
+
+    def test_create_unique_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.notifications import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["create_unique"])
+        assert not errors, f"create_unique mutation validation failed: {errors}"
+
+    def test_unarchive_many_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.notifications import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["unarchive_many"])
+        assert not errors, f"unarchive_many mutation validation failed: {errors}"
+
+    def test_unarchive_all_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.notifications import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["unarchive_all"])
+        assert not errors, f"unarchive_all mutation validation failed: {errors}"
+
+    def test_recalculate_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.notifications import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["recalculate"])
+        assert not errors, f"recalculate mutation validation failed: {errors}"
+
     def test_all_notification_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.notifications import MUTATIONS
 

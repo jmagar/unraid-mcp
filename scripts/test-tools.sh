@@ -20,8 +20,7 @@
 #   2 — prerequisite check failed (mcporter, uv, server startup)
 # =============================================================================
 
-set -Eeuo pipefail
-shopt -s inherit_errexit
+set -uo pipefail
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -175,6 +174,29 @@ smoke_test_server() {
     log_error "  • Missing module: check 'uv run unraid-mcp-server' locally"
     log_error "  • server.py has an import for a file that doesn't exist yet"
     log_error "  • Environment variable UNRAID_API_URL or UNRAID_API_KEY missing"
+    return 2
+  fi
+
+  # Assert the response contains a valid tool response field, not a bare JSON error.
+  # unraid_health action=check always returns {"status": ...} on success.
+  local key_check
+  key_check="$(
+    printf '%s' "${output}" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    if 'status' in d or 'success' in d or 'error' in d:
+        print('ok')
+    else:
+        print('missing: no status/success/error key in response')
+except Exception as e:
+    print('parse_error: ' + str(e))
+" 2>/dev/null
+  )" || key_check="parse_error"
+
+  if [[ "${key_check}" != "ok" ]]; then
+    log_error "Smoke test: unexpected response shape — ${key_check}"
+    printf '%s\n' "${output}" >&2
     return 2
   fi
 
