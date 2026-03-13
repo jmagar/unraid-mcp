@@ -16,12 +16,12 @@ from ..core.exceptions import ToolError, tool_error_handler
 QUERIES: dict[str, str] = {
     "list": """
         query ListApiKeys {
-          apiKeys { id name roles permissions createdAt lastUsed }
+          apiKeys { id name roles permissions { resource actions } createdAt }
         }
     """,
     "get": """
         query GetApiKey($id: PrefixedID!) {
-          apiKey(id: $id) { id name roles permissions createdAt lastUsed }
+          apiKey(id: $id) { id name roles permissions { resource actions } createdAt }
         }
     """,
 }

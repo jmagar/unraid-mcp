@@ -107,7 +107,7 @@ async def _comprehensive_check() -> dict[str, Any]:
         query ComprehensiveHealthCheck {
           info {
             machineId time
-            versions { unraid }
+            versions { core { unraid } }
             os { uptime }
           }
           array { state }
@@ -115,7 +115,7 @@ async def _comprehensive_check() -> dict[str, Any]:
             overview { unread { alert warning total } }
           }
           docker {
-            containers { id state status }
+            containers(skipCache: true) { id state status }
           }
         }
         """
@@ -141,7 +141,7 @@ async def _comprehensive_check() -> dict[str, Any]:
                 "status": "connected",
                 "url": safe_display_url(UNRAID_API_URL),
                 "machine_id": info.get("machineId"),
-                "version": info.get("versions", {}).get("unraid"),
+                "version": (info.get("versions") or {}).get("core", {}).get("unraid"),
                 "uptime": info.get("os", {}).get("uptime"),
             }
         else:

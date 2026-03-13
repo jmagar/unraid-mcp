@@ -41,7 +41,7 @@ QUERIES: dict[str, str] = {
     """,
     "unassigned": """
         query GetUnassignedDevices {
-          unassignedDevices { id device name size type }
+          disks { id device name vendor size type interfaceType smartStatus }
         }
     """,
     "log_files": """

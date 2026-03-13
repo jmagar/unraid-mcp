@@ -36,27 +36,27 @@ QUERIES: dict[str, str] = {
     """,
     "logs": """
         query GetContainerLogs($id: PrefixedID!, $tail: Int) {
-          docker { logs(id: $id, tail: $tail) }
+          docker { logs(id: $id, tail: $tail) { containerId lines { timestamp message } cursor } }
         }
     """,
     "networks": """
         query GetDockerNetworks {
-          dockerNetworks { id name driver scope }
+          docker { networks { id name driver scope } }
         }
     """,
     "network_details": """
-        query GetDockerNetwork($id: PrefixedID!) {
-          dockerNetwork(id: $id) { id name driver scope containers }
+        query GetDockerNetwork {
+          docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } }
         }
     """,
     "port_conflicts": """
         query GetPortConflicts {
-          docker { portConflicts { containerName port conflictsWith } }
+          docker { portConflicts { containerPorts { privatePort type containers { id name } } lanPorts { lanIpPort publicPort type containers { id name } } } }
         }
     """,
     "check_updates": """
         query CheckContainerUpdates {
-          docker { containerUpdateStatuses { id name updateAvailable currentVersion latestVersion } }
+          docker { containerUpdateStatuses { name updateStatus } }
         }
     """,
 }
@@ -440,12 +440,17 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
-                networks = safe_get(data, "dockerNetworks", default=[])
+                networks = safe_get(data, "docker", "networks", default=[])
                 return {"networks": networks}
 
             if action == "network_details":
-                data = await make_graphql_request(QUERIES["network_details"], {"id": network_id})
-                return dict(safe_get(data, "dockerNetwork", default={}) or {})
+                data = await make_graphql_request(QUERIES["network_details"])
+                all_networks = safe_get(data, "docker", "networks", default=[])
+                # Filter client-side by network_id since the API returns all networks
+                for net in all_networks:
+                    if net.get("id") == network_id or net.get("name") == network_id:
+                        return dict(net)
+                raise ToolError(f"Network '{network_id}' not found.")
 
             if action == "port_conflicts":
                 data = await make_graphql_request(QUERIES["port_conflicts"])

@@ -119,7 +119,7 @@ class TestDockerActions:
         assert result["success"] is True
 
     async def test_networks(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"dockerNetworks": [{"id": "net:1", "name": "bridge"}]}
+        _mock_graphql.return_value = {"docker": {"networks": [{"id": "net:1", "name": "bridge"}]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="networks")
         assert len(result["networks"]) == 1

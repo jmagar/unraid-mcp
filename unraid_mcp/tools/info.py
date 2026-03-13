@@ -19,15 +19,14 @@ QUERIES: dict[str, str] = {
     "overview": """
         query GetSystemInfo {
           info {
-            os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
+            os { platform distro release codename kernel arch hostname logofile serial build uptime }
             cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache }
             memory {
               layout { bank type clockSpeed formFactor manufacturer partNum serialNum }
             }
             baseboard { manufacturer model version serial assetTag }
             system { manufacturer model version serial uuid sku }
-            versions { kernel openssl systemOpenssl systemOpensslLib node v8 npm yarn pm2 gulp grunt git tsc mysql redis mongodb apache nginx php docker postfix postgresql perl python gcc unraid }
-            apps { installed started }
+            versions { core { unraid api kernel } packages { openssl node npm pm2 git nginx php docker } }
             machineId
             time
           }
@@ -68,7 +67,7 @@ QUERIES: dict[str, str] = {
     """,
     "connect": """
         query GetConnectSettings {
-          connect { status sandbox flashGuid }
+          connect { id dynamicRemoteAccess { enabledType runningType error } }
         }
     """,
     "variables": """
@@ -87,12 +86,12 @@ QUERIES: dict[str, str] = {
     """,
     "metrics": """
         query GetMetrics {
-          metrics { cpu { used } memory { used total } }
+          metrics { cpu { percentTotal } memory { used total } }
         }
     """,
     "services": """
         query GetServices {
-          services { name state }
+          services { name online version }
         }
     """,
     "display": """
@@ -122,7 +121,7 @@ QUERIES: dict[str, str] = {
         query GetServer {
           info {
             os { hostname uptime }
-            versions { unraid }
+            versions { core { unraid } }
             machineId time
           }
           array { state }
@@ -131,27 +130,27 @@ QUERIES: dict[str, str] = {
     """,
     "servers": """
         query GetServers {
-          servers { id name status description ip port }
+          servers { id name status comment wanip lanip localurl remoteurl }
         }
     """,
     "flash": """
         query GetFlash {
-          flash { id guid product vendor size }
+          flash { id guid product vendor }
         }
     """,
     "ups_devices": """
         query GetUpsDevices {
-          upsDevices { id model status runtime charge load }
+          upsDevices { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } }
         }
     """,
     "ups_device": """
-        query GetUpsDevice($id: PrefixedID!) {
-          upsDeviceById(id: $id) { id model status runtime charge load voltage frequency temperature }
+        query GetUpsDevice($id: String!) {
+          upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage nominalPower currentPower } }
         }
     """,
     "ups_config": """
         query GetUpsConfig {
-          upsConfiguration { enabled mode cable driver port }
+          upsConfiguration { service upsCable upsType device batteryLevel minutes timeout killUps upsName }
         }
     """,
 }

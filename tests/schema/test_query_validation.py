@@ -388,7 +388,26 @@ class TestDockerMutations:
     def test_all_docker_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.docker import MUTATIONS
 
-        expected = {"start", "stop", "pause", "unpause", "remove", "update", "update_all"}
+        expected = {
+            "start",
+            "stop",
+            "pause",
+            "unpause",
+            "remove",
+            "update",
+            "update_all",
+            "create_folder",
+            "set_folder_children",
+            "delete_entries",
+            "move_to_folder",
+            "move_to_position",
+            "rename_folder",
+            "create_folder_with_items",
+            "update_view_prefs",
+            "sync_templates",
+            "reset_template_mappings",
+            "refresh_digests",
+        }
         assert set(MUTATIONS.keys()) == expected
 
 
@@ -715,7 +734,7 @@ class TestHealthQueries:
         query ComprehensiveHealthCheck {
           info {
             machineId time
-            versions { unraid }
+            versions { core { unraid } }
             os { uptime }
           }
           array { state }
