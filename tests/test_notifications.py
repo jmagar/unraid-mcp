@@ -171,7 +171,7 @@ class TestNotificationsCreateValidation:
 
     async def test_invalid_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="importance must be one of"):
+        with pytest.raises(ToolError, match="Invalid importance"):
             await tool_fn(
                 action="create",
                 title="T",
@@ -183,7 +183,7 @@ class TestNotificationsCreateValidation:
     async def test_normal_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
         """NORMAL is not a valid GraphQL NotificationImportance value (INFO/WARNING/ALERT are)."""
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="importance must be one of"):
+        with pytest.raises(ToolError, match="Invalid importance"):
             await tool_fn(
                 action="create",
                 title="T",

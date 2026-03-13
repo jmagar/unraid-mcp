@@ -97,9 +97,80 @@ MUTATIONS: dict[str, str] = {
           docker { updateAllContainers { id names state status } }
         }
     """,
+    "create_folder": """
+        mutation CreateDockerFolder($name: String!, $parentId: String, $childrenIds: [String!]) {
+          createDockerFolder(name: $name, parentId: $parentId, childrenIds: $childrenIds) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "set_folder_children": """
+        mutation SetDockerFolderChildren($folderId: String, $childrenIds: [String!]!) {
+          setDockerFolderChildren(folderId: $folderId, childrenIds: $childrenIds) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "delete_entries": """
+        mutation DeleteDockerEntries($entryIds: [String!]!) {
+          deleteDockerEntries(entryIds: $entryIds) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "move_to_folder": """
+        mutation MoveDockerEntriesToFolder($sourceEntryIds: [String!]!, $destinationFolderId: String!) {
+          moveDockerEntriesToFolder(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "move_to_position": """
+        mutation MoveDockerItemsToPosition($sourceEntryIds: [String!]!, $destinationFolderId: String!, $position: Float!) {
+          moveDockerItemsToPosition(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId, position: $position) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "rename_folder": """
+        mutation RenameDockerFolder($folderId: String!, $newName: String!) {
+          renameDockerFolder(folderId: $folderId, newName: $newName) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "create_folder_with_items": """
+        mutation CreateDockerFolderWithItems($name: String!, $parentId: String, $sourceEntryIds: [String!], $position: Float) {
+          createDockerFolderWithItems(name: $name, parentId: $parentId, sourceEntryIds: $sourceEntryIds, position: $position) {
+            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
+          }
+        }
+    """,
+    "update_view_prefs": """
+        mutation UpdateDockerViewPreferences($viewId: String, $prefs: JSON!) {
+          updateDockerViewPreferences(viewId: $viewId, prefs: $prefs) {
+            version views { id name rootId }
+          }
+        }
+    """,
+    "sync_templates": """
+        mutation SyncDockerTemplatePaths {
+          syncDockerTemplatePaths { scanned matched skipped errors }
+        }
+    """,
+    "reset_template_mappings": """
+        mutation ResetDockerTemplateMappings {
+          resetDockerTemplateMappings
+        }
+    """,
+    "refresh_digests": """
+        mutation RefreshDockerDigests {
+          refreshDockerDigests
+        }
+    """,
 }
 
-DESTRUCTIVE_ACTIONS = {"remove", "update_all"}
+DESTRUCTIVE_ACTIONS = {"remove", "update_all", "delete_entries", "reset_template_mappings"}
 # NOTE (Code-M-07): "details" and "logs" are listed here because they require a
 # container_id parameter, but unlike mutations they use fuzzy name matching (not
 # strict). This is intentional: read-only queries are safe with fuzzy matching.
@@ -133,6 +204,17 @@ DOCKER_ACTIONS = Literal[
     "network_details",
     "port_conflicts",
     "check_updates",
+    "create_folder",
+    "set_folder_children",
+    "delete_entries",
+    "move_to_folder",
+    "move_to_position",
+    "rename_folder",
+    "create_folder_with_items",
+    "update_view_prefs",
+    "sync_templates",
+    "reset_template_mappings",
+    "refresh_digests",
 ]
 
 if set(get_args(DOCKER_ACTIONS)) != ALL_ACTIONS:
@@ -283,6 +365,17 @@ def register_docker_tool(mcp: FastMCP) -> None:
         *,
         confirm: bool = False,
         tail_lines: int = 100,
+        folder_name: str | None = None,
+        folder_id: str | None = None,
+        parent_id: str | None = None,
+        children_ids: list[str] | None = None,
+        entry_ids: list[str] | None = None,
+        source_entry_ids: list[str] | None = None,
+        destination_folder_id: str | None = None,
+        position: float | None = None,
+        new_folder_name: str | None = None,
+        view_id: str = "default",
+        view_prefs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Manage Docker containers, networks, and updates.
 
@@ -397,6 +490,100 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["update_all"])
                 results = safe_get(data, "docker", "updateAllContainers", default=[])
                 return {"success": True, "action": "update_all", "containers": results}
+
+            # --- Docker organizer mutations ---
+            if action == "create_folder":
+                if not folder_name:
+                    raise ToolError("folder_name is required for 'create_folder' action")
+                _vars: dict[str, Any] = {"name": folder_name}
+                if parent_id is not None:
+                    _vars["parentId"] = parent_id
+                if children_ids is not None:
+                    _vars["childrenIds"] = children_ids
+                data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
+                return {"success": True, "action": "create_folder", "organizer": data.get("createDockerFolder")}
+
+            if action == "set_folder_children":
+                if not children_ids:
+                    raise ToolError("children_ids is required for 'set_folder_children' action")
+                _vars = {"childrenIds": children_ids}
+                if folder_id is not None:
+                    _vars["folderId"] = folder_id
+                data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
+                return {"success": True, "action": "set_folder_children", "organizer": data.get("setDockerFolderChildren")}
+
+            if action == "delete_entries":
+                if not entry_ids:
+                    raise ToolError("entry_ids is required for 'delete_entries' action")
+                data = await make_graphql_request(MUTATIONS["delete_entries"], {"entryIds": entry_ids})
+                return {"success": True, "action": "delete_entries", "organizer": data.get("deleteDockerEntries")}
+
+            if action == "move_to_folder":
+                if not source_entry_ids:
+                    raise ToolError("source_entry_ids is required for 'move_to_folder' action")
+                if not destination_folder_id:
+                    raise ToolError("destination_folder_id is required for 'move_to_folder' action")
+                data = await make_graphql_request(
+                    MUTATIONS["move_to_folder"],
+                    {"sourceEntryIds": source_entry_ids, "destinationFolderId": destination_folder_id},
+                )
+                return {"success": True, "action": "move_to_folder", "organizer": data.get("moveDockerEntriesToFolder")}
+
+            if action == "move_to_position":
+                if not source_entry_ids:
+                    raise ToolError("source_entry_ids is required for 'move_to_position' action")
+                if not destination_folder_id:
+                    raise ToolError("destination_folder_id is required for 'move_to_position' action")
+                if position is None:
+                    raise ToolError("position is required for 'move_to_position' action")
+                data = await make_graphql_request(
+                    MUTATIONS["move_to_position"],
+                    {"sourceEntryIds": source_entry_ids, "destinationFolderId": destination_folder_id, "position": position},
+                )
+                return {"success": True, "action": "move_to_position", "organizer": data.get("moveDockerItemsToPosition")}
+
+            if action == "rename_folder":
+                if not folder_id:
+                    raise ToolError("folder_id is required for 'rename_folder' action")
+                if not new_folder_name:
+                    raise ToolError("new_folder_name is required for 'rename_folder' action")
+                data = await make_graphql_request(
+                    MUTATIONS["rename_folder"], {"folderId": folder_id, "newName": new_folder_name}
+                )
+                return {"success": True, "action": "rename_folder", "organizer": data.get("renameDockerFolder")}
+
+            if action == "create_folder_with_items":
+                if not folder_name:
+                    raise ToolError("folder_name is required for 'create_folder_with_items' action")
+                _vars = {"name": folder_name}
+                if parent_id is not None:
+                    _vars["parentId"] = parent_id
+                if entry_ids is not None:
+                    _vars["sourceEntryIds"] = entry_ids
+                if position is not None:
+                    _vars["position"] = position
+                data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
+                return {"success": True, "action": "create_folder_with_items", "organizer": data.get("createDockerFolderWithItems")}
+
+            if action == "update_view_prefs":
+                if view_prefs is None:
+                    raise ToolError("view_prefs is required for 'update_view_prefs' action")
+                data = await make_graphql_request(
+                    MUTATIONS["update_view_prefs"], {"viewId": view_id, "prefs": view_prefs}
+                )
+                return {"success": True, "action": "update_view_prefs", "organizer": data.get("updateDockerViewPreferences")}
+
+            if action == "sync_templates":
+                data = await make_graphql_request(MUTATIONS["sync_templates"])
+                return {"success": True, "action": "sync_templates", "result": data.get("syncDockerTemplatePaths")}
+
+            if action == "reset_template_mappings":
+                data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
+                return {"success": True, "action": "reset_template_mappings", "result": data.get("resetDockerTemplateMappings")}
+
+            if action == "refresh_digests":
+                data = await make_graphql_request(MUTATIONS["refresh_digests"])
+                return {"success": True, "action": "refresh_digests", "result": data.get("refreshDockerDigests")}
 
             # Single-container mutations
             if action in MUTATIONS:

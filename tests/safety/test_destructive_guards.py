@@ -41,7 +41,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str]]] = {
         "module": "unraid_mcp.tools.docker",
         "register_fn": "register_docker_tool",
         "tool_name": "unraid_docker",
-        "actions": {"remove", "update_all"},
+        "actions": {"remove", "update_all", "delete_entries", "reset_template_mappings"},
         "runtime_set": DOCKER_DESTRUCTIVE,
     },
     "vm": {

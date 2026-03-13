@@ -58,7 +58,16 @@ QUERIES: dict[str, str] = {
     """,
 }
 
-ALL_ACTIONS = set(QUERIES)
+MUTATIONS: dict[str, str] = {
+    "flash_backup": """
+        mutation InitiateFlashBackup($input: InitiateFlashBackupInput!) {
+          initiateFlashBackup(input: $input) { status jobId }
+        }
+    """,
+}
+
+DESTRUCTIVE_ACTIONS = {"flash_backup"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 STORAGE_ACTIONS = Literal[
     "shares",
@@ -67,6 +76,7 @@ STORAGE_ACTIONS = Literal[
     "unassigned",
     "log_files",
     "logs",
+    "flash_backup",
 ]
 
 if set(get_args(STORAGE_ACTIONS)) != ALL_ACTIONS:
@@ -87,6 +97,11 @@ def register_storage_tool(mcp: FastMCP) -> None:
         disk_id: str | None = None,
         log_path: str | None = None,
         tail_lines: int = 100,
+        confirm: bool = False,
+        remote_name: str | None = None,
+        source_path: str | None = None,
+        destination_path: str | None = None,
+        backup_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Manage Unraid storage, disks, and logs.
 
@@ -97,9 +112,13 @@ def register_storage_tool(mcp: FastMCP) -> None:
           unassigned - List unassigned devices
           log_files - List available log files
           logs - Retrieve log content (requires log_path, optional tail_lines)
+          flash_backup - Initiate flash backup via rclone (requires remote_name, source_path, destination_path, confirm=True)
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
+
+        if action in DESTRUCTIVE_ACTIONS and not confirm:
+            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         if action == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for 'disk_details' action")
@@ -120,6 +139,29 @@ def register_storage_tool(mcp: FastMCP) -> None:
                     f"Use log_files action to discover valid paths."
                 )
             log_path = normalized
+
+        if action == "flash_backup":
+            if not remote_name:
+                raise ToolError("remote_name is required for 'flash_backup' action")
+            if not source_path:
+                raise ToolError("source_path is required for 'flash_backup' action")
+            if not destination_path:
+                raise ToolError("destination_path is required for 'flash_backup' action")
+            input_data: dict[str, Any] = {
+                "remoteName": remote_name,
+                "sourcePath": source_path,
+                "destinationPath": destination_path,
+            }
+            if backup_options is not None:
+                input_data["options"] = backup_options
+            with tool_error_handler("storage", action, logger):
+                logger.info("Executing unraid_storage action=flash_backup")
+                data = await make_graphql_request(MUTATIONS["flash_backup"], {"input": input_data})
+                return {
+                    "success": True,
+                    "action": "flash_backup",
+                    "data": data.get("initiateFlashBackup"),
+                }
 
         query = QUERIES[action]
         variables: dict[str, Any] | None = None

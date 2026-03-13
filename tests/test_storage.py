@@ -283,3 +283,38 @@ class TestStorageNetworkErrors:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="HTTP error 500"):
             await tool_fn(action="disks")
+
+
+class TestStorageFlashBackup:
+    async def test_flash_backup_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destructive"):
+            await tool_fn(action="flash_backup", remote_name="r", source_path="/boot", destination_path="r:b")
+
+    async def test_flash_backup_requires_remote_name(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="remote_name"):
+            await tool_fn(action="flash_backup", confirm=True)
+
+    async def test_flash_backup_requires_source_path(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="source_path"):
+            await tool_fn(action="flash_backup", confirm=True, remote_name="r")
+
+    async def test_flash_backup_requires_destination_path(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destination_path"):
+            await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot")
+
+    async def test_flash_backup_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:1"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b")
+        assert result["success"] is True
+        assert result["data"]["status"] == "started"
+
+    async def test_flash_backup_passes_options(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:2"}}
+        tool_fn = _make_tool()
+        await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b", backup_options={"dryRun": True})
+        assert _mock_graphql.call_args[0][1]["input"]["options"] == {"dryRun": True}
