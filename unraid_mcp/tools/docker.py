@@ -315,8 +315,8 @@ async def _resolve_container_id(container_id: str, *, strict: bool = False) -> s
     data = await make_graphql_request(list_query)
     containers = safe_get(data, "docker", "containers", default=[])
 
-    # Short hex prefix: match by ID prefix before trying name matching (strict bypasses this)
-    if not strict and _DOCKER_SHORT_ID_PATTERN.match(container_id):
+    # Short hex prefix: match by ID prefix before trying name matching
+    if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
         matches: list[dict[str, Any]] = []
         for c in containers:
@@ -501,22 +501,36 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 if children_ids is not None:
                     _vars["childrenIds"] = children_ids
                 data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
-                return {"success": True, "action": "create_folder", "organizer": data.get("createDockerFolder")}
+                return {
+                    "success": True,
+                    "action": "create_folder",
+                    "organizer": data.get("createDockerFolder"),
+                }
 
             if action == "set_folder_children":
-                if not children_ids:
+                if children_ids is None:
                     raise ToolError("children_ids is required for 'set_folder_children' action")
                 _vars = {"childrenIds": children_ids}
                 if folder_id is not None:
                     _vars["folderId"] = folder_id
                 data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
-                return {"success": True, "action": "set_folder_children", "organizer": data.get("setDockerFolderChildren")}
+                return {
+                    "success": True,
+                    "action": "set_folder_children",
+                    "organizer": data.get("setDockerFolderChildren"),
+                }
 
             if action == "delete_entries":
                 if not entry_ids:
                     raise ToolError("entry_ids is required for 'delete_entries' action")
-                data = await make_graphql_request(MUTATIONS["delete_entries"], {"entryIds": entry_ids})
-                return {"success": True, "action": "delete_entries", "organizer": data.get("deleteDockerEntries")}
+                data = await make_graphql_request(
+                    MUTATIONS["delete_entries"], {"entryIds": entry_ids}
+                )
+                return {
+                    "success": True,
+                    "action": "delete_entries",
+                    "organizer": data.get("deleteDockerEntries"),
+                }
 
             if action == "move_to_folder":
                 if not source_entry_ids:
@@ -525,22 +539,39 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     raise ToolError("destination_folder_id is required for 'move_to_folder' action")
                 data = await make_graphql_request(
                     MUTATIONS["move_to_folder"],
-                    {"sourceEntryIds": source_entry_ids, "destinationFolderId": destination_folder_id},
+                    {
+                        "sourceEntryIds": source_entry_ids,
+                        "destinationFolderId": destination_folder_id,
+                    },
                 )
-                return {"success": True, "action": "move_to_folder", "organizer": data.get("moveDockerEntriesToFolder")}
+                return {
+                    "success": True,
+                    "action": "move_to_folder",
+                    "organizer": data.get("moveDockerEntriesToFolder"),
+                }
 
             if action == "move_to_position":
                 if not source_entry_ids:
                     raise ToolError("source_entry_ids is required for 'move_to_position' action")
                 if not destination_folder_id:
-                    raise ToolError("destination_folder_id is required for 'move_to_position' action")
+                    raise ToolError(
+                        "destination_folder_id is required for 'move_to_position' action"
+                    )
                 if position is None:
                     raise ToolError("position is required for 'move_to_position' action")
                 data = await make_graphql_request(
                     MUTATIONS["move_to_position"],
-                    {"sourceEntryIds": source_entry_ids, "destinationFolderId": destination_folder_id, "position": position},
+                    {
+                        "sourceEntryIds": source_entry_ids,
+                        "destinationFolderId": destination_folder_id,
+                        "position": position,
+                    },
                 )
-                return {"success": True, "action": "move_to_position", "organizer": data.get("moveDockerItemsToPosition")}
+                return {
+                    "success": True,
+                    "action": "move_to_position",
+                    "organizer": data.get("moveDockerItemsToPosition"),
+                }
 
             if action == "rename_folder":
                 if not folder_id:
@@ -550,7 +581,11 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["rename_folder"], {"folderId": folder_id, "newName": new_folder_name}
                 )
-                return {"success": True, "action": "rename_folder", "organizer": data.get("renameDockerFolder")}
+                return {
+                    "success": True,
+                    "action": "rename_folder",
+                    "organizer": data.get("renameDockerFolder"),
+                }
 
             if action == "create_folder_with_items":
                 if not folder_name:
@@ -558,12 +593,16 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 _vars = {"name": folder_name}
                 if parent_id is not None:
                     _vars["parentId"] = parent_id
-                if entry_ids is not None:
-                    _vars["sourceEntryIds"] = entry_ids
+                if source_entry_ids is not None:
+                    _vars["sourceEntryIds"] = source_entry_ids
                 if position is not None:
                     _vars["position"] = position
                 data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
-                return {"success": True, "action": "create_folder_with_items", "organizer": data.get("createDockerFolderWithItems")}
+                return {
+                    "success": True,
+                    "action": "create_folder_with_items",
+                    "organizer": data.get("createDockerFolderWithItems"),
+                }
 
             if action == "update_view_prefs":
                 if view_prefs is None:
@@ -571,19 +610,35 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["update_view_prefs"], {"viewId": view_id, "prefs": view_prefs}
                 )
-                return {"success": True, "action": "update_view_prefs", "organizer": data.get("updateDockerViewPreferences")}
+                return {
+                    "success": True,
+                    "action": "update_view_prefs",
+                    "organizer": data.get("updateDockerViewPreferences"),
+                }
 
             if action == "sync_templates":
                 data = await make_graphql_request(MUTATIONS["sync_templates"])
-                return {"success": True, "action": "sync_templates", "result": data.get("syncDockerTemplatePaths")}
+                return {
+                    "success": True,
+                    "action": "sync_templates",
+                    "result": data.get("syncDockerTemplatePaths"),
+                }
 
             if action == "reset_template_mappings":
                 data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
-                return {"success": True, "action": "reset_template_mappings", "result": data.get("resetDockerTemplateMappings")}
+                return {
+                    "success": True,
+                    "action": "reset_template_mappings",
+                    "result": data.get("resetDockerTemplateMappings"),
+                }
 
             if action == "refresh_digests":
                 data = await make_graphql_request(MUTATIONS["refresh_digests"])
-                return {"success": True, "action": "refresh_digests", "result": data.get("refreshDockerDigests")}
+                return {
+                    "success": True,
+                    "action": "refresh_digests",
+                    "result": data.get("refreshDockerDigests"),
+                }
 
             # Single-container mutations
             if action in MUTATIONS:
