@@ -48,6 +48,9 @@ logs/
 # Serena IDE configuration
 .serena/
 
+# Claude Code worktrees (temporary agent isolation dirs)
+.claude/worktrees/
+
 # Documentation and session artifacts
 .docs/
 .full-review/
