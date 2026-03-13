@@ -8,7 +8,7 @@ import pytest
 
 from unraid_mcp.core.exceptions import ToolError
 from unraid_mcp.subscriptions.diagnostics import (
-    _ALLOWED_SUBSCRIPTION_NAMES,
+    _ALLOWED_SUBSCRIPTION_FIELDS,
     _validate_subscription_query,
 )
 
@@ -16,7 +16,7 @@ from unraid_mcp.subscriptions.diagnostics import (
 class TestValidateSubscriptionQueryAllowed:
     """All whitelisted subscription names must be accepted."""
 
-    @pytest.mark.parametrize("sub_name", sorted(_ALLOWED_SUBSCRIPTION_NAMES))
+    @pytest.mark.parametrize("sub_name", sorted(_ALLOWED_SUBSCRIPTION_FIELDS))
     def test_all_allowed_names_accepted(self, sub_name: str) -> None:
         query = f"subscription {{ {sub_name} {{ data }} }}"
         result = _validate_subscription_query(query)
