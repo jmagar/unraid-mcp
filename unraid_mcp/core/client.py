@@ -22,6 +22,7 @@ from ..config.settings import (
     VERSION,
 )
 from ..core.exceptions import ToolError
+from .utils import safe_display_url
 
 
 # Sensitive keys to redact from debug logs (frozenset — immutable, Final — no accidental reassignment)
@@ -337,7 +338,7 @@ async def make_graphql_request(
     if variables:
         payload["variables"] = variables
 
-    logger.debug(f"Making GraphQL request to {UNRAID_API_URL}:")
+    logger.debug(f"Making GraphQL request to {safe_display_url(UNRAID_API_URL)}:")
     logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
     if variables:
         logger.debug(f"Variables: {redact_sensitive(variables)}")
