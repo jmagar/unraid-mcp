@@ -291,37 +291,55 @@ class TestInfoMutations:
             await tool_fn(action="update_server")
 
     async def test_update_server_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"updateServerIdentity": {"id": "s:1", "name": "tootie", "comment": None, "status": "online"}}
+        _mock_graphql.return_value = {
+            "updateServerIdentity": {
+                "id": "s:1",
+                "name": "tootie",
+                "comment": None,
+                "status": "online",
+            }
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="update_server", server_name="tootie")
         assert result["success"] is True
         assert result["data"]["name"] == "tootie"
 
     async def test_update_server_passes_optional_fields(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"updateServerIdentity": {"id": "s:1", "name": "x", "comment": None, "status": "online"}}
+        _mock_graphql.return_value = {
+            "updateServerIdentity": {"id": "s:1", "name": "x", "comment": None, "status": "online"}
+        }
         tool_fn = _make_tool()
         await tool_fn(action="update_server", server_name="x", sys_model="custom")
         assert _mock_graphql.call_args[0][1]["sysModel"] == "custom"
 
+    async def test_update_ssh_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="confirm=True"):
+            await tool_fn(action="update_ssh", ssh_enabled=True, ssh_port=22)
+
     async def test_update_ssh_requires_enabled(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="ssh_enabled"):
-            await tool_fn(action="update_ssh", ssh_port=22)
+            await tool_fn(action="update_ssh", confirm=True, ssh_port=22)
 
     async def test_update_ssh_requires_port(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="ssh_port"):
-            await tool_fn(action="update_ssh", ssh_enabled=True)
+            await tool_fn(action="update_ssh", confirm=True, ssh_enabled=True)
 
     async def test_update_ssh_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"updateSshSettings": {"id": "s:1", "useSsh": True, "portssh": 22}}
+        _mock_graphql.return_value = {
+            "updateSshSettings": {"id": "s:1", "useSsh": True, "portssh": 22}
+        }
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_ssh", ssh_enabled=True, ssh_port=22)
+        result = await tool_fn(action="update_ssh", confirm=True, ssh_enabled=True, ssh_port=22)
         assert result["success"] is True
         assert result["data"]["useSsh"] is True
 
     async def test_update_ssh_passes_correct_input(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"updateSshSettings": {"id": "s:1", "useSsh": False, "portssh": 2222}}
+        _mock_graphql.return_value = {
+            "updateSshSettings": {"id": "s:1", "useSsh": False, "portssh": 2222}
+        }
         tool_fn = _make_tool()
-        await tool_fn(action="update_ssh", ssh_enabled=False, ssh_port=2222)
+        await tool_fn(action="update_ssh", confirm=True, ssh_enabled=False, ssh_port=2222)
         assert _mock_graphql.call_args[0][1] == {"input": {"enabled": False, "port": 2222}}

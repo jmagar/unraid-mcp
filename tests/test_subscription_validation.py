@@ -23,21 +23,21 @@ class TestValidateSubscriptionQueryAllowed:
         assert result == sub_name
 
     def test_returns_extracted_subscription_name(self) -> None:
-        query = "subscription { cpuSubscription { usage } }"
-        assert _validate_subscription_query(query) == "cpuSubscription"
+        query = "subscription { cpu { usage } }"
+        assert _validate_subscription_query(query) == "cpu"
 
     def test_leading_whitespace_accepted(self) -> None:
-        query = "  subscription { memorySubscription { free } }"
-        assert _validate_subscription_query(query) == "memorySubscription"
+        query = "  subscription { memory { free } }"
+        assert _validate_subscription_query(query) == "memory"
 
     def test_multiline_query_accepted(self) -> None:
-        query = "subscription {\n  logFileSubscription {\n    content\n  }\n}"
-        assert _validate_subscription_query(query) == "logFileSubscription"
+        query = "subscription {\n  logFile {\n    content\n  }\n}"
+        assert _validate_subscription_query(query) == "logFile"
 
     def test_case_insensitive_subscription_keyword(self) -> None:
         """'SUBSCRIPTION' should be accepted (regex uses IGNORECASE)."""
-        query = "SUBSCRIPTION { cpuSubscription { usage } }"
-        assert _validate_subscription_query(query) == "cpuSubscription"
+        query = "SUBSCRIPTION { cpu { usage } }"
+        assert _validate_subscription_query(query) == "cpu"
 
 
 class TestValidateSubscriptionQueryForbiddenKeywords:
@@ -72,16 +72,16 @@ class TestValidateSubscriptionQueryForbiddenKeywords:
     def test_mutation_field_identifier_not_rejected(self) -> None:
         """'mutationField' as an identifier must NOT be rejected — only standalone 'mutation'."""
         # This tests the \b word boundary in _FORBIDDEN_KEYWORDS
-        query = "subscription { cpuSubscription { mutationField } }"
+        query = "subscription { cpu { mutationField } }"
         # Should not raise — "mutationField" is an identifier, not the keyword
         result = _validate_subscription_query(query)
-        assert result == "cpuSubscription"
+        assert result == "cpu"
 
     def test_query_field_identifier_not_rejected(self) -> None:
         """'queryResult' as an identifier must NOT be rejected."""
-        query = "subscription { cpuSubscription { queryResult } }"
+        query = "subscription { cpu { queryResult } }"
         result = _validate_subscription_query(query)
-        assert result == "cpuSubscription"
+        assert result == "cpu"
 
 
 class TestValidateSubscriptionQueryInvalidFormat:
@@ -114,9 +114,9 @@ class TestValidateSubscriptionQueryUnknownName:
             _validate_subscription_query(query)
 
     def test_error_message_includes_allowed_list(self) -> None:
-        """Error message must list the allowed subscription names for usability."""
+        """Error message must list the allowed subscription field names for usability."""
         query = "subscription { badSub { data } }"
-        with pytest.raises(ToolError, match="Allowed subscriptions"):
+        with pytest.raises(ToolError, match="Allowed fields"):
             _validate_subscription_query(query)
 
     def test_arbitrary_field_name_rejected(self) -> None:
@@ -125,7 +125,7 @@ class TestValidateSubscriptionQueryUnknownName:
             _validate_subscription_query(query)
 
     def test_close_but_not_whitelisted_rejected(self) -> None:
-        """'cpu' without 'Subscription' suffix is not in the allow-list."""
-        query = "subscription { cpu { usage } }"
+        """'cpuSubscription' (old operation-style name) is not in the field allow-list."""
+        query = "subscription { cpuSubscription { usage } }"
         with pytest.raises(ToolError, match="not allowed"):
             _validate_subscription_query(query)
