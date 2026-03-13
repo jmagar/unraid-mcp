@@ -659,9 +659,10 @@ class TestArrayToolRequests:
             return_value=_graphql_response({"parityCheck": {"start": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="parity_start")
+        result = await tool(action="parity_start", correct=False)
         body = _extract_request_body(route.calls.last.request)
         assert "StartParityCheck" in body["query"]
+        assert body["variables"] == {"correct": False}
         assert result["success"] is True
 
     @respx.mock
@@ -858,9 +859,9 @@ class TestNotificationsToolRequests:
     async def test_create_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"notifications": {"createNotification": {
+                {"createNotification": {
                     "id": "n1", "title": "Test", "importance": "INFO",
-                }}}
+                }}
             )
         )
         tool = self._get_tool()
@@ -882,7 +883,7 @@ class TestNotificationsToolRequests:
     async def test_archive_sends_id_variable(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"notifications": {"archiveNotification": True}}
+                {"archiveNotification": {"id": "notif-1"}}
             )
         )
         tool = self._get_tool()
@@ -901,7 +902,7 @@ class TestNotificationsToolRequests:
     async def test_delete_sends_id_and_type(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"notifications": {"deleteNotification": True}}
+                {"deleteNotification": {"unread": {"total": 0}}}
             )
         )
         tool = self._get_tool()
@@ -920,7 +921,7 @@ class TestNotificationsToolRequests:
     async def test_archive_all_sends_importance_when_provided(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"notifications": {"archiveAll": True}}
+                {"archiveAll": {"archive": {"total": 1}}}
             )
         )
         tool = self._get_tool()
@@ -1087,10 +1088,10 @@ class TestKeysToolRequests:
     async def test_create_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"createApiKey": {
+                {"apiKey": {"create": {
                     "id": "k2", "name": "new-key",
                     "key": "secret", "roles": ["read"],
-                }}
+                }}}
             )
         )
         tool = self._get_tool()
@@ -1106,7 +1107,7 @@ class TestKeysToolRequests:
     async def test_update_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"updateApiKey": {"id": "k1", "name": "renamed", "roles": ["admin"]}}
+                {"apiKey": {"update": {"id": "k1", "name": "renamed", "roles": ["admin"]}}}
             )
         )
         tool = self._get_tool()
@@ -1126,12 +1127,12 @@ class TestKeysToolRequests:
     @respx.mock
     async def test_delete_sends_ids_when_confirmed(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"deleteApiKeys": True})
+            return_value=_graphql_response({"apiKey": {"delete": True}})
         )
         tool = self._get_tool()
         result = await tool(action="delete", key_id="k1", confirm=True)
         body = _extract_request_body(route.calls.last.request)
-        assert "DeleteApiKeys" in body["query"]
+        assert "DeleteApiKey" in body["query"]
         assert body["variables"]["input"]["ids"] == ["k1"]
         assert result["success"] is True
 

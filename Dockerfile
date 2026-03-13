@@ -4,8 +4,8 @@ FROM python:3.12-slim
 # Set the working directory in the container
 WORKDIR /app
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Install uv (pinned tag to avoid mutable latest)
+COPY --from=ghcr.io/astral-sh/uv:0.5.4 /uv /uvx /usr/local/bin/
 
 # Create non-root user with home directory and give ownership of /app
 RUN groupadd --gid 1000 appuser && \
@@ -42,7 +42,7 @@ ENV UNRAID_MCP_LOG_LEVEL="INFO"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6970/mcp')"]
+    CMD ["python", "-c", "import os, urllib.request; port = os.getenv('UNRAID_MCP_PORT', '6970'); urllib.request.urlopen(f'http://localhost:{port}/mcp')"]
 
 # Run unraid-mcp-server when the container launches
 CMD ["uv", "run", "unraid-mcp-server"]

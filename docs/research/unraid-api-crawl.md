@@ -678,11 +678,9 @@ type Query {
 
 ```graphql
 type Mutation {
-    createApiKey(input: CreateApiKeyInput!): ApiKeyWithSecret!
+    apiKey: ApiKeyMutations!
     addPermission(input: AddPermissionInput!): Boolean!
     addRoleForUser(input: AddRoleForUserInput!): Boolean!
-    addRoleForApiKey(input: AddRoleForApiKeyInput!): Boolean!
-    removeRoleFromApiKey(input: RemoveRoleFromApiKeyInput!): Boolean!
     startArray: Array
     stopArray: Array
     addDiskToArray(input: arrayDiskInput): Array

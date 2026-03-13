@@ -44,33 +44,33 @@ QUERIES: dict[str, str] = {
 
 MUTATIONS: dict[str, str] = {
     "create": """
-        mutation CreateNotification($input: CreateNotificationInput!) {
-          notifications { createNotification(input: $input) { id title importance } }
+        mutation CreateNotification($input: NotificationData!) {
+          createNotification(input: $input) { id title importance }
         }
     """,
     "archive": """
         mutation ArchiveNotification($id: PrefixedID!) {
-          notifications { archiveNotification(id: $id) }
+          archiveNotification(id: $id)
         }
     """,
     "unread": """
         mutation UnreadNotification($id: PrefixedID!) {
-          notifications { unreadNotification(id: $id) }
+          unreadNotification(id: $id)
         }
     """,
     "delete": """
         mutation DeleteNotification($id: PrefixedID!, $type: NotificationType!) {
-          notifications { deleteNotification(id: $id, type: $type) }
+          deleteNotification(id: $id, type: $type)
         }
     """,
     "delete_archived": """
         mutation DeleteArchivedNotifications {
-          notifications { deleteArchivedNotifications }
+          deleteArchivedNotifications
         }
     """,
     "archive_all": """
         mutation ArchiveAllNotifications($importance: NotificationImportance) {
-          notifications { archiveAll(importance: $importance) }
+          archiveAll(importance: $importance)
         }
     """,
 }

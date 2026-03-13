@@ -82,9 +82,7 @@ class TestNotificationsActions:
 
     async def test_create(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "notifications": {
-                "createNotification": {"id": "n:new", "title": "Test", "importance": "INFO"}
-            }
+            "createNotification": {"id": "n:new", "title": "Test", "importance": "INFO"}
         }
         tool_fn = _make_tool()
         result = await tool_fn(
@@ -97,13 +95,13 @@ class TestNotificationsActions:
         assert result["success"] is True
 
     async def test_archive_notification(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"notifications": {"archiveNotification": True}}
+        _mock_graphql.return_value = {"archiveNotification": {"id": "n:1"}}
         tool_fn = _make_tool()
         result = await tool_fn(action="archive", notification_id="n:1")
         assert result["success"] is True
 
     async def test_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"notifications": {"deleteNotification": True}}
+        _mock_graphql.return_value = {"deleteNotification": {"unread": {"total": 0}}}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="delete",
@@ -114,13 +112,13 @@ class TestNotificationsActions:
         assert result["success"] is True
 
     async def test_archive_all(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"notifications": {"archiveAll": True}}
+        _mock_graphql.return_value = {"archiveAll": {"archive": {"total": 1}}}
         tool_fn = _make_tool()
         result = await tool_fn(action="archive_all")
         assert result["success"] is True
 
     async def test_unread_notification(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"notifications": {"unreadNotification": True}}
+        _mock_graphql.return_value = {"unreadNotification": {"id": "n:1"}}
         tool_fn = _make_tool()
         result = await tool_fn(action="unread", notification_id="n:1")
         assert result["success"] is True
@@ -140,7 +138,7 @@ class TestNotificationsActions:
         assert filter_var["offset"] == 5
 
     async def test_delete_archived(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"notifications": {"deleteArchivedNotifications": True}}
+        _mock_graphql.return_value = {"deleteArchivedNotifications": {"archive": {"total": 0}}}
         tool_fn = _make_tool()
         result = await tool_fn(action="delete_archived", confirm=True)
         assert result["success"] is True
@@ -180,9 +178,7 @@ class TestNotificationsCreateValidation:
             )
 
     async def test_alert_importance_accepted(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "notifications": {"createNotification": {"id": "n:1", "importance": "ALERT"}}
-        }
+        _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "ALERT"}}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="create", title="T", subject="S", description="D", importance="alert"
@@ -223,9 +219,7 @@ class TestNotificationsCreateValidation:
             )
 
     async def test_title_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "notifications": {"createNotification": {"id": "n:1", "importance": "NORMAL"}}
-        }
+        _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "NORMAL"}}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="create",

@@ -243,13 +243,13 @@ Every mutation identified across all research documents with their parameters an
 | Mutation | Parameters | Returns | Current MCP Coverage |
 |----------|------------|---------|---------------------|
 | `login(username, password)` | `String!`, `String!` | `String` | **NO** |
-| `createApiKey(input)` | `CreateApiKeyInput!` | `ApiKeyWithSecret!` | **NO** |
+| `apiKey.create(input)` | `CreateApiKeyInput!` | `ApiKey!` | **NO** |
 | `addPermission(input)` | `AddPermissionInput!` | `Boolean!` | **NO** |
 | `addRoleForUser(input)` | `AddRoleForUserInput!` | `Boolean!` | **NO** |
 | `addRoleForApiKey(input)` | `AddRoleForApiKeyInput!` | `Boolean!` | **NO** |
 | `removeRoleFromApiKey(input)` | `RemoveRoleFromApiKeyInput!` | `Boolean!` | **NO** |
-| `deleteApiKeys(input)` | API key IDs | `Boolean` | **NO** |
-| `updateApiKey(input)` | API key update data | `Boolean` | **NO** |
+| `apiKey.delete(input)` | API key IDs | `Boolean!` | **NO** |
+| `apiKey.update(input)` | API key update data | `ApiKey!` | **NO** |
 | `addUser(input)` | `addUserInput!` | `User` | **NO** |
 | `deleteUser(input)` | `deleteUserInput!` | `User` | **NO** |
 
@@ -417,11 +417,11 @@ GRAPHQL_PUBSUB_CHANNEL {
 
 | Input Type | Used By | Fields |
 |-----------|---------|--------|
-| `CreateApiKeyInput` | `createApiKey` | `name!`, `description`, `roles[]`, `permissions[]`, `overwrite` |
+| `CreateApiKeyInput` | `apiKey.create` | `name!`, `description`, `roles[]`, `permissions[]`, `overwrite` |
 | `AddPermissionInput` | `addPermission` | `resource!`, `actions![]` |
 | `AddRoleForUserInput` | `addRoleForUser` | User + role assignment |
-| `AddRoleForApiKeyInput` | `addRoleForApiKey` | API key + role assignment |
-| `RemoveRoleFromApiKeyInput` | `removeRoleFromApiKey` | API key + role removal |
+| `AddRoleForApiKeyInput` | `apiKey.addRole` | API key + role assignment |
+| `RemoveRoleFromApiKeyInput` | `apiKey.removeRole` | API key + role removal |
 | `arrayDiskInput` | `addDiskToArray`, `removeDiskFromArray` | Disk assignment data |
 | `ConnectSignInInput` | `connectSignIn` | Connect credentials |
 | `EnableDynamicRemoteAccessInput` | `enableDynamicRemoteAccess` | Remote access config |
@@ -619,9 +619,9 @@ The current MCP server has 10 tools (76 actions) after consolidation. The follow
 |--------------|---------------|---------------|
 | `list_api_keys()` | `apiKeys` query | Key inventory |
 | `get_api_key(id)` | `apiKey(id)` query | Key details |
-| `create_api_key(input)` | `createApiKey` mutation | Key provisioning |
-| `delete_api_keys(input)` | `deleteApiKeys` mutation | Key cleanup |
-| `update_api_key(input)` | `updateApiKey` mutation | Key modification |
+| `create_api_key(input)` | `apiKey.create` mutation | Key provisioning |
+| `delete_api_keys(input)` | `apiKey.delete` mutation | Key cleanup |
+| `update_api_key(input)` | `apiKey.update` mutation | Key modification |
 
 #### Remote Access Management (0 tools currently, 1 query + 3 mutations)
 

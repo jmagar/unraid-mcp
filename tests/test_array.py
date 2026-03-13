@@ -39,12 +39,17 @@ class TestArrayValidation:
             with pytest.raises(ToolError, match="Invalid action"):
                 await tool_fn(action=action)
 
+    async def test_parity_start_requires_correct(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="correct is required"):
+            await tool_fn(action="parity_start")
+
 
 class TestArrayActions:
     async def test_parity_start(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": True}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="parity_start")
+        result = await tool_fn(action="parity_start", correct=False)
         assert result["success"] is True
         assert result["action"] == "parity_start"
         _mock_graphql.assert_called_once()
@@ -94,14 +99,14 @@ class TestArrayMutationFailures:
     async def test_parity_start_mutation_returns_false(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": False}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="parity_start")
+        result = await tool_fn(action="parity_start", correct=False)
         assert result["success"] is True
         assert result["data"] == {"parityCheck": {"start": False}}
 
     async def test_parity_start_mutation_returns_null(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": None}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="parity_start")
+        result = await tool_fn(action="parity_start", correct=False)
         assert result["success"] is True
         assert result["data"] == {"parityCheck": {"start": None}}
 
@@ -110,7 +115,7 @@ class TestArrayMutationFailures:
     ) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": {}}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="parity_start")
+        result = await tool_fn(action="parity_start", correct=False)
         assert result["success"] is True
         assert result["data"] == {"parityCheck": {"start": {}}}
 
@@ -128,7 +133,7 @@ class TestArrayNetworkErrors:
         _mock_graphql.side_effect = ToolError("HTTP error 500: Internal Server Error")
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="HTTP error 500"):
-            await tool_fn(action="parity_start")
+            await tool_fn(action="parity_start", correct=False)
 
     async def test_connection_refused(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = ToolError("Network connection error: Connection refused")

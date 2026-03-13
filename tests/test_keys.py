@@ -65,7 +65,9 @@ class TestKeysActions:
 
     async def test_create(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "createApiKey": {"id": "k:new", "name": "new-key", "key": "secret123", "roles": []}
+            "apiKey": {
+                "create": {"id": "k:new", "name": "new-key", "key": "secret123", "roles": []}
+            }
         }
         tool_fn = _make_tool()
         result = await tool_fn(action="create", name="new-key")
@@ -74,11 +76,13 @@ class TestKeysActions:
 
     async def test_create_with_roles(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "createApiKey": {
-                "id": "k:new",
-                "name": "admin-key",
-                "key": "secret",
-                "roles": ["admin"],
+            "apiKey": {
+                "create": {
+                    "id": "k:new",
+                    "name": "admin-key",
+                    "key": "secret",
+                    "roles": ["admin"],
+                }
             }
         }
         tool_fn = _make_tool()
@@ -86,13 +90,15 @@ class TestKeysActions:
         assert result["success"] is True
 
     async def test_update(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"updateApiKey": {"id": "k:1", "name": "renamed", "roles": []}}
+        _mock_graphql.return_value = {
+            "apiKey": {"update": {"id": "k:1", "name": "renamed", "roles": []}}
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="update", key_id="k:1", name="renamed")
         assert result["success"] is True
 
     async def test_delete(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"deleteApiKeys": True}
+        _mock_graphql.return_value = {"apiKey": {"delete": True}}
         tool_fn = _make_tool()
         result = await tool_fn(action="delete", key_id="k:1", confirm=True)
         assert result["success"] is True

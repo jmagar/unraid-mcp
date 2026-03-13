@@ -34,6 +34,13 @@ logs/
 # IDE/Editor
 .bivvy
 .cursor
+.windsurf/
+.1code/
+.emdash.json
+
+# Backup files
+*.bak
+*.bak-*
 
 # Claude Code user settings (gitignore local settings)
 .claude/settings.local.json

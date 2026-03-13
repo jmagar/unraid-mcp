@@ -29,17 +29,17 @@ QUERIES: dict[str, str] = {
 MUTATIONS: dict[str, str] = {
     "create": """
         mutation CreateApiKey($input: CreateApiKeyInput!) {
-          createApiKey(input: $input) { id name key roles }
+          apiKey { create(input: $input) { id name key roles } }
         }
     """,
     "update": """
         mutation UpdateApiKey($input: UpdateApiKeyInput!) {
-          updateApiKey(input: $input) { id name roles }
+          apiKey { update(input: $input) { id name roles } }
         }
     """,
     "delete": """
-        mutation DeleteApiKeys($input: DeleteApiKeysInput!) {
-          deleteApiKeys(input: $input)
+        mutation DeleteApiKey($input: DeleteApiKeyInput!) {
+          apiKey { delete(input: $input) }
         }
     """,
 }
@@ -116,7 +116,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 return {
                     "success": True,
-                    "key": data.get("createApiKey", {}),
+                    "key": (data.get("apiKey") or {}).get("create", {}),
                 }
 
             if action == "update":
@@ -130,14 +130,14 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["update"], {"input": input_data})
                 return {
                     "success": True,
-                    "key": data.get("updateApiKey", {}),
+                    "key": (data.get("apiKey") or {}).get("update", {}),
                 }
 
             if action == "delete":
                 if not key_id:
                     raise ToolError("key_id is required for 'delete' action")
                 data = await make_graphql_request(MUTATIONS["delete"], {"input": {"ids": [key_id]}})
-                result = data.get("deleteApiKeys")
+                result = (data.get("apiKey") or {}).get("delete")
                 if not result:
                     raise ToolError(
                         f"Failed to delete API key '{key_id}': no confirmation from server"

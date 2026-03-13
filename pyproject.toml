@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 [project]
 name = "unraid-mcp"
-version = "0.2.0"
+version = "0.2.1"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -189,7 +189,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D104"]
-"tests/**/*.py" = ["D", "S101", "PLR2004"]  # Allow asserts and magic values in tests
+"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "PLR2004"]  # Allow test-only patterns
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

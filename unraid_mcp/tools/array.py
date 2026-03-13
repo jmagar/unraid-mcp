@@ -22,7 +22,7 @@ QUERIES: dict[str, str] = {
 
 MUTATIONS: dict[str, str] = {
     "parity_start": """
-        mutation StartParityCheck($correct: Boolean) {
+        mutation StartParityCheck($correct: Boolean!) {
           parityCheck { start(correct: $correct) }
         }
     """,
@@ -92,7 +92,9 @@ def register_array_tool(mcp: FastMCP) -> None:
             query = MUTATIONS[action]
             variables: dict[str, Any] | None = None
 
-            if action == "parity_start" and correct is not None:
+            if action == "parity_start":
+                if correct is None:
+                    raise ToolError("correct is required for 'parity_start' action")
                 variables = {"correct": correct}
 
             data = await make_graphql_request(query, variables)

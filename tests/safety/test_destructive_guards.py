@@ -305,7 +305,7 @@ class TestConfirmAllowsExecution:
         assert result["success"] is True
 
     async def test_notifications_delete_with_confirm(self, _mock_notif_graphql: AsyncMock) -> None:
-        _mock_notif_graphql.return_value = {"notifications": {"deleteNotification": True}}
+        _mock_notif_graphql.return_value = {"deleteNotification": {"unread": {"total": 0}}}
         tool_fn = make_tool_fn(
             "unraid_mcp.tools.notifications", "register_notifications_tool", "unraid_notifications"
         )
@@ -318,7 +318,7 @@ class TestConfirmAllowsExecution:
         assert result["success"] is True
 
     async def test_notifications_delete_archived_with_confirm(self, _mock_notif_graphql: AsyncMock) -> None:
-        _mock_notif_graphql.return_value = {"notifications": {"deleteArchivedNotifications": True}}
+        _mock_notif_graphql.return_value = {"deleteArchivedNotifications": {"archive": {"total": 0}}}
         tool_fn = make_tool_fn(
             "unraid_mcp.tools.notifications", "register_notifications_tool", "unraid_notifications"
         )
@@ -332,7 +332,7 @@ class TestConfirmAllowsExecution:
         assert result["success"] is True
 
     async def test_keys_delete_with_confirm(self, _mock_keys_graphql: AsyncMock) -> None:
-        _mock_keys_graphql.return_value = {"deleteApiKeys": True}
+        _mock_keys_graphql.return_value = {"apiKey": {"delete": True}}
         tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
         result = await tool_fn(action="delete", key_id="key-123", confirm=True)
         assert result["success"] is True

@@ -565,11 +565,11 @@ api/src/unraid-api/graph/resolvers/
 | **RClone** | `createRCloneRemote(input)` | Create remote storage | CREATE_ANY:FLASH |
 | **RClone** | `deleteRCloneRemote(input)` | Delete remote storage | DELETE_ANY:FLASH |
 | **UPS** | `configureUps(config)` | Update UPS configuration | UPDATE_ANY:* |
-| **API Keys** | `createApiKey(input)` | Create API key | CREATE_ANY:API_KEY |
-| **API Keys** | `addRoleForApiKey(input)` | Add role to key | UPDATE_ANY:API_KEY |
-| **API Keys** | `removeRoleFromApiKey(input)` | Remove role from key | UPDATE_ANY:API_KEY |
-| **API Keys** | `deleteApiKeys(input)` | Delete API keys | DELETE_ANY:API_KEY |
-| **API Keys** | `updateApiKey(input)` | Update API key | UPDATE_ANY:API_KEY |
+| **API Keys** | `apiKey.create(input)` | Create API key | CREATE_ANY:API_KEY |
+| **API Keys** | `apiKey.addRole(input)` | Add role to key | UPDATE_ANY:API_KEY |
+| **API Keys** | `apiKey.removeRole(input)` | Remove role from key | UPDATE_ANY:API_KEY |
+| **API Keys** | `apiKey.delete(input)` | Delete API keys | DELETE_ANY:API_KEY |
+| **API Keys** | `apiKey.update(input)` | Update API key | UPDATE_ANY:API_KEY |
 
 ---
 
