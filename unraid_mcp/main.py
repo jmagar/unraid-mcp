@@ -12,11 +12,18 @@ import sys
 async def shutdown_cleanup() -> None:
     """Cleanup resources on server shutdown."""
     try:
+        from .subscriptions.manager import subscription_manager
+
+        await subscription_manager.stop_all()
+    except Exception as e:
+        print(f"Error stopping subscriptions during cleanup: {e}", file=sys.stderr)
+
+    try:
         from .core.client import close_http_client
 
         await close_http_client()
     except Exception as e:
-        print(f"Error during cleanup: {e}")
+        print(f"Error during cleanup: {e}", file=sys.stderr)
 
 
 def _run_shutdown_cleanup() -> None:

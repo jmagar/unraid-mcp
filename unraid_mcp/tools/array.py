@@ -73,7 +73,7 @@ def register_array_tool(mcp: FastMCP) -> None:
         """Manage Unraid array parity checks.
 
         Actions:
-          parity_start - Start parity check (optional correct=True to fix errors)
+          parity_start - Start parity check (correct=True to fix errors, correct=False for read-only; required)
           parity_pause - Pause running parity check
           parity_resume - Resume paused parity check
           parity_cancel - Cancel running parity check

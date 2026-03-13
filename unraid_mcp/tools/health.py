@@ -21,6 +21,7 @@ from ..config.settings import (
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.utils import safe_display_url
+from ..subscriptions.utils import _analyze_subscription_status
 
 
 ALL_ACTIONS = {"check", "test_connection", "diagnose"}
@@ -216,42 +217,6 @@ async def _comprehensive_check() -> dict[str, Any]:
             "error": str(e),
             "server": _server_info(),
         }
-
-
-def _analyze_subscription_status(
-    status: dict[str, Any],
-) -> tuple[int, list[dict[str, Any]]]:
-    """Analyze subscription status dict, returning error count and connection issues.
-
-    This is the canonical implementation of subscription status analysis.
-    TODO: subscriptions/diagnostics.py has a similar status-analysis pattern
-    in diagnose_subscriptions(). That module could import and call this helper
-    directly to avoid divergence. See Code-H05.
-
-    Args:
-        status: Dict of subscription name -> status info from get_subscription_status().
-
-    Returns:
-        Tuple of (error_count, connection_issues_list).
-    """
-    error_count = 0
-    connection_issues: list[dict[str, Any]] = []
-
-    for sub_name, sub_status in status.items():
-        runtime = sub_status.get("runtime", {})
-        conn_state = runtime.get("connection_state", "unknown")
-        if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded"):
-            error_count += 1
-        if runtime.get("last_error"):
-            connection_issues.append(
-                {
-                    "subscription": sub_name,
-                    "state": conn_state,
-                    "error": runtime["last_error"],
-                }
-            )
-
-    return error_count, connection_issues
 
 
 async def _diagnose_subscriptions() -> dict[str, Any]:

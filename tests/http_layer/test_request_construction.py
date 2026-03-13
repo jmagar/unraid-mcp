@@ -228,9 +228,7 @@ class TestGraphQLErrorHandling:
     @respx.mock
     async def test_idempotent_start_error_returns_success(self) -> None:
         respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                errors=[{"message": "Container already running"}]
-            )
+            return_value=_graphql_response(errors=[{"message": "Container already running"}])
         )
         result = await make_graphql_request(
             'mutation { docker { start(id: "x") } }',
@@ -242,9 +240,7 @@ class TestGraphQLErrorHandling:
     @respx.mock
     async def test_idempotent_stop_error_returns_success(self) -> None:
         respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                errors=[{"message": "Container not running"}]
-            )
+            return_value=_graphql_response(errors=[{"message": "Container not running"}])
         )
         result = await make_graphql_request(
             'mutation { docker { stop(id: "x") } }',
@@ -275,7 +271,13 @@ class TestInfoToolRequests:
     async def test_overview_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"info": {"os": {"platform": "linux", "hostname": "tower"}, "cpu": {}, "memory": {}}}
+                {
+                    "info": {
+                        "os": {"platform": "linux", "hostname": "tower"},
+                        "cpu": {},
+                        "memory": {},
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -329,9 +331,7 @@ class TestInfoToolRequests:
 
     @respx.mock
     async def test_online_sends_correct_query(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"online": True})
-        )
+        route = respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
         await tool(action="online")
         body = _extract_request_body(route.calls.last.request)
@@ -374,9 +374,7 @@ class TestDockerToolRequests:
     async def test_list_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"docker": {"containers": [
-                    {"id": "c1", "names": ["plex"], "state": "running"}
-                ]}}
+                {"docker": {"containers": [{"id": "c1", "names": ["plex"], "state": "running"}]}}
             )
         )
         tool = self._get_tool()
@@ -389,10 +387,16 @@ class TestDockerToolRequests:
         container_id = "a" * 64
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"docker": {"start": {
-                    "id": container_id, "names": ["plex"],
-                    "state": "running", "status": "Up",
-                }}}
+                {
+                    "docker": {
+                        "start": {
+                            "id": container_id,
+                            "names": ["plex"],
+                            "state": "running",
+                            "status": "Up",
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -406,10 +410,16 @@ class TestDockerToolRequests:
         container_id = "b" * 64
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"docker": {"stop": {
-                    "id": container_id, "names": ["sonarr"],
-                    "state": "exited", "status": "Exited",
-                }}}
+                {
+                    "docker": {
+                        "stop": {
+                            "id": container_id,
+                            "names": ["sonarr"],
+                            "state": "exited",
+                            "status": "Exited",
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -451,9 +461,11 @@ class TestDockerToolRequests:
     async def test_networks_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"dockerNetworks": [
-                    {"id": "n1", "name": "bridge", "driver": "bridge", "scope": "local"}
-                ]}
+                {
+                    "dockerNetworks": [
+                        {"id": "n1", "name": "bridge", "driver": "bridge", "scope": "local"}
+                    ]
+                }
             )
         )
         tool = self._get_tool()
@@ -464,9 +476,7 @@ class TestDockerToolRequests:
     @respx.mock
     async def test_check_updates_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                {"docker": {"containerUpdateStatuses": []}}
-            )
+            return_value=_graphql_response({"docker": {"containerUpdateStatuses": []}})
         )
         tool = self._get_tool()
         await tool(action="check_updates")
@@ -485,17 +495,29 @@ class TestDockerToolRequests:
             call_count += 1
             if "StopContainer" in body["query"]:
                 return _graphql_response(
-                    {"docker": {"stop": {
-                        "id": container_id, "names": ["app"],
-                        "state": "exited", "status": "Exited",
-                    }}}
+                    {
+                        "docker": {
+                            "stop": {
+                                "id": container_id,
+                                "names": ["app"],
+                                "state": "exited",
+                                "status": "Exited",
+                            }
+                        }
+                    }
                 )
             if "StartContainer" in body["query"]:
                 return _graphql_response(
-                    {"docker": {"start": {
-                        "id": container_id, "names": ["app"],
-                        "state": "running", "status": "Up",
-                    }}}
+                    {
+                        "docker": {
+                            "start": {
+                                "id": container_id,
+                                "names": ["app"],
+                                "state": "running",
+                                "status": "Up",
+                            }
+                        }
+                    }
                 )
             return _graphql_response({"docker": {"containers": []}})
 
@@ -522,10 +544,16 @@ class TestDockerToolRequests:
                 )
             if "StartContainer" in body["query"]:
                 return _graphql_response(
-                    {"docker": {"start": {
-                        "id": resolved_id, "names": ["plex"],
-                        "state": "running", "status": "Up",
-                    }}}
+                    {
+                        "docker": {
+                            "start": {
+                                "id": resolved_id,
+                                "names": ["plex"],
+                                "state": "running",
+                                "status": "Up",
+                            }
+                        }
+                    }
                 )
             return _graphql_response({})
 
@@ -546,17 +574,17 @@ class TestVMToolRequests:
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"
-        )
+        return make_tool_fn("unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm")
 
     @respx.mock
     async def test_list_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"vms": {"domains": [
-                    {"id": "v1", "name": "win10", "state": "running", "uuid": "u1"}
-                ]}}
+                {
+                    "vms": {
+                        "domains": [{"id": "v1", "name": "win10", "state": "running", "uuid": "u1"}]
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -567,9 +595,7 @@ class TestVMToolRequests:
 
     @respx.mock
     async def test_start_sends_mutation_with_id(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"vm": {"start": True}})
-        )
+        route = respx.post(API_URL).mock(return_value=_graphql_response({"vm": {"start": True}}))
         tool = self._get_tool()
         result = await tool(action="start", vm_id="vm-123")
         body = _extract_request_body(route.calls.last.request)
@@ -579,9 +605,7 @@ class TestVMToolRequests:
 
     @respx.mock
     async def test_stop_sends_mutation_with_id(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"vm": {"stop": True}})
-        )
+        route = respx.post(API_URL).mock(return_value=_graphql_response({"vm": {"stop": True}}))
         tool = self._get_tool()
         await tool(action="stop", vm_id="vm-456")
         body = _extract_request_body(route.calls.last.request)
@@ -615,10 +639,14 @@ class TestVMToolRequests:
     async def test_details_finds_vm_by_name(self) -> None:
         respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"vms": {"domains": [
-                    {"id": "v1", "name": "win10", "state": "running", "uuid": "uuid-1"},
-                    {"id": "v2", "name": "ubuntu", "state": "stopped", "uuid": "uuid-2"},
-                ]}}
+                {
+                    "vms": {
+                        "domains": [
+                            {"id": "v1", "name": "win10", "state": "running", "uuid": "uuid-1"},
+                            {"id": "v2", "name": "ubuntu", "state": "stopped", "uuid": "uuid-2"},
+                        ]
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -642,9 +670,15 @@ class TestArrayToolRequests:
     async def test_parity_status_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"array": {"parityCheckStatus": {
-                    "progress": 50, "speed": "100 MB/s", "errors": 0,
-                }}}
+                {
+                    "array": {
+                        "parityCheckStatus": {
+                            "progress": 50,
+                            "speed": "100 MB/s",
+                            "errors": 0,
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -706,9 +740,7 @@ class TestStorageToolRequests:
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage"
-        )
+        return make_tool_fn("unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage")
 
     @respx.mock
     async def test_shares_sends_correct_query(self) -> None:
@@ -737,10 +769,16 @@ class TestStorageToolRequests:
     async def test_disk_details_sends_variable(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"disk": {
-                    "id": "d1", "device": "sda", "name": "Disk 1",
-                    "serialNum": "SN123", "size": 1000000, "temperature": 35,
-                }}
+                {
+                    "disk": {
+                        "id": "d1",
+                        "device": "sda",
+                        "name": "Disk 1",
+                        "serialNum": "SN123",
+                        "size": 1000000,
+                        "temperature": 35,
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -766,10 +804,14 @@ class TestStorageToolRequests:
     async def test_logs_sends_path_and_lines_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"logFile": {
-                    "path": "/var/log/syslog", "content": "log line",
-                    "totalLines": 100, "startLine": 1,
-                }}
+                {
+                    "logFile": {
+                        "path": "/var/log/syslog",
+                        "content": "log line",
+                        "totalLines": 100,
+                        "startLine": 1,
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -787,9 +829,7 @@ class TestStorageToolRequests:
 
     @respx.mock
     async def test_unassigned_sends_correct_query(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"unassignedDevices": []})
-        )
+        route = respx.post(API_URL).mock(return_value=_graphql_response({"unassignedDevices": []}))
         tool = self._get_tool()
         result = await tool(action="unassigned")
         body = _extract_request_body(route.calls.last.request)
@@ -817,9 +857,13 @@ class TestNotificationsToolRequests:
     async def test_overview_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"notifications": {"overview": {
-                    "unread": {"info": 1, "warning": 0, "alert": 0, "total": 1},
-                }}}
+                {
+                    "notifications": {
+                        "overview": {
+                            "unread": {"info": 1, "warning": 0, "alert": 0, "total": 1},
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -833,9 +877,7 @@ class TestNotificationsToolRequests:
             return_value=_graphql_response({"notifications": {"list": []}})
         )
         tool = self._get_tool()
-        await tool(
-            action="list", list_type="ARCHIVE", importance="WARNING", offset=5, limit=10
-        )
+        await tool(action="list", list_type="ARCHIVE", importance="WARNING", offset=5, limit=10)
         body = _extract_request_body(route.calls.last.request)
         assert "ListNotifications" in body["query"]
         filt = body["variables"]["filter"]
@@ -859,9 +901,13 @@ class TestNotificationsToolRequests:
     async def test_create_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"createNotification": {
-                    "id": "n1", "title": "Test", "importance": "INFO",
-                }}
+                {
+                    "createNotification": {
+                        "id": "n1",
+                        "title": "Test",
+                        "importance": "INFO",
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -870,21 +916,19 @@ class TestNotificationsToolRequests:
             title="Test",
             subject="Sub",
             description="Desc",
-            importance="normal",
+            importance="info",
         )
         body = _extract_request_body(route.calls.last.request)
         assert "CreateNotification" in body["query"]
         inp = body["variables"]["input"]
         assert inp["title"] == "Test"
         assert inp["subject"] == "Sub"
-        assert inp["importance"] == "NORMAL"  # uppercased from "normal"
+        assert inp["importance"] == "INFO"  # uppercased from "info"
 
     @respx.mock
     async def test_archive_sends_id_variable(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                {"archiveNotification": {"id": "notif-1"}}
-            )
+            return_value=_graphql_response({"archiveNotification": {"id": "notif-1"}})
         )
         tool = self._get_tool()
         await tool(action="archive", notification_id="notif-1")
@@ -901,9 +945,7 @@ class TestNotificationsToolRequests:
     @respx.mock
     async def test_delete_sends_id_and_type(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                {"deleteNotification": {"unread": {"total": 0}}}
-            )
+            return_value=_graphql_response({"deleteNotification": {"unread": {"total": 0}}})
         )
         tool = self._get_tool()
         await tool(
@@ -920,9 +962,7 @@ class TestNotificationsToolRequests:
     @respx.mock
     async def test_archive_all_sends_importance_when_provided(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                {"archiveAll": {"archive": {"total": 1}}}
-            )
+            return_value=_graphql_response({"archiveAll": {"archive": {"total": 1}}})
         )
         tool = self._get_tool()
         await tool(action="archive_all", importance="warning")
@@ -941,9 +981,7 @@ class TestRCloneToolRequests:
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone"
-        )
+        return make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
 
     @respx.mock
     async def test_list_remotes_sends_correct_query(self) -> None:
@@ -962,9 +1000,15 @@ class TestRCloneToolRequests:
     async def test_config_form_sends_provider_type(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"rclone": {"configForm": {
-                    "id": "form1", "dataSchema": {}, "uiSchema": {},
-                }}}
+                {
+                    "rclone": {
+                        "configForm": {
+                            "id": "form1",
+                            "dataSchema": {},
+                            "uiSchema": {},
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -977,9 +1021,15 @@ class TestRCloneToolRequests:
     async def test_create_remote_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"rclone": {"createRCloneRemote": {
-                    "name": "my-s3", "type": "s3", "parameters": {},
-                }}}
+                {
+                    "rclone": {
+                        "createRCloneRemote": {
+                            "name": "my-s3",
+                            "type": "s3",
+                            "parameters": {},
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -1025,18 +1075,20 @@ class TestUsersToolRequests:
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.users", "register_users_tool", "unraid_users"
-        )
+        return make_tool_fn("unraid_mcp.tools.users", "register_users_tool", "unraid_users")
 
     @respx.mock
     async def test_me_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"me": {
-                    "id": "u1", "name": "admin",
-                    "description": "Admin", "roles": ["admin"],
-                }}
+                {
+                    "me": {
+                        "id": "u1",
+                        "name": "admin",
+                        "description": "Admin",
+                        "roles": ["admin"],
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -1061,9 +1113,7 @@ class TestKeysToolRequests:
     @respx.mock
     async def test_list_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                {"apiKeys": [{"id": "k1", "name": "my-key"}]}
-            )
+            return_value=_graphql_response({"apiKeys": [{"id": "k1", "name": "my-key"}]})
         )
         tool = self._get_tool()
         result = await tool(action="list")
@@ -1088,10 +1138,16 @@ class TestKeysToolRequests:
     async def test_create_sends_input_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
-                {"apiKey": {"create": {
-                    "id": "k2", "name": "new-key",
-                    "key": "secret", "roles": ["read"],
-                }}}
+                {
+                    "apiKey": {
+                        "create": {
+                            "id": "k2",
+                            "name": "new-key",
+                            "key": "secret",
+                            "roles": ["read"],
+                        }
+                    }
+                }
             )
         )
         tool = self._get_tool()
@@ -1147,15 +1203,11 @@ class TestHealthToolRequests:
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.health", "register_health_tool", "unraid_health"
-        )
+        return make_tool_fn("unraid_mcp.tools.health", "register_health_tool", "unraid_health")
 
     @respx.mock
     async def test_test_connection_sends_online_query(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"online": True})
-        )
+        route = respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
         result = await tool(action="test_connection")
         body = _extract_request_body(route.calls.last.request)
@@ -1166,21 +1218,23 @@ class TestHealthToolRequests:
     @respx.mock
     async def test_check_sends_comprehensive_query(self) -> None:
         route = respx.post(API_URL).mock(
-            return_value=_graphql_response({
-                "info": {
-                    "machineId": "m1",
-                    "time": 1234567890,
-                    "versions": {"unraid": "7.0"},
-                    "os": {"uptime": 86400},
-                },
-                "array": {"state": "STARTED"},
-                "notifications": {
-                    "overview": {"unread": {"alert": 0, "warning": 1, "total": 3}},
-                },
-                "docker": {
-                    "containers": [{"id": "c1", "state": "running", "status": "Up"}],
-                },
-            })
+            return_value=_graphql_response(
+                {
+                    "info": {
+                        "machineId": "m1",
+                        "time": 1234567890,
+                        "versions": {"unraid": "7.0"},
+                        "os": {"uptime": 86400},
+                    },
+                    "array": {"state": "STARTED"},
+                    "notifications": {
+                        "overview": {"unread": {"alert": 0, "warning": 1, "total": 3}},
+                    },
+                    "docker": {
+                        "containers": [{"id": "c1", "state": "running", "status": "Up"}],
+                    },
+                }
+            )
         )
         tool = self._get_tool()
         result = await tool(action="check")
@@ -1191,9 +1245,7 @@ class TestHealthToolRequests:
 
     @respx.mock
     async def test_test_connection_measures_latency(self) -> None:
-        respx.post(API_URL).mock(
-            return_value=_graphql_response({"online": True})
-        )
+        respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
         result = await tool(action="test_connection")
         assert "latency_ms" in result
@@ -1202,18 +1254,21 @@ class TestHealthToolRequests:
     @respx.mock
     async def test_check_reports_warning_on_alerts(self) -> None:
         respx.post(API_URL).mock(
-            return_value=_graphql_response({
-                "info": {
-                    "machineId": "m1", "time": 0,
-                    "versions": {"unraid": "7.0"},
-                    "os": {"uptime": 0},
-                },
-                "array": {"state": "STARTED"},
-                "notifications": {
-                    "overview": {"unread": {"alert": 3, "warning": 0, "total": 5}},
-                },
-                "docker": {"containers": []},
-            })
+            return_value=_graphql_response(
+                {
+                    "info": {
+                        "machineId": "m1",
+                        "time": 0,
+                        "versions": {"unraid": "7.0"},
+                        "os": {"uptime": 0},
+                    },
+                    "array": {"state": "STARTED"},
+                    "notifications": {
+                        "overview": {"unread": {"alert": 3, "warning": 0, "total": 5}},
+                    },
+                    "docker": {"containers": []},
+                }
+            )
         )
         tool = self._get_tool()
         result = await tool(action="check")
@@ -1252,24 +1307,16 @@ class TestCrossCuttingConcerns:
     @respx.mock
     async def test_tool_error_from_http_layer_propagates(self) -> None:
         """When an HTTP error occurs, the ToolError bubbles up through the tool."""
-        respx.post(API_URL).mock(
-            return_value=httpx.Response(500, text="Server Error")
-        )
-        tool = make_tool_fn(
-            "unraid_mcp.tools.info", "register_info_tool", "unraid_info"
-        )
+        respx.post(API_URL).mock(return_value=httpx.Response(500, text="Server Error"))
+        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
         with pytest.raises(ToolError, match="Unraid API returned HTTP 500"):
             await tool(action="online")
 
     @respx.mock
     async def test_network_error_propagates_through_tool(self) -> None:
         """When a network error occurs, the ToolError bubbles up through the tool."""
-        respx.post(API_URL).mock(
-            side_effect=httpx.ConnectError("Connection refused")
-        )
-        tool = make_tool_fn(
-            "unraid_mcp.tools.info", "register_info_tool", "unraid_info"
-        )
+        respx.post(API_URL).mock(side_effect=httpx.ConnectError("Connection refused"))
+        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
         with pytest.raises(ToolError, match="Network error connecting to Unraid API"):
             await tool(action="online")
 
@@ -1277,12 +1324,8 @@ class TestCrossCuttingConcerns:
     async def test_graphql_error_propagates_through_tool(self) -> None:
         """When a GraphQL error occurs, the ToolError bubbles up through the tool."""
         respx.post(API_URL).mock(
-            return_value=_graphql_response(
-                errors=[{"message": "Permission denied"}]
-            )
+            return_value=_graphql_response(errors=[{"message": "Permission denied"}])
         )
-        tool = make_tool_fn(
-            "unraid_mcp.tools.info", "register_info_tool", "unraid_info"
-        )
+        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
         with pytest.raises(ToolError, match="Permission denied"):
             await tool(action="online")

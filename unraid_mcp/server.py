@@ -10,8 +10,6 @@ from fastmcp import FastMCP
 
 from .config.logging import logger
 from .config.settings import (
-    UNRAID_API_KEY,
-    UNRAID_API_URL,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
     UNRAID_MCP_TRANSPORT,
@@ -86,20 +84,10 @@ def run_server() -> None:
         )
         sys.exit(1)
 
-    # Log configuration
-    if UNRAID_API_URL:
-        logger.info(f"UNRAID_API_URL loaded: {UNRAID_API_URL[:20]}...")
-    else:
-        logger.warning("UNRAID_API_URL not found in environment or .env file.")
+    # Log configuration (delegated to shared function)
+    from .config.logging import log_configuration_status
 
-    if UNRAID_API_KEY:
-        logger.info("UNRAID_API_KEY loaded: ****")
-    else:
-        logger.warning("UNRAID_API_KEY not found in environment or .env file.")
-
-    logger.info(f"UNRAID_MCP_PORT set to: {UNRAID_MCP_PORT}")
-    logger.info(f"UNRAID_MCP_HOST set to: {UNRAID_MCP_HOST}")
-    logger.info(f"UNRAID_MCP_TRANSPORT set to: {UNRAID_MCP_TRANSPORT}")
+    log_configuration_status(logger)
 
     if UNRAID_VERIFY_SSL is False:
         logger.warning(

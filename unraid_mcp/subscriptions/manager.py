@@ -45,7 +45,7 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
         elif (
             key == "content"
             and isinstance(value, str)
-            and len(value.encode("utf-8", errors="replace")) > _MAX_RESOURCE_DATA_BYTES
+            and len(value) > _MAX_RESOURCE_DATA_BYTES  # fast pre-check on char count
         ):
             lines = value.splitlines()
             original_line_count = len(lines)
@@ -54,19 +54,15 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
             if len(lines) > _MAX_RESOURCE_DATA_LINES:
                 lines = lines[-_MAX_RESOURCE_DATA_LINES:]
 
-            # Enforce byte cap while preserving whole-line boundaries where possible.
             truncated = "\n".join(lines)
-            truncated_bytes = truncated.encode("utf-8", errors="replace")
-            while len(lines) > 1 and len(truncated_bytes) > _MAX_RESOURCE_DATA_BYTES:
-                lines = lines[1:]
-                truncated = "\n".join(lines)
-                truncated_bytes = truncated.encode("utf-8", errors="replace")
-
-            # Last resort: if a single line still exceeds cap, hard-cap bytes.
-            if len(truncated_bytes) > _MAX_RESOURCE_DATA_BYTES:
-                truncated = truncated_bytes[-_MAX_RESOURCE_DATA_BYTES :].decode(
-                    "utf-8", errors="ignore"
-                )
+            # Encode once and slice bytes instead of O(n²) line-trim loop
+            encoded = truncated.encode("utf-8", errors="replace")
+            if len(encoded) > _MAX_RESOURCE_DATA_BYTES:
+                truncated = encoded[-_MAX_RESOURCE_DATA_BYTES:].decode("utf-8", errors="ignore")
+                # Strip partial first line that may have been cut mid-character
+                nl_pos = truncated.find("\n")
+                if nl_pos != -1:
+                    truncated = truncated[nl_pos + 1 :]
 
             logger.warning(
                 f"[RESOURCE] Capped log content from {original_line_count} to "
@@ -201,6 +197,16 @@ class SubscriptionManager:
                 logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
             else:
                 logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
+
+    async def stop_all(self) -> None:
+        """Stop all active subscriptions (called during server shutdown)."""
+        subscription_names = list(self.active_subscriptions.keys())
+        for name in subscription_names:
+            try:
+                await self.stop_subscription(name)
+            except Exception as e:
+                logger.error(f"[SHUTDOWN] Error stopping subscription '{name}': {e}", exc_info=True)
+        logger.info(f"[SHUTDOWN] Stopped {len(subscription_names)} subscription(s)")
 
     async def _subscription_loop(
         self, subscription_name: str, query: str, variables: dict[str, Any] | None
@@ -512,9 +518,11 @@ class SubscriptionManager:
                         f"({connected_duration:.0f}s < {_STABLE_CONNECTION_SECONDS}s), "
                         f"keeping retry counter at {self.reconnect_attempts.get(subscription_name, 0)}"
                     )
-
-            # Calculate backoff delay
-            retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                    # Only escalate backoff when connection was NOT stable
+                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+            else:
+                # No connection was established — escalate backoff
+                retry_delay = min(retry_delay * 1.5, max_retry_delay)
             logger.info(
                 f"[WEBSOCKET:{subscription_name}] Reconnecting in {retry_delay:.1f} seconds..."
             )

@@ -713,6 +713,23 @@ type Mutation {
     addUser(input: addUserInput!): User
     deleteUser(input: deleteUserInput!): User
 }
+
+type ApiKeyMutations {
+    """Create an API key"""
+    create(input: CreateApiKeyInput!): ApiKey!
+
+    """Add a role to an API key"""
+    addRole(input: AddRoleForApiKeyInput!): Boolean!
+
+    """Remove a role from an API key"""
+    removeRole(input: RemoveRoleFromApiKeyInput!): Boolean!
+
+    """Delete one or more API keys"""
+    delete(input: DeleteApiKeyInput!): Boolean!
+
+    """Update an API key"""
+    update(input: UpdateApiKeyInput!): ApiKey!
+}
 ```
 
 > **Note:** The client schema above uses `ID!` for disk mutation args (e.g., `mountArrayDisk(id: ID!)`), but the actual server resolvers use `PrefixedID!`. The MCP tool code correctly uses `PrefixedID!` based on server source analysis.

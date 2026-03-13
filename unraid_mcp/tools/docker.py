@@ -233,8 +233,8 @@ async def _resolve_container_id(container_id: str, *, strict: bool = False) -> s
     data = await make_graphql_request(list_query)
     containers = safe_get(data, "docker", "containers", default=[])
 
-    # Short hex prefix: match by ID prefix before trying name matching
-    if _DOCKER_SHORT_ID_PATTERN.match(container_id):
+    # Short hex prefix: match by ID prefix before trying name matching (strict bypasses this)
+    if not strict and _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
         matches: list[dict[str, Any]] = []
         for c in containers:

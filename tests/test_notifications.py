@@ -90,7 +90,7 @@ class TestNotificationsActions:
             title="Test",
             subject="Test Subject",
             description="Test Desc",
-            importance="normal",
+            importance="info",
         )
         assert result["success"] is True
 
@@ -101,7 +101,12 @@ class TestNotificationsActions:
         assert result["success"] is True
 
     async def test_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"deleteNotification": {"unread": {"total": 0}}}
+        _mock_graphql.return_value = {
+            "deleteNotification": {
+                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            }
+        }
         tool_fn = _make_tool()
         result = await tool_fn(
             action="delete",
@@ -112,7 +117,12 @@ class TestNotificationsActions:
         assert result["success"] is True
 
     async def test_archive_all(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"archiveAll": {"archive": {"total": 1}}}
+        _mock_graphql.return_value = {
+            "archiveAll": {
+                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 1},
+            }
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="archive_all")
         assert result["success"] is True
@@ -138,7 +148,12 @@ class TestNotificationsActions:
         assert filter_var["offset"] == 5
 
     async def test_delete_archived(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"deleteArchivedNotifications": {"archive": {"total": 0}}}
+        _mock_graphql.return_value = {
+            "deleteArchivedNotifications": {
+                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            }
+        }
         tool_fn = _make_tool()
         result = await tool_fn(action="delete_archived", confirm=True)
         assert result["success"] is True
@@ -165,8 +180,8 @@ class TestNotificationsCreateValidation:
                 importance="invalid",
             )
 
-    async def test_info_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
-        """INFO is listed in old docstring examples but rejected by the validator."""
+    async def test_normal_importance_rejected(self, _mock_graphql: AsyncMock) -> None:
+        """NORMAL is not a valid GraphQL NotificationImportance value (INFO/WARNING/ALERT are)."""
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="importance must be one of"):
             await tool_fn(
@@ -174,7 +189,7 @@ class TestNotificationsCreateValidation:
                 title="T",
                 subject="S",
                 description="D",
-                importance="info",
+                importance="normal",
             )
 
     async def test_alert_importance_accepted(self, _mock_graphql: AsyncMock) -> None:
@@ -193,7 +208,7 @@ class TestNotificationsCreateValidation:
                 title="x" * 201,
                 subject="S",
                 description="D",
-                importance="normal",
+                importance="info",
             )
 
     async def test_subject_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
@@ -204,7 +219,7 @@ class TestNotificationsCreateValidation:
                 title="T",
                 subject="x" * 501,
                 description="D",
-                importance="normal",
+                importance="info",
             )
 
     async def test_description_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
@@ -215,17 +230,118 @@ class TestNotificationsCreateValidation:
                 title="T",
                 subject="S",
                 description="x" * 2001,
-                importance="normal",
+                importance="info",
             )
 
     async def test_title_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "NORMAL"}}
+        _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "INFO"}}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="create",
             title="x" * 200,
             subject="S",
             description="D",
-            importance="normal",
+            importance="info",
         )
+        assert result["success"] is True
+
+
+class TestNewNotificationMutations:
+    async def test_archive_many_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "archiveNotifications": {
+                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+                "archive": {"info": 2, "warning": 0, "alert": 0, "total": 2},
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="archive_many", notification_ids=["n:1", "n:2"])
+        assert result["success"] is True
+        call_args = _mock_graphql.call_args
+        assert call_args[0][1] == {"ids": ["n:1", "n:2"]}
+
+    async def test_archive_many_requires_ids(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="notification_ids"):
+            await tool_fn(action="archive_many")
+
+    async def test_create_unique_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "notifyIfUnique": {"id": "n:1", "title": "Test", "importance": "INFO"}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create_unique",
+            title="Test",
+            subject="Subj",
+            description="Desc",
+            importance="info",
+        )
+        assert result["success"] is True
+
+    async def test_create_unique_returns_none_when_duplicate(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"notifyIfUnique": None}
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create_unique",
+            title="T",
+            subject="S",
+            description="D",
+            importance="info",
+        )
+        assert result["success"] is True
+        assert result["duplicate"] is True
+
+    async def test_create_unique_requires_fields(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="requires title"):
+            await tool_fn(action="create_unique")
+
+    async def test_unarchive_many_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "unarchiveNotifications": {
+                "unread": {"info": 2, "warning": 0, "alert": 0, "total": 2},
+                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="unarchive_many", notification_ids=["n:1", "n:2"])
+        assert result["success"] is True
+
+    async def test_unarchive_many_requires_ids(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="notification_ids"):
+            await tool_fn(action="unarchive_many")
+
+    async def test_unarchive_all_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "unarchiveAll": {
+                "unread": {"info": 5, "warning": 1, "alert": 0, "total": 6},
+                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="unarchive_all")
+        assert result["success"] is True
+
+    async def test_unarchive_all_with_importance(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "unarchiveAll": {"unread": {"total": 1}, "archive": {"total": 0}}
+        }
+        tool_fn = _make_tool()
+        await tool_fn(action="unarchive_all", importance="WARNING")
+        call_args = _mock_graphql.call_args
+        assert call_args[0][1] == {"importance": "WARNING"}
+
+    async def test_recalculate_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "recalculateOverview": {
+                "unread": {"info": 3, "warning": 1, "alert": 0, "total": 4},
+                "archive": {"info": 10, "warning": 0, "alert": 0, "total": 10},
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="recalculate")
         assert result["success"] is True

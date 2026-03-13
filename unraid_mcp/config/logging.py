@@ -53,21 +53,22 @@ class OverwriteFileHandler(logging.FileHandler):
         ):
             try:
                 base_path = Path(self.baseFilename)
-                if base_path.exists():
-                    file_size = base_path.stat().st_size
-                    if file_size >= self.max_bytes:
-                        # Close current stream
-                        if self.stream:
-                            self.stream.close()
-
-                        # Remove the old file and start fresh
-                        if base_path.exists():
-                            base_path.unlink()
-
-                        # Reopen with truncate mode
+                file_size = base_path.stat().st_size if base_path.exists() else 0
+                if file_size >= self.max_bytes:
+                    old_stream = self.stream
+                    self.stream = None
+                    try:
+                        old_stream.close()
+                        base_path.unlink(missing_ok=True)
                         self.stream = self._open()
+                    except OSError:
+                        # Recovery: attempt to reopen even if unlink failed
+                        try:
+                            self.stream = self._open()
+                        except OSError:
+                            self.stream = old_stream  # Last resort: restore original
 
-                        # Log a marker that the file was reset
+                    if self.stream is not None:
                         reset_record = logging.LogRecord(
                             name="UnraidMCPServer.Logging",
                             level=logging.INFO,
@@ -184,27 +185,8 @@ def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
 
     fastmcp_logger.setLevel(numeric_log_level)
 
-    # Also configure the root logger to catch any other logs
-    root_logger = logging.getLogger()
-    root_logger.handlers.clear()
-    root_logger.propagate = False
-
-    # Rich Console Handler for root logger
-    root_console_handler = RichHandler(
-        console=console,
-        show_time=True,
-        show_level=True,
-        show_path=False,
-        rich_tracebacks=True,
-        tracebacks_show_locals=False,
-        markup=True,
-    )
-    root_console_handler.setLevel(numeric_log_level)
-    root_logger.addHandler(root_console_handler)
-
-    # Reuse the shared file handler for root logger
-    root_logger.addHandler(_shared_file_handler)
-    root_logger.setLevel(numeric_log_level)
+    # Set root logger level to avoid suppressing library warnings entirely
+    logging.getLogger().setLevel(numeric_log_level)
 
     return fastmcp_logger
 

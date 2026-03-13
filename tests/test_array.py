@@ -43,6 +43,7 @@ class TestArrayValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="correct is required"):
             await tool_fn(action="parity_start")
+        _mock_graphql.assert_not_called()
 
 
 class TestArrayActions:
@@ -53,6 +54,8 @@ class TestArrayActions:
         assert result["success"] is True
         assert result["action"] == "parity_start"
         _mock_graphql.assert_called_once()
+        call_args = _mock_graphql.call_args
+        assert call_args[0][1] == {"correct": False}
 
     async def test_parity_start_with_correct(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": True}}

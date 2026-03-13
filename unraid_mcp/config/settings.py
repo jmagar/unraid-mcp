@@ -36,8 +36,27 @@ for dotenv_path in dotenv_paths:
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
 UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
 
+
 # Server Configuration
-UNRAID_MCP_PORT = int(os.getenv("UNRAID_MCP_PORT", "6970"))
+def _parse_port(env_var: str, default: int) -> int:
+    """Parse a port number from environment variable with validation."""
+    raw = os.getenv(env_var, str(default))
+    try:
+        port = int(raw)
+    except ValueError:
+        import sys
+
+        print(f"FATAL: {env_var}={raw!r} is not a valid integer port number", file=sys.stderr)
+        sys.exit(1)
+    if not (1 <= port <= 65535):
+        import sys
+
+        print(f"FATAL: {env_var}={port} outside valid port range 1-65535", file=sys.stderr)
+        sys.exit(1)
+    return port
+
+
+UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
 UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
 UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
 
@@ -58,7 +77,7 @@ IS_DOCKER = Path("/.dockerenv").exists()
 LOGS_DIR = Path("/app/logs") if IS_DOCKER else PROJECT_ROOT / "logs"
 LOG_FILE_PATH = LOGS_DIR / LOG_FILE_NAME
 
-# Ensure logs directory exists; if creation fails, fall back to /tmp.
+# Ensure logs directory exists; if creation fails, fall back to PROJECT_ROOT / ".cache" / "logs".
 try:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
@@ -97,9 +116,11 @@ def get_config_summary() -> dict[str, Any]:
     """
     is_valid, missing = validate_required_config()
 
+    from ..core.utils import safe_display_url
+
     return {
         "api_url_configured": bool(UNRAID_API_URL),
-        "api_url_preview": UNRAID_API_URL[:20] + "..." if UNRAID_API_URL else None,
+        "api_url_preview": safe_display_url(UNRAID_API_URL) if UNRAID_API_URL else None,
         "api_key_configured": bool(UNRAID_API_KEY),
         "server_host": UNRAID_MCP_HOST,
         "server_port": UNRAID_MCP_PORT,
@@ -110,5 +131,7 @@ def get_config_summary() -> dict[str, Any]:
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
     }
+
+
 # Re-export application version from a single source of truth.
 VERSION = APP_VERSION

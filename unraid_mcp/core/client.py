@@ -51,9 +51,7 @@ def _is_sensitive_key(key: str) -> bool:
 def redact_sensitive(obj: Any) -> Any:
     """Recursively redact sensitive values from nested dicts/lists."""
     if isinstance(obj, dict):
-        return {
-            k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()
-        }
+        return {k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()}
     if isinstance(obj, list):
         return [redact_sensitive(item) for item in obj]
     return obj
@@ -149,10 +147,16 @@ class _QueryCache:
     Keyed by a hash of (query, variables). Entries expire after _CACHE_TTL_SECONDS.
     Only caches responses for queries whose operation name is in _CACHEABLE_QUERY_PREFIXES.
     Mutation requests always bypass the cache.
+
+    Thread-safe via asyncio.Lock. Bounded to _MAX_ENTRIES with FIFO eviction (oldest
+    expiry timestamp evicted first when the store is full).
     """
+
+    _MAX_ENTRIES: Final[int] = 256
 
     def __init__(self) -> None:
         self._store: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._lock: Final[asyncio.Lock] = asyncio.Lock()
 
     @staticmethod
     def _cache_key(query: str, variables: dict[str, Any] | None) -> str:
@@ -170,26 +174,32 @@ class _QueryCache:
             return False
         return match.group(1) in _CACHEABLE_QUERY_PREFIXES
 
-    def get(self, query: str, variables: dict[str, Any] | None) -> dict[str, Any] | None:
+    async def get(self, query: str, variables: dict[str, Any] | None) -> dict[str, Any] | None:
         """Return cached result if present and not expired, else None."""
-        key = self._cache_key(query, variables)
-        entry = self._store.get(key)
-        if entry is None:
-            return None
-        expires_at, data = entry
-        if time.monotonic() > expires_at:
-            del self._store[key]
-            return None
-        return data
+        async with self._lock:
+            key = self._cache_key(query, variables)
+            entry = self._store.get(key)
+            if entry is None:
+                return None
+            expires_at, data = entry
+            if time.monotonic() > expires_at:
+                del self._store[key]
+                return None
+            return data
 
-    def put(self, query: str, variables: dict[str, Any] | None, data: dict[str, Any]) -> None:
-        """Store a query result with TTL expiry."""
-        key = self._cache_key(query, variables)
-        self._store[key] = (time.monotonic() + _CACHE_TTL_SECONDS, data)
+    async def put(self, query: str, variables: dict[str, Any] | None, data: dict[str, Any]) -> None:
+        """Store a query result with TTL expiry, evicting oldest entry if at capacity."""
+        async with self._lock:
+            if len(self._store) >= self._MAX_ENTRIES:
+                oldest_key = min(self._store, key=lambda k: self._store[k][0])
+                del self._store[oldest_key]
+            key = self._cache_key(query, variables)
+            self._store[key] = (time.monotonic() + _CACHE_TTL_SECONDS, data)
 
-    def invalidate_all(self) -> None:
+    async def invalidate_all(self) -> None:
         """Clear the entire cache (called after mutations)."""
-        self._store.clear()
+        async with self._lock:
+            self._store.clear()
 
 
 _query_cache = _QueryCache()
@@ -310,10 +320,10 @@ async def make_graphql_request(
     if not UNRAID_API_KEY:
         raise ToolError("UNRAID_API_KEY not configured")
 
-    # Check TTL cache for stable read-only queries
+    # Check TTL cache — short-circuits rate limiter on hits
     is_mutation = query.lstrip().startswith("mutation")
     if not is_mutation and _query_cache.is_cacheable(query):
-        cached = _query_cache.get(query, variables)
+        cached = await _query_cache.get(query, variables)
         if cached is not None:
             logger.debug("Returning cached response for query")
             return cached
@@ -399,9 +409,9 @@ async def make_graphql_request(
 
         # Invalidate cache on mutations; cache eligible query results
         if is_mutation:
-            _query_cache.invalidate_all()
+            await _query_cache.invalidate_all()
         elif _query_cache.is_cacheable(query):
-            _query_cache.put(query, variables, result)
+            await _query_cache.put(query, variables, result)
 
         return result
 

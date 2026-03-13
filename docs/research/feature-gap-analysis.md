@@ -420,8 +420,8 @@ GRAPHQL_PUBSUB_CHANNEL {
 | `CreateApiKeyInput` | `apiKey.create` | `name!`, `description`, `roles[]`, `permissions[]`, `overwrite` |
 | `AddPermissionInput` | `addPermission` | `resource!`, `actions![]` |
 | `AddRoleForUserInput` | `addRoleForUser` | User + role assignment |
-| `AddRoleForApiKeyInput` | `apiKey.addRole` | API key + role assignment |
-| `RemoveRoleFromApiKeyInput` | `apiKey.removeRole` | API key + role removal |
+| `AddRoleForApiKeyInput` | `addRoleForApiKey` | API key + role assignment |
+| `RemoveRoleFromApiKeyInput` | `removeRoleFromApiKey` | API key + role removal |
 | `arrayDiskInput` | `addDiskToArray`, `removeDiskFromArray` | Disk assignment data |
 | `ConnectSignInInput` | `connectSignIn` | Connect credentials |
 | `EnableDynamicRemoteAccessInput` | `enableDynamicRemoteAccess` | Remote access config |
@@ -619,7 +619,7 @@ The current MCP server has 10 tools (76 actions) after consolidation. The follow
 |--------------|---------------|---------------|
 | `list_api_keys()` | `apiKeys` query | Key inventory |
 | `get_api_key(id)` | `apiKey(id)` query | Key details |
-| `create_api_key(input)` | `apiKey.create` mutation | Key provisioning |
+| `create_api_key(input)` | `apiKey.create` mutation | Key provisioning — **already implemented** in `unraid_keys` |
 | `delete_api_keys(input)` | `apiKey.delete` mutation | Key cleanup |
 | `update_api_key(input)` | `apiKey.update` mutation | Key modification |
 

@@ -1,6 +1,7 @@
 """Shared utilities for the subscription system."""
 
 import ssl as _ssl
+from typing import Any
 
 from ..config.settings import UNRAID_API_URL, UNRAID_VERIFY_SSL
 
@@ -52,3 +53,37 @@ def build_ws_ssl_context(ws_url: str) -> _ssl.SSLContext | None:
     ctx.check_hostname = False
     ctx.verify_mode = _ssl.CERT_NONE
     return ctx
+
+
+def _analyze_subscription_status(
+    status: dict[str, Any],
+) -> tuple[int, list[dict[str, Any]]]:
+    """Analyze subscription status dict, returning error count and connection issues.
+
+    This is the canonical, shared implementation used by both the health tool
+    and the subscription diagnostics tool.
+
+    Args:
+        status: Dict of subscription name -> status info from get_subscription_status().
+
+    Returns:
+        Tuple of (error_count, connection_issues_list).
+    """
+    error_count = 0
+    connection_issues: list[dict[str, Any]] = []
+
+    for sub_name, sub_status in status.items():
+        runtime = sub_status.get("runtime", {})
+        conn_state = runtime.get("connection_state", "unknown")
+        if conn_state in ("error", "auth_failed", "timeout", "max_retries_exceeded", "invalid_uri"):
+            error_count += 1
+        if runtime.get("last_error"):
+            connection_issues.append(
+                {
+                    "subscription": sub_name,
+                    "state": conn_state,
+                    "error": runtime["last_error"],
+                }
+            )
+
+    return error_count, connection_issues

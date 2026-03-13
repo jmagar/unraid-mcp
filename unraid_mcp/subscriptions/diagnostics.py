@@ -22,7 +22,7 @@ from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
 from .resources import ensure_subscriptions_started
-from .utils import build_ws_ssl_context, build_ws_url
+from .utils import _analyze_subscription_status, build_ws_ssl_context, build_ws_url
 
 
 _ALLOWED_SUBSCRIPTION_NAMES = frozenset(
@@ -187,8 +187,10 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             # Get comprehensive status
             status = await subscription_manager.get_subscription_status()
 
-            # Initialize connection issues list with proper type
-            connection_issues: list[dict[str, Any]] = []
+            # Analyze connection issues and error counts via the shared helper.
+            # This ensures "invalid_uri" and all other error states are counted
+            # consistently with the health tool's _diagnose_subscriptions path.
+            error_count, connection_issues = _analyze_subscription_status(status)
 
             # Add environment info with explicit typing
             diagnostic_info: dict[str, Any] = {
@@ -210,7 +212,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                     ),
                     "active_count": len(subscription_manager.active_subscriptions),
                     "with_data": len(subscription_manager.resource_data),
-                    "in_error_state": 0,
+                    "in_error_state": error_count,
                     "connection_issues": connection_issues,
                 },
             }
@@ -218,23 +220,6 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             # Calculate WebSocket URL (stays None if UNRAID_API_URL not configured)
             with contextlib.suppress(ValueError):
                 diagnostic_info["environment"]["websocket_url"] = build_ws_url()
-
-            # Analyze issues
-            for sub_name, sub_status in status.items():
-                runtime = sub_status.get("runtime", {})
-                connection_state = runtime.get("connection_state", "unknown")
-
-                if connection_state in ["error", "auth_failed", "timeout", "max_retries_exceeded"]:
-                    diagnostic_info["summary"]["in_error_state"] += 1
-
-                if runtime.get("last_error"):
-                    connection_issues.append(
-                        {
-                            "subscription": sub_name,
-                            "state": connection_state,
-                            "error": runtime["last_error"],
-                        }
-                    )
 
             # Add troubleshooting recommendations
             recommendations: list[str] = []

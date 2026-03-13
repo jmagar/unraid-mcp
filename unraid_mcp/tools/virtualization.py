@@ -114,56 +114,42 @@ def register_vm_tool(mcp: FastMCP) -> None:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         with tool_error_handler("vm", action, logger):
-            try:
-                logger.info(f"Executing unraid_vm action={action}")
+            logger.info(f"Executing unraid_vm action={action}")
 
-                if action == "list":
-                    data = await make_graphql_request(QUERIES["list"])
-                    if data.get("vms"):
-                        vms = data["vms"].get("domains") or data["vms"].get("domain") or []
-                        if isinstance(vms, dict):
-                            vms = [vms]
-                        return {"vms": vms}
-                    return {"vms": []}
-
-                if action == "details":
-                    data = await make_graphql_request(QUERIES["details"])
-                    if not data.get("vms"):
-                        raise ToolError("No VM data returned from server")
+            if action == "list":
+                data = await make_graphql_request(QUERIES["list"])
+                if data.get("vms"):
                     vms = data["vms"].get("domains") or data["vms"].get("domain") or []
                     if isinstance(vms, dict):
                         vms = [vms]
-                    for vm in vms:
-                        if (
-                            vm.get("uuid") == vm_id
-                            or vm.get("id") == vm_id
-                            or vm.get("name") == vm_id
-                        ):
-                            return dict(vm)
-                    available = [f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms]
-                    raise ToolError(f"VM '{vm_id}' not found. Available: {', '.join(available)}")
+                    return {"vms": vms}
+                return {"vms": []}
 
-                # Mutations
-                if action in MUTATIONS:
-                    data = await make_graphql_request(MUTATIONS[action], {"id": vm_id})
-                    field = _MUTATION_FIELDS.get(action, action)
-                    if data.get("vm") and field in data["vm"]:
-                        return {
-                            "success": data["vm"][field],
-                            "action": action,
-                            "vm_id": vm_id,
-                        }
-                    raise ToolError(f"Failed to {action} VM or unexpected response")
+            if action == "details":
+                data = await make_graphql_request(QUERIES["details"])
+                if not data.get("vms"):
+                    raise ToolError("No VM data returned from server")
+                vms = data["vms"].get("domains") or data["vms"].get("domain") or []
+                if isinstance(vms, dict):
+                    vms = [vms]
+                for vm in vms:
+                    if vm.get("uuid") == vm_id or vm.get("id") == vm_id or vm.get("name") == vm_id:
+                        return dict(vm)
+                available = [f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms]
+                raise ToolError(f"VM '{vm_id}' not found. Available: {', '.join(available)}")
 
-                raise ToolError(f"Unhandled action '{action}' — this is a bug")
+            # Mutations
+            if action in MUTATIONS:
+                data = await make_graphql_request(MUTATIONS[action], {"id": vm_id})
+                field = _MUTATION_FIELDS.get(action, action)
+                if data.get("vm") and field in data["vm"]:
+                    return {
+                        "success": data["vm"][field],
+                        "action": action,
+                        "vm_id": vm_id,
+                    }
+                raise ToolError(f"Failed to {action} VM or unexpected response")
 
-            except ToolError:
-                raise
-            except Exception as e:
-                if "VMs are not available" in str(e):
-                    raise ToolError(
-                        "VMs not available on this server. Check VM support is enabled."
-                    ) from e
-                raise
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
     logger.info("VM tool registered successfully")

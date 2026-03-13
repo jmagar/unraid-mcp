@@ -11,6 +11,7 @@ services:
     tmpfs:
       - /tmp:noexec,nosuid,size=64m
       - /app/logs:noexec,nosuid,size=16m
+      - /app/.cache/logs:noexec,nosuid,size=8m
     ports:
       # HostPort:ContainerPort (maps to UNRAID_MCP_PORT inside the container, default 6970)
       # Change the host port (left side) if 6970 is already in use on your host
