@@ -171,6 +171,7 @@ MUTATIONS: dict[str, str] = {
     """,
 }
 
+DESTRUCTIVE_ACTIONS = {"update_ssh"}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 INFO_ACTIONS = Literal[
@@ -326,6 +327,7 @@ def register_info_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_info(
         action: INFO_ACTIONS,
+        confirm: bool = False,
         device_id: str | None = None,
         server_name: str | None = None,
         server_comment: str | None = None,
@@ -360,6 +362,9 @@ def register_info_tool(mcp: FastMCP) -> None:
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
+
+        if action in DESTRUCTIVE_ACTIONS and not confirm:
+            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         if action == "ups_device" and not device_id:
             raise ToolError("device_id is required for ups_device action")

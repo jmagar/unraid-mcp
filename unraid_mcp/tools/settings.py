@@ -142,11 +142,17 @@ def register_settings_tool(mcp: FastMCP) -> None:
 
             if action == "update_temperature":
                 if temperature_config is None:
-                    raise ToolError("temperature_config is required for 'update_temperature' action")
+                    raise ToolError(
+                        "temperature_config is required for 'update_temperature' action"
+                    )
                 data = await make_graphql_request(
                     MUTATIONS["update_temperature"], {"input": temperature_config}
                 )
-                return {"success": True, "action": "update_temperature", "result": data.get("updateTemperatureConfig")}
+                return {
+                    "success": True,
+                    "action": "update_temperature",
+                    "result": data.get("updateTemperatureConfig"),
+                }
 
             if action == "update_time":
                 time_input: dict[str, Any] = {}
@@ -163,13 +169,23 @@ def register_settings_tool(mcp: FastMCP) -> None:
                         "update_time requires at least one of: time_zone, use_ntp, ntp_servers, manual_datetime"
                     )
                 data = await make_graphql_request(MUTATIONS["update_time"], {"input": time_input})
-                return {"success": True, "action": "update_time", "data": data.get("updateSystemTime")}
+                return {
+                    "success": True,
+                    "action": "update_time",
+                    "data": data.get("updateSystemTime"),
+                }
 
             if action == "configure_ups":
                 if ups_config is None:
                     raise ToolError("ups_config is required for 'configure_ups' action")
-                data = await make_graphql_request(MUTATIONS["configure_ups"], {"config": ups_config})
-                return {"success": True, "action": "configure_ups", "result": data.get("configureUps")}
+                data = await make_graphql_request(
+                    MUTATIONS["configure_ups"], {"config": ups_config}
+                )
+                return {
+                    "success": True,
+                    "action": "configure_ups",
+                    "result": data.get("configureUps"),
+                }
 
             if action == "update_api":
                 api_input: dict[str, Any] = {}
@@ -184,29 +200,41 @@ def register_settings_tool(mcp: FastMCP) -> None:
                         "update_api requires at least one of: access_type, forward_type, port"
                     )
                 data = await make_graphql_request(MUTATIONS["update_api"], {"input": api_input})
-                return {"success": True, "action": "update_api", "data": data.get("updateApiSettings")}
+                return {
+                    "success": True,
+                    "action": "update_api",
+                    "data": data.get("updateApiSettings"),
+                }
 
             if action == "connect_sign_in":
                 if not api_key:
                     raise ToolError("api_key is required for 'connect_sign_in' action")
                 sign_in_input: dict[str, Any] = {"apiKey": api_key}
-                if username or email:
-                    user_info: dict[str, Any] = {}
-                    if username:
-                        user_info["preferred_username"] = username
-                    if email:
-                        user_info["email"] = email
-                    if avatar:
-                        user_info["avatar"] = avatar
+                user_info: dict[str, Any] = {}
+                if username:
+                    user_info["preferred_username"] = username
+                if email:
+                    user_info["email"] = email
+                if avatar:
+                    user_info["avatar"] = avatar
+                if user_info:
                     sign_in_input["userInfo"] = user_info
                 data = await make_graphql_request(
                     MUTATIONS["connect_sign_in"], {"input": sign_in_input}
                 )
-                return {"success": True, "action": "connect_sign_in", "result": data.get("connectSignIn")}
+                return {
+                    "success": True,
+                    "action": "connect_sign_in",
+                    "result": data.get("connectSignIn"),
+                }
 
             if action == "connect_sign_out":
                 data = await make_graphql_request(MUTATIONS["connect_sign_out"])
-                return {"success": True, "action": "connect_sign_out", "result": data.get("connectSignOut")}
+                return {
+                    "success": True,
+                    "action": "connect_sign_out",
+                    "result": data.get("connectSignOut"),
+                }
 
             if action == "setup_remote_access":
                 if not access_type:
@@ -219,7 +247,11 @@ def register_settings_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     MUTATIONS["setup_remote_access"], {"input": remote_input}
                 )
-                return {"success": True, "action": "setup_remote_access", "result": data.get("setupRemoteAccess")}
+                return {
+                    "success": True,
+                    "action": "setup_remote_access",
+                    "result": data.get("setupRemoteAccess"),
+                }
 
             if action == "enable_dynamic_remote_access":
                 if not access_url_type:
@@ -241,7 +273,11 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     MUTATIONS["enable_dynamic_remote_access"],
                     {"input": {"url": url_input, "enabled": dynamic_enabled}},
                 )
-                return {"success": True, "action": "enable_dynamic_remote_access", "result": data.get("enableDynamicRemoteAccess")}
+                return {
+                    "success": True,
+                    "action": "enable_dynamic_remote_access",
+                    "result": data.get("enableDynamicRemoteAccess"),
+                }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
