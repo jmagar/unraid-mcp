@@ -4,8 +4,10 @@ This module defines MCP resources that bridge between the subscription manager
 and the MCP protocol, providing fallback queries when subscription data is unavailable.
 """
 
+import asyncio
 import json
 import os
+from typing import Final
 
 import anyio
 from fastmcp import FastMCP
@@ -16,22 +18,29 @@ from .manager import subscription_manager
 
 # Global flag to track subscription startup
 _subscriptions_started = False
+_startup_lock: Final[asyncio.Lock] = asyncio.Lock()
 
 
 async def ensure_subscriptions_started() -> None:
     """Ensure subscriptions are started, called from async context."""
     global _subscriptions_started
 
+    # Fast-path: skip lock if already started
     if _subscriptions_started:
         return
 
-    logger.info("[STARTUP] First async operation detected, starting subscriptions...")
-    try:
-        await autostart_subscriptions()
-        _subscriptions_started = True
-        logger.info("[STARTUP] Subscriptions started successfully")
-    except Exception as e:
-        logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
+    # Slow-path: acquire lock for initialization (double-checked locking)
+    async with _startup_lock:
+        if _subscriptions_started:
+            return
+
+        logger.info("[STARTUP] First async operation detected, starting subscriptions...")
+        try:
+            await autostart_subscriptions()
+            _subscriptions_started = True
+            logger.info("[STARTUP] Subscriptions started successfully")
+        except Exception as e:
+            logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
 
 
 async def autostart_subscriptions() -> None:
@@ -39,11 +48,12 @@ async def autostart_subscriptions() -> None:
     logger.info("[AUTOSTART] Initiating subscription auto-start process...")
 
     try:
-        # Use the new SubscriptionManager auto-start method
+        # Use the SubscriptionManager auto-start method
         await subscription_manager.auto_start_all_subscriptions()
         logger.info("[AUTOSTART] Auto-start process completed successfully")
     except Exception as e:
         logger.error(f"[AUTOSTART] Failed during auto-start process: {e}", exc_info=True)
+        raise  # Propagate so ensure_subscriptions_started doesn't mark as started
 
     # Optional log file subscription
     log_path = os.getenv("UNRAID_AUTOSTART_LOG_PATH")
