@@ -187,10 +187,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
           unarchive_all - Move all archived notifications to unread (optional importance filter)
           recalculate - Recompute overview counts from disk
         """
-        _VALID_LIST_TYPES = frozenset({"UNREAD", "ARCHIVE"})
-        _VALID_IMPORTANCE = frozenset({"INFO", "WARNING", "ALERT"})
-        _VALID_NOTIFICATION_TYPES = frozenset({"UNREAD", "ARCHIVE"})
-
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
@@ -198,21 +194,23 @@ def register_notifications_tool(mcp: FastMCP) -> None:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         # Validate enum parameters before dispatching to GraphQL (SEC-M04).
-        # Invalid values here would waste a rate-limited request and may leak schema details.
-        if list_type.upper() not in _VALID_LIST_TYPES:
+        # Invalid values waste a rate-limited request and may leak schema details in errors.
+        valid_list_types = frozenset({"UNREAD", "ARCHIVE"})
+        valid_importance = frozenset({"INFO", "WARNING", "ALERT"})
+        valid_notif_types = frozenset({"UNREAD", "ARCHIVE"})
+
+        if list_type.upper() not in valid_list_types:
             raise ToolError(
-                f"Invalid list_type '{list_type}'. Must be one of: {sorted(_VALID_LIST_TYPES)}"
+                f"Invalid list_type '{list_type}'. Must be one of: {sorted(valid_list_types)}"
             )
-        if importance is not None and importance.upper() not in _VALID_IMPORTANCE:
+        if importance is not None and importance.upper() not in valid_importance:
             raise ToolError(
-                f"Invalid importance '{importance}'. Must be one of: {sorted(_VALID_IMPORTANCE)}"
+                f"Invalid importance '{importance}'. Must be one of: {sorted(valid_importance)}"
             )
-        if (
-            notification_type is not None
-            and notification_type.upper() not in _VALID_NOTIFICATION_TYPES
-        ):
+        if notification_type is not None and notification_type.upper() not in valid_notif_types:
             raise ToolError(
-                f"Invalid notification_type '{notification_type}'. Must be one of: {sorted(_VALID_NOTIFICATION_TYPES)}"
+                f"Invalid notification_type '{notification_type}'. "
+                f"Must be one of: {sorted(valid_notif_types)}"
             )
 
         with tool_error_handler("notifications", action, logger):
