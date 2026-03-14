@@ -109,10 +109,12 @@ docker compose down
 
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:
-1. `/app/.env.local` (container mount)
-2. `../.env.local` (project root)
-3. `../.env` (project root)
-4. `.env` (local directory)
+1. `~/.unraid-mcp/.env` (primary — canonical credentials dir, all runtimes)
+2. `~/.unraid-mcp/.env.local` (local overrides, only used if primary is absent)
+3. `/app/.env.local` (Docker container mount)
+4. `../.env.local` (project root local overrides)
+5. `../.env` (project root fallback)
+6. `unraid_mcp/.env` (last resort)
 
 ### Transport Configuration
 - **streamable-http** (recommended): HTTP-based transport on `/mcp` endpoint
@@ -182,17 +184,14 @@ When bumping the version, **always update both files** — they must stay in syn
 - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
 - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
 
-### Plugin Cache `.env` (automatic via elicitation)
-On first tool call without credentials, the server triggers MCP elicitation to
-collect `UNRAID_API_URL` and `UNRAID_API_KEY` interactively, then writes `.env`
-to the plugin cache dir automatically. No manual symlinking needed.
-
-Manual fallback (if client doesn't support elicitation):
-```bash
-VERSION=$(grep '^version' pyproject.toml | grep -oP '[\d.]+') && \
-ln -sf /home/jmagar/workspace/unraid-mcp/.env \
-  ~/.claude/plugins/cache/jmagar-unraid-mcp/unraid/${VERSION}/.env
-```
+### Credential Storage (`~/.unraid-mcp/.env`)
+All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
+- **Plugin/direct:** `unraid_health action=setup` writes this file automatically via elicitation,
+  or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.
+- **Docker:** `docker-compose.yml` loads it via `env_file` before container start.
+- **No symlinks needed.** Version bumps do not affect this path.
+- **Permissions:** dir=700, file=600 (set automatically by elicitation; set manually if
+  using `cp`: `chmod 700 ~/.unraid-mcp && chmod 600 ~/.unraid-mcp/.env`).
 
 ### Symlinks
 `AGENTS.md` and `GEMINI.md` are symlinks to `CLAUDE.md` for Codex/Gemini compatibility:

@@ -54,22 +54,31 @@ This provides instant access to Unraid monitoring and management through Claude 
 
 **See [.claude-plugin/README.md](.claude-plugin/README.md) for detailed plugin documentation.**
 
-### ⚙️ Credential Setup (Automatic)
+### ⚙️ Credential Setup
 
-On first use, the plugin will **automatically prompt you for credentials** via an
-interactive elicitation dialog in Claude Code. Simply call any Unraid tool and
-follow the prompts — no manual `.env` configuration needed.
+Credentials are stored in `~/.unraid-mcp/.env` — one location that works for the
+Claude Code plugin, direct `uv run` invocations, and Docker.
 
-Alternatively, trigger setup explicitly:
+**Option 1 — Interactive (Claude Code plugin, elicitation-supported clients):**
 ```
 unraid_health action=setup
 ```
+The server prompts for your API URL and key, writes `~/.unraid-mcp/.env` automatically
+(created with mode 700/600), and activates credentials without restart.
 
-Credentials are saved to `.env` in the plugin cache directory and persisted
-across restarts.
+**Option 2 — Manual:**
+```bash
+mkdir -p ~/.unraid-mcp && chmod 700 ~/.unraid-mcp
+cp .env.example ~/.unraid-mcp/.env && chmod 600 ~/.unraid-mcp/.env
+# Edit ~/.unraid-mcp/.env with your values:
+#   UNRAID_API_URL=https://10-1-0-2.xxx.myunraid.net:31337
+#   UNRAID_API_KEY=your-key-from-unraid-settings
+```
 
-> **Manual fallback:** If elicitation is not supported by your client, create
-> `.env` in the plugin cache directory manually (see `.env.example` for the format).
+**Docker:** `~/.unraid-mcp/.env` is loaded via `env_file` in `docker-compose.yml` —
+same file, no duplication needed.
+
+> **Finding your API key:** Unraid → Settings → Management Access → API Keys
 
 ---
 
