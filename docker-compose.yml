@@ -16,8 +16,13 @@ services:
       # HostPort:ContainerPort (maps to UNRAID_MCP_PORT inside the container, default 6970)
       # Change the host port (left side) if 6970 is already in use on your host
       - "${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
+    env_file:
+      - path: ${HOME}/.unraid-mcp/.env
+        required: false  # Don't fail if file missing; environment: block below takes over
     environment:
       # Core API Configuration (Required)
+      # Sourced from ~/.unraid-mcp/.env via env_file above (if present),
+      # or set these directly here. The :? syntax fails fast if unset.
       - UNRAID_API_URL=${UNRAID_API_URL:?UNRAID_API_URL is required}
       - UNRAID_API_KEY=${UNRAID_API_KEY:?UNRAID_API_KEY is required}
 
