@@ -6,11 +6,21 @@ configuration, time settings, UPS, API settings, and Unraid Connect.
 
 from typing import Any, Literal, get_args
 
+from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
+from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.setup import elicit_and_configure as _elicit
+
+
+# Re-export at module scope so tests can patch "unraid_mcp.tools.settings.elicit_and_configure"
+# and "unraid_mcp.tools.settings.CredentialsNotConfiguredError"
+elicit_and_configure = _elicit
+CredentialsNotConfiguredError = _CredErr
+Context = _Context
 
 
 MUTATIONS: dict[str, str] = {
@@ -111,6 +121,7 @@ def register_settings_tool(mcp: FastMCP) -> None:
         access_url_ipv4: str | None = None,
         access_url_ipv6: str | None = None,
         dynamic_enabled: bool | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Update Unraid system settings, time, UPS, and remote access configuration.
 
@@ -137,7 +148,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
             if action == "update":
                 if settings_input is None:
                     raise ToolError("settings_input is required for 'update' action")
-                data = await make_graphql_request(MUTATIONS["update"], {"input": settings_input})
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["update"], {"input": settings_input}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["update"], {"input": settings_input}
+                    )
                 return {"success": True, "action": "update", "data": data.get("updateSettings")}
 
             if action == "update_temperature":

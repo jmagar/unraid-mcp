@@ -21,7 +21,10 @@ def _mock_graphql() -> Generator[AsyncMock, None, None]:
 def _make_tool() -> AsyncMock:
     test_mcp = FastMCP("test")
     register_settings_tool(test_mcp)
-    return test_mcp._tool_manager._tools["unraid_settings"].fn  # type: ignore[union-attr]
+    # FastMCP 3.x stores tools in providers[0]._components keyed as "tool:{name}@"
+    local_provider = test_mcp.providers[0]
+    tool = local_provider._components["tool:unraid_settings@"]
+    return tool.fn  # type: ignore[union-attr]
 
 
 class TestSettingsValidation:
