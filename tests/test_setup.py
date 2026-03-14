@@ -94,3 +94,63 @@ def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
         assert any("elicitation" in msg for msg in warning_msgs), (
             f"Expected a warning containing 'elicitation', got: {warning_msgs}"
         )
+
+
+@pytest.mark.asyncio
+async def test_elicit_and_configure_writes_env_file(tmp_path):
+    """elicit_and_configure writes a .env file and calls apply_runtime_config."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from unraid_mcp.core.setup import elicit_and_configure
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "accept"
+    mock_result.data = MagicMock()
+    mock_result.data.api_url = "https://myunraid.example.com/graphql"
+    mock_result.data.api_key = "abc123secret"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    with (
+        patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
+        patch("unraid_mcp.core.setup.apply_runtime_config") as mock_apply,
+    ):
+        result = await elicit_and_configure(mock_ctx)
+
+    assert result is True
+    env_file = tmp_path / ".env"
+    assert env_file.exists()
+    content = env_file.read_text()
+    assert "UNRAID_API_URL=https://myunraid.example.com/graphql" in content
+    assert "UNRAID_API_KEY=abc123secret" in content
+    mock_apply.assert_called_once_with("https://myunraid.example.com/graphql", "abc123secret")
+
+
+@pytest.mark.asyncio
+async def test_elicit_and_configure_returns_false_on_decline():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_and_configure
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "decline"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_and_configure(mock_ctx)
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_and_configure_returns_false_on_cancel():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_and_configure
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "cancel"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_and_configure(mock_ctx)
+    assert result is False
