@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 [project]
 name = "unraid-mcp"
-version = "0.4.3"
+version = "0.4.4"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -107,8 +107,13 @@ only-include = ["unraid_mcp"]
 include = [
     "/unraid_mcp",
     "/tests",
+    "/commands",
+    "/skills",
     "/README.md",
     "/LICENSE",
+    "/CLAUDE.md",
+    "/AGENTS.md",
+    "/GEMINI.md",
     "/pyproject.toml",
     "/.env.example",
 ]
@@ -120,6 +125,8 @@ exclude = [
     "/.docs",
     "/.full-review",
     "/docs",
+    "/dist",
+    "/logs",
     "*.pyc",
     "__pycache__",
 ]

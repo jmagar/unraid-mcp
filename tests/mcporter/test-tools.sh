@@ -26,7 +26,7 @@ set -uo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+readonly PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 readonly SCRIPT_NAME="$(basename -- "${BASH_SOURCE[0]}")"
 readonly TS_START="$(date +%s%N)"                  # nanosecond epoch
 readonly LOG_FILE="${TMPDIR:-/tmp}/${SCRIPT_NAME%.sh}.$(date +%Y%m%d-%H%M%S).log"

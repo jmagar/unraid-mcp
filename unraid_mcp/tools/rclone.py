@@ -153,7 +153,13 @@ def register_rclone_tool(mcp: FastMCP) -> None:
                 validated_config = _validate_config_data(config_data)
                 data = await make_graphql_request(
                     MUTATIONS["create_remote"],
-                    {"input": {"name": name, "type": provider_type, "config": validated_config}},
+                    {
+                        "input": {
+                            "name": name,
+                            "type": provider_type,
+                            "parameters": validated_config,
+                        }
+                    },
                 )
                 remote = data.get("rclone", {}).get("createRCloneRemote")
                 if not remote:
