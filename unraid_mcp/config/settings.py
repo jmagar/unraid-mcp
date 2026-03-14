@@ -108,6 +108,24 @@ def validate_required_config() -> tuple[bool, list[str]]:
     return len(missing) == 0, missing
 
 
+def is_configured() -> bool:
+    """Return True if both required credentials are present."""
+    return bool(UNRAID_API_URL and UNRAID_API_KEY)
+
+
+def apply_runtime_config(api_url: str, api_key: str) -> None:
+    """Update module-level credential globals at runtime (post-elicitation).
+
+    Also sets matching environment variables so submodules that read
+    os.getenv() after import see the new values.
+    """
+    global UNRAID_API_URL, UNRAID_API_KEY
+    UNRAID_API_URL = api_url
+    UNRAID_API_KEY = api_key
+    os.environ["UNRAID_API_URL"] = api_url
+    os.environ["UNRAID_API_KEY"] = api_key
+
+
 def get_config_summary() -> dict[str, Any]:
     """Get a summary of current configuration (safe for logging).
 
