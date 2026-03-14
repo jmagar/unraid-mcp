@@ -453,7 +453,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
             if action == "details":
                 # Resolve name -> ID first (skips list fetch if already an ID)
                 actual_id = await _resolve_container_id(container_id or "")
-                data = await make_graphql_request(QUERIES["details"])
+                try:
+                    data = await make_graphql_request(QUERIES["details"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["details"])
                 containers = safe_get(data, "docker", "containers", default=[])
                 # Match by resolved ID (exact match, no second list fetch needed)
                 for c in containers:
@@ -463,9 +471,19 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "logs":
                 actual_id = await _resolve_container_id(container_id or "")
-                data = await make_graphql_request(
-                    QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
-                )
+                try:
+                    data = await make_graphql_request(
+                        QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
+                    )
                 logs_data = safe_get(data, "docker", "logs")
                 if logs_data is None:
                     raise ToolError(f"No logs returned for container '{container_id}'")
@@ -483,12 +501,28 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 }
 
             if action == "networks":
-                data = await make_graphql_request(QUERIES["networks"])
+                try:
+                    data = await make_graphql_request(QUERIES["networks"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["networks"])
                 networks = safe_get(data, "docker", "networks", default=[])
                 return {"networks": networks}
 
             if action == "network_details":
-                data = await make_graphql_request(QUERIES["network_details"])
+                try:
+                    data = await make_graphql_request(QUERIES["network_details"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["network_details"])
                 all_networks = safe_get(data, "docker", "networks", default=[])
                 # Filter client-side by network_id since the API returns all networks
                 for net in all_networks:
@@ -497,7 +531,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 raise ToolError(f"Network '{network_id}' not found.")
 
             if action == "port_conflicts":
-                data = await make_graphql_request(QUERIES["port_conflicts"])
+                try:
+                    data = await make_graphql_request(QUERIES["port_conflicts"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["port_conflicts"])
                 conflicts_data = safe_get(data, "docker", "portConflicts", default={})
                 # The GraphQL response is { containerPorts: [...], lanPorts: [...] }
                 # but callers expect result["port_conflicts"] to be a flat list.
@@ -511,7 +553,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 return {"port_conflicts": conflicts}
 
             if action == "check_updates":
-                data = await make_graphql_request(QUERIES["check_updates"])
+                try:
+                    data = await make_graphql_request(QUERIES["check_updates"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["check_updates"])
                 statuses = safe_get(data, "docker", "containerUpdateStatuses", default=[])
                 return {"update_statuses": statuses}
 
@@ -519,11 +569,23 @@ def register_docker_tool(mcp: FastMCP) -> None:
             if action == "restart":
                 actual_id = await _resolve_container_id(container_id or "", strict=True)
                 # Stop (idempotent: treat "already stopped" as success)
-                stop_data = await make_graphql_request(
-                    MUTATIONS["stop"],
-                    {"id": actual_id},
-                    operation_context={"operation": "stop"},
-                )
+                try:
+                    stop_data = await make_graphql_request(
+                        MUTATIONS["stop"],
+                        {"id": actual_id},
+                        operation_context={"operation": "stop"},
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    stop_data = await make_graphql_request(
+                        MUTATIONS["stop"],
+                        {"id": actual_id},
+                        operation_context={"operation": "stop"},
+                    )
                 stop_was_idempotent = stop_data.get("idempotent_success", False)
                 # Start (idempotent: treat "already running" as success)
                 start_data = await make_graphql_request(
@@ -545,7 +607,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 return response
 
             if action == "update_all":
-                data = await make_graphql_request(MUTATIONS["update_all"])
+                try:
+                    data = await make_graphql_request(MUTATIONS["update_all"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["update_all"])
                 results = safe_get(data, "docker", "updateAllContainers", default=[])
                 return {"success": True, "action": "update_all", "containers": results}
 
@@ -558,7 +628,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     _vars["parentId"] = parent_id
                 if children_ids is not None:
                     _vars["childrenIds"] = children_ids
-                data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
+                try:
+                    data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
                 organizer = data.get("createDockerFolder")
                 if organizer is None:
                     raise ToolError("create_folder failed: server returned no data")
@@ -570,7 +648,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 _vars = {"childrenIds": children_ids}
                 if folder_id is not None:
                     _vars["folderId"] = folder_id
-                data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
+                try:
+                    data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
                 organizer = data.get("setDockerFolderChildren")
                 if organizer is None:
                     raise ToolError("set_folder_children failed: server returned no data")
@@ -579,9 +665,19 @@ def register_docker_tool(mcp: FastMCP) -> None:
             if action == "delete_entries":
                 if not entry_ids:
                     raise ToolError("entry_ids is required for 'delete_entries' action")
-                data = await make_graphql_request(
-                    MUTATIONS["delete_entries"], {"entryIds": entry_ids}
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["delete_entries"], {"entryIds": entry_ids}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["delete_entries"], {"entryIds": entry_ids}
+                    )
                 organizer = data.get("deleteDockerEntries")
                 if organizer is None:
                     raise ToolError("delete_entries failed: server returned no data")
@@ -592,13 +688,19 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     raise ToolError("source_entry_ids is required for 'move_to_folder' action")
                 if not destination_folder_id:
                     raise ToolError("destination_folder_id is required for 'move_to_folder' action")
-                data = await make_graphql_request(
-                    MUTATIONS["move_to_folder"],
-                    {
-                        "sourceEntryIds": source_entry_ids,
-                        "destinationFolderId": destination_folder_id,
-                    },
-                )
+                _move_vars = {
+                    "sourceEntryIds": source_entry_ids,
+                    "destinationFolderId": destination_folder_id,
+                }
+                try:
+                    data = await make_graphql_request(MUTATIONS["move_to_folder"], _move_vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["move_to_folder"], _move_vars)
                 organizer = data.get("moveDockerEntriesToFolder")
                 if organizer is None:
                     raise ToolError("move_to_folder failed: server returned no data")
@@ -613,14 +715,20 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     )
                 if position is None:
                     raise ToolError("position is required for 'move_to_position' action")
-                data = await make_graphql_request(
-                    MUTATIONS["move_to_position"],
-                    {
-                        "sourceEntryIds": source_entry_ids,
-                        "destinationFolderId": destination_folder_id,
-                        "position": position,
-                    },
-                )
+                _mtp_vars = {
+                    "sourceEntryIds": source_entry_ids,
+                    "destinationFolderId": destination_folder_id,
+                    "position": position,
+                }
+                try:
+                    data = await make_graphql_request(MUTATIONS["move_to_position"], _mtp_vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["move_to_position"], _mtp_vars)
                 organizer = data.get("moveDockerItemsToPosition")
                 if organizer is None:
                     raise ToolError("move_to_position failed: server returned no data")
@@ -631,9 +739,16 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     raise ToolError("folder_id is required for 'rename_folder' action")
                 if not new_folder_name:
                     raise ToolError("new_folder_name is required for 'rename_folder' action")
-                data = await make_graphql_request(
-                    MUTATIONS["rename_folder"], {"folderId": folder_id, "newName": new_folder_name}
-                )
+                _rf_vars = {"folderId": folder_id, "newName": new_folder_name}
+                try:
+                    data = await make_graphql_request(MUTATIONS["rename_folder"], _rf_vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["rename_folder"], _rf_vars)
                 organizer = data.get("renameDockerFolder")
                 if organizer is None:
                     raise ToolError("rename_folder failed: server returned no data")
@@ -649,7 +764,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     _vars["sourceEntryIds"] = source_entry_ids
                 if position is not None:
                     _vars["position"] = position
-                data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
+                try:
+                    data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
                 organizer = data.get("createDockerFolderWithItems")
                 if organizer is None:
                     raise ToolError("create_folder_with_items failed: server returned no data")
@@ -662,23 +785,46 @@ def register_docker_tool(mcp: FastMCP) -> None:
             if action == "update_view_prefs":
                 if view_prefs is None:
                     raise ToolError("view_prefs is required for 'update_view_prefs' action")
-                data = await make_graphql_request(
-                    MUTATIONS["update_view_prefs"], {"viewId": view_id, "prefs": view_prefs}
-                )
+                _uvp_vars = {"viewId": view_id, "prefs": view_prefs}
+                try:
+                    data = await make_graphql_request(MUTATIONS["update_view_prefs"], _uvp_vars)
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["update_view_prefs"], _uvp_vars)
                 organizer = data.get("updateDockerViewPreferences")
                 if organizer is None:
                     raise ToolError("update_view_prefs failed: server returned no data")
                 return {"success": True, "action": "update_view_prefs", "organizer": organizer}
 
             if action == "sync_templates":
-                data = await make_graphql_request(MUTATIONS["sync_templates"])
+                try:
+                    data = await make_graphql_request(MUTATIONS["sync_templates"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["sync_templates"])
                 result = data.get("syncDockerTemplatePaths")
                 if result is None:
                     raise ToolError("sync_templates failed: server returned no data")
                 return {"success": True, "action": "sync_templates", "result": result}
 
             if action == "reset_template_mappings":
-                data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
+                try:
+                    data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
                 return {
                     "success": True,
                     "action": "reset_template_mappings",
@@ -686,7 +832,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 }
 
             if action == "refresh_digests":
-                data = await make_graphql_request(MUTATIONS["refresh_digests"])
+                try:
+                    data = await make_graphql_request(MUTATIONS["refresh_digests"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["refresh_digests"])
                 return {
                     "success": True,
                     "action": "refresh_digests",
@@ -699,11 +853,23 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 op_context: dict[str, str] | None = (
                     {"operation": action} if action in ("start", "stop") else None
                 )
-                data = await make_graphql_request(
-                    MUTATIONS[action],
-                    {"id": actual_id},
-                    operation_context=op_context,
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS[action],
+                        {"id": actual_id},
+                        operation_context=op_context,
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS[action],
+                        {"id": actual_id},
+                        operation_context=op_context,
+                    )
 
                 # Handle idempotent success
                 if data.get("idempotent_success"):

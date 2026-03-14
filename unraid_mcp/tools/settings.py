@@ -168,9 +168,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     raise ToolError(
                         "temperature_config is required for 'update_temperature' action"
                     )
-                data = await make_graphql_request(
-                    MUTATIONS["update_temperature"], {"input": temperature_config}
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["update_temperature"], {"input": temperature_config}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["update_temperature"], {"input": temperature_config}
+                    )
                 return {
                     "success": True,
                     "action": "update_temperature",
@@ -191,7 +201,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     raise ToolError(
                         "update_time requires at least one of: time_zone, use_ntp, ntp_servers, manual_datetime"
                     )
-                data = await make_graphql_request(MUTATIONS["update_time"], {"input": time_input})
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["update_time"], {"input": time_input}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["update_time"], {"input": time_input}
+                    )
                 return {
                     "success": True,
                     "action": "update_time",
@@ -201,9 +223,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
             if action == "configure_ups":
                 if ups_config is None:
                     raise ToolError("ups_config is required for 'configure_ups' action")
-                data = await make_graphql_request(
-                    MUTATIONS["configure_ups"], {"config": ups_config}
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["configure_ups"], {"config": ups_config}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["configure_ups"], {"config": ups_config}
+                    )
                 return {
                     "success": True,
                     "action": "configure_ups",
@@ -222,7 +254,15 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     raise ToolError(
                         "update_api requires at least one of: access_type, forward_type, port"
                     )
-                data = await make_graphql_request(MUTATIONS["update_api"], {"input": api_input})
+                try:
+                    data = await make_graphql_request(MUTATIONS["update_api"], {"input": api_input})
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["update_api"], {"input": api_input})
                 return {
                     "success": True,
                     "action": "update_api",
@@ -242,9 +282,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     user_info["avatar"] = avatar
                 if user_info:
                     sign_in_input["userInfo"] = user_info
-                data = await make_graphql_request(
-                    MUTATIONS["connect_sign_in"], {"input": sign_in_input}
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["connect_sign_in"], {"input": sign_in_input}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["connect_sign_in"], {"input": sign_in_input}
+                    )
                 return {
                     "success": True,
                     "action": "connect_sign_in",
@@ -252,7 +302,15 @@ def register_settings_tool(mcp: FastMCP) -> None:
                 }
 
             if action == "connect_sign_out":
-                data = await make_graphql_request(MUTATIONS["connect_sign_out"])
+                try:
+                    data = await make_graphql_request(MUTATIONS["connect_sign_out"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(MUTATIONS["connect_sign_out"])
                 return {
                     "success": True,
                     "action": "connect_sign_out",
@@ -267,9 +325,19 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     remote_input["forwardType"] = forward_type
                 if port is not None:
                     remote_input["port"] = port
-                data = await make_graphql_request(
-                    MUTATIONS["setup_remote_access"], {"input": remote_input}
-                )
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["setup_remote_access"], {"input": remote_input}
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["setup_remote_access"], {"input": remote_input}
+                    )
                 return {
                     "success": True,
                     "action": "setup_remote_access",
@@ -292,10 +360,22 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     url_input["ipv4"] = access_url_ipv4
                 if access_url_ipv6 is not None:
                     url_input["ipv6"] = access_url_ipv6
-                data = await make_graphql_request(
-                    MUTATIONS["enable_dynamic_remote_access"],
-                    {"input": {"url": url_input, "enabled": dynamic_enabled}},
-                )
+                dra_vars = {"input": {"url": url_input, "enabled": dynamic_enabled}}
+                try:
+                    data = await make_graphql_request(
+                        MUTATIONS["enable_dynamic_remote_access"],
+                        dra_vars,
+                    )
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(
+                        MUTATIONS["enable_dynamic_remote_access"],
+                        dra_vars,
+                    )
                 return {
                     "success": True,
                     "action": "enable_dynamic_remote_access",

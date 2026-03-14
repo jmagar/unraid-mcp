@@ -21,15 +21,26 @@ class _UnraidCredentials:
     api_key: str
 
 
-async def elicit_and_configure(ctx: Context) -> bool:
+async def elicit_and_configure(ctx: Context | None) -> bool:
     """Prompt the user for Unraid credentials via MCP elicitation.
 
     Writes accepted credentials to .env in PROJECT_ROOT and applies them
     to the running process via apply_runtime_config().
 
+    Args:
+        ctx: The MCP context for elicitation. If None, returns False immediately
+             (no context available to prompt the user).
+
     Returns:
         True if credentials were accepted and applied, False if declined/cancelled.
     """
+    if ctx is None:
+        logger.warning(
+            "Cannot elicit credentials: no MCP context available. "
+            "Run unraid_health action=setup to configure credentials."
+        )
+        return False
+
     result = await ctx.elicit(
         message=(
             "Unraid MCP needs your Unraid server credentials to connect.\n\n"
