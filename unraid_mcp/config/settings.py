@@ -18,13 +18,20 @@ SCRIPT_DIR = Path(__file__).parent  # /home/user/code/unraid-mcp/unraid_mcp/conf
 UNRAID_MCP_DIR = SCRIPT_DIR.parent  # /home/user/code/unraid-mcp/unraid_mcp/
 PROJECT_ROOT = UNRAID_MCP_DIR.parent  # /home/user/code/unraid-mcp/
 
+# Canonical credentials directory — version-agnostic, survives plugin version bumps.
+# Override with UNRAID_CREDENTIALS_DIR env var (useful for containers).
+CREDENTIALS_DIR = Path(os.getenv("UNRAID_CREDENTIALS_DIR", str(Path.home() / ".unraid-mcp")))
+CREDENTIALS_ENV_PATH = CREDENTIALS_DIR / ".env"
+
 # Load environment variables from .env file
-# In container: First try /app/.env.local (mounted), then project root .env
+# Priority: canonical ~/.unraid-mcp/.env first, then dev/container fallbacks.
 dotenv_paths = [
-    Path("/app/.env.local"),  # Container mount point
-    PROJECT_ROOT / ".env.local",  # Project root .env.local
-    PROJECT_ROOT / ".env",  # Project root .env
-    UNRAID_MCP_DIR / ".env",  # Local .env in unraid_mcp/
+    CREDENTIALS_ENV_PATH,  # primary — ~/.unraid-mcp/.env (all runtimes)
+    CREDENTIALS_DIR / ".env.local",  # only used if ~/.unraid-mcp/.env absent
+    Path("/app/.env.local"),  # Docker compat mount
+    PROJECT_ROOT / ".env.local",  # dev overrides
+    PROJECT_ROOT / ".env",  # dev fallback
+    UNRAID_MCP_DIR / ".env",  # last resort
 ]
 
 for dotenv_path in dotenv_paths:

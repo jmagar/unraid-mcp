@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -213,3 +214,45 @@ async def test_auto_elicitation_triggered_on_credentials_not_configured():
 
     mock_elicit.assert_called_once_with(mock_ctx)
     assert result is not None
+
+
+import os  # noqa: E402 — needed for reload-based tests below
+
+
+def test_credentials_dir_defaults_to_home_unraid_mcp():
+    """CREDENTIALS_DIR defaults to ~/.unraid-mcp when env var is not set."""
+    import importlib
+
+    import unraid_mcp.config.settings as s
+
+    os.environ.pop("UNRAID_CREDENTIALS_DIR", None)
+    try:
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("UNRAID_CREDENTIALS_DIR", None)
+            importlib.reload(s)
+            assert Path.home() / ".unraid-mcp" == s.CREDENTIALS_DIR
+    finally:
+        importlib.reload(s)  # Restore module state
+
+
+def test_credentials_dir_env_var_override():
+    """UNRAID_CREDENTIALS_DIR env var overrides the default."""
+    import importlib
+
+    import unraid_mcp.config.settings as s
+
+    custom = "/tmp/custom-creds"
+    try:
+        with patch.dict(os.environ, {"UNRAID_CREDENTIALS_DIR": custom}):
+            importlib.reload(s)
+            assert Path(custom) == s.CREDENTIALS_DIR
+    finally:
+        # Reload without the custom env var to restore original state
+        os.environ.pop("UNRAID_CREDENTIALS_DIR", None)
+        importlib.reload(s)
+
+
+def test_credentials_env_path_is_dot_env_inside_credentials_dir():
+    import unraid_mcp.config.settings as s
+
+    assert s.CREDENTIALS_ENV_PATH == s.CREDENTIALS_DIR / ".env"
