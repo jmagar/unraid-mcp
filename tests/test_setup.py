@@ -112,16 +112,20 @@ async def test_elicit_and_configure_writes_env_file(tmp_path):
     mock_result.data.api_key = "abc123secret"
     mock_ctx.elicit = AsyncMock(return_value=mock_result)
 
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
     with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
         patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
         patch("unraid_mcp.core.setup.apply_runtime_config") as mock_apply,
     ):
         result = await elicit_and_configure(mock_ctx)
 
     assert result is True
-    env_file = tmp_path / ".env"
-    assert env_file.exists()
-    content = env_file.read_text()
+    assert creds_file.exists()
+    content = creds_file.read_text()
     assert "UNRAID_API_URL=https://myunraid.example.com/graphql" in content
     assert "UNRAID_API_KEY=abc123secret" in content
     mock_apply.assert_called_once_with("https://myunraid.example.com/graphql", "abc123secret")
@@ -256,3 +260,133 @@ def test_credentials_env_path_is_dot_env_inside_credentials_dir():
     import unraid_mcp.config.settings as s
 
     assert s.CREDENTIALS_ENV_PATH == s.CREDENTIALS_DIR / ".env"
+
+
+import stat  # noqa: E402
+
+
+def test_write_env_creates_credentials_dir_with_700_permissions(tmp_path):
+    """_write_env creates CREDENTIALS_DIR with mode 700 (owner-only)."""
+    from unraid_mcp.core.setup import _write_env
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
+    ):
+        _write_env("https://example.com", "mykey")
+
+    assert creds_dir.exists()
+    dir_mode = stat.S_IMODE(creds_dir.stat().st_mode)
+    assert dir_mode == 0o700, f"Expected 0o700, got {oct(dir_mode)}"
+
+
+def test_write_env_sets_file_permissions_600(tmp_path):
+    """_write_env sets .env file permissions to 600 (owner read/write only)."""
+    from unraid_mcp.core.setup import _write_env
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
+    ):
+        _write_env("https://example.com", "mykey")
+
+    file_mode = stat.S_IMODE(creds_file.stat().st_mode)
+    assert file_mode == 0o600, f"Expected 0o600, got {oct(file_mode)}"
+
+
+def test_write_env_seeds_from_env_example_on_first_run(tmp_path):
+    """_write_env copies .env.example structure and replaces credentials in-place."""
+    from unraid_mcp.core.setup import _write_env
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+    # Create a fake .env.example
+    example = tmp_path / ".env.example"
+    example.write_text(
+        "# Example config\nFOO=bar\nUNRAID_API_URL=placeholder\nUNRAID_API_KEY=placeholder\n"
+    )
+
+    with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
+        patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
+    ):
+        _write_env("https://real.url", "realkey")
+
+    content = creds_file.read_text()
+    assert "UNRAID_API_URL=https://real.url" in content
+    assert "UNRAID_API_KEY=realkey" in content
+    assert "# Example config" in content  # comment preserved
+    assert "FOO=bar" in content  # other vars preserved
+    assert "placeholder" not in content  # old credential values replaced
+    # Credentials should be at their original position (after comments), not prepended before them
+    lines = content.splitlines()
+    url_idx = next(i for i, line in enumerate(lines) if line.startswith("UNRAID_API_URL="))
+    comment_idx = next(i for i, line in enumerate(lines) if line.startswith("# Example config"))
+    assert comment_idx < url_idx  # Comment comes before credentials
+
+
+def test_write_env_first_run_no_example_file(tmp_path):
+    """_write_env works on first run when .env.example does not exist."""
+    from unraid_mcp.core.setup import _write_env
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+    # tmp_path has no .env.example
+
+    with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
+        patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
+    ):
+        _write_env("https://myserver.com", "mykey123")
+
+    assert creds_file.exists()
+    content = creds_file.read_text()
+    assert "UNRAID_API_URL=https://myserver.com" in content
+    assert "UNRAID_API_KEY=mykey123" in content
+
+
+def test_write_env_updates_existing_credentials_in_place(tmp_path):
+    """_write_env updates credentials without destroying other vars."""
+    from unraid_mcp.core.setup import _write_env
+
+    creds_dir = tmp_path / "creds"
+    creds_dir.mkdir(mode=0o700)
+    creds_file = creds_dir / ".env"
+    creds_file.write_text(
+        "UNRAID_API_URL=https://old.url\nUNRAID_API_KEY=oldkey\nUNRAID_VERIFY_SSL=false\n"
+    )
+
+    with (
+        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
+        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
+        patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
+    ):
+        _write_env("https://new.url", "newkey")
+
+    content = creds_file.read_text()
+    assert "UNRAID_API_URL=https://new.url" in content
+    assert "UNRAID_API_KEY=newkey" in content
+    assert "UNRAID_VERIFY_SSL=false" in content  # preserved
+    assert "old" not in content
+
+
+@pytest.mark.asyncio
+async def test_elicit_and_configure_returns_false_when_client_not_supported():
+    """elicit_and_configure returns False when client raises NotImplementedError."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_and_configure
+
+    mock_ctx = MagicMock()
+    mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
+
+    result = await elicit_and_configure(mock_ctx)
+    assert result is False

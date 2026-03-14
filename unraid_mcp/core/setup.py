@@ -2,7 +2,7 @@
 
 When UNRAID_API_URL or UNRAID_API_KEY are absent, tools call
 `elicit_and_configure(ctx)` to collect them from the user and persist
-them to .env in the server root directory.
+them to ~/.unraid-mcp/.env with restricted permissions.
 """
 
 from __future__ import annotations
@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from fastmcp import Context
 
 from ..config.logging import logger
-from ..config.settings import PROJECT_ROOT, apply_runtime_config
+from ..config.settings import (
+    CREDENTIALS_DIR,
+    CREDENTIALS_ENV_PATH,
+    PROJECT_ROOT,
+    apply_runtime_config,
+)
 
 
 @dataclass
@@ -24,7 +29,7 @@ class _UnraidCredentials:
 async def elicit_and_configure(ctx: Context | None) -> bool:
     """Prompt the user for Unraid credentials via MCP elicitation.
 
-    Writes accepted credentials to .env in PROJECT_ROOT and applies them
+    Writes accepted credentials to CREDENTIALS_ENV_PATH and applies them
     to the running process via apply_runtime_config().
 
     Args:
@@ -32,7 +37,8 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
              (no context available to prompt the user).
 
     Returns:
-        True if credentials were accepted and applied, False if declined/cancelled.
+        True if credentials were accepted and applied, False if declined/cancelled
+        or if the MCP client does not support elicitation.
     """
     if ctx is None:
         logger.warning(
@@ -41,15 +47,23 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
         )
         return False
 
-    result = await ctx.elicit(
-        message=(
-            "Unraid MCP needs your Unraid server credentials to connect.\n\n"
-            "• **API URL**: Your Unraid GraphQL endpoint "
-            "(e.g. `https://10-1-0-2.xxx.myunraid.net:31337`)\n"
-            "• **API Key**: Found in Unraid → Settings → Management Access → API Keys"
-        ),
-        response_type=_UnraidCredentials,
-    )
+    try:
+        result = await ctx.elicit(
+            message=(
+                "Unraid MCP needs your Unraid server credentials to connect.\n\n"
+                "• **API URL**: Your Unraid GraphQL endpoint "
+                "(e.g. `https://10-1-0-2.xxx.myunraid.net:31337`)\n"
+                "• **API Key**: Found in Unraid → Settings → Management Access → API Keys"
+            ),
+            response_type=_UnraidCredentials,
+        )
+    except NotImplementedError:
+        logger.warning(
+            "MCP client does not support elicitation. "
+            "Use unraid_health action=setup or create %s manually.",
+            CREDENTIALS_ENV_PATH,
+        )
+        return False
 
     if result.action != "accept":
         logger.warning("Credential elicitation %s — server remains unconfigured.", result.action)
@@ -61,29 +75,47 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
     _write_env(api_url, api_key)
     apply_runtime_config(api_url, api_key)
 
-    logger.info("Credentials configured via elicitation and persisted to .env.")
+    logger.info("Credentials configured via elicitation and persisted to %s.", CREDENTIALS_ENV_PATH)
     return True
 
 
 def _write_env(api_url: str, api_key: str) -> None:
-    """Write or update .env in PROJECT_ROOT with credential values.
+    """Write or update credentials in CREDENTIALS_ENV_PATH.
 
-    Preserves any existing lines that are not UNRAID_API_URL or UNRAID_API_KEY.
+    Creates CREDENTIALS_DIR (mode 700) if needed. On first run, seeds from
+    .env.example to preserve comments and structure. Sets file mode to 600.
     """
-    env_path = PROJECT_ROOT / ".env"
-    existing_lines: list[str] = []
+    # Ensure directory exists with restricted permissions (chmod after to bypass umask)
+    CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_DIR.chmod(0o700)
 
-    if env_path.exists():
-        for line in env_path.read_text().splitlines():
-            stripped = line.strip()
-            if stripped.startswith("UNRAID_API_URL=") or stripped.startswith("UNRAID_API_KEY="):
-                continue  # Will be replaced below
-            existing_lines.append(line)
+    if CREDENTIALS_ENV_PATH.exists():
+        template_lines = CREDENTIALS_ENV_PATH.read_text().splitlines()
+    else:
+        example_path = PROJECT_ROOT / ".env.example"
+        template_lines = example_path.read_text().splitlines() if example_path.exists() else []
 
-    new_lines = [
-        f"UNRAID_API_URL={api_url}",
-        f"UNRAID_API_KEY={api_key}",
-        *existing_lines,
-    ]
-    env_path.write_text("\n".join(new_lines) + "\n")
-    logger.debug("Wrote credentials to %s", env_path)
+    # Replace credentials in-place; append at end if not found in template
+    url_written = False
+    key_written = False
+    new_lines: list[str] = []
+    for line in template_lines:
+        stripped = line.strip()
+        if stripped.startswith("UNRAID_API_URL="):
+            new_lines.append(f"UNRAID_API_URL={api_url}")
+            url_written = True
+        elif stripped.startswith("UNRAID_API_KEY="):
+            new_lines.append(f"UNRAID_API_KEY={api_key}")
+            key_written = True
+        else:
+            new_lines.append(line)
+
+    # If not found in template (empty or missing keys), append at end
+    if not url_written:
+        new_lines.append(f"UNRAID_API_URL={api_url}")
+    if not key_written:
+        new_lines.append(f"UNRAID_API_KEY={api_key}")
+
+    CREDENTIALS_ENV_PATH.write_text("\n".join(new_lines) + "\n")
+    CREDENTIALS_ENV_PATH.chmod(0o600)
+    logger.info("Credentials written to %s (mode 600)", CREDENTIALS_ENV_PATH)
