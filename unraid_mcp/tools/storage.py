@@ -7,22 +7,12 @@ unassigned devices, log files, and log content retrieval.
 import os
 from typing import Any, Literal, get_args
 
-from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
-from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.setup import elicit_and_configure as _elicit
 from ..core.utils import format_bytes
-
-
-# Re-export at module scope so tests can patch "unraid_mcp.tools.storage.elicit_and_configure"
-# and "unraid_mcp.tools.storage.CredentialsNotConfiguredError"
-elicit_and_configure = _elicit
-CredentialsNotConfiguredError = _CredErr
-Context = _Context
 
 
 _ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
@@ -112,7 +102,6 @@ def register_storage_tool(mcp: FastMCP) -> None:
         source_path: str | None = None,
         destination_path: str | None = None,
         backup_options: dict[str, Any] | None = None,
-        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Manage Unraid storage, disks, and logs.
 
@@ -188,15 +177,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
 
         with tool_error_handler("storage", action, logger):
             logger.info(f"Executing unraid_storage action={action}")
-            try:
-                data = await make_graphql_request(query, variables, custom_timeout=custom_timeout)
-            except CredentialsNotConfiguredError:
-                configured = await elicit_and_configure(ctx)
-                if not configured:
-                    raise ToolError(
-                        "Credentials required. Run `unraid_health action=setup` to configure."
-                    )
-                data = await make_graphql_request(query, variables, custom_timeout=custom_timeout)
+            data = await make_graphql_request(query, variables, custom_timeout=custom_timeout)
 
             if action == "shares":
                 return {"shares": data.get("shares", [])}
