@@ -89,6 +89,31 @@ run_test_capture() {
     echo "$output"   # pure JSON → captured by caller's $()
 }
 
+extract_id() {
+    # Extract an ID from JSON output using a Python snippet.
+    # Usage: ID=$(extract_id "$JSON_OUTPUT" "$LABEL" 'python expression')
+    # If JSON parsing fails (malformed mcporter output), record a FAIL.
+    # If parsing succeeds but finds no items, return empty (caller skips).
+    local json_input="$1" label="$2" py_code="$3"
+    local result="" py_exit=0 parse_err=""
+    # Capture stdout (the extracted ID) and stderr (any parse errors) separately.
+    # A temp file is needed because $() can only capture one stream.
+    local errfile
+    errfile=$(mktemp)
+    result=$(echo "$json_input" | python3 -c "$py_code" 2>"$errfile") || py_exit=$?
+    parse_err=$(<"$errfile")
+    rm -f "$errfile"
+    if [[ $py_exit -ne 0 ]]; then
+        printf "  %-60s${RED}FAIL${NC} (JSON parse error)\n" "$label" >&2
+        [[ -n "$parse_err" ]] && echo "$parse_err" | head -2 | sed 's/^/      /' >&2
+        ((FAIL++)) || true
+        FAILED_TESTS+=("$label (JSON parse)")
+        echo ""
+        return 1
+    fi
+    echo "$result"
+}
+
 skip_test() {
     local label="$1" reason="$2"
     printf "  %-60s${YELLOW}SKIP${NC} (%s)\n" "$label" "$reason"
@@ -109,9 +134,12 @@ echo ""
 printf "Checking connectivity... "
 # Use -s (silent) without -f: a 4xx/406 means the MCP server is up and
 # responding correctly to a plain GET — only "connection refused" is fatal.
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$MCP_URL" 2>/dev/null || echo "000")
-if [[ "$HTTP_CODE" == "000" ]]; then
-    echo -e "${RED}UNREACHABLE${NC}"
+# Capture curl's exit code directly — don't mask failures with a fallback.
+HTTP_CODE=""
+curl_exit=0
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$MCP_URL" 2>/dev/null) || curl_exit=$?
+if [[ $curl_exit -ne 0 ]]; then
+    echo -e "${RED}UNREACHABLE${NC} (curl exit code: $curl_exit)"
     echo "Start the server first: docker compose up -d  OR  uv run unraid-mcp-server"
     exit 1
 fi
@@ -247,19 +275,16 @@ skip_test "settings: enable_dynamic_remote_access" "destructive (confirm=True re
 section "Phase 2: ID-discovered reads"
 
 # ── docker container ID ───────────────────────────────────────────────────────
-CONTAINER_ID=$(echo "$DOCKER_LIST" | python3 -c "
+CONTAINER_ID=$(extract_id "$DOCKER_LIST" "docker: extract container ID" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    containers = d.get('containers') or d.get('data', {}).get('containers') or []
-    if isinstance(containers, list) and containers:
-        c = containers[0]
-        cid = c.get('id') or c.get('names', [''])[0].lstrip('/')
-        if cid:
-            print(cid)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+containers = d.get('containers') or d.get('data', {}).get('containers') or []
+if isinstance(containers, list) and containers:
+    c = containers[0]
+    cid = c.get('id') or c.get('names', [''])[0].lstrip('/')
+    if cid:
+        print(cid)
+")
 
 if [[ -n "$CONTAINER_ID" ]]; then
     run_test "docker: details (id=$CONTAINER_ID)" \
@@ -272,18 +297,15 @@ else
 fi
 
 # ── docker network ID ─────────────────────────────────────────────────────────
-NETWORK_ID=$(echo "$DOCKER_NETS" | python3 -c "
+NETWORK_ID=$(extract_id "$DOCKER_NETS" "docker: extract network ID" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    nets = d.get('networks') or d.get('data', {}).get('networks') or []
-    if isinstance(nets, list) and nets:
-        nid = nets[0].get('id') or nets[0].get('Id')
-        if nid:
-            print(nid)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+nets = d.get('networks') or d.get('data', {}).get('networks') or []
+if isinstance(nets, list) and nets:
+    nid = nets[0].get('id') or nets[0].get('Id')
+    if nid:
+        print(nid)
+")
 
 if [[ -n "$NETWORK_ID" ]]; then
     run_test "docker: network_details (id=$NETWORK_ID)" \
@@ -293,18 +315,15 @@ else
 fi
 
 # ── disk ID ───────────────────────────────────────────────────────────────────
-DISK_ID=$(echo "$STORAGE_DISKS" | python3 -c "
+DISK_ID=$(extract_id "$STORAGE_DISKS" "storage: extract disk ID" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    disks = d.get('disks') or d.get('data', {}).get('disks') or []
-    if isinstance(disks, list) and disks:
-        did = disks[0].get('id') or disks[0].get('device')
-        if did:
-            print(did)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+disks = d.get('disks') or d.get('data', {}).get('disks') or []
+if isinstance(disks, list) and disks:
+    did = disks[0].get('id') or disks[0].get('device')
+    if did:
+        print(did)
+")
 
 if [[ -n "$DISK_ID" ]]; then
     run_test "storage: disk_details (id=$DISK_ID)" \
@@ -314,18 +333,15 @@ else
 fi
 
 # ── log path ──────────────────────────────────────────────────────────────────
-LOG_PATH=$(echo "$LOG_FILES" | python3 -c "
+LOG_PATH=$(extract_id "$LOG_FILES" "storage: extract log path" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    files = d.get('log_files') or d.get('files') or d.get('data', {}).get('log_files') or []
-    if isinstance(files, list) and files:
-        p = files[0].get('path') or (files[0] if isinstance(files[0], str) else None)
-        if p:
-            print(p)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+files = d.get('log_files') or d.get('files') or d.get('data', {}).get('log_files') or []
+if isinstance(files, list) and files:
+    p = files[0].get('path') or (files[0] if isinstance(files[0], str) else None)
+    if p:
+        print(p)
+")
 
 if [[ -n "$LOG_PATH" ]]; then
     run_test "storage: logs (path=$LOG_PATH)" \
@@ -335,18 +351,15 @@ else
 fi
 
 # ── VM ID ─────────────────────────────────────────────────────────────────────
-VM_ID=$(echo "$VM_LIST" | python3 -c "
+VM_ID=$(extract_id "$VM_LIST" "vm: extract VM ID" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    vms = d.get('vms') or d.get('data', {}).get('vms') or []
-    if isinstance(vms, list) and vms:
-        vid = vms[0].get('uuid') or vms[0].get('id') or vms[0].get('name')
-        if vid:
-            print(vid)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+vms = d.get('vms') or d.get('data', {}).get('vms') or []
+if isinstance(vms, list) and vms:
+    vid = vms[0].get('uuid') or vms[0].get('id') or vms[0].get('name')
+    if vid:
+        print(vid)
+")
 
 if [[ -n "$VM_ID" ]]; then
     run_test "vm: details (id=$VM_ID)" \
@@ -356,18 +369,15 @@ else
 fi
 
 # ── API key ID ────────────────────────────────────────────────────────────────
-KEY_ID=$(echo "$KEYS_LIST" | python3 -c "
+KEY_ID=$(extract_id "$KEYS_LIST" "keys: extract key ID" "
 import json, sys
-try:
-    d = json.load(sys.stdin)
-    keys = d.get('keys') or d.get('apiKeys') or d.get('data', {}).get('keys') or []
-    if isinstance(keys, list) and keys:
-        kid = keys[0].get('id')
-        if kid:
-            print(kid)
-except Exception:
-    pass
-" 2>/dev/null || true)
+d = json.load(sys.stdin)
+keys = d.get('keys') or d.get('apiKeys') or d.get('data', {}).get('keys') or []
+if isinstance(keys, list) and keys:
+    kid = keys[0].get('id')
+    if kid:
+        print(kid)
+")
 
 if [[ -n "$KEY_ID" ]]; then
     run_test "keys: get (id=$KEY_ID)" \

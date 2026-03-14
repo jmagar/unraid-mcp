@@ -447,10 +447,21 @@ def register_docker_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(
                     QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
                 )
-                logs = safe_get(data, "docker", "logs")
-                if logs is None:
+                logs_data = safe_get(data, "docker", "logs")
+                if logs_data is None:
                     raise ToolError(f"No logs returned for container '{container_id}'")
-                return {"logs": logs}
+                # Extract log lines into a plain text string for backward compatibility.
+                # The GraphQL response is { containerId, lines: [{ timestamp, message }], cursor }
+                # but callers expect result["logs"] to be a string of log text.
+                lines = logs_data.get("lines", []) if isinstance(logs_data, dict) else []
+                log_text = "\n".join(
+                    f"{line.get('timestamp', '')} {line.get('message', '')}".strip()
+                    for line in lines
+                )
+                return {
+                    "logs": log_text,
+                    "cursor": logs_data.get("cursor") if isinstance(logs_data, dict) else None,
+                }
 
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
@@ -468,7 +479,16 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             if action == "port_conflicts":
                 data = await make_graphql_request(QUERIES["port_conflicts"])
-                conflicts = safe_get(data, "docker", "portConflicts", default=[])
+                conflicts_data = safe_get(data, "docker", "portConflicts", default={})
+                # The GraphQL response is { containerPorts: [...], lanPorts: [...] }
+                # but callers expect result["port_conflicts"] to be a flat list.
+                # Merge both conflict lists for backward compatibility.
+                if isinstance(conflicts_data, dict):
+                    conflicts: list[Any] = []
+                    conflicts.extend(conflicts_data.get("containerPorts", []))
+                    conflicts.extend(conflicts_data.get("lanPorts", []))
+                else:
+                    conflicts = list(conflicts_data) if conflicts_data else []
                 return {"port_conflicts": conflicts}
 
             if action == "check_updates":

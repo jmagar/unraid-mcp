@@ -135,21 +135,21 @@ async def _comprehensive_check() -> dict[str, Any]:
             return health_info
 
         # System info
-        info = data.get("info", {})
+        info = data.get("info") or {}
         if info:
             health_info["unraid_system"] = {
                 "status": "connected",
                 "url": safe_display_url(UNRAID_API_URL),
                 "machine_id": info.get("machineId"),
-                "version": (info.get("versions") or {}).get("core", {}).get("unraid"),
-                "uptime": info.get("os", {}).get("uptime"),
+                "version": ((info.get("versions") or {}).get("core") or {}).get("unraid"),
+                "uptime": (info.get("os") or {}).get("uptime"),
             }
         else:
             _escalate("degraded")
             issues.append("Unable to retrieve system info")
 
         # Array
-        array_info = data.get("array", {})
+        array_info = data.get("array") or {}
         if array_info:
             state = array_info.get("state", "unknown")
             health_info["array_status"] = {
@@ -164,9 +164,9 @@ async def _comprehensive_check() -> dict[str, Any]:
             issues.append("Unable to retrieve array status")
 
         # Notifications
-        notifications = data.get("notifications", {})
+        notifications = data.get("notifications") or {}
         if notifications and notifications.get("overview"):
-            unread = notifications["overview"].get("unread", {})
+            unread = notifications["overview"].get("unread") or {}
             alerts = unread.get("alert", 0)
             health_info["notifications"] = {
                 "unread_total": unread.get("total", 0),
@@ -178,7 +178,7 @@ async def _comprehensive_check() -> dict[str, Any]:
                 issues.append(f"{alerts} unread alert(s)")
 
         # Docker
-        docker = data.get("docker", {})
+        docker = data.get("docker") or {}
         if docker and docker.get("containers"):
             containers = docker["containers"]
             health_info["docker_services"] = {

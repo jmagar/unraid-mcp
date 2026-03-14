@@ -41,7 +41,7 @@ QUERIES: dict[str, str] = {
     """,
     "unassigned": """
         query GetUnassignedDevices {
-          disks { id device name vendor size type interfaceType smartStatus }
+          unassignedDevices { id device name size type }
         }
     """,
     "log_files": """
@@ -204,7 +204,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
                 return {"summary": summary, "details": raw}
 
             if action == "unassigned":
-                return {"devices": data.get("disks", [])}
+                return {"devices": data.get("unassignedDevices", [])}
 
             if action == "log_files":
                 return {"log_files": data.get("logFiles", [])}

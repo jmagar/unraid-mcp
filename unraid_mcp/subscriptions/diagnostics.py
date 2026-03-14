@@ -109,7 +109,10 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             try:
                 ws_url = build_ws_url()
             except ValueError as e:
-                raise ToolError(str(e)) from e
+                logger.error("[TEST_SUBSCRIPTION] Invalid WebSocket URL configuration: %s", e)
+                raise ToolError(
+                    "Subscription test failed: invalid WebSocket URL configuration."
+                ) from e
 
             ssl_context = build_ws_ssl_context(ws_url)
 
@@ -137,7 +140,13 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 init_response = json.loads(response)
 
                 if init_response.get("type") != "connection_ack":
-                    raise ToolError(f"Connection failed: {init_response}")
+                    logger.error(
+                        "[TEST_SUBSCRIPTION] Connection not acknowledged: %s",
+                        init_response,
+                    )
+                    raise ToolError(
+                        "Subscription test failed: WebSocket connection was not acknowledged."
+                    )
 
                 # Send subscription
                 await websocket.send(
@@ -165,8 +174,10 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
         except ToolError:
             raise
         except Exception as e:
-            logger.error(f"[TEST_SUBSCRIPTION] Error: {e}", exc_info=True)
-            raise ToolError(f"Subscription test failed: {e!s}") from e
+            logger.error("[TEST_SUBSCRIPTION] Error: %s", e, exc_info=True)
+            raise ToolError(
+                "Subscription test failed: an unexpected error occurred. Check server logs for details."
+            ) from e
 
     @mcp.tool()
     async def diagnose_subscriptions() -> dict[str, Any]:
@@ -269,7 +280,9 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             return diagnostic_info
 
         except Exception as e:
-            logger.error(f"[DIAGNOSTIC] Failed to generate diagnostics: {e}")
-            raise ToolError(f"Failed to generate diagnostics: {e!s}") from e
+            logger.error("[DIAGNOSTIC] Failed to generate diagnostics: %s", e, exc_info=True)
+            raise ToolError(
+                "Failed to generate diagnostics: an unexpected error occurred. Check server logs for details."
+            ) from e
 
     logger.info("Subscription diagnostic tools registered successfully")
