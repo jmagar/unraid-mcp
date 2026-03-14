@@ -194,3 +194,36 @@ class TestSafeDisplayUrl:
         # raises ValueError: Invalid IPv6 URL — this triggers the except branch.
         result = safe_display_url("https://[invalid")
         assert result == "<unparseable>"
+
+
+@pytest.mark.asyncio
+async def test_health_setup_action_calls_elicitation() -> None:
+    """setup action triggers elicit_and_configure and returns success message."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    tool_fn = _make_tool()
+
+    with patch(
+        "unraid_mcp.tools.health.elicit_and_configure", new=AsyncMock(return_value=True)
+    ) as mock_elicit:
+        result = await tool_fn(action="setup", ctx=MagicMock())
+
+    assert mock_elicit.called
+    assert "configured" in result.lower() or "success" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_health_setup_action_returns_declined_message() -> None:
+    """setup action with declined elicitation returns appropriate message."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    tool_fn = _make_tool()
+
+    with patch("unraid_mcp.tools.health.elicit_and_configure", new=AsyncMock(return_value=False)):
+        result = await tool_fn(action="setup", ctx=MagicMock())
+
+    assert (
+        "not configured" in result.lower()
+        or "declined" in result.lower()
+        or "cancel" in result.lower()
+    )

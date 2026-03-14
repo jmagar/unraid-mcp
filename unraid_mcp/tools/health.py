@@ -1,14 +1,14 @@
 """Health monitoring and diagnostics.
 
-Provides the `unraid_health` tool with 3 actions for system health checks,
-connection testing, and subscription diagnostics.
+Provides the `unraid_health` tool with 4 actions for system health checks,
+connection testing, subscription diagnostics, and credential setup.
 """
 
 import datetime
 import time
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..config.settings import (
@@ -20,13 +20,14 @@ from ..config.settings import (
 )
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.setup import elicit_and_configure
 from ..core.utils import safe_display_url
 from ..subscriptions.utils import _analyze_subscription_status
 
 
-ALL_ACTIONS = {"check", "test_connection", "diagnose"}
+ALL_ACTIONS = {"check", "test_connection", "diagnose", "setup"}
 
-HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose"]
+HEALTH_ACTIONS = Literal["check", "test_connection", "diagnose", "setup"]
 
 if set(get_args(HEALTH_ACTIONS)) != ALL_ACTIONS:
     _missing = ALL_ACTIONS - set(get_args(HEALTH_ACTIONS))
@@ -57,16 +58,29 @@ def register_health_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_health(
         action: HEALTH_ACTIONS,
-    ) -> dict[str, Any]:
+        ctx: Context | None = None,
+    ) -> dict[str, Any] | str:
         """Monitor Unraid MCP server and system health.
 
         Actions:
+          setup - Configure Unraid credentials via interactive elicitation
           check - Comprehensive health check (API latency, array, notifications, Docker)
           test_connection - Quick connectivity test (just checks { online })
           diagnose - Subscription system diagnostics
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
+
+        if action == "setup":
+            configured = await elicit_and_configure(ctx)
+            if configured:
+                return (
+                    "✅ Credentials configured successfully. You can now use all Unraid MCP tools."
+                )
+            return (
+                "⚠️ Credentials not configured. "
+                "Run `unraid_health action=setup` again to provide credentials."
+            )
 
         with tool_error_handler("health", action, logger):
             logger.info(f"Executing unraid_health action={action}")
