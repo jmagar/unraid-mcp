@@ -54,6 +54,8 @@ def tool_error_handler(
         yield
     except ToolError:
         raise
+    except CredentialsNotConfiguredError:
+        raise  # Let callers handle elicitation — do not wrap in ToolError
     except TimeoutError as e:
         logger.exception(
             f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit"
