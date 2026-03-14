@@ -6,21 +6,11 @@ creating, archiving, and deleting system notifications.
 
 from typing import Any, Literal, get_args
 
-from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.setup import elicit_and_configure as _elicit
-
-
-# Re-export at module scope so tests can patch "unraid_mcp.tools.notifications.elicit_and_configure"
-# and "unraid_mcp.tools.notifications.CredentialsNotConfiguredError"
-elicit_and_configure = _elicit
-CredentialsNotConfiguredError = _CredErr
-Context = _Context
 
 
 QUERIES: dict[str, str] = {
@@ -178,7 +168,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
         title: str | None = None,
         subject: str | None = None,
         description: str | None = None,
-        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Manage Unraid system notifications.
 
@@ -228,15 +217,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
             logger.info(f"Executing unraid_notifications action={action}")
 
             if action == "overview":
-                try:
-                    data = await make_graphql_request(QUERIES["overview"])
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(QUERIES["overview"])
+                data = await make_graphql_request(QUERIES["overview"])
                 notifications = data.get("notifications") or {}
                 return dict(notifications.get("overview") or {})
 
@@ -248,28 +229,12 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 }
                 if importance:
                     filter_vars["importance"] = importance.upper()
-                try:
-                    data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
+                data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
                 notifications = data.get("notifications", {})
                 return {"notifications": notifications.get("list", [])}
 
             if action == "warnings":
-                try:
-                    data = await make_graphql_request(QUERIES["warnings"])
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(QUERIES["warnings"])
+                data = await make_graphql_request(QUERIES["warnings"])
                 notifications = data.get("notifications", {})
                 return {"warnings": notifications.get("warningsAndAlerts", [])}
 
@@ -295,15 +260,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     "description": description,
                     "importance": importance.upper(),
                 }
-                try:
-                    data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
+                data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
                 notification = data.get("createNotification")
                 if notification is None:
                     raise ToolError("Notification creation failed: server returned no data")
@@ -312,75 +269,33 @@ def register_notifications_tool(mcp: FastMCP) -> None:
             if action in ("archive", "unread"):
                 if not notification_id:
                     raise ToolError(f"notification_id is required for '{action}' action")
-                try:
-                    data = await make_graphql_request(MUTATIONS[action], {"id": notification_id})
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS[action], {"id": notification_id})
+                data = await make_graphql_request(MUTATIONS[action], {"id": notification_id})
                 return {"success": True, "action": action, "data": data}
 
             if action == "delete":
                 if not notification_id or not notification_type:
                     raise ToolError("delete requires notification_id and notification_type")
                 _del_vars = {"id": notification_id, "type": notification_type.upper()}
-                try:
-                    data = await make_graphql_request(MUTATIONS["delete"], _del_vars)
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["delete"], _del_vars)
+                data = await make_graphql_request(MUTATIONS["delete"], _del_vars)
                 return {"success": True, "action": "delete", "data": data}
 
             if action == "delete_archived":
-                try:
-                    data = await make_graphql_request(MUTATIONS["delete_archived"])
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["delete_archived"])
+                data = await make_graphql_request(MUTATIONS["delete_archived"])
                 return {"success": True, "action": "delete_archived", "data": data}
 
             if action == "archive_all":
                 variables: dict[str, Any] | None = None
                 if importance:
                     variables = {"importance": importance.upper()}
-                try:
-                    data = await make_graphql_request(MUTATIONS["archive_all"], variables)
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["archive_all"], variables)
+                data = await make_graphql_request(MUTATIONS["archive_all"], variables)
                 return {"success": True, "action": "archive_all", "data": data}
 
             if action == "archive_many":
                 if not notification_ids:
                     raise ToolError("notification_ids is required for 'archive_many' action")
-                try:
-                    data = await make_graphql_request(
-                        MUTATIONS["archive_many"], {"ids": notification_ids}
-                    )
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(
-                        MUTATIONS["archive_many"], {"ids": notification_ids}
-                    )
+                data = await make_graphql_request(
+                    MUTATIONS["archive_many"], {"ids": notification_ids}
+                )
                 return {"success": True, "action": "archive_many", "data": data}
 
             if action == "create_unique":
@@ -407,19 +322,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     "description": description,
                     "importance": importance.upper(),
                 }
-                try:
-                    data = await make_graphql_request(
-                        MUTATIONS["create_unique"], {"input": input_data}
-                    )
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(
-                        MUTATIONS["create_unique"], {"input": input_data}
-                    )
+                data = await make_graphql_request(MUTATIONS["create_unique"], {"input": input_data})
                 notification = data.get("notifyIfUnique")
                 if notification is None:
                     return {"success": True, "duplicate": True, "data": None}
@@ -428,46 +331,20 @@ def register_notifications_tool(mcp: FastMCP) -> None:
             if action == "unarchive_many":
                 if not notification_ids:
                     raise ToolError("notification_ids is required for 'unarchive_many' action")
-                try:
-                    data = await make_graphql_request(
-                        MUTATIONS["unarchive_many"], {"ids": notification_ids}
-                    )
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(
-                        MUTATIONS["unarchive_many"], {"ids": notification_ids}
-                    )
+                data = await make_graphql_request(
+                    MUTATIONS["unarchive_many"], {"ids": notification_ids}
+                )
                 return {"success": True, "action": "unarchive_many", "data": data}
 
             if action == "unarchive_all":
                 vars_: dict[str, Any] | None = None
                 if importance:
                     vars_ = {"importance": importance.upper()}
-                try:
-                    data = await make_graphql_request(MUTATIONS["unarchive_all"], vars_)
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["unarchive_all"], vars_)
+                data = await make_graphql_request(MUTATIONS["unarchive_all"], vars_)
                 return {"success": True, "action": "unarchive_all", "data": data}
 
             if action == "recalculate":
-                try:
-                    data = await make_graphql_request(MUTATIONS["recalculate"])
-                except CredentialsNotConfiguredError:
-                    configured = await elicit_and_configure(ctx)
-                    if not configured:
-                        raise ToolError(
-                            "Credentials required. Run `unraid_health action=setup` to configure."
-                        )
-                    data = await make_graphql_request(MUTATIONS["recalculate"])
+                data = await make_graphql_request(MUTATIONS["recalculate"])
                 return {"success": True, "action": "recalculate", "data": data}
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")
