@@ -54,6 +54,23 @@ This provides instant access to Unraid monitoring and management through Claude 
 
 **See [.claude-plugin/README.md](.claude-plugin/README.md) for detailed plugin documentation.**
 
+### ⚙️ Credential Setup (Automatic)
+
+On first use, the plugin will **automatically prompt you for credentials** via an
+interactive elicitation dialog in Claude Code. Simply call any Unraid tool and
+follow the prompts — no manual `.env` configuration needed.
+
+Alternatively, trigger setup explicitly:
+```
+unraid_health action=setup
+```
+
+Credentials are saved to `.env` in the plugin cache directory and persisted
+across restarts.
+
+> **Manual fallback:** If elicitation is not supported by your client, create
+> `.env` in the plugin cache directory manually (see `.env.example` for the format).
+
 ---
 
 ## 🚀 Quick Start

@@ -182,6 +182,18 @@ When bumping the version, **always update both files** — they must stay in syn
 - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
 - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
 
+### Plugin Cache `.env` (automatic via elicitation)
+On first tool call without credentials, the server triggers MCP elicitation to
+collect `UNRAID_API_URL` and `UNRAID_API_KEY` interactively, then writes `.env`
+to the plugin cache dir automatically. No manual symlinking needed.
+
+Manual fallback (if client doesn't support elicitation):
+```bash
+VERSION=$(grep '^version' pyproject.toml | grep -oP '[\d.]+') && \
+ln -sf /home/jmagar/workspace/unraid-mcp/.env \
+  ~/.claude/plugins/cache/jmagar-unraid-mcp/unraid/${VERSION}/.env
+```
+
 ### Symlinks
 `AGENTS.md` and `GEMINI.md` are symlinks to `CLAUDE.md` for Codex/Gemini compatibility:
 ```bash
