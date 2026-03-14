@@ -177,6 +177,11 @@ See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_A
 
 Use these when adding new queries/mutations.
 
+### Version Bumps
+When bumping the version, **always update both files** — they must stay in sync:
+- `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
+- `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
+
 ### Symlinks
 `AGENTS.md` and `GEMINI.md` are symlinks to `CLAUDE.md` for Codex/Gemini compatibility:
 ```bash
