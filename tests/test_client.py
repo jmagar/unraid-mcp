@@ -16,7 +16,7 @@ from unraid_mcp.core.client import (
     make_graphql_request,
     redact_sensitive,
 )
-from unraid_mcp.core.exceptions import ToolError
+from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError
 
 
 # ---------------------------------------------------------------------------
@@ -173,8 +173,8 @@ class TestMakeGraphQLRequestSuccess:
     @pytest.fixture(autouse=True)
     def _patch_config(self):
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", "https://unraid.local/graphql"),
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", "test-key"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
         ):
             yield
 
@@ -258,22 +258,22 @@ class TestMakeGraphQLRequestErrors:
     @pytest.fixture(autouse=True)
     def _patch_config(self):
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", "https://unraid.local/graphql"),
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", "test-key"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
         ):
             yield
 
     async def test_missing_api_url(self) -> None:
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", ""),
-            pytest.raises(ToolError, match="UNRAID_API_URL not configured"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", ""),
+            pytest.raises(CredentialsNotConfiguredError),
         ):
             await make_graphql_request("{ info }")
 
     async def test_missing_api_key(self) -> None:
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", ""),
-            pytest.raises(ToolError, match="UNRAID_API_KEY not configured"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", ""),
+            pytest.raises(CredentialsNotConfiguredError),
         ):
             await make_graphql_request("{ info }")
 
@@ -377,8 +377,8 @@ class TestGraphQLErrorHandling:
     @pytest.fixture(autouse=True)
     def _patch_config(self):
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", "https://unraid.local/graphql"),
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", "test-key"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
         ):
             yield
 
@@ -641,8 +641,8 @@ class TestRateLimitRetry:
     @pytest.fixture(autouse=True)
     def _patch_config(self):
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", "https://unraid.local/graphql"),
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", "test-key"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
             patch("unraid_mcp.core.client.asyncio.sleep", new_callable=AsyncMock),
         ):
             yield

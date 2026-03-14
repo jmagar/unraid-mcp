@@ -154,3 +154,23 @@ async def test_elicit_and_configure_returns_false_on_cancel():
 
     result = await elicit_and_configure(mock_ctx)
     assert result is False
+
+
+@pytest.mark.asyncio
+async def test_make_graphql_request_raises_sentinel_when_unconfigured():
+    """make_graphql_request raises CredentialsNotConfiguredError (not ToolError) when
+    credentials are absent, so callers can trigger elicitation."""
+    from unraid_mcp.config import settings as settings_mod
+    from unraid_mcp.core.client import make_graphql_request
+    from unraid_mcp.core.exceptions import CredentialsNotConfiguredError
+
+    original_url = settings_mod.UNRAID_API_URL
+    original_key = settings_mod.UNRAID_API_KEY
+    try:
+        settings_mod.UNRAID_API_URL = None
+        settings_mod.UNRAID_API_KEY = None
+        with pytest.raises(CredentialsNotConfiguredError):
+            await make_graphql_request("{ __typename }")
+    finally:
+        settings_mod.UNRAID_API_URL = original_url
+        settings_mod.UNRAID_API_KEY = original_key

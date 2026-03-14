@@ -17,7 +17,7 @@ import respx
 
 from tests.conftest import make_tool_fn
 from unraid_mcp.core.client import DEFAULT_TIMEOUT, DISK_TIMEOUT, make_graphql_request
-from unraid_mcp.core.exceptions import ToolError
+from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError
 
 
 # ---------------------------------------------------------------------------
@@ -32,8 +32,8 @@ API_KEY = "test-api-key-12345"
 def _patch_config():
     """Patch API URL and key for all tests in this module."""
     with (
-        patch("unraid_mcp.core.client.UNRAID_API_URL", API_URL),
-        patch("unraid_mcp.core.client.UNRAID_API_KEY", API_KEY),
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", API_URL),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", API_KEY),
     ):
         yield
 
@@ -1288,8 +1288,8 @@ class TestCrossCuttingConcerns:
     async def test_missing_api_url_raises_before_http_call(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({}))
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_URL", ""),
-            pytest.raises(ToolError, match="UNRAID_API_URL not configured"),
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", ""),
+            pytest.raises(CredentialsNotConfiguredError),
         ):
             await make_graphql_request("query { online }")
         assert not route.called
@@ -1298,8 +1298,8 @@ class TestCrossCuttingConcerns:
     async def test_missing_api_key_raises_before_http_call(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({}))
         with (
-            patch("unraid_mcp.core.client.UNRAID_API_KEY", ""),
-            pytest.raises(ToolError, match="UNRAID_API_KEY not configured"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", ""),
+            pytest.raises(CredentialsNotConfiguredError),
         ):
             await make_graphql_request("query { online }")
         assert not route.called

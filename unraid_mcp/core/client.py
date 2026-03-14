@@ -16,12 +16,10 @@ import httpx
 from ..config.logging import logger
 from ..config.settings import (
     TIMEOUT_CONFIG,
-    UNRAID_API_KEY,
-    UNRAID_API_URL,
     UNRAID_VERIFY_SSL,
     VERSION,
 )
-from ..core.exceptions import ToolError
+from ..core.exceptions import CredentialsNotConfiguredError, ToolError
 from .utils import safe_display_url
 
 
@@ -313,13 +311,15 @@ async def make_graphql_request(
         Dict containing the GraphQL response data
 
     Raises:
+        CredentialsNotConfiguredError: When UNRAID_API_URL or UNRAID_API_KEY are absent at call time
         ToolError: For HTTP errors, network errors, or non-idempotent GraphQL errors
     """
-    if not UNRAID_API_URL:
-        raise ToolError("UNRAID_API_URL not configured")
+    # Local import to get current runtime values — module-level names are captured at import time
+    # and won't reflect runtime changes (e.g., after elicitation sets them via apply_runtime_config).
+    from ..config import settings as _settings
 
-    if not UNRAID_API_KEY:
-        raise ToolError("UNRAID_API_KEY not configured")
+    if not _settings.UNRAID_API_URL or not _settings.UNRAID_API_KEY:
+        raise CredentialsNotConfiguredError()
 
     # Check TTL cache — short-circuits rate limiter on hits
     is_mutation = query.lstrip().startswith("mutation")
@@ -331,14 +331,14 @@ async def make_graphql_request(
 
     headers = {
         "Content-Type": "application/json",
-        "X-API-Key": UNRAID_API_KEY,
+        "X-API-Key": _settings.UNRAID_API_KEY,
     }
 
     payload: dict[str, Any] = {"query": query}
     if variables:
         payload["variables"] = variables
 
-    logger.debug(f"Making GraphQL request to {safe_display_url(UNRAID_API_URL)}:")
+    logger.debug(f"Making GraphQL request to {safe_display_url(_settings.UNRAID_API_URL)}:")
     logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
     if variables:
         logger.debug(f"Variables: {redact_sensitive(variables)}")
@@ -357,7 +357,7 @@ async def make_graphql_request(
 
         response: httpx.Response | None = None
         for attempt in range(3):
-            response = await client.post(UNRAID_API_URL, **post_kwargs)
+            response = await client.post(_settings.UNRAID_API_URL, **post_kwargs)
             if response.status_code == 429:
                 backoff = 2**attempt
                 logger.warning(
