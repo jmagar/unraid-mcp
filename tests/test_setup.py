@@ -385,3 +385,26 @@ def test_tool_error_handler_credentials_error_message_includes_path():
 
     assert str(CREDENTIALS_ENV_PATH) in str(exc_info.value)
     assert "setup" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_credentials_not_configured_surfaces_as_tool_error_with_path():
+    """CredentialsNotConfiguredError from a tool becomes ToolError with the credentials path."""
+    from unittest.mock import AsyncMock, patch
+
+    from tests.conftest import make_tool_fn
+    from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
+    from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError
+
+    tool_fn = make_tool_fn("unraid_mcp.tools.users", "register_users_tool", "unraid_users")
+
+    with (
+        patch(
+            "unraid_mcp.tools.users.make_graphql_request",
+            new=AsyncMock(side_effect=CredentialsNotConfiguredError()),
+        ),
+        pytest.raises(ToolError) as exc_info,
+    ):
+        await tool_fn(action="me")
+
+    assert str(CREDENTIALS_ENV_PATH) in str(exc_info.value)
