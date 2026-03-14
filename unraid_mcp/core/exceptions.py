@@ -23,6 +23,16 @@ class ToolError(FastMCPToolError):
     pass
 
 
+class CredentialsNotConfiguredError(Exception):
+    """Raised when UNRAID_API_URL or UNRAID_API_KEY are not set.
+
+    Used as a sentinel to trigger elicitation rather than a hard crash.
+    """
+
+    def __str__(self) -> str:
+        return "Unraid credentials are not configured."
+
+
 @contextlib.contextmanager
 def tool_error_handler(
     tool_name: str,
@@ -45,7 +55,9 @@ def tool_error_handler(
     except ToolError:
         raise
     except TimeoutError as e:
-        logger.exception(f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit")
+        logger.exception(
+            f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit"
+        )
         raise ToolError(
             f"Request timed out executing {tool_name}/{action}. The Unraid API did not respond in time."
         ) from e
