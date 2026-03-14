@@ -78,13 +78,19 @@ def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
     monkeypatch.setattr(settings_mod, "UNRAID_API_URL", None)
     monkeypatch.setattr(settings_mod, "UNRAID_API_KEY", None)
 
-    # Patch the actual mcp.run so we don't spin up a real server
     from unraid_mcp import server as server_mod
 
-    with patch.object(server_mod, "mcp") as mock_mcp:
+    with (
+        patch.object(server_mod, "mcp") as mock_mcp,
+        patch("unraid_mcp.server.logger") as mock_logger,
+    ):
         mock_mcp.run.side_effect = SystemExit(0)
         try:
             server_mod.run_server()
         except SystemExit as e:
-            # Only the mocked mcp.run exit (code 0) is acceptable
             assert e.code == 0, f"Unexpected sys.exit({e.code}) — server crashed on missing creds"
+        mock_logger.warning.assert_called()
+        warning_msgs = [call[0][0] for call in mock_logger.warning.call_args_list]
+        assert any("elicitation" in msg for msg in warning_msgs), (
+            f"Expected a warning containing 'elicitation', got: {warning_msgs}"
+        )
