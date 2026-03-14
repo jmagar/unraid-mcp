@@ -7,12 +7,22 @@ logs, networks, update management, and Docker organizer operations.
 import re
 from typing import Any, Literal, get_args
 
+from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
+from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.setup import elicit_and_configure as _elicit
 from ..core.utils import safe_get
+
+
+# Re-export at module scope so tests can patch "unraid_mcp.tools.docker.elicit_and_configure"
+# and "unraid_mcp.tools.docker.CredentialsNotConfiguredError"
+elicit_and_configure = _elicit
+CredentialsNotConfiguredError = _CredErr
+Context = _Context
 
 
 QUERIES: dict[str, str] = {
@@ -376,6 +386,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
         new_folder_name: str | None = None,
         view_id: str = "default",
         view_prefs: dict[str, Any] | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Manage Docker containers, networks, and updates.
 
@@ -427,7 +438,15 @@ def register_docker_tool(mcp: FastMCP) -> None:
 
             # --- Read-only queries ---
             if action == "list":
-                data = await make_graphql_request(QUERIES["list"])
+                try:
+                    data = await make_graphql_request(QUERIES["list"])
+                except CredentialsNotConfiguredError:
+                    configured = await elicit_and_configure(ctx)
+                    if not configured:
+                        raise ToolError(
+                            "Credentials required. Run `unraid_health action=setup` to configure."
+                        )
+                    data = await make_graphql_request(QUERIES["list"])
                 containers = safe_get(data, "docker", "containers", default=[])
                 return {"containers": containers}
 
