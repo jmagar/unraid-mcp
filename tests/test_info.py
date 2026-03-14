@@ -170,18 +170,37 @@ class TestUnraidInfoTool:
             await tool_fn(action="ups_device")
 
     async def test_network_action(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"network": {"id": "net:1", "accessUrls": []}}
-        tool_fn = _make_tool()
-        result = await tool_fn(action="network")
-        assert result["id"] == "net:1"
-
-    async def test_connect_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "connect": {"status": "connected", "sandbox": False, "flashGuid": "abc123"}
+            "servers": [
+                {
+                    "id": "s:1",
+                    "name": "tootie",
+                    "status": "ONLINE",
+                    "lanip": "10.1.0.2",
+                    "wanip": "",
+                    "localurl": "http://10.1.0.2:6969",
+                    "remoteurl": "",
+                }
+            ],
+            "vars": {
+                "id": "v:1",
+                "port": 6969,
+                "portssl": 31337,
+                "localTld": "local",
+                "useSsl": None,
+            },
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="connect")
-        assert result["status"] == "connected"
+        result = await tool_fn(action="network")
+        assert "accessUrls" in result
+        assert result["httpPort"] == 6969
+        assert result["httpsPort"] == 31337
+        assert any(u["type"] == "LAN" and u["ipv4"] == "10.1.0.2" for u in result["accessUrls"])
+
+    async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="connect.*not available"):
+            await tool_fn(action="connect")
 
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected")

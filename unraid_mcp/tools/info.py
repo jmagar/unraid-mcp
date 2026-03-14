@@ -6,12 +6,22 @@ system information, array status, network config, and server metadata.
 
 from typing import Any, Literal, get_args
 
+from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
+from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.setup import elicit_and_configure as _elicit
 from ..core.utils import format_kb
+
+
+# Re-export at module scope so tests can patch "unraid_mcp.tools.info.elicit_and_configure"
+# and "unraid_mcp.tools.info.CredentialsNotConfiguredError"
+elicit_and_configure = _elicit
+CredentialsNotConfiguredError = _CredErr
+Context = _Context
 
 
 # Pre-built queries keyed by action name
@@ -49,11 +59,9 @@ QUERIES: dict[str, str] = {
         }
     """,
     "network": """
-        query GetNetworkConfig {
-          network {
-            id
-            accessUrls { type name ipv4 ipv6 }
-          }
+        query GetNetworkInfo {
+          servers { id name status wanip lanip localurl remoteurl }
+          vars { id port portssl localTld useSsl }
         }
     """,
     "registration": """
@@ -86,7 +94,7 @@ QUERIES: dict[str, str] = {
     """,
     "metrics": """
         query GetMetrics {
-          metrics { cpu { percentTotal } memory { used total } }
+          metrics { cpu { percentTotal } memory { total used free available buffcache percentTotal } }
         }
     """,
     "services": """
@@ -130,12 +138,12 @@ QUERIES: dict[str, str] = {
     """,
     "servers": """
         query GetServers {
-          servers { id name status comment wanip lanip localurl remoteurl }
+          servers { id name status wanip lanip localurl remoteurl }
         }
     """,
     "flash": """
         query GetFlash {
-          flash { id guid product vendor }
+          flash { id vendor product }
         }
     """,
     "ups_devices": """
@@ -333,6 +341,7 @@ def register_info_tool(mcp: FastMCP) -> None:
         sys_model: str | None = None,
         ssh_enabled: bool | None = None,
         ssh_port: int | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Query Unraid system information.
 
@@ -402,6 +411,13 @@ def register_info_tool(mcp: FastMCP) -> None:
                     "data": data.get("updateSshSettings"),
                 }
 
+        # connect is not available on all Unraid API versions
+        if action == "connect":
+            raise ToolError(
+                "The 'connect' query is not available on this Unraid API version. "
+                "Use the 'settings' action for API and SSO configuration."
+            )
+
         query = QUERIES[action]
         variables: dict[str, Any] | None = None
         if action == "ups_device":
@@ -410,9 +426,7 @@ def register_info_tool(mcp: FastMCP) -> None:
         # Lookup tables for common response patterns
         # Simple dict actions: action -> GraphQL response key
         dict_actions: dict[str, str] = {
-            "network": "network",
             "registration": "registration",
-            "connect": "connect",
             "variables": "vars",
             "metrics": "metrics",
             "config": "config",
@@ -430,7 +444,16 @@ def register_info_tool(mcp: FastMCP) -> None:
 
         with tool_error_handler("info", action, logger):
             logger.info(f"Executing unraid_info action={action}")
-            data = await make_graphql_request(query, variables)
+            try:
+                data = await make_graphql_request(query, variables)
+            except CredentialsNotConfiguredError:
+                configured = await elicit_and_configure(ctx)
+                if not configured:
+                    raise ToolError(
+                        "Credentials required. Run `unraid_health action=setup` to configure."
+                    )
+                # Retry once after successful elicitation
+                data = await make_graphql_request(query, variables)
 
             # Special-case actions with custom processing
             if action == "overview":
@@ -468,6 +491,27 @@ def register_info_tool(mcp: FastMCP) -> None:
 
             if action == "server":
                 return data
+
+            if action == "network":
+                servers_data = data.get("servers") or []
+                vars_data = data.get("vars") or {}
+                access_urls = []
+                for srv in servers_data:
+                    if srv.get("lanip"):
+                        access_urls.append(
+                            {"type": "LAN", "ipv4": srv["lanip"], "url": srv.get("localurl")}
+                        )
+                    if srv.get("wanip"):
+                        access_urls.append(
+                            {"type": "WAN", "ipv4": srv["wanip"], "url": srv.get("remoteurl")}
+                        )
+                return {
+                    "accessUrls": access_urls,
+                    "httpPort": vars_data.get("port"),
+                    "httpsPort": vars_data.get("portssl"),
+                    "localTld": vars_data.get("localTld"),
+                    "useSsl": vars_data.get("useSsl"),
+                }
 
             # Simple dict-returning actions
             if action in dict_actions:

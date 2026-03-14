@@ -31,8 +31,12 @@ def make_tool_fn(
 
     This wraps the repeated pattern of creating a test FastMCP instance,
     registering a tool, and extracting the inner function. Centralizing
-    this avoids reliance on FastMCP's private `_tool_manager._tools` API
-    in every test file.
+    this avoids reliance on FastMCP's internal tool storage API in every
+    test file.
+
+    FastMCP 3.x removed `_tool_manager._tools`; use `await mcp.get_tool()`
+    instead. We run a small event loop here to keep the helper synchronous
+    so callers don't need to change.
 
     Args:
         module_path: Dotted import path to the tool module (e.g., "unraid_mcp.tools.info")
@@ -48,4 +52,8 @@ def make_tool_fn(
     register_fn = getattr(module, register_fn_name)
     test_mcp = FastMCP("test")
     register_fn(test_mcp)
-    return test_mcp._tool_manager._tools[tool_name].fn  # type: ignore[union-attr]
+    # FastMCP 3.x stores tools in providers[0]._components keyed as "tool:{name}@"
+    # (the "@" suffix is the version separator with no version set).
+    local_provider = test_mcp.providers[0]
+    tool = local_provider._components[f"tool:{tool_name}@"]
+    return tool.fn
