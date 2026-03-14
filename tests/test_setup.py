@@ -42,13 +42,30 @@ def test_settings_is_configured_false_when_missing():
 
 
 def test_settings_apply_runtime_config_updates_module_globals():
+    import os
+
     from unraid_mcp.config import settings
 
     original_url = settings.UNRAID_API_URL
     original_key = settings.UNRAID_API_KEY
-    settings.apply_runtime_config("https://newurl.com/graphql", "newkey")
-    assert settings.UNRAID_API_URL == "https://newurl.com/graphql"
-    assert settings.UNRAID_API_KEY == "newkey"
-    # Reset so other tests are not affected
-    settings.UNRAID_API_URL = original_url
-    settings.UNRAID_API_KEY = original_key
+    original_env_url = os.environ.get("UNRAID_API_URL")
+    original_env_key = os.environ.get("UNRAID_API_KEY")
+    try:
+        settings.apply_runtime_config("https://newurl.com/graphql", "newkey")
+        assert settings.UNRAID_API_URL == "https://newurl.com/graphql"
+        assert settings.UNRAID_API_KEY == "newkey"
+        assert os.environ["UNRAID_API_URL"] == "https://newurl.com/graphql"
+        assert os.environ["UNRAID_API_KEY"] == "newkey"
+    finally:
+        # Reset module globals
+        settings.UNRAID_API_URL = original_url
+        settings.UNRAID_API_KEY = original_key
+        # Reset os.environ
+        if original_env_url is None:
+            os.environ.pop("UNRAID_API_URL", None)
+        else:
+            os.environ["UNRAID_API_URL"] = original_env_url
+        if original_env_key is None:
+            os.environ.pop("UNRAID_API_KEY", None)
+        else:
+            os.environ["UNRAID_API_KEY"] = original_env_key
