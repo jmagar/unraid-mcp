@@ -41,9 +41,10 @@ def tool_error_handler(
 ) -> Iterator[None]:
     """Context manager that standardizes tool error handling.
 
-    Re-raises ToolError as-is. Gives TimeoutError a descriptive message.
-    Catches all other exceptions, logs them with full traceback, and wraps them
-    in ToolError with a descriptive message.
+    Re-raises ToolError as-is. Converts CredentialsNotConfiguredError to a ToolError
+    with setup instructions including CREDENTIALS_ENV_PATH; does not log.
+    Gives TimeoutError a descriptive message. Catches all other exceptions,
+    logs them with full traceback, and wraps them in ToolError.
 
     Args:
         tool_name: The tool name for error messages (e.g., "docker", "vm").
@@ -54,8 +55,14 @@ def tool_error_handler(
         yield
     except ToolError:
         raise
-    except CredentialsNotConfiguredError:
-        raise  # Let callers handle elicitation — do not wrap in ToolError
+    except CredentialsNotConfiguredError as e:
+        from ..config.settings import CREDENTIALS_ENV_PATH
+
+        raise ToolError(
+            f"Credentials not configured. Run unraid_health action=setup, "
+            f"or create {CREDENTIALS_ENV_PATH} with UNRAID_API_URL and UNRAID_API_KEY "
+            f"(cp .env.example {CREDENTIALS_ENV_PATH} to get started)."
+        ) from e
     except TimeoutError as e:
         logger.exception(
             f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit"

@@ -181,45 +181,6 @@ async def test_make_graphql_request_raises_sentinel_when_unconfigured():
         settings_mod.UNRAID_API_KEY = original_key
 
 
-@pytest.mark.asyncio
-async def test_auto_elicitation_triggered_on_credentials_not_configured():
-    """Any tool call with missing creds auto-triggers elicitation before erroring."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    from conftest import make_tool_fn
-    from fastmcp import FastMCP
-
-    from unraid_mcp.core.exceptions import CredentialsNotConfiguredError
-    from unraid_mcp.tools.info import register_info_tool
-
-    test_mcp = FastMCP("test")
-    register_info_tool(test_mcp)
-    tool_fn = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
-
-    mock_ctx = MagicMock()
-
-    # First call raises CredentialsNotConfiguredError, second returns data
-    call_count = 0
-
-    async def side_effect(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            raise CredentialsNotConfiguredError()
-        return {"info": {"os": {"hostname": "tootie"}}}
-
-    with (
-        patch("unraid_mcp.tools.info.make_graphql_request", side_effect=side_effect),
-        patch(
-            "unraid_mcp.tools.info.elicit_and_configure", new=AsyncMock(return_value=True)
-        ) as mock_elicit,
-    ):
-        result = await tool_fn(action="overview", ctx=mock_ctx)
-
-    mock_elicit.assert_called_once_with(mock_ctx)
-    assert result is not None
-
-
 import os  # noqa: E402 — needed for reload-based tests below
 
 
@@ -390,3 +351,37 @@ async def test_elicit_and_configure_returns_false_when_client_not_supported():
 
     result = await elicit_and_configure(mock_ctx)
     assert result is False
+
+
+def test_tool_error_handler_converts_credentials_not_configured_to_tool_error():
+    """tool_error_handler wraps CredentialsNotConfiguredError in a ToolError."""
+    import logging
+
+    from unraid_mcp.core.exceptions import (
+        CredentialsNotConfiguredError,
+        ToolError,
+        tool_error_handler,
+    )
+
+    _log = logging.getLogger("test")
+    with pytest.raises(ToolError), tool_error_handler("docker", "list", _log):
+        raise CredentialsNotConfiguredError()
+
+
+def test_tool_error_handler_credentials_error_message_includes_path():
+    """ToolError from CredentialsNotConfiguredError includes the credentials path."""
+    import logging
+
+    from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
+    from unraid_mcp.core.exceptions import (
+        CredentialsNotConfiguredError,
+        ToolError,
+        tool_error_handler,
+    )
+
+    _log = logging.getLogger("test")
+    with pytest.raises(ToolError) as exc_info, tool_error_handler("docker", "list", _log):
+        raise CredentialsNotConfiguredError()
+
+    assert str(CREDENTIALS_ENV_PATH) in str(exc_info.value)
+    assert "setup" in str(exc_info.value).lower()
