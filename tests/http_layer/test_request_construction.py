@@ -1044,7 +1044,7 @@ class TestRCloneToolRequests:
         inp = body["variables"]["input"]
         assert inp["name"] == "my-s3"
         assert inp["type"] == "s3"
-        assert inp["config"] == {"bucket": "my-bucket"}
+        assert inp["parameters"] == {"bucket": "my-bucket"}
 
     @respx.mock
     async def test_delete_remote_requires_confirm(self) -> None:

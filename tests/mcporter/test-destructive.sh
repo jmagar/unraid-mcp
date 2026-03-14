@@ -158,15 +158,17 @@ test_notifications_delete() {
     return
   fi
 
-  # The create response ID doesn't match the stored filename — list and find by title
+  # The create response ID doesn't match the stored filename — list and find by title.
+  # Use the LAST match so a stale notification with the same title is bypassed.
   local list_raw nid
   list_raw="$(mcall unraid_notifications '{"action":"list","notification_type":"UNREAD"}')"
   nid="$(python3 -c "
 import json,sys
 d = json.loads('''${list_raw}''')
 notifs = d.get('notifications', [])
-match = next((n['id'] for n in notifs if n.get('title') == 'mcp-test-delete'), '')
-print(match)
+# Reverse so the most-recent match wins over any stale leftover
+matches = [n['id'] for n in reversed(notifs) if n.get('title') == 'mcp-test-delete']
+print(matches[0] if matches else '')
 " 2>/dev/null)"
 
   if [[ -z "${nid}" ]]; then
@@ -255,7 +257,9 @@ sys.exit(1 if any(k.get('name') == 'mcp test key' for k in keys) else 0)
   success="$(python3 -c "import json,sys; d=json.loads('''${del_raw}'''); print(d.get('success', False))" 2>/dev/null)"
 
   if [[ "${success}" != "True" ]]; then
-    fail_test "${label}" "delete did not return success=true: ${del_raw}"
+    # Cleanup: attempt to delete the leaked key so future runs are not blocked
+    mcall unraid_keys "{\"action\":\"delete\",\"key_id\":\"${kid}\",\"confirm\":true}" &>/dev/null || true
+    fail_test "${label}" "delete did not return success=true: ${del_raw} (key delete re-attempted as fallback cleanup)"
     return
   fi
 

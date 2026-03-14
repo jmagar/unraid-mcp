@@ -43,9 +43,15 @@ No safe live isolation — this hits every running container. Test via `tests/sa
 
 ```bash
 # 1. Create a throwaway organizer folder
+#    Parameter: folder_name (str); ID is in organizer.views.flatEntries[type==FOLDER]
 FOLDER=$(mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args '{"action":"create_folder","name":"mcp-test-delete-me"}' --output json)
-FID=$(echo "$FOLDER" | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
+  --args '{"action":"create_folder","folder_name":"mcp-test-delete-me"}' --output json)
+FID=$(echo "$FOLDER" | python3 -c "
+import json,sys
+data=json.load(sys.stdin)
+entries=(data.get('organizer',{}).get('views',{}).get('flatEntries') or [])
+match=next((e['id'] for e in entries if e.get('type')=='FOLDER' and 'mcp-test' in e.get('name','')),'' )
+print(match)")
 
 # 2. Delete it
 mcporter call --http-url "$MCP_URL" --tool unraid_docker \
@@ -107,14 +113,21 @@ mcporter call --http-url "$MCP_URL" --tool unraid_vm \
 ### `delete` — Permanently delete a notification
 
 ```bash
-# 1. Create a test notification
-NID=$(mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"create","title":"mcp-test-delete","subject":"safe to delete","description":"MCP destructive action test","importance":"normal"}' --output json \
-  | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
-
-# 2. Delete it
+# 1. Create a test notification, then list to get the real stored ID (create response
+#    ID is ULID-based; stored filename uses a unix timestamp, so IDs differ)
 mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args "{\"action\":\"delete\",\"notification_id\":\"$NID\",\"confirm\":true}" --output json
+  --args '{"action":"create","title":"mcp-test-delete","subject":"safe to delete","description":"MCP destructive action test","importance":"INFO"}' --output json
+NID=$(mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
+  --args '{"action":"list","notification_type":"UNREAD"}' --output json \
+  | python3 -c "
+import json,sys
+notifs=json.load(sys.stdin).get('notifications',[])
+matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-delete']
+print(matches[0] if matches else '')")
+
+# 2. Delete it (notification_type required)
+mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
+  --args "{\"action\":\"delete\",\"notification_id\":\"$NID\",\"notification_type\":\"UNREAD\",\"confirm\":true}" --output json
 
 # 3. Verify
 mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
@@ -127,10 +140,18 @@ mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
 ### `delete_archived` — Wipe all archived notifications (bulk, irreversible)
 
 ```bash
-# 1. Create and archive a test notification first
+# 1. Create and archive a test notification
 mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"create","title":"mcp-test-archive-wipe","subject":"archive me","description":"safe to delete","importance":"normal"}' --output json
-# (then archive it via action=archive if needed)
+  --args '{"action":"create","title":"mcp-test-archive-wipe","subject":"archive me","description":"safe to delete","importance":"INFO"}' --output json
+AID=$(mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
+  --args '{"action":"list","notification_type":"UNREAD"}' --output json \
+  | python3 -c "
+import json,sys
+notifs=json.load(sys.stdin).get('notifications',[])
+matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-archive-wipe']
+print(matches[0] if matches else '')")
+mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
+  --args "{\"action\":\"archive\",\"notification_id\":\"$AID\"}" --output json
 
 # 2. Wipe all archived
 # NOTE: this deletes ALL archived notifications, not just the test one
@@ -148,12 +169,13 @@ mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
 
 ```bash
 # 1. Create a throwaway local remote (points to /tmp — no real data)
+#    Parameters: name (str), provider_type (str), config_data (dict)
 mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
-  --args '{"action":"create_remote","name":"mcp-test-remote","remote_type":"local","config":{"root":"/tmp"}}' --output json
+  --args '{"action":"create_remote","name":"mcp-test-remote","provider_type":"local","config_data":{"root":"/tmp"}}' --output json
 
 # 2. Delete it
 mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
-  --args '{"action":"delete_remote","remote_name":"mcp-test-remote","confirm":true}' --output json
+  --args '{"action":"delete_remote","name":"mcp-test-remote","confirm":true}' --output json
 
 # 3. Verify
 mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
@@ -170,10 +192,10 @@ mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
 ### `delete` — Delete an API key (immediately revokes access)
 
 ```bash
-# 1. Create a test key
+# 1. Create a test key (names cannot contain hyphens; ID is at key.id)
 KID=$(mcporter call --http-url "$MCP_URL" --tool unraid_keys \
-  --args '{"action":"create","name":"mcp-test-key","description":"Safe to delete — MCP destructive test"}' --output json \
-  | python3 -c "import json,sys; print(json.load(sys.stdin).get('id',''))")
+  --args '{"action":"create","name":"mcp test key","roles":["VIEWER"]}' --output json \
+  | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',{}).get('id',''))")
 
 # 2. Delete it
 mcporter call --http-url "$MCP_URL" --tool unraid_keys \

@@ -104,6 +104,7 @@ docker compose down
 - **rclone**: delete_remote
 - **keys**: delete
 - **storage**: flash_backup
+- **info**: update_ssh
 - **settings**: configure_ups, setup_remote_access, enable_dynamic_remote_access
 
 ### Environment Variable Hierarchy

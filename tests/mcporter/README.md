@@ -33,7 +33,7 @@ Launches `uv run unraid-mcp-server` in stdio mode for each tool call. Requires `
 UNRAID_MCP_URL=http://10.1.0.2:6970/mcp ./tests/mcporter/test-actions.sh
 ```
 
-Connects to an already-running streamable-http server. More up-to-date coverage — includes `unraid_settings`, all docker organizer mutations, and the full notification action set.
+Connects to an already-running streamable-http server. Covers all read-only actions across 10 tools (`unraid_settings` is all-mutations and skipped; all destructive mutations are explicitly skipped).
 
 ---
 
@@ -148,4 +148,4 @@ uv run unraid-mcp-server
 
 ## Cleanup
 
-Both scripts create **no temporary files and no background processes**. `test-actions.sh` connects to an existing server and leaves it running. `test-tools.sh` spawns stdio server subprocesses per call; they exit when mcporter finishes each invocation.
+`test-actions.sh` connects to an existing server and leaves it running; it creates no temporary files. `test-tools.sh` spawns stdio server subprocesses per call — they exit when mcporter finishes each invocation — and may write a timestamped log file under `${TMPDIR:-/tmp}`. Neither script leaves background processes.
