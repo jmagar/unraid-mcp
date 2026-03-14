@@ -6,22 +6,12 @@ system information, array status, network config, and server metadata.
 
 from typing import Any, Literal, get_args
 
-from fastmcp import Context as _Context
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import CredentialsNotConfiguredError as _CredErr
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.setup import elicit_and_configure as _elicit
 from ..core.utils import format_kb
-
-
-# Re-export at module scope so tests can patch "unraid_mcp.tools.info.elicit_and_configure"
-# and "unraid_mcp.tools.info.CredentialsNotConfiguredError"
-elicit_and_configure = _elicit
-CredentialsNotConfiguredError = _CredErr
-Context = _Context
 
 
 # Pre-built queries keyed by action name
@@ -341,7 +331,6 @@ def register_info_tool(mcp: FastMCP) -> None:
         sys_model: str | None = None,
         ssh_enabled: bool | None = None,
         ssh_port: int | None = None,
-        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Query Unraid system information.
 
@@ -444,16 +433,7 @@ def register_info_tool(mcp: FastMCP) -> None:
 
         with tool_error_handler("info", action, logger):
             logger.info(f"Executing unraid_info action={action}")
-            try:
-                data = await make_graphql_request(query, variables)
-            except CredentialsNotConfiguredError:
-                configured = await elicit_and_configure(ctx)
-                if not configured:
-                    raise ToolError(
-                        "Credentials required. Run `unraid_health action=setup` to configure."
-                    )
-                # Retry once after successful elicitation
-                data = await make_graphql_request(query, variables)
+            data = await make_graphql_request(query, variables)
 
             # Special-case actions with custom processing
             if action == "overview":
