@@ -69,3 +69,22 @@ def test_settings_apply_runtime_config_updates_module_globals():
             os.environ.pop("UNRAID_API_KEY", None)
         else:
             os.environ["UNRAID_API_KEY"] = original_env_key
+
+
+def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
+    """Server should not sys.exit(1) when credentials are absent."""
+    import unraid_mcp.config.settings as settings_mod
+
+    monkeypatch.setattr(settings_mod, "UNRAID_API_URL", None)
+    monkeypatch.setattr(settings_mod, "UNRAID_API_KEY", None)
+
+    # Patch the actual mcp.run so we don't spin up a real server
+    from unraid_mcp import server as server_mod
+
+    with patch.object(server_mod, "mcp") as mock_mcp:
+        mock_mcp.run.side_effect = SystemExit(0)
+        try:
+            server_mod.run_server()
+        except SystemExit as e:
+            # Only the mocked mcp.run exit (code 0) is acceptable
+            assert e.code == 0, f"Unexpected sys.exit({e.code}) — server crashed on missing creds"

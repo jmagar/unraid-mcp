@@ -80,11 +80,10 @@ def run_server() -> None:
     # Validate required configuration before anything else
     is_valid, missing = validate_required_config()
     if not is_valid:
-        logger.critical(
-            f"Missing required configuration: {', '.join(missing)}. "
-            "Set these environment variables or add them to your .env file."
+        logger.warning(
+            f"Missing configuration: {', '.join(missing)}. "
+            "Server will prompt for credentials on first tool call via elicitation."
         )
-        sys.exit(1)
 
     # Log configuration (delegated to shared function)
     from .config.logging import log_configuration_status
