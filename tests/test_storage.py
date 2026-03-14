@@ -7,7 +7,7 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.storage import format_bytes
+from unraid_mcp.core.utils import format_bytes, format_kb, safe_get
 
 
 # --- Unit tests for helpers ---
@@ -76,6 +76,87 @@ class TestStorageValidation:
         tool_fn = _make_tool()
         result = await tool_fn(action="logs", log_path="/var/log/syslog")
         assert result["content"] == "ok"
+
+    async def test_logs_tail_lines_too_large(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="tail_lines must be between"):
+            await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=10_001)
+
+    async def test_logs_tail_lines_zero_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="tail_lines must be between"):
+            await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=0)
+
+    async def test_logs_tail_lines_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="logs", log_path="/var/log/syslog", tail_lines=10_000)
+        assert result["content"] == "ok"
+
+    async def test_non_logs_action_ignores_tail_lines_validation(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"shares": []}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="shares", tail_lines=0)
+        assert result["shares"] == []
+
+
+class TestFormatKb:
+    def test_none_returns_na(self) -> None:
+        assert format_kb(None) == "N/A"
+
+    def test_invalid_string_returns_na(self) -> None:
+        assert format_kb("not-a-number") == "N/A"
+
+    def test_kilobytes_range(self) -> None:
+        assert format_kb(512) == "512.00 KB"
+
+    def test_megabytes_range(self) -> None:
+        assert format_kb(2048) == "2.00 MB"
+
+    def test_gigabytes_range(self) -> None:
+        assert format_kb(1_048_576) == "1.00 GB"
+
+    def test_terabytes_range(self) -> None:
+        assert format_kb(1_073_741_824) == "1.00 TB"
+
+    def test_boundary_exactly_1024_kb(self) -> None:
+        # 1024 KB = 1 MB
+        assert format_kb(1024) == "1.00 MB"
+
+
+class TestSafeGet:
+    def test_simple_key_access(self) -> None:
+        assert safe_get({"a": 1}, "a") == 1
+
+    def test_nested_key_access(self) -> None:
+        assert safe_get({"a": {"b": "val"}}, "a", "b") == "val"
+
+    def test_missing_key_returns_none(self) -> None:
+        assert safe_get({"a": 1}, "missing") is None
+
+    def test_none_intermediate_returns_default(self) -> None:
+        assert safe_get({"a": None}, "a", "b") is None
+
+    def test_custom_default_returned(self) -> None:
+        assert safe_get({}, "x", default="fallback") == "fallback"
+
+    def test_non_dict_intermediate_returns_default(self) -> None:
+        assert safe_get({"a": "string"}, "a", "b") is None
+
+    def test_empty_list_default(self) -> None:
+        result = safe_get({}, "missing", default=[])
+        assert result == []
+
+    def test_zero_value_not_replaced_by_default(self) -> None:
+        assert safe_get({"temp": 0}, "temp", default="N/A") == 0
+
+    def test_false_value_not_replaced_by_default(self) -> None:
+        assert safe_get({"active": False}, "active", default=True) is False
+
+    def test_empty_string_not_replaced_by_default(self) -> None:
+        assert safe_get({"name": ""}, "name", default="unknown") == ""
 
 
 class TestStorageActions:
@@ -202,3 +283,38 @@ class TestStorageNetworkErrors:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="HTTP error 500"):
             await tool_fn(action="disks")
+
+
+class TestStorageFlashBackup:
+    async def test_flash_backup_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destructive"):
+            await tool_fn(action="flash_backup", remote_name="r", source_path="/boot", destination_path="r:b")
+
+    async def test_flash_backup_requires_remote_name(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="remote_name"):
+            await tool_fn(action="flash_backup", confirm=True)
+
+    async def test_flash_backup_requires_source_path(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="source_path"):
+            await tool_fn(action="flash_backup", confirm=True, remote_name="r")
+
+    async def test_flash_backup_requires_destination_path(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destination_path"):
+            await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot")
+
+    async def test_flash_backup_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:1"}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b")
+        assert result["success"] is True
+        assert result["data"]["status"] == "started"
+
+    async def test_flash_backup_passes_options(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:2"}}
+        tool_fn = _make_tool()
+        await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b", backup_options={"dryRun": True})
+        assert _mock_graphql.call_args[0][1]["input"]["options"] == {"dryRun": True}

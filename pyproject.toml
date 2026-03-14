@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 [project]
 name = "unraid-mcp"
-version = "0.2.0"
+version = "0.4.5"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -77,7 +77,6 @@ dependencies = [
     "uvicorn[standard]>=0.35.0",
     "websockets>=15.0.1",
     "rich>=14.1.0",
-    "pytz>=2025.2",
 ]
 
 # ============================================================================
@@ -108,8 +107,13 @@ only-include = ["unraid_mcp"]
 include = [
     "/unraid_mcp",
     "/tests",
+    "/commands",
+    "/skills",
     "/README.md",
     "/LICENSE",
+    "/CLAUDE.md",
+    "/AGENTS.md",
+    "/GEMINI.md",
     "/pyproject.toml",
     "/.env.example",
 ]
@@ -121,6 +125,8 @@ exclude = [
     "/.docs",
     "/.full-review",
     "/docs",
+    "/dist",
+    "/logs",
     "*.pyc",
     "__pycache__",
 ]
@@ -170,6 +176,8 @@ select = [
     "PERF",
     # Ruff-specific rules
     "RUF",
+    # flake8-bandit (security)
+    "S",
 ]
 ignore = [
     "E501",   # line too long (handled by ruff formatter)
@@ -188,7 +196,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D104"]
-"tests/**/*.py" = ["D", "S101", "PLR2004"]  # Allow asserts and magic values in tests
+"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "PLR2004"]  # Allow test-only patterns
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -285,7 +293,6 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "respx>=0.22.0",
-    "types-pytz>=2025.2.0.20250809",
     "ty>=0.0.15",
     "ruff>=0.12.8",
     "build>=1.2.2",

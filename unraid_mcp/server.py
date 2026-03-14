@@ -10,13 +10,14 @@ from fastmcp import FastMCP
 
 from .config.logging import logger
 from .config.settings import (
-    UNRAID_API_KEY,
-    UNRAID_API_URL,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
     UNRAID_MCP_TRANSPORT,
+    UNRAID_VERIFY_SSL,
     VERSION,
+    validate_required_config,
 )
+from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.array import register_array_tool
 from .tools.docker import register_docker_tool
@@ -25,6 +26,7 @@ from .tools.info import register_info_tool
 from .tools.keys import register_keys_tool
 from .tools.notifications import register_notifications_tool
 from .tools.rclone import register_rclone_tool
+from .tools.settings import register_settings_tool
 from .tools.storage import register_storage_tool
 from .tools.users import register_users_tool
 from .tools.virtualization import register_vm_tool
@@ -44,9 +46,10 @@ mcp = FastMCP(
 def register_all_modules() -> None:
     """Register all tools and resources with the MCP instance."""
     try:
-        # Register subscription resources first
+        # Register subscription resources and diagnostic tools
         register_subscription_resources(mcp)
-        logger.info("Subscription resources registered")
+        register_diagnostic_tools(mcp)
+        logger.info("Subscription resources and diagnostic tools registered")
 
         # Register all consolidated tools
         registrars = [
@@ -60,6 +63,7 @@ def register_all_modules() -> None:
             register_users_tool,
             register_keys_tool,
             register_health_tool,
+            register_settings_tool,
         ]
         for registrar in registrars:
             registrar(mcp)
@@ -73,20 +77,26 @@ def register_all_modules() -> None:
 
 def run_server() -> None:
     """Run the MCP server with the configured transport."""
-    # Log configuration
-    if UNRAID_API_URL:
-        logger.info(f"UNRAID_API_URL loaded: {UNRAID_API_URL[:20]}...")
-    else:
-        logger.warning("UNRAID_API_URL not found in environment or .env file.")
+    # Validate required configuration before anything else
+    is_valid, missing = validate_required_config()
+    if not is_valid:
+        logger.critical(
+            f"Missing required configuration: {', '.join(missing)}. "
+            "Set these environment variables or add them to your .env file."
+        )
+        sys.exit(1)
 
-    if UNRAID_API_KEY:
-        logger.info("UNRAID_API_KEY loaded: ****")
-    else:
-        logger.warning("UNRAID_API_KEY not found in environment or .env file.")
+    # Log configuration (delegated to shared function)
+    from .config.logging import log_configuration_status
 
-    logger.info(f"UNRAID_MCP_PORT set to: {UNRAID_MCP_PORT}")
-    logger.info(f"UNRAID_MCP_HOST set to: {UNRAID_MCP_HOST}")
-    logger.info(f"UNRAID_MCP_TRANSPORT set to: {UNRAID_MCP_TRANSPORT}")
+    log_configuration_status(logger)
+
+    if UNRAID_VERIFY_SSL is False:
+        logger.warning(
+            "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
+            "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
+            "Only use this in trusted networks or for development."
+        )
 
     # Register all modules
     register_all_modules()

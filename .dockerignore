@@ -21,3 +21,11 @@ venv/
 env/
 .vscode/
 cline_docs/
+tests/
+docs/
+scripts/
+commands/
+.full-review/
+.claude-plugin/
+*.md
+!README.md

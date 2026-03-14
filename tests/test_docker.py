@@ -70,7 +70,9 @@ class TestDockerValidation:
             await tool_fn(action="remove", container_id="abc123")
 
     @pytest.mark.parametrize("action", ["start", "stop", "details", "logs", "pause", "unpause"])
-    async def test_container_actions_require_id(self, _mock_graphql: AsyncMock, action: str) -> None:
+    async def test_container_actions_require_id(
+        self, _mock_graphql: AsyncMock, action: str
+    ) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="container_id"):
             await tool_fn(action=action)
@@ -79,6 +81,14 @@ class TestDockerValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="network_id"):
             await tool_fn(action="network_details")
+
+    async def test_non_logs_action_ignores_tail_lines_validation(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"docker": {"containers": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="list", tail_lines=0)
+        assert result["containers"] == []
 
 
 class TestDockerActions:
@@ -94,13 +104,7 @@ class TestDockerActions:
         # First call resolves ID, second performs start
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
-            {
-                "docker": {
-                    "containers": [
-                        {"id": cid, "names": ["plex"]}
-                    ]
-                }
-            },
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
             {
                 "docker": {
                     "start": {
@@ -115,7 +119,7 @@ class TestDockerActions:
         assert result["success"] is True
 
     async def test_networks(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"dockerNetworks": [{"id": "net:1", "name": "bridge"}]}
+        _mock_graphql.return_value = {"docker": {"networks": [{"id": "net:1", "name": "bridge"}]}}
         tool_fn = _make_tool()
         result = await tool_fn(action="networks")
         assert len(result["networks"]) == 1
@@ -175,7 +179,7 @@ class TestDockerActions:
             "docker": {"updateAllContainers": [{"id": "c1", "state": "running"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert len(result["containers"]) == 1
 
@@ -224,8 +228,27 @@ class TestDockerActions:
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="unexpected failure"):
+        with pytest.raises(ToolError, match="Failed to execute docker/list"):
             await tool_fn(action="list")
+
+    async def test_short_id_prefix_ambiguous_rejected(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "abcdef1234560000000000000000000000000000000000000000000000000000:local",
+                        "names": ["plex"],
+                    },
+                    {
+                        "id": "abcdef1234561111111111111111111111111111111111111111111111111111:local",
+                        "names": ["sonarr"],
+                    },
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="ambiguous"):
+            await tool_fn(action="logs", container_id="abcdef123456")
 
 
 class TestDockerMutationFailures:
@@ -271,9 +294,15 @@ class TestDockerMutationFailures:
         """update_all with no containers to update."""
         _mock_graphql.return_value = {"docker": {"updateAllContainers": []}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="update_all")
+        result = await tool_fn(action="update_all", confirm=True)
         assert result["success"] is True
         assert result["containers"] == []
+
+    async def test_update_all_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        """update_all is destructive and requires confirm=True."""
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="destructive"):
+            await tool_fn(action="update_all")
 
     async def test_mutation_timeout(self, _mock_graphql: AsyncMock) -> None:
         """Mid-operation timeout during a docker mutation."""
@@ -315,3 +344,159 @@ class TestDockerNetworkErrors:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid JSON"):
             await tool_fn(action="list")
+
+
+_ORGANIZER_RESPONSE = {
+    "version": 1.0,
+    "views": [{"id": "default", "name": "Default", "rootId": "root", "flatEntries": []}],
+}
+
+
+class TestDockerOrganizerMutations:
+    async def test_create_folder_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"createDockerFolder": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="create_folder", folder_name="Media")
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["name"] == "Media"
+
+    async def test_create_folder_requires_name(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="folder_name"):
+            await _make_tool()(action="create_folder")
+
+    async def test_set_folder_children_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"setDockerFolderChildren": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="set_folder_children", children_ids=["c1"])
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["childrenIds"] == ["c1"]
+
+    async def test_set_folder_children_requires_children(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="children_ids"):
+            await _make_tool()(action="set_folder_children")
+
+    async def test_delete_entries_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="destructive"):
+            await _make_tool()(action="delete_entries", entry_ids=["e1"])
+
+    async def test_delete_entries_requires_ids(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="entry_ids"):
+            await _make_tool()(action="delete_entries", confirm=True)
+
+    async def test_delete_entries_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"deleteDockerEntries": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="delete_entries", entry_ids=["e1", "e2"], confirm=True)
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["entryIds"] == ["e1", "e2"]
+
+    async def test_move_to_folder_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"moveDockerEntriesToFolder": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(
+            action="move_to_folder", source_entry_ids=["e1"], destination_folder_id="f1"
+        )
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["sourceEntryIds"] == ["e1"]
+        assert call_vars["destinationFolderId"] == "f1"
+
+    async def test_move_to_folder_requires_source_ids(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="source_entry_ids"):
+            await _make_tool()(action="move_to_folder", destination_folder_id="f1")
+
+    async def test_move_to_folder_requires_destination(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="destination_folder_id"):
+            await _make_tool()(action="move_to_folder", source_entry_ids=["e1"])
+
+    async def test_move_to_position_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"moveDockerItemsToPosition": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(
+            action="move_to_position",
+            source_entry_ids=["e1"],
+            destination_folder_id="f1",
+            position=2.0,
+        )
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["sourceEntryIds"] == ["e1"]
+        assert call_vars["destinationFolderId"] == "f1"
+        assert call_vars["position"] == 2.0
+
+    async def test_move_to_position_requires_position(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="position"):
+            await _make_tool()(
+                action="move_to_position", source_entry_ids=["e1"], destination_folder_id="f1"
+            )
+
+    async def test_rename_folder_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"renameDockerFolder": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="rename_folder", folder_id="f1", new_folder_name="New")
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["folderId"] == "f1"
+        assert call_vars["newName"] == "New"
+
+    async def test_rename_folder_requires_folder_id(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="folder_id"):
+            await _make_tool()(action="rename_folder", new_folder_name="New")
+
+    async def test_rename_folder_requires_new_name(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="new_folder_name"):
+            await _make_tool()(action="rename_folder", folder_id="f1")
+
+    async def test_create_folder_with_items_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"createDockerFolderWithItems": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="create_folder_with_items", folder_name="New")
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["name"] == "New"
+        assert "sourceEntryIds" not in call_vars  # not forwarded when not provided
+
+    async def test_create_folder_with_items_with_source_ids(self, _mock_graphql: AsyncMock) -> None:
+        """Passing source_entry_ids must forward sourceEntryIds to the mutation."""
+        _mock_graphql.return_value = {"createDockerFolderWithItems": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(
+            action="create_folder_with_items",
+            folder_name="Media",
+            source_entry_ids=["c1", "c2"],
+        )
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["name"] == "Media"
+        assert call_vars["sourceEntryIds"] == ["c1", "c2"]
+
+    async def test_create_folder_with_items_requires_name(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="folder_name"):
+            await _make_tool()(action="create_folder_with_items")
+
+    async def test_update_view_prefs_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateDockerViewPreferences": _ORGANIZER_RESPONSE}
+        result = await _make_tool()(action="update_view_prefs", view_prefs={"sort": "name"})
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["prefs"] == {"sort": "name"}
+
+    async def test_update_view_prefs_requires_prefs(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="view_prefs"):
+            await _make_tool()(action="update_view_prefs")
+
+    async def test_sync_templates_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "syncDockerTemplatePaths": {"scanned": 5, "matched": 4, "skipped": 1, "errors": []}
+        }
+        result = await _make_tool()(action="sync_templates")
+        assert result["success"] is True
+
+    async def test_reset_template_mappings_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="destructive"):
+            await _make_tool()(action="reset_template_mappings")
+
+    async def test_reset_template_mappings_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"resetDockerTemplateMappings": True}
+        result = await _make_tool()(action="reset_template_mappings", confirm=True)
+        assert result["success"] is True
+
+    async def test_refresh_digests_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"refreshDockerDigests": True}
+        result = await _make_tool()(action="refresh_digests")
+        assert result["success"] is True

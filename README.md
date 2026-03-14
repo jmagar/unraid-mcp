@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- 🔧 **10 Tools, 90 Actions**: Complete Unraid management through MCP protocol
+- 🔧 **11 Tools, ~104 Actions**: Complete Unraid management through MCP protocol
 - 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase  
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
 - 🔄 **Real-time Data**: WebSocket subscriptions for live log streaming
@@ -46,7 +46,7 @@
 ```
 
 This provides instant access to Unraid monitoring and management through Claude Code with:
-- **10 MCP tools** exposing **83 actions** via the consolidated action pattern
+- **11 MCP tools** exposing **~104 actions** via the consolidated action pattern
 - **10 slash commands** for quick CLI-style access (`commands/`)
 - Real-time system metrics and health monitoring
 - Docker container and VM lifecycle management
@@ -111,7 +111,7 @@ unraid-mcp/                      # ${CLAUDE_PLUGIN_ROOT}
 └── scripts/                     # Validation and helper scripts
 ```
 
-- **MCP Server**: 10 tools with 76 actions via GraphQL API
+- **MCP Server**: 11 tools with ~104 actions via GraphQL API
 - **Slash Commands**: 10 commands in `commands/` for quick CLI-style access
 - **Skill**: `/unraid` skill for monitoring and queries
 - **Entry Point**: `unraid-mcp-server` defined in pyproject.toml
@@ -218,20 +218,21 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 
 Each tool uses a consolidated `action` parameter to expose multiple operations, reducing context window usage. Destructive actions require `confirm=True`.
 
-### Tool Categories (10 Tools, 76 Actions)
+### Tool Categories (11 Tools, ~104 Actions)
 
 | Tool | Actions | Description |
 |------|---------|-------------|
-| **`unraid_info`** | 19 | overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **`unraid_info`** | 21 | overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config, update_server, update_ssh |
 | **`unraid_array`** | 5 | parity_start, parity_pause, parity_resume, parity_cancel, parity_status |
-| **`unraid_storage`** | 6 | shares, disks, disk_details, unassigned, log_files, logs |
-| **`unraid_docker`** | 15 | list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates |
+| **`unraid_storage`** | 7 | shares, disks, disk_details, unassigned, log_files, logs, flash_backup |
+| **`unraid_docker`** | 26 | list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates, create_folder, set_folder_children, delete_entries, move_to_folder, move_to_position, rename_folder, create_folder_with_items, update_view_prefs, sync_templates, reset_template_mappings, refresh_digests |
 | **`unraid_vm`** | 9 | list, details, start, stop, pause, resume, force_stop, reboot, reset |
-| **`unraid_notifications`** | 9 | overview, list, warnings, create, archive, unread, delete, delete_archived, archive_all |
+| **`unraid_notifications`** | 14 | overview, list, warnings, create, create_unique, archive, archive_many, unread, unarchive_many, unarchive_all, recalculate, delete, delete_archived, archive_all |
 | **`unraid_rclone`** | 4 | list_remotes, config_form, create_remote, delete_remote |
 | **`unraid_users`** | 1 | me |
 | **`unraid_keys`** | 5 | list, get, create, update, delete |
 | **`unraid_health`** | 3 | check, test_connection, diagnose |
+| **`unraid_settings`** | 9 | update, update_temperature, update_time, configure_ups, update_api, connect_sign_in, connect_sign_out, setup_remote_access, enable_dynamic_remote_access |
 
 ### MCP Resources (Real-time Data)
 - `unraid://logs/stream` - Live log streaming from `/var/log/syslog` with WebSocket subscriptions
@@ -248,12 +249,12 @@ The project includes **10 custom slash commands** in `commands/` for quick acces
 
 | Command | Actions | Quick Access |
 |---------|---------|--------------|
-| `/info` | 19 | System information, metrics, configuration |
+| `/info` | 21 | System information, metrics, configuration |
 | `/array` | 5 | Parity check management |
-| `/storage` | 6 | Shares, disks, logs |
-| `/docker` | 15 | Container management and monitoring |
+| `/storage` | 7 | Shares, disks, logs |
+| `/docker` | 26 | Container management and monitoring |
 | `/vm` | 9 | Virtual machine lifecycle |
-| `/notifications` | 9 | Alert management |
+| `/notifications` | 14 | Alert management |
 | `/rclone` | 4 | Cloud storage remotes |
 | `/users` | 1 | Current user query |
 | `/keys` | 5 | API key management |
@@ -317,16 +318,17 @@ unraid-mcp/
 │   │   ├── manager.py        # WebSocket management
 │   │   ├── resources.py      # MCP resources
 │   │   └── diagnostics.py    # Diagnostic tools
-│   ├── tools/                # MCP tool categories (10 tools, 76 actions)
-│   │   ├── info.py           # System information (19 actions)
+│   ├── tools/                # MCP tool categories (11 tools, ~104 actions)
+│   │   ├── info.py           # System information (21 actions)
 │   │   ├── array.py          # Parity checks (5 actions)
-│   │   ├── storage.py        # Storage & monitoring (6 actions)
-│   │   ├── docker.py         # Container management (15 actions)
+│   │   ├── storage.py        # Storage & monitoring (7 actions)
+│   │   ├── docker.py         # Container management (26 actions)
 │   │   ├── virtualization.py # VM management (9 actions)
-│   │   ├── notifications.py  # Notification management (9 actions)
+│   │   ├── notifications.py  # Notification management (14 actions)
 │   │   ├── rclone.py         # Cloud storage (4 actions)
 │   │   ├── users.py          # Current user query (1 action)
 │   │   ├── keys.py           # API key management (5 actions)
+│   │   ├── settings.py       # Server settings (9 actions)
 │   │   └── health.py         # Health checks (3 actions)
 │   └── server.py             # FastMCP server setup
 ├── logs/                     # Log files (auto-created)
@@ -345,6 +347,20 @@ uv run ty check unraid_mcp/
 # Run tests
 uv run pytest
 ```
+
+### Integration Smoke-Tests (mcporter)
+
+Live integration tests that exercise all non-destructive actions via [mcporter](https://github.com/mcporter/mcporter). Two scripts cover two transport modes:
+
+```bash
+# stdio — no running server needed (good for CI)
+./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
+
+# HTTP — connects to a live server (most up-to-date coverage)
+./tests/mcporter/test-actions.sh [MCP_URL]   # default: http://localhost:6970/mcp
+```
+
+Destructive actions are always skipped in both scripts. For safe testing strategies and exact mcporter commands per destructive action, see [`docs/DESTRUCTIVE_ACTIONS.md`](docs/DESTRUCTIVE_ACTIONS.md).
 
 ### API Schema Docs Automation
 ```bash

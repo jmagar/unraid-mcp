@@ -10,7 +10,7 @@ from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
@@ -39,17 +39,11 @@ def register_users_tool(mcp: FastMCP) -> None:
         Note: Unraid API does not support user management operations (list, add, delete).
         """
         if action not in ALL_ACTIONS:
-            raise ToolError(f"Invalid action '{action}'. Must be: me")
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        try:
+        with tool_error_handler("users", action, logger):
             logger.info("Executing unraid_users action=me")
             data = await make_graphql_request(QUERIES["me"])
             return data.get("me") or {}
-
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_users action=me: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute users/me: {e!s}") from e
 
     logger.info("Users tool registered successfully")

@@ -19,7 +19,6 @@ def _make_tool():
     return make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
 
 
-@pytest.mark.usefixtures("_mock_graphql")
 class TestRcloneValidation:
     async def test_delete_requires_confirm(self) -> None:
         tool_fn = _make_tool()
@@ -100,3 +99,83 @@ class TestRcloneActions:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Failed to delete"):
             await tool_fn(action="delete_remote", name="gdrive", confirm=True)
+
+
+class TestRcloneConfigDataValidation:
+    """Tests for _validate_config_data security guards."""
+
+    async def test_path_traversal_in_key_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="disallowed characters"):
+            await tool_fn(
+                action="create_remote",
+                name="r",
+                provider_type="s3",
+                config_data={"../evil": "value"},
+            )
+
+    async def test_shell_metachar_in_key_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="disallowed characters"):
+            await tool_fn(
+                action="create_remote",
+                name="r",
+                provider_type="s3",
+                config_data={"key;rm": "value"},
+            )
+
+    async def test_too_many_keys_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="max 50"):
+            await tool_fn(
+                action="create_remote",
+                name="r",
+                provider_type="s3",
+                config_data={f"key{i}": "v" for i in range(51)},
+            )
+
+    async def test_dict_value_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="string, number, or boolean"):
+            await tool_fn(
+                action="create_remote",
+                name="r",
+                provider_type="s3",
+                config_data={"nested": {"key": "val"}},
+            )
+
+    async def test_value_too_long_rejected(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="exceeds max length"):
+            await tool_fn(
+                action="create_remote",
+                name="r",
+                provider_type="s3",
+                config_data={"key": "x" * 4097},
+            )
+
+    async def test_boolean_value_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "rclone": {"createRCloneRemote": {"name": "r", "type": "s3"}}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create_remote",
+            name="r",
+            provider_type="s3",
+            config_data={"use_path_style": True},
+        )
+        assert result["success"] is True
+
+    async def test_int_value_accepted(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "rclone": {"createRCloneRemote": {"name": "r", "type": "sftp"}}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="create_remote",
+            name="r",
+            provider_type="sftp",
+            config_data={"port": 22},
+        )
+        assert result["success"] is True

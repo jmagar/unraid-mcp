@@ -4,13 +4,13 @@ Provides the `unraid_notifications` tool with 9 actions for viewing,
 creating, archiving, and deleting system notifications.
 """
 
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
-from ..core.exceptions import ToolError
+from ..core.exceptions import ToolError, tool_error_handler
 
 
 QUERIES: dict[str, str] = {
@@ -44,38 +44,86 @@ QUERIES: dict[str, str] = {
 
 MUTATIONS: dict[str, str] = {
     "create": """
-        mutation CreateNotification($input: CreateNotificationInput!) {
-          notifications { createNotification(input: $input) { id title importance } }
+        mutation CreateNotification($input: NotificationData!) {
+          createNotification(input: $input) { id title importance }
         }
     """,
     "archive": """
         mutation ArchiveNotification($id: PrefixedID!) {
-          notifications { archiveNotification(id: $id) }
+          archiveNotification(id: $id) { id title importance }
         }
     """,
     "unread": """
         mutation UnreadNotification($id: PrefixedID!) {
-          notifications { unreadNotification(id: $id) }
+          unreadNotification(id: $id) { id title importance }
         }
     """,
     "delete": """
         mutation DeleteNotification($id: PrefixedID!, $type: NotificationType!) {
-          notifications { deleteNotification(id: $id, type: $type) }
+          deleteNotification(id: $id, type: $type) {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
         }
     """,
     "delete_archived": """
         mutation DeleteArchivedNotifications {
-          notifications { deleteArchivedNotifications }
+          deleteArchivedNotifications {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
         }
     """,
     "archive_all": """
         mutation ArchiveAllNotifications($importance: NotificationImportance) {
-          notifications { archiveAll(importance: $importance) }
+          archiveAll(importance: $importance) {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
+        }
+    """,
+    "archive_many": """
+        mutation ArchiveNotifications($ids: [PrefixedID!]!) {
+          archiveNotifications(ids: $ids) {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
+        }
+    """,
+    "create_unique": """
+        mutation NotifyIfUnique($input: NotificationData!) {
+          notifyIfUnique(input: $input) { id title importance }
+        }
+    """,
+    "unarchive_many": """
+        mutation UnarchiveNotifications($ids: [PrefixedID!]!) {
+          unarchiveNotifications(ids: $ids) {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
+        }
+    """,
+    "unarchive_all": """
+        mutation UnarchiveAll($importance: NotificationImportance) {
+          unarchiveAll(importance: $importance) {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
+        }
+    """,
+    "recalculate": """
+        mutation RecalculateOverview {
+          recalculateOverview {
+            unread { info warning alert total }
+            archive { info warning alert total }
+          }
         }
     """,
 }
 
 DESTRUCTIVE_ACTIONS = {"delete", "delete_archived"}
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
+_VALID_IMPORTANCE = {"ALERT", "WARNING", "INFO"}
 
 NOTIFICATION_ACTIONS = Literal[
     "overview",
@@ -87,7 +135,20 @@ NOTIFICATION_ACTIONS = Literal[
     "delete",
     "delete_archived",
     "archive_all",
+    "archive_many",
+    "create_unique",
+    "unarchive_many",
+    "unarchive_all",
+    "recalculate",
 ]
+
+if set(get_args(NOTIFICATION_ACTIONS)) != ALL_ACTIONS:
+    _missing = ALL_ACTIONS - set(get_args(NOTIFICATION_ACTIONS))
+    _extra = set(get_args(NOTIFICATION_ACTIONS)) - ALL_ACTIONS
+    raise RuntimeError(
+        f"NOTIFICATION_ACTIONS and ALL_ACTIONS are out of sync. "
+        f"Missing from Literal: {_missing or 'none'}. Extra in Literal: {_extra or 'none'}"
+    )
 
 
 def register_notifications_tool(mcp: FastMCP) -> None:
@@ -98,6 +159,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
         action: NOTIFICATION_ACTIONS,
         confirm: bool = False,
         notification_id: str | None = None,
+        notification_ids: list[str] | None = None,
         notification_type: str | None = None,
         importance: str | None = None,
         offset: int = 0,
@@ -119,17 +181,39 @@ def register_notifications_tool(mcp: FastMCP) -> None:
           delete - Delete a notification (requires notification_id, notification_type, confirm=True)
           delete_archived - Delete all archived notifications (requires confirm=True)
           archive_all - Archive all notifications (optional importance filter)
+          archive_many - Archive multiple notifications by ID (requires notification_ids)
+          create_unique - Create notification only if no equivalent unread exists (requires title, subject, description, importance)
+          unarchive_many - Move notifications back to unread (requires notification_ids)
+          unarchive_all - Move all archived notifications to unread (optional importance filter)
+          recalculate - Recompute overview counts from disk
         """
-        all_actions = {**QUERIES, **MUTATIONS}
-        if action not in all_actions:
-            raise ToolError(
-                f"Invalid action '{action}'. Must be one of: {list(all_actions.keys())}"
-            )
+        if action not in ALL_ACTIONS:
+            raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
             raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
-        try:
+        # Validate enum parameters before dispatching to GraphQL (SEC-M04).
+        # Invalid values waste a rate-limited request and may leak schema details in errors.
+        valid_list_types = frozenset({"UNREAD", "ARCHIVE"})
+        valid_importance = frozenset({"INFO", "WARNING", "ALERT"})
+        valid_notif_types = frozenset({"UNREAD", "ARCHIVE"})
+
+        if list_type.upper() not in valid_list_types:
+            raise ToolError(
+                f"Invalid list_type '{list_type}'. Must be one of: {sorted(valid_list_types)}"
+            )
+        if importance is not None and importance.upper() not in valid_importance:
+            raise ToolError(
+                f"Invalid importance '{importance}'. Must be one of: {sorted(valid_importance)}"
+            )
+        if notification_type is not None and notification_type.upper() not in valid_notif_types:
+            raise ToolError(
+                f"Invalid notification_type '{notification_type}'. "
+                f"Must be one of: {sorted(valid_notif_types)}"
+            )
+
+        with tool_error_handler("notifications", action, logger):
             logger.info(f"Executing unraid_notifications action={action}")
 
             if action == "overview":
@@ -147,18 +231,29 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     filter_vars["importance"] = importance.upper()
                 data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
                 notifications = data.get("notifications", {})
-                result = notifications.get("list", [])
-                return {"notifications": list(result) if isinstance(result, list) else []}
+                return {"notifications": notifications.get("list", [])}
 
             if action == "warnings":
                 data = await make_graphql_request(QUERIES["warnings"])
                 notifications = data.get("notifications", {})
-                result = notifications.get("warningsAndAlerts", [])
-                return {"warnings": list(result) if isinstance(result, list) else []}
+                return {"warnings": notifications.get("warningsAndAlerts", [])}
 
             if action == "create":
                 if title is None or subject is None or description is None or importance is None:
                     raise ToolError("create requires title, subject, description, and importance")
+                if importance.upper() not in _VALID_IMPORTANCE:
+                    raise ToolError(
+                        f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}. "
+                        f"Got: '{importance}'"
+                    )
+                if len(title) > 200:
+                    raise ToolError(f"title must be at most 200 characters (got {len(title)})")
+                if len(subject) > 500:
+                    raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
+                if len(description) > 2000:
+                    raise ToolError(
+                        f"description must be at most 2000 characters (got {len(description)})"
+                    )
                 input_data = {
                     "title": title,
                     "subject": subject,
@@ -166,7 +261,10 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     "importance": importance.upper(),
                 }
                 data = await make_graphql_request(MUTATIONS["create"], {"input": input_data})
-                return {"success": True, "data": data}
+                notification = data.get("createNotification")
+                if notification is None:
+                    raise ToolError("Notification creation failed: server returned no data")
+                return {"success": True, "notification": notification}
 
             if action in ("archive", "unread"):
                 if not notification_id:
@@ -194,12 +292,63 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(MUTATIONS["archive_all"], variables)
                 return {"success": True, "action": "archive_all", "data": data}
 
-            raise ToolError(f"Unhandled action '{action}' — this is a bug")
+            if action == "archive_many":
+                if not notification_ids:
+                    raise ToolError("notification_ids is required for 'archive_many' action")
+                data = await make_graphql_request(
+                    MUTATIONS["archive_many"], {"ids": notification_ids}
+                )
+                return {"success": True, "action": "archive_many", "data": data}
 
-        except ToolError:
-            raise
-        except Exception as e:
-            logger.error(f"Error in unraid_notifications action={action}: {e}", exc_info=True)
-            raise ToolError(f"Failed to execute notifications/{action}: {e!s}") from e
+            if action == "create_unique":
+                if title is None or subject is None or description is None or importance is None:
+                    raise ToolError(
+                        "create_unique requires title, subject, description, and importance"
+                    )
+                if importance.upper() not in _VALID_IMPORTANCE:
+                    raise ToolError(
+                        f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}. "
+                        f"Got: '{importance}'"
+                    )
+                if len(title) > 200:
+                    raise ToolError(f"title must be at most 200 characters (got {len(title)})")
+                if len(subject) > 500:
+                    raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
+                if len(description) > 2000:
+                    raise ToolError(
+                        f"description must be at most 2000 characters (got {len(description)})"
+                    )
+                input_data = {
+                    "title": title,
+                    "subject": subject,
+                    "description": description,
+                    "importance": importance.upper(),
+                }
+                data = await make_graphql_request(MUTATIONS["create_unique"], {"input": input_data})
+                notification = data.get("notifyIfUnique")
+                if notification is None:
+                    return {"success": True, "duplicate": True, "data": None}
+                return {"success": True, "duplicate": False, "data": notification}
+
+            if action == "unarchive_many":
+                if not notification_ids:
+                    raise ToolError("notification_ids is required for 'unarchive_many' action")
+                data = await make_graphql_request(
+                    MUTATIONS["unarchive_many"], {"ids": notification_ids}
+                )
+                return {"success": True, "action": "unarchive_many", "data": data}
+
+            if action == "unarchive_all":
+                vars_: dict[str, Any] | None = None
+                if importance:
+                    vars_ = {"importance": importance.upper()}
+                data = await make_graphql_request(MUTATIONS["unarchive_all"], vars_)
+                return {"success": True, "action": "unarchive_all", "data": data}
+
+            if action == "recalculate":
+                data = await make_graphql_request(MUTATIONS["recalculate"])
+                return {"success": True, "action": "recalculate", "data": data}
+
+            raise ToolError(f"Unhandled action '{action}' — this is a bug")
 
     logger.info("Notifications tool registered successfully")

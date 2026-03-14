@@ -34,6 +34,13 @@ logs/
 # IDE/Editor
 .bivvy
 .cursor
+.windsurf/
+.1code/
+.emdash.json
+
+# Backup files
+*.bak
+*.bak-*
 
 # Claude Code user settings (gitignore local settings)
 .claude/settings.local.json
@@ -41,12 +48,17 @@ logs/
 # Serena IDE configuration
 .serena/
 
+# Claude Code worktrees (temporary agent isolation dirs)
+.claude/worktrees/
+
 # Documentation and session artifacts
 .docs/
 .full-review/
 /docs/plans/
 /docs/sessions/
 /docs/reports/
+/docs/research/
+/docs/superpowers/
 
 # Test planning documents
 /DESTRUCTIVE_ACTIONS.md
