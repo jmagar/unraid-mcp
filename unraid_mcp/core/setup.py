@@ -8,7 +8,6 @@ them to .env in the server root directory.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
 from fastmcp import Context
 
@@ -60,7 +59,7 @@ def _write_env(api_url: str, api_key: str) -> None:
 
     Preserves any existing lines that are not UNRAID_API_URL or UNRAID_API_KEY.
     """
-    env_path = Path(PROJECT_ROOT) / ".env"
+    env_path = PROJECT_ROOT / ".env"
     existing_lines: list[str] = []
 
     if env_path.exists():
