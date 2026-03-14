@@ -12,6 +12,7 @@ from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..config.settings import (
+    CREDENTIALS_ENV_PATH,
     UNRAID_API_URL,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
@@ -72,14 +73,21 @@ def register_health_tool(mcp: FastMCP) -> None:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action == "setup":
+
             configured = await elicit_and_configure(ctx)
             if configured:
                 return (
                     "✅ Credentials configured successfully. You can now use all Unraid MCP tools."
                 )
             return (
-                "⚠️ Credentials not configured. "
-                "Run `unraid_health action=setup` again to provide credentials."
+                f"⚠️ Credentials not configured.\n\n"
+                f"Your MCP client may not support elicitation, or setup was cancelled.\n\n"
+                f"**Manual setup** — create `{CREDENTIALS_ENV_PATH}` with:\n"
+                f"```\n"
+                f"UNRAID_API_URL=https://your-unraid-server:port\n"
+                f"UNRAID_API_KEY=your-api-key\n"
+                f"```\n\n"
+                f"Then run any Unraid tool to connect."
             )
 
         with tool_error_handler("health", action, logger):

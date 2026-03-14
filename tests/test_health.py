@@ -227,3 +227,20 @@ async def test_health_setup_action_returns_declined_message() -> None:
         or "declined" in result.lower()
         or "cancel" in result.lower()
     )
+
+
+@pytest.mark.asyncio
+async def test_health_setup_declined_message_includes_manual_path() -> None:
+    """Declined setup message includes the exact credentials file path and variable names."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
+
+    tool_fn = _make_tool()
+
+    with patch("unraid_mcp.tools.health.elicit_and_configure", new=AsyncMock(return_value=False)):
+        result = await tool_fn(action="setup", ctx=MagicMock())
+
+    assert str(CREDENTIALS_ENV_PATH) in result
+    assert "UNRAID_API_URL=" in result  # inline variable shown
+    assert "UNRAID_API_KEY=" in result
