@@ -20,6 +20,7 @@ from .config.settings import (
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.array import register_array_tool
+from .tools.customization import register_customization_tool
 from .tools.docker import register_docker_tool
 from .tools.health import register_health_tool
 from .tools.info import register_info_tool
@@ -66,6 +67,7 @@ def register_all_modules() -> None:
             register_health_tool,
             register_settings_tool,
             register_live_tool,
+            register_customization_tool,
         ]
         for registrar in registrars:
             registrar(mcp)
