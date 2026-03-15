@@ -304,7 +304,7 @@ class TestInfoToolRequests:
         tool = self._get_tool()
         await tool(action="network")
         body = _extract_request_body(route.calls.last.request)
-        assert "GetNetworkConfig" in body["query"]
+        assert "GetNetworkInfo" in body["query"]
 
     @respx.mock
     async def test_metrics_sends_correct_query(self) -> None:
@@ -1177,7 +1177,7 @@ class TestKeysToolRequests:
     @respx.mock
     async def test_delete_requires_confirm(self) -> None:
         tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool(action="delete", key_id="k1")
 
     @respx.mock

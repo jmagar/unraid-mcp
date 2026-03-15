@@ -3,8 +3,6 @@
 Provides the `unraid_plugins` tool with 3 actions: list, add, remove.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal, get_args
 
 from fastmcp import Context, FastMCP

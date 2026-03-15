@@ -209,7 +209,15 @@ class TestDockerActions:
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
-            {"docker": {"logs": "2026-02-08 log line here"}},
+            {
+                "docker": {
+                    "logs": {
+                        "containerId": cid,
+                        "lines": [{"timestamp": "2026-02-08", "message": "log line here"}],
+                        "cursor": None,
+                    }
+                }
+            },
         ]
         tool_fn = _make_tool()
         result = await tool_fn(action="logs", container_id="plex")

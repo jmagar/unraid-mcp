@@ -4,8 +4,6 @@ Provides the `unraid_array` tool with 13 actions covering parity check
 management, array start/stop, and disk add/remove/mount operations.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal, get_args
 
 from fastmcp import Context, FastMCP

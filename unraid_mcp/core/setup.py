@@ -8,8 +8,11 @@ them to ~/.unraid-mcp/.env with restricted permissions.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from fastmcp import Context
+
+if TYPE_CHECKING:
+    from fastmcp import Context
 
 from ..config.logging import logger
 from ..config.settings import (

@@ -89,7 +89,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
         "module": "unraid_mcp.tools.settings",
         "register_fn": "register_settings_tool",
         "tool_name": "unraid_settings",
-        "actions": {"configure_ups"},
+        "actions": {"configure_ups", "setup_remote_access", "enable_dynamic_remote_access"},
         "runtime_set": SETTINGS_DESTRUCTIVE,
     },
     "plugins": {

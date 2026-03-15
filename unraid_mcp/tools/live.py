@@ -8,8 +8,6 @@ Use `subscribe_once` actions for current-state reads (cpu, memory, array_state).
 Use `subscribe_collect` actions for event streams (notification_feed, log_tail).
 """
 
-from __future__ import annotations
-
 import os
 from typing import Any, Literal, get_args
 
@@ -94,7 +92,7 @@ def register_live_tool(mcp: FastMCP) -> None:
         action: LIVE_ACTIONS,
         path: str | None = None,
         collect_for: float = 5.0,
-        timeout: float = 10.0,
+        timeout: float = 10.0,  # noqa: ASYNC109
     ) -> dict[str, Any]:
         """Get real-time data from Unraid via WebSocket subscriptions.
 

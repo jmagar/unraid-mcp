@@ -4,8 +4,6 @@ Provides the `unraid_oidc` tool with 5 read-only actions for querying
 OIDC provider configuration and validating sessions.
 """
 
-from __future__ import annotations
-
 from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP

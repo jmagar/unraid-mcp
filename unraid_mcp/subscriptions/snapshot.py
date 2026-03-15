@@ -29,7 +29,7 @@ from .utils import build_ws_ssl_context, build_ws_url
 async def subscribe_once(
     query: str,
     variables: dict[str, Any] | None = None,
-    timeout: float = 10.0,
+    timeout: float = 10.0,  # noqa: ASYNC109
 ) -> dict[str, Any]:
     """Open a WebSocket subscription, receive the first data event, close, return it.
 
@@ -94,7 +94,7 @@ async def subscribe_once(
                     elif msg.get("type") == "error" and msg.get("id") == sub_id:
                         raise ToolError(f"Subscription error: {msg.get('payload')}")
         except TimeoutError:
-            raise ToolError(f"Subscription timed out after {timeout:.0f}s")
+            raise ToolError(f"Subscription timed out after {timeout:.0f}s") from None
 
         raise ToolError("WebSocket closed before receiving subscription data")
 
@@ -103,7 +103,7 @@ async def subscribe_collect(
     query: str,
     variables: dict[str, Any] | None = None,
     collect_for: float = 5.0,
-    timeout: float = 10.0,
+    timeout: float = 10.0,  # noqa: ASYNC109
 ) -> list[dict[str, Any]]:
     """Open a subscription, collect events for `collect_for` seconds, close, return list.
 
