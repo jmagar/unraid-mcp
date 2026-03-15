@@ -84,28 +84,32 @@ docker compose down
 - **Health Monitoring**: Comprehensive health check tool for system monitoring
 - **Real-time Subscriptions**: WebSocket-based live data streaming
 
-### Tool Categories (11 Tools, ~104 Actions)
-1. **`unraid_info`** (21 actions): overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config, update_server, update_ssh
-2. **`unraid_array`** (5 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status
-3. **`unraid_storage`** (7 actions): shares, disks, disk_details, unassigned, log_files, logs, flash_backup
-4. **`unraid_docker`** (26 actions): list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates, create_folder, set_folder_children, delete_entries, move_to_folder, move_to_position, rename_folder, create_folder_with_items, update_view_prefs, sync_templates, reset_template_mappings, refresh_digests
+### Tool Categories (15 Tools, ~103 Actions)
+1. **`unraid_info`** (18 actions): overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
+2. **`unraid_array`** (13 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status, parity_history, start_array, stop_array, add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats
+3. **`unraid_storage`** (6 actions): shares, disks, disk_details, log_files, logs, flash_backup
+4. **`unraid_docker`** (7 actions): list, details, start, stop, restart, networks, network_details
 5. **`unraid_vm`** (9 actions): list, details, start, stop, pause, resume, force_stop, reboot, reset
-6. **`unraid_notifications`** (9 actions): overview, list, warnings, create, archive, unread, delete, delete_archived, archive_all
+6. **`unraid_notifications`** (12 actions): overview, list, create, archive, unread, delete, delete_archived, archive_all, archive_many, unarchive_many, unarchive_all, recalculate
 7. **`unraid_rclone`** (4 actions): list_remotes, config_form, create_remote, delete_remote
 8. **`unraid_users`** (1 action): me
-9. **`unraid_keys`** (5 actions): list, get, create, update, delete
-10. **`unraid_health`** (3 actions): check, test_connection, diagnose
-11. **`unraid_settings`** (9 actions): update, update_temperature, update_time, configure_ups, update_api, connect_sign_in, connect_sign_out, setup_remote_access, enable_dynamic_remote_access
+9. **`unraid_keys`** (7 actions): list, get, create, update, delete, add_role, remove_role
+10. **`unraid_health`** (4 actions): check, test_connection, diagnose, setup
+11. **`unraid_settings`** (2 actions): update, configure_ups
+12. **`unraid_customization`** (5 actions): theme, public_theme, is_initial_setup, sso_enabled, set_theme
+13. **`unraid_plugins`** (3 actions): list, add, remove
+14. **`unraid_oidc`** (5 actions): providers, provider, configuration, public_providers, validate_session
+15. **`unraid_live`** (11 actions): cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status
 
 ### Destructive Actions (require `confirm=True`)
-- **docker**: remove, update_all, delete_entries, reset_template_mappings
+- **array**: remove_disk, clear_disk_stats
 - **vm**: force_stop, reset
 - **notifications**: delete, delete_archived
 - **rclone**: delete_remote
 - **keys**: delete
 - **storage**: flash_backup
-- **info**: update_ssh
-- **settings**: configure_ups, setup_remote_access, enable_dynamic_remote_access
+- **settings**: configure_ups
+- **plugins**: remove
 
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:

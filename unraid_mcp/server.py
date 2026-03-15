@@ -27,6 +27,7 @@ from .tools.info import register_info_tool
 from .tools.keys import register_keys_tool
 from .tools.live import register_live_tool
 from .tools.notifications import register_notifications_tool
+from .tools.oidc import register_oidc_tool
 from .tools.plugins import register_plugins_tool
 from .tools.rclone import register_rclone_tool
 from .tools.settings import register_settings_tool
