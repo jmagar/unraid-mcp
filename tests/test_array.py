@@ -32,8 +32,6 @@ class TestArrayValidation:
             "stop",
             "shutdown",
             "reboot",
-            "mount_disk",
-            "unmount_disk",
             "clear_stats",
         ):
             with pytest.raises(ToolError, match="Invalid action"):
@@ -143,3 +141,108 @@ class TestArrayNetworkErrors:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Network connection error"):
             await tool_fn(action="parity_status")
+
+
+# ---------------------------------------------------------------------------
+# New actions: parity_history, start/stop array, disk operations
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _mock_array_graphql():
+    with patch("unraid_mcp.tools.array.make_graphql_request", new_callable=AsyncMock) as m:
+        yield m
+
+
+# parity_history
+
+
+@pytest.mark.asyncio
+async def test_parity_history_returns_history(_mock_array_graphql):
+    _mock_array_graphql.return_value = {
+        "parityHistory": [{"date": "2026-03-01T00:00:00Z", "status": "COMPLETED", "errors": 0}]
+    }
+    result = await _make_tool()(action="parity_history")
+    assert result["success"] is True
+    assert len(result["data"]["parityHistory"]) == 1
+
+
+# Array state mutations
+
+
+@pytest.mark.asyncio
+async def test_start_array(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"setState": {"state": "STARTED"}}}
+    result = await _make_tool()(action="start_array")
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_stop_array(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"setState": {"state": "STOPPED"}}}
+    result = await _make_tool()(action="stop_array")
+    assert result["success"] is True
+
+
+# add_disk
+
+
+@pytest.mark.asyncio
+async def test_add_disk_requires_disk_id(_mock_array_graphql):
+    with pytest.raises(ToolError, match="disk_id"):
+        await _make_tool()(action="add_disk")
+
+
+@pytest.mark.asyncio
+async def test_add_disk_success(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"addDiskToArray": {"state": "STARTED"}}}
+    result = await _make_tool()(action="add_disk", disk_id="abc123:local")
+    assert result["success"] is True
+
+
+# remove_disk — destructive
+
+
+@pytest.mark.asyncio
+async def test_remove_disk_requires_confirm(_mock_array_graphql):
+    with pytest.raises(ToolError, match="not confirmed"):
+        await _make_tool()(action="remove_disk", disk_id="abc123:local", confirm=False)
+
+
+@pytest.mark.asyncio
+async def test_remove_disk_with_confirm(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"removeDiskFromArray": {"state": "STOPPED"}}}
+    result = await _make_tool()(action="remove_disk", disk_id="abc123:local", confirm=True)
+    assert result["success"] is True
+
+
+# mount_disk / unmount_disk
+
+
+@pytest.mark.asyncio
+async def test_mount_disk_requires_disk_id(_mock_array_graphql):
+    with pytest.raises(ToolError, match="disk_id"):
+        await _make_tool()(action="mount_disk")
+
+
+@pytest.mark.asyncio
+async def test_unmount_disk_success(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"unmountArrayDisk": {"id": "abc123:local"}}}
+    result = await _make_tool()(action="unmount_disk", disk_id="abc123:local")
+    assert result["success"] is True
+
+
+# clear_disk_stats — destructive
+
+
+@pytest.mark.asyncio
+async def test_clear_disk_stats_requires_confirm(_mock_array_graphql):
+    with pytest.raises(ToolError, match="not confirmed"):
+        await _make_tool()(action="clear_disk_stats", disk_id="abc123:local", confirm=False)
+
+
+@pytest.mark.asyncio
+async def test_clear_disk_stats_with_confirm(_mock_array_graphql):
+    _mock_array_graphql.return_value = {"array": {"clearArrayDiskStatistics": True}}
+    result = await _make_tool()(action="clear_disk_stats", disk_id="abc123:local", confirm=True)
+    assert result["success"] is True
