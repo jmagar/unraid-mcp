@@ -26,6 +26,54 @@ class _UnraidCredentials:
     api_key: str
 
 
+async def elicit_destructive_confirmation(
+    ctx: Context | None, action: str, description: str
+) -> bool:
+    """Prompt the user to confirm a destructive action via MCP elicitation.
+
+    Args:
+        ctx: The MCP context for elicitation. If None, returns False immediately.
+        action: The action name (for display in the prompt).
+        description: Human-readable description of what the action will do.
+
+    Returns:
+        True if the user accepted, False if declined, cancelled, or no context.
+    """
+    if ctx is None:
+        logger.warning(
+            "Cannot elicit confirmation for '%s': no MCP context available. "
+            "Re-run with confirm=True to bypass elicitation.",
+            action,
+        )
+        return False
+
+    try:
+        result = await ctx.elicit(
+            message=(
+                f"**Confirm destructive action: `{action}`**\n\n"
+                f"{description}\n\n"
+                "Are you sure you want to proceed?"
+            ),
+            response_type=bool,
+        )
+    except NotImplementedError:
+        logger.warning(
+            "MCP client does not support elicitation for action '%s'. "
+            "Re-run with confirm=True to bypass.",
+            action,
+        )
+        return False
+
+    if result.action != "accept":
+        logger.info("Destructive action '%s' declined by user (%s).", action, result.action)
+        return False
+
+    confirmed: bool = result.data
+    if not confirmed:
+        logger.info("Destructive action '%s' not confirmed by user.", action)
+    return confirmed
+
+
 async def elicit_and_configure(ctx: Context | None) -> bool:
     """Prompt the user for Unraid credentials via MCP elicitation.
 

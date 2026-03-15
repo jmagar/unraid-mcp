@@ -25,6 +25,8 @@ from unraid_mcp.tools.keys import DESTRUCTIVE_ACTIONS as KEYS_DESTRUCTIVE
 from unraid_mcp.tools.keys import MUTATIONS as KEYS_MUTATIONS
 from unraid_mcp.tools.notifications import DESTRUCTIVE_ACTIONS as NOTIF_DESTRUCTIVE
 from unraid_mcp.tools.notifications import MUTATIONS as NOTIF_MUTATIONS
+from unraid_mcp.tools.plugins import DESTRUCTIVE_ACTIONS as PLUGINS_DESTRUCTIVE
+from unraid_mcp.tools.plugins import MUTATIONS as PLUGINS_MUTATIONS
 from unraid_mcp.tools.rclone import DESTRUCTIVE_ACTIONS as RCLONE_DESTRUCTIVE
 from unraid_mcp.tools.rclone import MUTATIONS as RCLONE_MUTATIONS
 from unraid_mcp.tools.settings import DESTRUCTIVE_ACTIONS as SETTINGS_DESTRUCTIVE
@@ -90,6 +92,13 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
         "actions": {"configure_ups"},
         "runtime_set": SETTINGS_DESTRUCTIVE,
     },
+    "plugins": {
+        "module": "unraid_mcp.tools.plugins",
+        "register_fn": "register_plugins_tool",
+        "tool_name": "unraid_plugins",
+        "actions": {"remove"},
+        "runtime_set": PLUGINS_DESTRUCTIVE,
+    },
 }
 
 
@@ -121,6 +130,7 @@ class TestDestructiveActionRegistries:
             "keys": KEYS_MUTATIONS,
             "storage": STORAGE_MUTATIONS,
             "settings": SETTINGS_MUTATIONS,
+            "plugins": PLUGINS_MUTATIONS,
         }
         mutations = mutations_map[tool_key]
         for action in info["actions"]:
@@ -151,6 +161,7 @@ class TestDestructiveActionRegistries:
             "keys": KEYS_MUTATIONS,
             "storage": STORAGE_MUTATIONS,
             "settings": SETTINGS_MUTATIONS,
+            "plugins": PLUGINS_MUTATIONS,
         }
         all_destructive = {
             "array": ARRAY_DESTRUCTIVE,
@@ -160,6 +171,7 @@ class TestDestructiveActionRegistries:
             "keys": KEYS_DESTRUCTIVE,
             "storage": STORAGE_DESTRUCTIVE,
             "settings": SETTINGS_DESTRUCTIVE,
+            "plugins": PLUGINS_DESTRUCTIVE,
         }
         missing: list[str] = []
         for tool_key, mutations in all_mutations.items():
@@ -204,6 +216,8 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     ),
     # Settings
     ("settings", "configure_ups", {"ups_config": {"mode": "slave"}}),
+    # Plugins
+    ("plugins", "remove", {"names": ["my-plugin"]}),
 ]
 
 
@@ -252,6 +266,12 @@ def _mock_settings_graphql() -> Generator[AsyncMock, None, None]:
         yield m
 
 
+@pytest.fixture
+def _mock_plugins_graphql() -> Generator[AsyncMock, None, None]:
+    with patch("unraid_mcp.tools.plugins.make_graphql_request", new_callable=AsyncMock) as m:
+        yield m
+
+
 # Map tool_key -> (module path, register fn, tool name)
 _TOOL_REGISTRY = {
     "array": ("unraid_mcp.tools.array", "register_array_tool", "unraid_array"),
@@ -265,6 +285,7 @@ _TOOL_REGISTRY = {
     "keys": ("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys"),
     "storage": ("unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage"),
     "settings": ("unraid_mcp.tools.settings", "register_settings_tool", "unraid_settings"),
+    "plugins": ("unraid_mcp.tools.plugins", "register_plugins_tool", "unraid_plugins"),
 }
 
 
@@ -284,6 +305,7 @@ class TestConfirmationGuards:
         _mock_keys_graphql: AsyncMock,
         _mock_storage_graphql: AsyncMock,
         _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
     ) -> None:
         """Calling a destructive action without confirm=True must raise ToolError."""
         module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
@@ -305,6 +327,7 @@ class TestConfirmationGuards:
         _mock_keys_graphql: AsyncMock,
         _mock_storage_graphql: AsyncMock,
         _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
     ) -> None:
         """Explicitly passing confirm=False must still raise ToolError."""
         module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
@@ -326,6 +349,7 @@ class TestConfirmationGuards:
         _mock_keys_graphql: AsyncMock,
         _mock_storage_graphql: AsyncMock,
         _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
     ) -> None:
         """The error message should include the action name for clarity."""
         module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
@@ -442,4 +466,12 @@ class TestConfirmAllowsExecution:
         _mock_array_graphql.return_value = {"array": {"clearArrayDiskStatistics": True}}
         tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
         result = await tool_fn(action="clear_disk_stats", disk_id="abc:local", confirm=True)
+        assert result["success"] is True
+
+    async def test_plugins_remove_with_confirm(self, _mock_plugins_graphql: AsyncMock) -> None:
+        _mock_plugins_graphql.return_value = {"removePlugin": True}
+        tool_fn = make_tool_fn(
+            "unraid_mcp.tools.plugins", "register_plugins_tool", "unraid_plugins"
+        )
+        result = await tool_fn(action="remove", names=["my-plugin"], confirm=True)
         assert result["success"] is True

@@ -27,6 +27,7 @@ from .tools.info import register_info_tool
 from .tools.keys import register_keys_tool
 from .tools.live import register_live_tool
 from .tools.notifications import register_notifications_tool
+from .tools.plugins import register_plugins_tool
 from .tools.rclone import register_rclone_tool
 from .tools.settings import register_settings_tool
 from .tools.storage import register_storage_tool
@@ -61,6 +62,7 @@ def register_all_modules() -> None:
             register_docker_tool,
             register_vm_tool,
             register_notifications_tool,
+            register_plugins_tool,
             register_rclone_tool,
             register_users_tool,
             register_keys_tool,
