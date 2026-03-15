@@ -70,6 +70,7 @@ def register_all_modules() -> None:
             register_settings_tool,
             register_live_tool,
             register_customization_tool,
+            register_oidc_tool,
         ]
         for registrar in registrars:
             registrar(mcp)
