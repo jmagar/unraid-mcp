@@ -93,3 +93,22 @@ async def test_invalid_action_raises(mcp):
     tool_fn = _make_live_tool(mcp)
     with pytest.raises(ToolError, match="Invalid action"):
         await tool_fn(action="nonexistent")  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_snapshot_propagates_tool_error(mcp, _mock_subscribe_once):
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_subscribe_once.side_effect = ToolError("Subscription timed out after 10s")
+    tool_fn = _make_live_tool(mcp)
+    with pytest.raises(ToolError, match="timed out"):
+        await tool_fn(action="cpu")
+
+
+@pytest.mark.asyncio
+async def test_log_tail_rejects_invalid_path(mcp, _mock_subscribe_collect):
+    from unraid_mcp.core.exceptions import ToolError
+
+    tool_fn = _make_live_tool(mcp)
+    with pytest.raises(ToolError, match="must start with"):
+        await tool_fn(action="log_tail", path="/etc/shadow")

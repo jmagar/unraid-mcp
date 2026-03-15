@@ -10,6 +10,7 @@ Use `subscribe_collect` actions for event streams (notification_feed, log_tail).
 
 from __future__ import annotations
 
+import os
 from typing import Any, Literal, get_args
 
 from fastmcp import FastMCP
@@ -18,6 +19,8 @@ from ..config.logging import logger
 from ..core.exceptions import ToolError, tool_error_handler
 from ..subscriptions.snapshot import subscribe_collect, subscribe_once
 
+
+_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
 
 SNAPSHOT_ACTIONS = {
     "cpu": """
@@ -122,6 +125,20 @@ def register_live_tool(mcp: FastMCP) -> None:
                 f"Invalid action '{action}'. Must be one of: {sorted(ALL_LIVE_ACTIONS)}"
             )
 
+        # Validate log_tail path before entering the error handler context.
+        if action == "log_tail":
+            if not path:
+                raise ToolError("path is required for 'log_tail' action")
+            # Resolve to prevent path traversal attacks (same as storage.py).
+            # Using os.path.realpath instead of anyio.Path.resolve() because the
+            # async variant blocks on NFS-mounted paths under /mnt/ (Perf-AI-1).
+            normalized = os.path.realpath(path)  # noqa: ASYNC240
+            if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
+                raise ToolError(
+                    f"path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}. Got: {path!r}"
+                )
+            path = normalized
+
         with tool_error_handler("live", action, logger):
             logger.info(f"Executing unraid_live action={action} timeout={timeout}")
 
@@ -131,8 +148,6 @@ def register_live_tool(mcp: FastMCP) -> None:
 
             # Collect actions
             if action == "log_tail":
-                if not path:
-                    raise ToolError("path is required for 'log_tail' action")
                 events = await subscribe_collect(
                     COLLECT_ACTIONS["log_tail"],
                     variables={"path": path},
