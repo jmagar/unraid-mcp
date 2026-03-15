@@ -24,6 +24,7 @@ from .tools.docker import register_docker_tool
 from .tools.health import register_health_tool
 from .tools.info import register_info_tool
 from .tools.keys import register_keys_tool
+from .tools.live import register_live_tool
 from .tools.notifications import register_notifications_tool
 from .tools.rclone import register_rclone_tool
 from .tools.settings import register_settings_tool
@@ -64,6 +65,7 @@ def register_all_modules() -> None:
             register_keys_tool,
             register_health_tool,
             register_settings_tool,
+            register_live_tool,
         ]
         for registrar in registrars:
             registrar(mcp)
