@@ -68,7 +68,7 @@ async def elicit_destructive_confirmation(
         logger.info("Destructive action '%s' declined by user (%s).", action, result.action)
         return False
 
-    confirmed: bool = result.data
+    confirmed: bool = result.data  # type: ignore[union-attr]
     if not confirmed:
         logger.info("Destructive action '%s' not confirmed by user.", action)
     return confirmed
@@ -117,8 +117,8 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
         logger.warning("Credential elicitation %s — server remains unconfigured.", result.action)
         return False
 
-    api_url: str = result.data.api_url.rstrip("/")
-    api_key: str = result.data.api_key.strip()
+    api_url: str = result.data.api_url.rstrip("/")  # type: ignore[union-attr]
+    api_key: str = result.data.api_key.strip()  # type: ignore[union-attr]
 
     _write_env(api_url, api_key)
     apply_runtime_config(api_url, api_key)
