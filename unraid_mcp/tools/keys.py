@@ -6,11 +6,12 @@ creating, updating, and deleting API keys.
 
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.setup import elicit_destructive_confirmation
 
 
 QUERIES: dict[str, str] = {
@@ -42,17 +43,29 @@ MUTATIONS: dict[str, str] = {
           apiKey { delete(input: $input) }
         }
     """,
+    "add_role": """
+        mutation AddRole($input: AddRoleForApiKeyInput!) {
+          apiKey { addRole(input: $input) }
+        }
+    """,
+    "remove_role": """
+        mutation RemoveRole($input: RemoveRoleFromApiKeyInput!) {
+          apiKey { removeRole(input: $input) }
+        }
+    """,
 }
 
 DESTRUCTIVE_ACTIONS = {"delete"}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 KEY_ACTIONS = Literal[
-    "list",
-    "get",
+    "add_role",
     "create",
-    "update",
     "delete",
+    "get",
+    "list",
+    "remove_role",
+    "update",
 ]
 
 if set(get_args(KEY_ACTIONS)) != ALL_ACTIONS:
@@ -70,6 +83,7 @@ def register_keys_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_keys(
         action: KEY_ACTIONS,
+        ctx: Context | None = None,
         confirm: bool = False,
         key_id: str | None = None,
         name: str | None = None,
@@ -84,12 +98,20 @@ def register_keys_tool(mcp: FastMCP) -> None:
           create - Create a new API key (requires name; optional roles, permissions)
           update - Update an API key (requires key_id; optional name, roles)
           delete - Delete API keys (requires key_id, confirm=True)
+          add_role - Add a role to an API key (requires key_id and roles)
+          remove_role - Remove a role from an API key (requires key_id and roles)
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
         if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+            _desc = f"Delete API key **{key_id}**. Any clients using this key will lose access."
+            confirmed = await elicit_destructive_confirmation(ctx, action, _desc)
+            if not confirmed:
+                raise ToolError(
+                    f"Action '{action}' was not confirmed. "
+                    "Re-run with confirm=True to bypass elicitation."
+                )
 
         with tool_error_handler("keys", action, logger):
             logger.info(f"Executing unraid_keys action={action}")
@@ -145,6 +167,35 @@ def register_keys_tool(mcp: FastMCP) -> None:
                 return {
                     "success": True,
                     "message": f"API key '{key_id}' deleted",
+                }
+
+            if action == "add_role":
+                if not key_id:
+                    raise ToolError("key_id is required for 'add_role' action")
+                if not roles or len(roles) == 0:
+                    raise ToolError(
+                        "role is required for 'add_role' action (pass as roles=['ROLE_NAME'])"
+                    )
+                data = await make_graphql_request(
+                    MUTATIONS["add_role"],
+                    {"input": {"apiKeyId": key_id, "role": roles[0]}},
+                )
+                return {"success": True, "message": f"Role '{roles[0]}' added to key '{key_id}'"}
+
+            if action == "remove_role":
+                if not key_id:
+                    raise ToolError("key_id is required for 'remove_role' action")
+                if not roles or len(roles) == 0:
+                    raise ToolError(
+                        "role is required for 'remove_role' action (pass as roles=['ROLE_NAME'])"
+                    )
+                data = await make_graphql_request(
+                    MUTATIONS["remove_role"],
+                    {"input": {"apiKeyId": key_id, "role": roles[0]}},
+                )
+                return {
+                    "success": True,
+                    "message": f"Role '{roles[0]}' removed from key '{key_id}'",
                 }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")

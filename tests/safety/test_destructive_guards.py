@@ -129,7 +129,20 @@ class TestDestructiveActionRegistries:
             )
 
     def test_no_delete_or_remove_mutations_missing_from_destructive(self) -> None:
-        """Any mutation with 'delete' or 'remove' in its name should be destructive."""
+        """Any mutation with 'delete' or 'remove' in its name should be destructive.
+
+        Exceptions (documented, intentional):
+          keys/remove_role — fully reversible; the role can always be re-added via add_role.
+            No data is lost and there is no irreversible side-effect.
+        """
+        # Mutations explicitly exempted from the delete/remove heuristic with justification.
+        # Add entries here only when the action is demonstrably reversible and non-destructive.
+        _HEURISTIC_EXCEPTIONS: frozenset[str] = frozenset(
+            {
+                "keys/remove_role",  # reversible — role can be re-added via add_role
+            }
+        )
+
         all_mutations = {
             "array": ARRAY_MUTATIONS,
             "vm": VM_MUTATIONS,
@@ -156,6 +169,7 @@ class TestDestructiveActionRegistries:
                 for action_name in mutations
                 if ("delete" in action_name or "remove" in action_name)
                 and action_name not in destructive
+                and f"{tool_key}/{action_name}" not in _HEURISTIC_EXCEPTIONS
             )
         assert not missing, (
             f"Mutations with 'delete'/'remove' not in DESTRUCTIVE_ACTIONS: {missing}"

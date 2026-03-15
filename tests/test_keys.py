@@ -22,7 +22,7 @@ def _make_tool():
 class TestKeysValidation:
     async def test_delete_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="confirm=True"):
             await tool_fn(action="delete", key_id="k:1")
 
     async def test_get_requires_key_id(self, _mock_graphql: AsyncMock) -> None:
@@ -108,3 +108,25 @@ class TestKeysActions:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Failed to execute keys/list"):
             await tool_fn(action="list")
+
+    async def test_add_role_requires_key_id(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="key_id"):
+            await tool_fn(action="add_role", roles=["VIEWER"])
+
+    async def test_add_role_requires_role(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="role"):
+            await tool_fn(action="add_role", key_id="abc:local")
+
+    async def test_add_role_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"apiKey": {"addRole": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="add_role", key_id="abc:local", roles=["VIEWER"])
+        assert result["success"] is True
+
+    async def test_remove_role_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"apiKey": {"removeRole": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="remove_role", key_id="abc:local", roles=["VIEWER"])
+        assert result["success"] is True

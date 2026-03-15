@@ -58,12 +58,6 @@ class TestInfoQueries:
         errors = _validate_operation(schema, QUERIES["registration"])
         assert not errors, f"registration query validation failed: {errors}"
 
-    def test_connect_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.info import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["connect"])
-        assert not errors, f"connect query validation failed: {errors}"
-
     def test_variables_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.info import QUERIES
 
@@ -157,7 +151,6 @@ class TestInfoQueries:
             "array",
             "network",
             "registration",
-            "connect",
             "variables",
             "metrics",
             "services",
@@ -229,7 +222,7 @@ class TestArrayMutations:
 
 
 # ============================================================================
-# Storage Tool (6 queries)
+# Storage Tool (5 queries + 1 mutation)
 # ============================================================================
 class TestStorageQueries:
     """Validate all queries from unraid_mcp/tools/storage.py."""
@@ -252,12 +245,6 @@ class TestStorageQueries:
         errors = _validate_operation(schema, QUERIES["disk_details"])
         assert not errors, f"disk_details query validation failed: {errors}"
 
-    def test_unassigned_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.storage import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["unassigned"])
-        assert not errors, f"unassigned query validation failed: {errors}"
-
     def test_log_files_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.storage import QUERIES
 
@@ -273,12 +260,27 @@ class TestStorageQueries:
     def test_all_storage_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.storage import QUERIES
 
-        expected = {"shares", "disks", "disk_details", "unassigned", "log_files", "logs"}
+        expected = {"shares", "disks", "disk_details", "log_files", "logs"}
         assert set(QUERIES.keys()) == expected
 
 
+class TestStorageMutations:
+    """Validate all mutations from unraid_mcp/tools/storage.py."""
+
+    def test_flash_backup_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.storage import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["flash_backup"])
+        assert not errors, f"flash_backup mutation validation failed: {errors}"
+
+    def test_all_storage_mutations_covered(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.storage import MUTATIONS
+
+        assert set(MUTATIONS.keys()) == {"flash_backup"}
+
+
 # ============================================================================
-# Docker Tool (7 queries + 7 mutations)
+# Docker Tool (4 queries + 2 mutations)
 # ============================================================================
 class TestDockerQueries:
     """Validate all queries from unraid_mcp/tools/docker.py."""
@@ -295,12 +297,6 @@ class TestDockerQueries:
         errors = _validate_operation(schema, QUERIES["details"])
         assert not errors, f"details query validation failed: {errors}"
 
-    def test_logs_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["logs"])
-        assert not errors, f"logs query validation failed: {errors}"
-
     def test_networks_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.docker import QUERIES
 
@@ -313,29 +309,14 @@ class TestDockerQueries:
         errors = _validate_operation(schema, QUERIES["network_details"])
         assert not errors, f"network_details query validation failed: {errors}"
 
-    def test_port_conflicts_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["port_conflicts"])
-        assert not errors, f"port_conflicts query validation failed: {errors}"
-
-    def test_check_updates_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["check_updates"])
-        assert not errors, f"check_updates query validation failed: {errors}"
-
     def test_all_docker_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.docker import QUERIES
 
         expected = {
             "list",
             "details",
-            "logs",
             "networks",
             "network_details",
-            "port_conflicts",
-            "check_updates",
         }
         assert set(QUERIES.keys()) == expected
 
@@ -355,58 +336,12 @@ class TestDockerMutations:
         errors = _validate_operation(schema, MUTATIONS["stop"])
         assert not errors, f"stop mutation validation failed: {errors}"
 
-    def test_pause_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["pause"])
-        assert not errors, f"pause mutation validation failed: {errors}"
-
-    def test_unpause_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["unpause"])
-        assert not errors, f"unpause mutation validation failed: {errors}"
-
-    def test_remove_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["remove"])
-        assert not errors, f"remove mutation validation failed: {errors}"
-
-    def test_update_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["update"])
-        assert not errors, f"update mutation validation failed: {errors}"
-
-    def test_update_all_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.docker import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["update_all"])
-        assert not errors, f"update_all mutation validation failed: {errors}"
-
     def test_all_docker_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.docker import MUTATIONS
 
         expected = {
             "start",
             "stop",
-            "pause",
-            "unpause",
-            "remove",
-            "update",
-            "update_all",
-            "create_folder",
-            "set_folder_children",
-            "delete_entries",
-            "move_to_folder",
-            "move_to_position",
-            "rename_folder",
-            "create_folder_with_items",
-            "update_view_prefs",
-            "sync_templates",
-            "reset_template_mappings",
-            "refresh_digests",
         }
         assert set(MUTATIONS.keys()) == expected
 
@@ -505,16 +440,10 @@ class TestNotificationQueries:
         errors = _validate_operation(schema, QUERIES["list"])
         assert not errors, f"list query validation failed: {errors}"
 
-    def test_warnings_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.notifications import QUERIES
-
-        errors = _validate_operation(schema, QUERIES["warnings"])
-        assert not errors, f"warnings query validation failed: {errors}"
-
     def test_all_notification_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.notifications import QUERIES
 
-        assert set(QUERIES.keys()) == {"overview", "list", "warnings"}
+        assert set(QUERIES.keys()) == {"overview", "list"}
 
 
 class TestNotificationMutations:
@@ -562,12 +491,6 @@ class TestNotificationMutations:
         errors = _validate_operation(schema, MUTATIONS["archive_many"])
         assert not errors, f"archive_many mutation validation failed: {errors}"
 
-    def test_create_unique_mutation(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools.notifications import MUTATIONS
-
-        errors = _validate_operation(schema, MUTATIONS["create_unique"])
-        assert not errors, f"create_unique mutation validation failed: {errors}"
-
     def test_unarchive_many_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.notifications import MUTATIONS
 
@@ -597,7 +520,6 @@ class TestNotificationMutations:
             "delete_archived",
             "archive_all",
             "archive_many",
-            "create_unique",
             "unarchive_many",
             "unarchive_all",
             "recalculate",
@@ -713,10 +635,46 @@ class TestKeysMutations:
         errors = _validate_operation(schema, MUTATIONS["delete"])
         assert not errors, f"delete mutation validation failed: {errors}"
 
+    def test_add_role_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.keys import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["add_role"])
+        assert not errors, f"add_role mutation validation failed: {errors}"
+
+    def test_remove_role_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.keys import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["remove_role"])
+        assert not errors, f"remove_role mutation validation failed: {errors}"
+
     def test_all_keys_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.keys import MUTATIONS
 
-        assert set(MUTATIONS.keys()) == {"create", "update", "delete"}
+        assert set(MUTATIONS.keys()) == {"create", "update", "delete", "add_role", "remove_role"}
+
+
+# ============================================================================
+# Settings Tool (0 queries + 2 mutations)
+# ============================================================================
+class TestSettingsMutations:
+    """Validate all mutations from unraid_mcp/tools/settings.py."""
+
+    def test_update_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.settings import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["update"])
+        assert not errors, f"update mutation validation failed: {errors}"
+
+    def test_configure_ups_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.settings import MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["configure_ups"])
+        assert not errors, f"configure_ups mutation validation failed: {errors}"
+
+    def test_all_settings_mutations_covered(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools.settings import MUTATIONS
+
+        assert set(MUTATIONS.keys()) == {"update", "configure_ups"}
 
 
 # ============================================================================
@@ -770,6 +728,7 @@ class TestSchemaCompleteness:
             "unraid_mcp.tools.rclone",
             "unraid_mcp.tools.users",
             "unraid_mcp.tools.keys",
+            "unraid_mcp.tools.settings",
         ]
 
         failures: list[str] = []
@@ -820,6 +779,7 @@ class TestSchemaCompleteness:
             "unraid_mcp.tools.rclone",
             "unraid_mcp.tools.users",
             "unraid_mcp.tools.keys",
+            "unraid_mcp.tools.settings",
         ]
 
         total = 0
@@ -828,5 +788,5 @@ class TestSchemaCompleteness:
             total += len(getattr(mod, "QUERIES", {}))
             total += len(getattr(mod, "MUTATIONS", {}))
 
-        # 71 operations across all tools (queries + mutations in dicts)
-        assert total >= 50, f"Expected at least 50 operations, found {total}"
+        # Operations across all tools (queries + mutations in dicts)
+        assert total >= 40, f"Expected at least 40 operations, found {total}"
