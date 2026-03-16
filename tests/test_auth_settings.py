@@ -16,11 +16,17 @@ def _reload_settings(monkeypatch, overrides: dict) -> Any:
 
 def test_google_auth_defaults_to_empty(monkeypatch):
     """Google auth vars default to empty string when not set."""
-    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
-    monkeypatch.delenv("UNRAID_MCP_BASE_URL", raising=False)
-    monkeypatch.delenv("UNRAID_MCP_JWT_SIGNING_KEY", raising=False)
-    mod = _reload_settings(monkeypatch, {})
+    # Use setenv("", "") rather than delenv so dotenv reload can't re-inject values
+    # from ~/.unraid-mcp/.env (load_dotenv won't override existing env vars).
+    mod = _reload_settings(
+        monkeypatch,
+        {
+            "GOOGLE_CLIENT_ID": "",
+            "GOOGLE_CLIENT_SECRET": "",
+            "UNRAID_MCP_BASE_URL": "",
+            "UNRAID_MCP_JWT_SIGNING_KEY": "",
+        },
+    )
     assert mod.GOOGLE_CLIENT_ID == ""
     assert mod.GOOGLE_CLIENT_SECRET == ""
     assert mod.UNRAID_MCP_BASE_URL == ""

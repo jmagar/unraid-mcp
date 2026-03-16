@@ -51,7 +51,8 @@ def test_build_google_auth_omits_jwt_key_when_empty(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-id.apps.googleusercontent.com")
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "GOCSPX-test-secret")
     monkeypatch.setenv("UNRAID_MCP_BASE_URL", "http://10.1.0.2:6970")
-    monkeypatch.delenv("UNRAID_MCP_JWT_SIGNING_KEY", raising=False)
+    # Use setenv("") not delenv so dotenv reload can't re-inject from ~/.unraid-mcp/.env
+    monkeypatch.setenv("UNRAID_MCP_JWT_SIGNING_KEY", "")
 
     import unraid_mcp.config.settings as s
 
