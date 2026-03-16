@@ -36,6 +36,8 @@ class TestLiveResourcesUseManagerCache:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=cached)
             mcp = _make_resources()
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         assert json.loads(result) == cached
@@ -49,6 +51,8 @@ class TestLiveResourcesUseManagerCache:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mock_mgr.last_error = {}
             mcp = _make_resources()
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         parsed = json.loads(result)
@@ -61,6 +65,8 @@ class TestLiveResourcesUseManagerCache:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mock_mgr.last_error = {action: "WebSocket auth failed"}
             mcp = _make_resources()
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         parsed = json.loads(result)
@@ -96,6 +102,8 @@ class TestLogsStreamResource:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mcp = _make_resources()
             local_provider = mcp.providers[0]
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = local_provider._components["resource:unraid://logs/stream@"]
             result = await resource.fn()
             parsed = json.loads(result)
@@ -108,6 +116,8 @@ class TestLogsStreamResource:
             mock_mgr.get_resource_data = AsyncMock(return_value={})
             mcp = _make_resources()
             local_provider = mcp.providers[0]
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = local_provider._components["resource:unraid://logs/stream@"]
             result = await resource.fn()
             assert json.loads(result) == {}
@@ -131,6 +141,8 @@ class TestAutoStartDisabledFallback:
             mock_mgr.last_error = {}
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         assert json.loads(result) == fallback_data
@@ -150,6 +162,8 @@ class TestAutoStartDisabledFallback:
             mock_mgr.last_error = {}
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
+            # Accessing FastMCP internals intentionally for unit test isolation.
+            # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         assert json.loads(result)["status"] == "connecting"

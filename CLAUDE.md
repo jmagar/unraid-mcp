@@ -61,29 +61,33 @@ docker compose down
   - `UNRAID_MCP_PORT`: Server port (default: 6970)
   - `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
 
-### Google OAuth (Optional — protects the HTTP server)
+### Authentication (Optional — protects the HTTP server)
 
-When `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `UNRAID_MCP_BASE_URL` are all set,
-the MCP server requires Google login before any tool call.
+Two independent methods. Use either or both — when both are set, `MultiAuth` accepts either.
 
-| Env Var | Required | Purpose |
-|---------|----------|---------|
-| `GOOGLE_CLIENT_ID` | For OAuth | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | For OAuth | Google OAuth 2.0 Client Secret |
-| `UNRAID_MCP_BASE_URL` | For OAuth | Public URL of this server (e.g. `http://10.1.0.2:6970`) |
-| `UNRAID_MCP_JWT_SIGNING_KEY` | Recommended | Stable 32+ char secret — prevents token invalidation on restart |
+**Google OAuth** — requires all three vars:
 
-**Google Cloud Console setup:**
-1. APIs & Services → Credentials → Create OAuth 2.0 Client ID (Web application)
-2. Authorized redirect URIs: `<UNRAID_MCP_BASE_URL>/auth/callback`
-3. Copy Client ID + Secret to `~/.unraid-mcp/.env`
+| Env Var | Purpose |
+|---------|---------|
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
+| `UNRAID_MCP_BASE_URL` | Public URL of this server (e.g. `http://10.1.0.2:6970`) |
+| `UNRAID_MCP_JWT_SIGNING_KEY` | Stable 32+ char secret — prevents token invalidation on restart |
+
+Google Cloud Console setup: APIs & Services → Credentials → OAuth 2.0 Client ID (Web application) → Authorized redirect URIs: `<UNRAID_MCP_BASE_URL>/auth/callback`
+
+**API Key** — clients present as `Authorization: Bearer <key>`:
+
+| Env Var | Purpose |
+|---------|---------|
+| `UNRAID_MCP_API_KEY` | Static bearer token (can be same value as `UNRAID_API_KEY`) |
 
 **Generate a stable JWT signing key:**
 ```bash
 python3 -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-**Omit `GOOGLE_CLIENT_ID` to run without auth** (default — preserves existing behaviour).
+**Omit all auth vars to run without auth** (default — open server).
 
 **Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
 

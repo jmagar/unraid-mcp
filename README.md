@@ -246,13 +246,16 @@ UNRAID_MAX_RECONNECT_ATTEMPTS=10      # Max WebSocket reconnection attempts (def
 
 ---
 
-## 🔐 Google OAuth (Optional)
+## 🔐 Authentication (Optional)
+
+Two independent auth methods — use either or both.
+
+### Google OAuth
 
 Protect the HTTP server with Google OAuth 2.0 — clients must complete a Google login before any tool call is executed.
 
-Add these to `~/.unraid-mcp/.env`:
-
 ```bash
+# Add to ~/.unraid-mcp/.env
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-your-secret
 UNRAID_MCP_BASE_URL=http://10.1.0.2:6970        # public URL of this server
@@ -266,7 +269,18 @@ UNRAID_MCP_JWT_SIGNING_KEY=<64-char-hex>         # prevents token invalidation o
 4. Generate a signing key: `python3 -c "import secrets; print(secrets.token_hex(32))"`
 5. Restart the server
 
-Omit `GOOGLE_CLIENT_ID` to run without authentication (default behavior).
+### API Key (Bearer Token)
+
+Simpler option for headless/machine access — no browser flow required:
+
+```bash
+# Add to ~/.unraid-mcp/.env
+UNRAID_MCP_API_KEY=your-secret-token    # can be same value as UNRAID_API_KEY
+```
+
+Clients present it as `Authorization: Bearer <UNRAID_MCP_API_KEY>`. Set both `GOOGLE_CLIENT_ID` and `UNRAID_MCP_API_KEY` to accept either method simultaneously.
+
+Omit both to run without authentication (default — open server).
 
 **Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
 
@@ -326,7 +340,7 @@ The server exposes two classes of MCP resources backed by persistent WebSocket c
 **`unraid://logs/stream`** — Live log file tail (path controlled by `UNRAID_AUTOSTART_LOG_PATH`)
 
 > **Note**: Resources return cached data from persistent WebSocket subscriptions. A `{"status": "connecting"}` placeholder is returned while the subscription initializes — retry in a moment.
-
+>
 > **`log_tail` and `notification_feed`** are accessible as tool subactions (`unraid(action="live", subaction="log_tail")`) but are not registered as MCP resources — they use transient one-shot subscriptions and require parameters.
 
 ---

@@ -36,7 +36,7 @@ def _all_domain_dicts(unraid_mod: object) -> list[tuple[str, dict[str, str]]]:
     """
     import types
 
-    m = unraid_mod  # type: ignore[assignment]
+    m = unraid_mod
     if not isinstance(m, types.ModuleType):
         import importlib
 
@@ -417,7 +417,6 @@ class TestDockerQueries:
             "details",
             "networks",
             "network_details",
-            "_resolve",
         }
         assert set(QUERIES.keys()) == expected
 

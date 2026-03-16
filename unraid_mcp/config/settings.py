@@ -98,6 +98,19 @@ def is_google_auth_configured() -> bool:
     return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and UNRAID_MCP_BASE_URL)
 
 
+# API Key Authentication (Optional)
+# ----------------------------------
+# A static bearer token clients can use instead of (or alongside) Google OAuth.
+# Can be set to the same value as UNRAID_API_KEY for simplicity, or a separate
+# dedicated secret for MCP access.
+UNRAID_MCP_API_KEY = os.getenv("UNRAID_MCP_API_KEY", "")
+
+
+def is_api_key_auth_configured() -> bool:
+    """Return True when UNRAID_MCP_API_KEY is set."""
+    return bool(UNRAID_MCP_API_KEY)
+
+
 # Logging Configuration
 LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
 LOG_FILE_NAME = os.getenv("UNRAID_MCP_LOG_FILE", "unraid-mcp.log")
@@ -180,6 +193,7 @@ def get_config_summary() -> dict[str, Any]:
         "google_auth_enabled": is_google_auth_configured(),
         "google_auth_base_url": UNRAID_MCP_BASE_URL if is_google_auth_configured() else None,
         "jwt_signing_key_configured": bool(UNRAID_MCP_JWT_SIGNING_KEY),
+        "api_key_auth_enabled": is_api_key_auth_configured(),
     }
 
 

@@ -30,9 +30,8 @@ unraid(action="array",   subaction="stop_array",  confirm=True)   # ⚠️ Stop 
 
 ```python
 unraid(action="disk", subaction="log_files")                                          # List available logs
-unraid(action="disk", subaction="logs", log_path="syslog", tail_lines=50)             # Read syslog
-unraid(action="disk", subaction="logs", log_path="/var/log/syslog")                   # Full path also works
-unraid(action="live", subaction="log_tail", log_path="/var/log/syslog")               # Live tail
+unraid(action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=50)    # Read syslog
+unraid(action="live", subaction="log_tail", path="/var/log/syslog")                   # Live tail
 ```
 
 ### Docker Containers
@@ -64,7 +63,7 @@ unraid(action="notification", subaction="overview")
 unraid(action="notification", subaction="list",    list_type="UNREAD", limit=10)
 unraid(action="notification", subaction="archive", notification_id="<id>")
 unraid(action="notification", subaction="create",  title="Test", subject="Subject",
-                                                   description="Body", importance="normal")
+                                                   description="Body", importance="INFO")
 ```
 
 ### API Keys

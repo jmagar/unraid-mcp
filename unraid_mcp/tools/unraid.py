@@ -285,6 +285,16 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
 # ===========================================================================
 
 _HEALTH_SUBACTIONS: set[str] = {"check", "test_connection", "diagnose", "setup"}
+_HEALTH_QUERIES: dict[str, str] = {
+    "comprehensive_health": (
+        "query ComprehensiveHealthCheck {"
+        " info { machineId time versions { core { unraid } } os { uptime } }"
+        " array { state }"
+        " notifications { overview { unread { alert warning total } } }"
+        " docker { containers(skipCache: true) { id state status } }"
+        " }"
+    ),
+}
 _SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
 
 
@@ -346,7 +356,8 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
             return await _comprehensive_health_check()
 
         if subaction == "diagnose":
-            from ..server import cache_middleware, error_middleware
+            from ..server import _cache_middleware as cache_middleware
+            from ..server import _error_middleware as error_middleware
             from ..subscriptions.manager import subscription_manager
             from ..subscriptions.resources import ensure_subscriptions_started
 
@@ -373,7 +384,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                     "call_tool": {
                         "hits": cache_stats.call_tool.get.hit,
                         "misses": cache_stats.call_tool.get.miss,
-                        "puts": cache_stats.call_tool.put.total,
+                        "puts": cache_stats.call_tool.put.count,
                     }
                     if cache_stats.call_tool
                     else {"hits": 0, "misses": 0, "puts": 0},
@@ -403,15 +414,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
         health_severity = max(health_severity, _SEVERITY.get(level, 0))
 
     try:
-        query = """
-        query ComprehensiveHealthCheck {
-          info { machineId time versions { core { unraid } } os { uptime } }
-          array { state }
-          notifications { overview { unread { alert warning total } } }
-          docker { containers(skipCache: true) { id state status } }
-        }
-        """
-        data = await make_graphql_request(query)
+        data = await make_graphql_request(_HEALTH_QUERIES["comprehensive_health"])
         api_latency = round((time.time() - start_time) * 1000, 2)
 
         health_info: dict[str, Any] = {
@@ -738,8 +741,12 @@ _DOCKER_QUERIES: dict[str, str] = {
     "details": "query GetContainerDetails { docker { containers(skipCache: false) { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
     "networks": "query GetDockerNetworks { docker { networks { id name driver scope } } }",
     "network_details": "query GetDockerNetwork { docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } } }",
-    "_resolve": "query ResolveContainerID { docker { containers(skipCache: true) { id names } } }",
 }
+
+# Internal query used only for container ID resolution — not a public subaction.
+_DOCKER_RESOLVE_QUERY = (
+    "query ResolveContainerID { docker { containers(skipCache: true) { id names } } }"
+)
 
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",
@@ -775,7 +782,7 @@ def _find_container(
 async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
-    data = await make_graphql_request(_DOCKER_QUERIES["_resolve"])
+    data = await make_graphql_request(_DOCKER_RESOLVE_QUERY)
     containers = safe_get(data, "docker", "containers", default=[])
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
@@ -1640,7 +1647,7 @@ async def _handle_live(
     if subaction == "log_tail":
         if not path:
             raise ToolError("path is required for live/log_tail")
-        normalized = os.path.realpath(path)  # noqa: ASYNC240
+        normalized = await asyncio.to_thread(os.path.realpath, path)
         if not any(normalized.startswith(p) for p in _LIVE_ALLOWED_LOG_PREFIXES):
             raise ToolError(f"path must start with one of: {', '.join(_LIVE_ALLOWED_LOG_PREFIXES)}")
         path = normalized

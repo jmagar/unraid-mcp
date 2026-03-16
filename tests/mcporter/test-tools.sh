@@ -134,6 +134,11 @@ check_prerequisites() {
     missing=true
   fi
 
+  if ! command -v jq &>/dev/null; then
+    log_error "jq not found in PATH. Install it and re-run."
+    missing=true
+  fi
+
   if [[ ! -f "${PROJECT_DIR}/pyproject.toml" ]]; then
     log_error "pyproject.toml not found at ${PROJECT_DIR}. Wrong directory?"
     missing=true
@@ -181,10 +186,12 @@ smoke_test_server() {
 import sys, json
 try:
     d = json.load(sys.stdin)
-    if 'status' in d or 'success' in d or 'error' in d:
+    if 'error' in d:
+        print('error: tool returned error key — ' + str(d.get('error', '')))
+    elif 'status' in d or 'success' in d:
         print('ok')
     else:
-        print('missing: no status/success/error key in response')
+        print('missing: no status/success key in response')
 except Exception as e:
     print('parse_error: ' + str(e))
 " 2>/dev/null
@@ -248,6 +255,31 @@ run_test() {
     printf "${C_RED}[FAIL]${C_RESET} %-55s ${C_DIM}%dms${C_RESET}\n" \
       "${label}" "${elapsed_ms}" | tee -a "${LOG_FILE}"
     printf '       server offline — check startup errors in %s\n' "${LOG_FILE}" | tee -a "${LOG_FILE}"
+    FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+    FAIL_NAMES+=("${label}")
+    return 1
+  fi
+
+  # Always validate JSON is parseable and not an error payload
+  local json_check
+  json_check="$(
+    printf '%s' "${output}" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    if isinstance(d, dict) and ('error' in d or d.get('kind') == 'error'):
+        print('error: ' + str(d.get('error', d.get('message', 'unknown error'))))
+    else:
+        print('ok')
+except Exception as e:
+    print('invalid_json: ' + str(e))
+" 2>/dev/null
+  )" || json_check="parse_error"
+
+  if [[ "${json_check}" != "ok" ]]; then
+    printf "${C_RED}[FAIL]${C_RESET} %-55s ${C_DIM}%dms${C_RESET}\n" \
+      "${label}" "${elapsed_ms}" | tee -a "${LOG_FILE}"
+    printf '       response validation failed: %s\n' "${json_check}" | tee -a "${LOG_FILE}"
     FAIL_COUNT=$(( FAIL_COUNT + 1 ))
     FAIL_NAMES+=("${label}")
     return 1

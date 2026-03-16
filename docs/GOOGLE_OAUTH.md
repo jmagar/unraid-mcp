@@ -157,6 +157,29 @@ Check `logs/unraid-mcp.log` or `docker compose logs unraid-mcp` for startup erro
 
 ---
 
+## API Key Authentication (Alternative / Combined)
+
+For machine-to-machine access (scripts, CI, other agents) without a browser-based OAuth flow, set `UNRAID_MCP_API_KEY`:
+
+```bash
+# In ~/.unraid-mcp/.env
+UNRAID_MCP_API_KEY=your-secret-token
+```
+
+Clients present it as a standard bearer token:
+
+```
+Authorization: Bearer your-secret-token
+```
+
+**Combining with Google OAuth**: set both `GOOGLE_CLIENT_ID` and `UNRAID_MCP_API_KEY`. The server activates `MultiAuth` and accepts either method — Google OAuth for interactive clients, API key for headless clients.
+
+**Reusing the Unraid API key**: you can set `UNRAID_MCP_API_KEY` to the same value as `UNRAID_API_KEY` for simplicity. The two vars are kept separate so each concern has its own name.
+
+**Standalone API key** (no Google OAuth): set only `UNRAID_MCP_API_KEY`. The server validates bearer tokens directly with no OAuth redirect flow.
+
+---
+
 ## Security Notes
 
 - OAuth protects the MCP HTTP interface — the Unraid GraphQL API itself still uses `UNRAID_API_KEY`

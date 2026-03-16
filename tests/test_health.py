@@ -141,8 +141,8 @@ class TestHealthActions:
                 "unraid_mcp.subscriptions.utils._analyze_subscription_status",
                 return_value=(0, []),
             ),
-            patch("unraid_mcp.server.cache_middleware", mock_cache),
-            patch("unraid_mcp.server.error_middleware", mock_error),
+            patch("unraid_mcp.server._cache_middleware", mock_cache),
+            patch("unraid_mcp.server._error_middleware", mock_error),
         ):
             result = await tool_fn(action="health", subaction="diagnose")
         assert "subscriptions" in result

@@ -26,15 +26,15 @@ This writes `UNRAID_API_URL` and `UNRAID_API_KEY` to `~/.unraid-mcp/.env`. Re-ru
 unraid(action="health", subaction="test_connection")
 ```
 
-2. Full diagnostic report:
+1. Full diagnostic report:
 
 ```python
 unraid(action="health", subaction="diagnose")
 ```
 
-3. Check that `UNRAID_API_URL` in `~/.unraid-mcp/.env` points to the correct Unraid GraphQL endpoint.
+1. Check that `UNRAID_API_URL` in `~/.unraid-mcp/.env` points to the correct Unraid GraphQL endpoint.
 
-4. Verify the API key has the required roles. Get a new key: **Unraid UI → Settings → Management Access → API Keys → Create** (select "Viewer" role for read-only, or appropriate roles for mutations).
+1. Verify the API key has the required roles. Get a new key: **Unraid UI → Settings → Management Access → API Keys → Create** (select "Viewer" role for read-only, or appropriate roles for mutations).
 
 ---
 
