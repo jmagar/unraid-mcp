@@ -498,3 +498,145 @@ class TestConfirmAllowsExecution:
         )
         result = await tool_fn(action="remove", names=["my-plugin"], confirm=True)
         assert result["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Strict guard tests: no network calls escape when unconfirmed
+# ---------------------------------------------------------------------------
+
+
+class TestNoGraphQLCallsWhenUnconfirmed:
+    """The most critical safety property: when confirm is missing/False,
+    NO GraphQL request must ever reach the network layer. This verifies that
+    the guard fires before any I/O, not just that a ToolError is raised.
+    """
+
+    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    async def test_no_graphql_call_without_confirm(
+        self,
+        tool_key: str,
+        action: str,
+        kwargs: dict,
+        _mock_array_graphql: AsyncMock,
+        _mock_vm_graphql: AsyncMock,
+        _mock_notif_graphql: AsyncMock,
+        _mock_rclone_graphql: AsyncMock,
+        _mock_keys_graphql: AsyncMock,
+        _mock_storage_graphql: AsyncMock,
+        _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
+    ) -> None:
+        """make_graphql_request must NOT be called when confirm is absent."""
+        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
+        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
+        mock_map = {
+            "array": _mock_array_graphql,
+            "vm": _mock_vm_graphql,
+            "notifications": _mock_notif_graphql,
+            "rclone": _mock_rclone_graphql,
+            "keys": _mock_keys_graphql,
+            "storage": _mock_storage_graphql,
+            "settings": _mock_settings_graphql,
+            "plugins": _mock_plugins_graphql,
+        }
+
+        with pytest.raises(ToolError):
+            await tool_fn(action=action, **kwargs)
+
+        mock_map[tool_key].assert_not_called()
+
+    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    async def test_no_graphql_call_with_confirm_false(
+        self,
+        tool_key: str,
+        action: str,
+        kwargs: dict,
+        _mock_array_graphql: AsyncMock,
+        _mock_vm_graphql: AsyncMock,
+        _mock_notif_graphql: AsyncMock,
+        _mock_rclone_graphql: AsyncMock,
+        _mock_keys_graphql: AsyncMock,
+        _mock_storage_graphql: AsyncMock,
+        _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
+    ) -> None:
+        """make_graphql_request must NOT be called when confirm=False."""
+        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
+        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
+        mock_map = {
+            "array": _mock_array_graphql,
+            "vm": _mock_vm_graphql,
+            "notifications": _mock_notif_graphql,
+            "rclone": _mock_rclone_graphql,
+            "keys": _mock_keys_graphql,
+            "storage": _mock_storage_graphql,
+            "settings": _mock_settings_graphql,
+            "plugins": _mock_plugins_graphql,
+        }
+
+        with pytest.raises(ToolError):
+            await tool_fn(action=action, confirm=False, **kwargs)
+
+        mock_map[tool_key].assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Non-destructive actions must NOT require confirm
+# ---------------------------------------------------------------------------
+
+
+class TestNonDestructiveActionsNeverRequireConfirm:
+    """Guard regression test: non-destructive mutations must work without confirm.
+
+    If a non-destructive action starts requiring confirm=True (over-guarding),
+    it would break normal use cases. This test class prevents that regression.
+    """
+
+    @pytest.mark.parametrize(
+        "tool_key,action,kwargs,mock_return",
+        [
+            ("array", "parity_cancel", {}, {"parityCheck": {"cancel": True}}),
+            ("vm", "start", {"vm_id": "test-uuid"}, {"vm": {"start": True}}),
+            ("notifications", "archive_all", {}, {"archiveAll": {"info": 0, "total": 0}}),
+            ("rclone", "list_remotes", {}, {"rclone": {"remotes": []}}),
+            ("keys", "list", {}, {"apiKeys": []}),
+        ],
+        ids=[
+            "array/parity_cancel",
+            "vm/start",
+            "notifications/archive_all",
+            "rclone/list_remotes",
+            "keys/list",
+        ],
+    )
+    async def test_non_destructive_action_works_without_confirm(
+        self,
+        tool_key: str,
+        action: str,
+        kwargs: dict,
+        mock_return: dict,
+        _mock_array_graphql: AsyncMock,
+        _mock_vm_graphql: AsyncMock,
+        _mock_notif_graphql: AsyncMock,
+        _mock_rclone_graphql: AsyncMock,
+        _mock_keys_graphql: AsyncMock,
+        _mock_storage_graphql: AsyncMock,
+        _mock_settings_graphql: AsyncMock,
+        _mock_plugins_graphql: AsyncMock,
+    ) -> None:
+        """Non-destructive actions must not raise ToolError for missing confirm."""
+        mock_map = {
+            "array": _mock_array_graphql,
+            "vm": _mock_vm_graphql,
+            "notifications": _mock_notif_graphql,
+            "rclone": _mock_rclone_graphql,
+            "keys": _mock_keys_graphql,
+        }
+        mock_map[tool_key].return_value = mock_return
+
+        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
+        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
+        # Just verify no ToolError is raised for missing confirm — return shape varies by action
+        result = await tool_fn(action=action, **kwargs)
+        assert result is not None
+        mock_map[tool_key].assert_called_once()
