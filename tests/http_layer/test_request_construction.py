@@ -576,7 +576,7 @@ class TestVMToolRequests:
     @respx.mock
     async def test_force_stop_requires_confirm(self) -> None:
         tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool(action="force_stop", vm_id="vm-789")
 
     @respx.mock
@@ -593,7 +593,7 @@ class TestVMToolRequests:
     @respx.mock
     async def test_reset_requires_confirm(self) -> None:
         tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool(action="reset", vm_id="vm-abc")
 
     @respx.mock
@@ -880,7 +880,7 @@ class TestNotificationsToolRequests:
     @respx.mock
     async def test_delete_requires_confirm(self) -> None:
         tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool(action="delete", notification_id="n1", notification_type="UNREAD")
 
     @respx.mock
@@ -990,7 +990,7 @@ class TestRCloneToolRequests:
     @respx.mock
     async def test_delete_remote_requires_confirm(self) -> None:
         tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool(action="delete_remote", name="old-remote")
 
     @respx.mock

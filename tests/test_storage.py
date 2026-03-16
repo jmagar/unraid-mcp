@@ -290,7 +290,7 @@ class TestStorageNetworkErrors:
 class TestStorageFlashBackup:
     async def test_flash_backup_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool_fn(
                 action="flash_backup", remote_name="r", source_path="/boot", destination_path="r:b"
             )

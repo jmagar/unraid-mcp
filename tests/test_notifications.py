@@ -40,12 +40,12 @@ def _make_tool():
 class TestNotificationsValidation:
     async def test_delete_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool_fn(action="delete", notification_id="n:1", notification_type="UNREAD")
 
     async def test_delete_archived_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool_fn(action="delete_archived")
 
     async def test_create_requires_fields(self, _mock_graphql: AsyncMock) -> None:

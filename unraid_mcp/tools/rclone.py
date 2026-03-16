@@ -7,11 +7,12 @@ cloud storage remotes (S3, Google Drive, Dropbox, FTP, etc.).
 import re
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
 
 
 QUERIES: dict[str, str] = {
@@ -110,6 +111,7 @@ def register_rclone_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_rclone(
         action: RCLONE_ACTIONS,
+        ctx: Context | None = None,
         confirm: bool = False,
         name: str | None = None,
         provider_type: str | None = None,
@@ -126,8 +128,13 @@ def register_rclone_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            f"Delete rclone remote **{name}**. This cannot be undone.",
+        )
 
         with tool_error_handler("rclone", action, logger):
             logger.info(f"Executing unraid_rclone action={action}")

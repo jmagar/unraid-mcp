@@ -31,7 +31,7 @@ class TestVmValidation:
     async def test_destructive_actions_require_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         for action in ("force_stop", "reset"):
-            with pytest.raises(ToolError, match="destructive"):
+            with pytest.raises(ToolError, match="not confirmed"):
                 await tool_fn(action=action, vm_id="uuid-1")
 
     async def test_destructive_vm_id_check_before_confirm(self, _mock_graphql: AsyncMock) -> None:

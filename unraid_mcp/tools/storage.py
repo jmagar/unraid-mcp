@@ -7,11 +7,12 @@ log files, and log content retrieval.
 import os
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
 from ..core.utils import format_bytes
 
 
@@ -88,6 +89,7 @@ def register_storage_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_storage(
         action: STORAGE_ACTIONS,
+        ctx: Context | None = None,
         disk_id: str | None = None,
         log_path: str | None = None,
         tail_lines: int = 100,
@@ -110,8 +112,14 @@ def register_storage_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            f"Back up flash drive to **{remote_name}:{destination_path}**. "
+            "Existing backups at this destination will be overwritten.",
+        )
 
         if action == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for 'disk_details' action")

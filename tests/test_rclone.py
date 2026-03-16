@@ -22,7 +22,7 @@ def _make_tool():
 class TestRcloneValidation:
     async def test_delete_requires_confirm(self) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="destructive"):
+        with pytest.raises(ToolError, match="not confirmed"):
             await tool_fn(action="delete_remote", name="gdrive")
 
     async def test_create_requires_fields(self) -> None:

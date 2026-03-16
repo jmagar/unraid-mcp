@@ -6,11 +6,12 @@ creating, archiving, and deleting system notifications.
 
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
 
 
 QUERIES: dict[str, str] = {
@@ -143,6 +144,7 @@ def register_notifications_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_notifications(
         action: NOTIFICATION_ACTIONS,
+        ctx: Context | None = None,
         confirm: bool = False,
         notification_id: str | None = None,
         notification_ids: list[str] | None = None,
@@ -174,8 +176,16 @@ def register_notifications_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            {
+                "delete": f"Delete notification **{notification_id}** permanently. This cannot be undone.",
+                "delete_archived": "Delete ALL archived notifications permanently. This cannot be undone.",
+            },
+        )
 
         # Validate enum parameters before dispatching to GraphQL (SEC-M04).
         # Invalid values waste a rate-limited request and may leak schema details in errors.

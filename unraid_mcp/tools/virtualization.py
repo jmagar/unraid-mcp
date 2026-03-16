@@ -6,11 +6,12 @@ including start, stop, pause, resume, force stop, reboot, and reset.
 
 from typing import Any, Literal, get_args
 
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
 
 
 QUERIES: dict[str, str] = {
@@ -88,6 +89,7 @@ def register_vm_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_vm(
         action: VM_ACTIONS,
+        ctx: Context | None = None,
         vm_id: str | None = None,
         confirm: bool = False,
     ) -> dict[str, Any]:
@@ -110,8 +112,16 @@ def register_vm_tool(mcp: FastMCP) -> None:
         if action != "list" and not vm_id:
             raise ToolError(f"vm_id is required for '{action}' action")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            {
+                "force_stop": f"Force stop VM **{vm_id}**. Unsaved data may be lost.",
+                "reset": f"Reset VM **{vm_id}**. This is a hard reset — unsaved data may be lost.",
+            },
+        )
 
         with tool_error_handler("vm", action, logger):
             logger.info(f"Executing unraid_vm action={action}")
