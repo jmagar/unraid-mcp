@@ -282,7 +282,7 @@ Clients present it as `Authorization: Bearer <UNRAID_MCP_API_KEY>`. Set both `GO
 
 Omit both to run without authentication (default — open server).
 
-**Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
+**Full guide:** [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md)
 
 ---
 

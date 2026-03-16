@@ -89,7 +89,7 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 **Omit all auth vars to run without auth** (default — open server).
 
-**Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
+**Full guide:** [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md)
 
 ## Architecture
 
