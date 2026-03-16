@@ -95,7 +95,7 @@ MUTATIONS: dict[str, str] = {
     """,
 }
 
-DESTRUCTIVE_ACTIONS = {"remove_disk", "clear_disk_stats"}
+DESTRUCTIVE_ACTIONS = {"remove_disk", "clear_disk_stats", "stop_array"}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 ARRAY_ACTIONS = Literal[
@@ -163,6 +163,7 @@ def register_array_tool(mcp: FastMCP) -> None:
             desc_map = {
                 "remove_disk": f"Remove disk **{disk_id}** from the array. The array must be stopped first.",
                 "clear_disk_stats": f"Clear all I/O statistics for disk **{disk_id}**. This cannot be undone.",
+                "stop_array": "Stop the Unraid array. Running containers and VMs may lose access to array shares.",
             }
             confirmed = await elicit_destructive_confirmation(ctx, action, desc_map[action])
             if not confirmed:

@@ -112,3 +112,14 @@ async def test_log_tail_rejects_invalid_path(mcp, _mock_subscribe_collect):
     tool_fn = _make_live_tool(mcp)
     with pytest.raises(ToolError, match="must start with"):
         await tool_fn(action="log_tail", path="/etc/shadow")
+
+
+@pytest.mark.asyncio
+async def test_snapshot_wraps_bare_exception(mcp, _mock_subscribe_once):
+    """Bare exceptions from subscribe_once are wrapped in ToolError by tool_error_handler."""
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_subscribe_once.side_effect = RuntimeError("WebSocket connection refused")
+    tool_fn = _make_live_tool(mcp)
+    with pytest.raises(ToolError):
+        await tool_fn(action="cpu")

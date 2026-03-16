@@ -172,9 +172,15 @@ async def test_start_array(_mock_graphql):
 
 
 @pytest.mark.asyncio
-async def test_stop_array(_mock_graphql):
+async def test_stop_array_requires_confirm(_mock_graphql):
+    with pytest.raises(ToolError, match="not confirmed"):
+        await _make_tool()(action="stop_array", confirm=False)
+
+
+@pytest.mark.asyncio
+async def test_stop_array_with_confirm(_mock_graphql):
     _mock_graphql.return_value = {"array": {"setState": {"state": "STOPPED"}}}
-    result = await _make_tool()(action="stop_array")
+    result = await _make_tool()(action="stop_array", confirm=True)
     assert result["success"] is True
 
 

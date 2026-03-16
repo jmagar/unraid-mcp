@@ -47,7 +47,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
         "module": "unraid_mcp.tools.array",
         "register_fn": "register_array_tool",
         "tool_name": "unraid_array",
-        "actions": {"remove_disk", "clear_disk_stats"},
+        "actions": {"remove_disk", "clear_disk_stats", "stop_array"},
         "runtime_set": ARRAY_DESTRUCTIVE,
     },
     "vm": {
@@ -198,6 +198,7 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Array
     ("array", "remove_disk", {"disk_id": "abc123:local"}),
     ("array", "clear_disk_stats", {"disk_id": "abc123:local"}),
+    ("array", "stop_array", {}),
     # VM
     ("vm", "force_stop", {"vm_id": "test-vm-uuid"}),
     ("vm", "reset", {"vm_id": "test-vm-uuid"}),
@@ -466,6 +467,12 @@ class TestConfirmAllowsExecution:
         _mock_array_graphql.return_value = {"array": {"clearArrayDiskStatistics": True}}
         tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
         result = await tool_fn(action="clear_disk_stats", disk_id="abc:local", confirm=True)
+        assert result["success"] is True
+
+    async def test_array_stop_array_with_confirm(self, _mock_array_graphql: AsyncMock) -> None:
+        _mock_array_graphql.return_value = {"array": {"setState": {"state": "STOPPED"}}}
+        tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
+        result = await tool_fn(action="stop_array", confirm=True)
         assert result["success"] is True
 
     async def test_plugins_remove_with_confirm(self, _mock_plugins_graphql: AsyncMock) -> None:
