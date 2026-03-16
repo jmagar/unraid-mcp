@@ -122,12 +122,14 @@ class TestNotificationsActions:
         result = await tool_fn(action="notification", subaction="archive_all")
         assert result["success"] is True
 
-    async def test_unread_notification(self, _mock_graphql: AsyncMock) -> None:
+    async def test_mark_unread_notification(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"unreadNotification": {"id": "n:1"}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="notification", subaction="unread", notification_id="n:1")
+        result = await tool_fn(
+            action="notification", subaction="mark_unread", notification_id="n:1"
+        )
         assert result["success"] is True
-        assert result["subaction"] == "unread"
+        assert result["subaction"] == "mark_unread"
 
     async def test_list_with_importance_filter(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {

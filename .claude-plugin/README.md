@@ -31,32 +31,34 @@ This directory contains the Claude Code marketplace configuration for the Unraid
 Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring.
 
 **Features:**
-- 11 tools with ~104 actions (queries and mutations)
-- Real-time system metrics
+- 1 consolidated `unraid` tool with ~108 actions across 15 domains
+- Real-time live subscriptions (CPU, memory, logs, array state, UPS)
 - Disk health and temperature monitoring
 - Docker container management
 - VM status and control
 - Log file access
 - Network share information
 - Notification management
+- Plugin, rclone, API key, and OIDC management
 
-**Version:** 0.2.0
+**Version:** 1.0.0
 **Category:** Infrastructure
 **Tags:** unraid, monitoring, homelab, graphql, docker, virtualization
 
 ## Configuration
 
-After installation, configure your Unraid server credentials:
+After installation, run setup to configure credentials interactively:
 
-```bash
-export UNRAID_API_URL="https://your-unraid-server/graphql"
-export UNRAID_API_KEY="your-api-key"
 ```
+unraid(action="health", subaction="setup")
+```
+
+Credentials are stored at `~/.unraid-mcp/.env` automatically.
 
 **Getting an API Key:**
 1. Open Unraid WebUI
 2. Go to Settings → Management Access → API Keys
-3. Click "Create" and select "Viewer" role
+3. Click "Create" and select "Viewer" role (or appropriate roles for mutations)
 4. Copy the generated API key
 
 ## Documentation

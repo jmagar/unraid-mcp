@@ -341,7 +341,7 @@ class TestNotificationsEnumFuzzing:
             "list",
             "create",
             "archive",
-            "unread",
+            "mark_unread",
             "delete",
             "delete_archived",
             "archive_all",

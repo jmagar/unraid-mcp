@@ -52,8 +52,13 @@ async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bo
             response_type=bool,
         )
     except NotImplementedError:
-        logger.warning("MCP client does not support elicitation for reset confirmation.")
-        return False
+        # Client doesn't support elicitation — treat as "proceed with reset" so
+        # non-interactive clients (stdio, CI) are not permanently blocked from
+        # reconfiguring credentials.
+        logger.warning(
+            "MCP client does not support elicitation for reset confirmation — proceeding with reset."
+        )
+        return True
 
     if result.action != "accept":
         logger.info("Credential reset declined by user (%s).", result.action)
@@ -80,7 +85,7 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
     if ctx is None:
         logger.warning(
             "Cannot elicit credentials: no MCP context available. "
-            "Run unraid_health action=setup to configure credentials."
+            "Run unraid(action=health, subaction=setup) to configure credentials."
         )
         return False
 
@@ -97,7 +102,7 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
     except NotImplementedError:
         logger.warning(
             "MCP client does not support elicitation. "
-            "Use unraid_health action=setup or create %s manually.",
+            "Use unraid(action=health, subaction=setup) or create %s manually.",
             CREDENTIALS_ENV_PATH,
         )
         return False

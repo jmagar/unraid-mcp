@@ -42,22 +42,31 @@ class TestLiveResourcesUseManagerCache:
         assert json.loads(result) == cached
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
-    async def test_resource_returns_status_when_no_cache(
+    async def test_resource_returns_connecting_when_no_cache_and_no_error(
         self, action: str, _mock_ensure_started: AsyncMock
     ) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.last_error = {}
             mcp = _make_resources()
             resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
             result = await resource.fn()
         parsed = json.loads(result)
-        assert "status" in parsed
+        assert parsed["status"] == "connecting"
 
-    def test_subscribe_once_not_imported(self) -> None:
-        """subscribe_once must not be imported — resources use manager cache exclusively."""
-        import unraid_mcp.subscriptions.resources as res_module
-
-        assert not hasattr(res_module, "subscribe_once")
+    @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    async def test_resource_returns_error_status_on_permanent_failure(
+        self, action: str, _mock_ensure_started: AsyncMock
+    ) -> None:
+        with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
+            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.last_error = {action: "WebSocket auth failed"}
+            mcp = _make_resources()
+            resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
+            result = await resource.fn()
+        parsed = json.loads(result)
+        assert parsed["status"] == "error"
+        assert "auth failed" in parsed["message"]
 
 
 class TestSnapshotSubscriptionsRegistered:

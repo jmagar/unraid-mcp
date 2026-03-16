@@ -1,5 +1,17 @@
 """GraphQL subscription query strings for snapshot and collect operations."""
 
+# Subscriptions that only emit on state changes (not on a regular interval).
+# When subscribe_once times out for these, it means no recent change — not an error.
+EVENT_DRIVEN_ACTIONS: frozenset[str] = frozenset(
+    {
+        "parity_progress",
+        "ups_status",
+        "notifications_overview",
+        "owner",
+        "server_status",
+    }
+)
+
 SNAPSHOT_ACTIONS = {
     "cpu": """
         subscription { systemMetricsCpu { id percentTotal cpus { percentTotal percentUser percentSystem percentIdle } } }

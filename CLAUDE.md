@@ -88,22 +88,29 @@ docker compose down
   `subscription_manager.get_resource_data(action)`. A "connecting" placeholder is returned
   while the subscription starts — callers should retry in a moment.
 
-### Tool Categories (15 Tools, ~108 Actions)
-1. **`unraid_info`** (19 actions): overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
-2. **`unraid_array`** (13 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status, parity_history, start_array, stop_array, add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats
-3. **`unraid_storage`** (6 actions): shares, disks, disk_details, log_files, logs, flash_backup
-4. **`unraid_docker`** (7 actions): list, details, start, stop, restart, networks, network_details
-5. **`unraid_vm`** (9 actions): list, details, start, stop, pause, resume, force_stop, reboot, reset
-6. **`unraid_notifications`** (12 actions): overview, list, create, archive, unread, delete, delete_archived, archive_all, archive_many, unarchive_many, unarchive_all, recalculate
-7. **`unraid_rclone`** (4 actions): list_remotes, config_form, create_remote, delete_remote
-8. **`unraid_users`** (1 action): me
-9. **`unraid_keys`** (7 actions): list, get, create, update, delete, add_role, remove_role
-10. **`unraid_health`** (4 actions): check, test_connection, diagnose, setup
-11. **`unraid_settings`** (2 actions): update, configure_ups
-12. **`unraid_customization`** (5 actions): theme, public_theme, is_initial_setup, sso_enabled, set_theme
-13. **`unraid_plugins`** (3 actions): list, add, remove
-14. **`unraid_oidc`** (5 actions): providers, provider, configuration, public_providers, validate_session
-15. **`unraid_live`** (11 actions): cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status
+### Tool Categories (1 Tool, ~107 Subactions)
+
+The server registers a **single consolidated `unraid` tool** with `action` (domain) + `subaction` (operation) routing. Call it as `unraid(action="docker", subaction="list")`.
+
+| action | subactions |
+|--------|-----------|
+| **system** (19) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **health** (4) | check, test_connection, diagnose, setup |
+| **array** (13) | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
+| **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
+| **docker** (7) | list, details, start, stop, restart, networks, network_details |
+| **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
+| **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
+| **key** (7) | list, get, create, update, delete*, add_role, remove_role |
+| **plugin** (3) | list, add, remove* |
+| **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
+| **setting** (2) | update, configure_ups* |
+| **customization** (5) | theme, public_theme, is_initial_setup, sso_enabled, set_theme |
+| **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
+| **user** (1) | me |
+| **live** (11) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status |
+
+`*` = destructive, requires `confirm=True`
 
 ### Destructive Actions (require `confirm=True`)
 - **array**: stop_array, remove_disk, clear_disk_stats
@@ -194,7 +201,7 @@ When bumping the version, **always update both files** — they must stay in syn
 
 ### Credential Storage (`~/.unraid-mcp/.env`)
 All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
-- **Plugin/direct:** `unraid_health action=setup` writes this file automatically via elicitation,
+- **Plugin/direct:** `unraid action=health subaction=setup` writes this file automatically via elicitation,
   **Safe to re-run**: if credentials exist and are working, it asks before overwriting.
   If credentials exist but connection fails, it silently re-configures without prompting.
   or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.

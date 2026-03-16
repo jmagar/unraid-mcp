@@ -1,3 +1,5 @@
+> **⚠️ DEVELOPER REFERENCE ONLY** — Full GraphQL SDL from live API introspection. Use this to verify field names and types when adding new queries/mutations to the MCP server. Not for runtime agent usage.
+
 """
 Indicates exactly one field must be supplied and this field must not be `null`.
 """

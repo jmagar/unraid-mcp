@@ -421,6 +421,7 @@ suite_system() {
   printf '\n%b== system (info/metrics/UPS) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
   run_test "system: overview"     '{"action":"system","subaction":"overview"}'
+  run_test "system: array"        '{"action":"system","subaction":"array"}'
   run_test "system: network"      '{"action":"system","subaction":"network"}'
   run_test "system: registration" '{"action":"system","subaction":"registration"}'
   run_test "system: variables"    '{"action":"system","subaction":"variables"}'
@@ -531,8 +532,8 @@ suite_notification() {
 
   run_test "notification: overview" '{"action":"notification","subaction":"overview"}'
   run_test "notification: list"     '{"action":"notification","subaction":"list"}'
-  run_test "notification: unread"   '{"action":"notification","subaction":"unread"}'
-  # Mutating: create/archive/delete/delete_archived/archive_all/etc. — skipped
+  run_test "notification: recalculate" '{"action":"notification","subaction":"recalculate"}'
+  # Mutating: create/archive/mark_unread/delete/delete_archived/archive_all/etc. — skipped
 }
 
 suite_rclone() {

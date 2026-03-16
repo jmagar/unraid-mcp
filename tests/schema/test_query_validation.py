@@ -522,11 +522,11 @@ class TestNotificationMutations:
         errors = _validate_operation(schema, MUTATIONS["archive"])
         assert not errors, f"archive mutation validation failed: {errors}"
 
-    def test_unread_mutation(self, schema: GraphQLSchema) -> None:
+    def test_mark_unread_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.unraid import _NOTIFICATION_MUTATIONS as MUTATIONS
 
-        errors = _validate_operation(schema, MUTATIONS["unread"])
-        assert not errors, f"unread mutation validation failed: {errors}"
+        errors = _validate_operation(schema, MUTATIONS["mark_unread"])
+        assert not errors, f"mark_unread mutation validation failed: {errors}"
 
     def test_delete_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.unraid import _NOTIFICATION_MUTATIONS as MUTATIONS
@@ -576,7 +576,7 @@ class TestNotificationMutations:
         expected = {
             "create",
             "archive",
-            "unread",
+            "mark_unread",
             "delete",
             "delete_archived",
             "archive_all",

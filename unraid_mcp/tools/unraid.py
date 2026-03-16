@@ -871,8 +871,6 @@ async def _handle_docker(
             "container": (data.get("docker") or {}).get(subaction),
         }
 
-    raise ToolError(f"Unhandled docker subaction '{subaction}' — this is a bug")
-
 
 # ===========================================================================
 # VM
@@ -950,8 +948,6 @@ async def _handle_vm(
             return {"success": data["vm"][field], "subaction": subaction, "vm_id": vm_id}
         raise ToolError(f"Failed to {subaction} VM or unexpected response")
 
-    raise ToolError(f"Unhandled vm subaction '{subaction}' — this is a bug")
-
 
 # ===========================================================================
 # NOTIFICATION
@@ -965,7 +961,7 @@ _NOTIFICATION_QUERIES: dict[str, str] = {
 _NOTIFICATION_MUTATIONS: dict[str, str] = {
     "create": "mutation CreateNotification($input: NotificationData!) { createNotification(input: $input) { id title importance } }",
     "archive": "mutation ArchiveNotification($id: PrefixedID!) { archiveNotification(id: $id) { id title importance } }",
-    "unread": "mutation UnreadNotification($id: PrefixedID!) { unreadNotification(id: $id) { id title importance } }",
+    "mark_unread": "mutation UnreadNotification($id: PrefixedID!) { unreadNotification(id: $id) { id title importance } }",
     "delete": "mutation DeleteNotification($id: PrefixedID!, $type: NotificationType!) { deleteNotification(id: $id, type: $type) { unread { info warning alert total } archive { info warning alert total } } }",
     "delete_archived": "mutation DeleteArchivedNotifications { deleteArchivedNotifications { unread { info warning alert total } archive { info warning alert total } } }",
     "archive_all": "mutation ArchiveAllNotifications($importance: NotificationImportance) { archiveAll(importance: $importance) { unread { info warning alert total } archive { info warning alert total } } }",
@@ -1077,7 +1073,7 @@ async def _handle_notification(
                 raise ToolError("Notification creation failed: server returned no data")
             return {"success": True, "notification": notif}
 
-        if subaction in ("archive", "unread"):
+        if subaction in ("archive", "mark_unread"):
             if not notification_id:
                 raise ToolError(f"notification_id is required for notification/{subaction}")
             data = await make_graphql_request(
@@ -1615,7 +1611,7 @@ _LIVE_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
 async def _handle_live(
     subaction: str, path: str | None, collect_for: float, timeout: float
 ) -> dict[str, Any]:
-    from ..subscriptions.queries import COLLECT_ACTIONS, SNAPSHOT_ACTIONS
+    from ..subscriptions.queries import COLLECT_ACTIONS, EVENT_DRIVEN_ACTIONS, SNAPSHOT_ACTIONS
     from ..subscriptions.snapshot import subscribe_collect, subscribe_once
 
     all_live = set(SNAPSHOT_ACTIONS) | set(COLLECT_ACTIONS)
@@ -1636,7 +1632,20 @@ async def _handle_live(
         logger.info(f"Executing unraid action=live subaction={subaction} timeout={timeout}")
 
         if subaction in SNAPSHOT_ACTIONS:
-            data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
+            if subaction in EVENT_DRIVEN_ACTIONS:
+                try:
+                    data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
+                except ToolError as e:
+                    if "timed out" in str(e):
+                        return {
+                            "success": True,
+                            "subaction": subaction,
+                            "status": "no_recent_events",
+                            "message": f"No events received in {timeout:.0f}s — this subscription only emits on state changes",
+                        }
+                    raise
+            else:
+                data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "log_tail":
@@ -1761,58 +1770,51 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         Use action + subaction to select an operation. All params are optional
         except those required by the specific subaction.
 
-        action="system"       - Server info, metrics, network, UPS
-          subactions: overview, array, network, registration, variables, metrics,
-                      services, display, config, online, owner, settings, server,
-                      servers, flash, ups_devices, ups_device, ups_config
+        ┌─────────────────┬──────────────────────────────────────────────────────────────────────┐
+        │ action          │ subactions                                                           │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ system          │ overview, array, network, registration, variables, metrics,          │
+        │                 │ services, display, config, online, owner, settings, server,          │
+        │                 │ servers, flash, ups_devices, ups_device, ups_config                  │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ health          │ check, test_connection, diagnose, setup                              │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ array           │ parity_status, parity_history, parity_start, parity_pause,          │
+        │                 │ parity_resume, parity_cancel, start_array*, stop_array*,             │
+        │                 │ add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats*  │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ disk            │ shares, disks, disk_details, log_files, logs, flash_backup*          │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ docker          │ list, details, start, stop, restart, networks, network_details       │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ vm              │ list, details, start, stop, pause, resume,                           │
+        │                 │ force_stop*, reboot, reset*                                          │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ notification    │ overview, list, create, archive, mark_unread, recalculate,           │
+        │                 │ archive_all, archive_many, unarchive_many, unarchive_all,            │
+        │                 │ delete*, delete_archived*                                            │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ key             │ list, get, create, update, delete*, add_role, remove_role            │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ plugin          │ list, add, remove*                                                   │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ rclone          │ list_remotes, config_form, create_remote, delete_remote*             │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ setting         │ update, configure_ups*                                               │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ customization   │ theme, public_theme, is_initial_setup, sso_enabled, set_theme        │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ oidc            │ providers, provider, configuration, public_providers,                │
+        │                 │ validate_session                                                     │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ user            │ me                                                                   │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ live            │ cpu, memory, cpu_telemetry, array_state, parity_progress,            │
+        │                 │ ups_status, notifications_overview, owner, server_status,            │
+        │                 │ log_tail (requires path=), notification_feed                         │
+        └─────────────────┴──────────────────────────────────────────────────────────────────────┘
 
-        action="health"       - MCP server and API health
-          subactions: check, test_connection, diagnose, setup
-
-        action="array"        - Array and parity management
-          subactions: parity_status, parity_history, parity_start, parity_pause,
-                      parity_resume, parity_cancel, start_array, stop_array,
-                      add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats
-
-        action="disk"         - Shares, physical disks, logs
-          subactions: shares, disks, disk_details, log_files, logs, flash_backup
-
-        action="docker"       - Container lifecycle and networks
-          subactions: list, details, start, stop, restart, networks, network_details
-
-        action="vm"           - Virtual machine lifecycle
-          subactions: list, details, start, stop, pause, resume, force_stop, reboot, reset
-
-        action="notification" - System notifications
-          subactions: overview, list, create, archive, unread, delete,
-                      delete_archived, archive_all, archive_many,
-                      unarchive_many, unarchive_all, recalculate
-
-        action="key"          - API key management
-          subactions: list, get, create, update, delete, add_role, remove_role
-
-        action="plugin"       - Plugin management
-          subactions: list, add, remove
-
-        action="rclone"       - Cloud storage remotes
-          subactions: list_remotes, config_form, create_remote, delete_remote
-
-        action="setting"      - System settings mutations
-          subactions: update, configure_ups
-
-        action="customization" - Theme and UI
-          subactions: theme, public_theme, is_initial_setup, sso_enabled, set_theme
-
-        action="oidc"         - OIDC/SSO providers
-          subactions: providers, provider, configuration, public_providers, validate_session
-
-        action="user"         - Current authenticated user
-          subactions: me
-
-        action="live"         - Real-time WebSocket subscription snapshots
-          subactions: cpu, memory, cpu_telemetry, array_state, parity_progress,
-                      ups_status, notifications_overview, owner, server_status,
-                      log_tail, notification_feed
+        * Destructive — requires confirm=True
         """
         if action == "system":
             return await _handle_system(subaction, device_id)

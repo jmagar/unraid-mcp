@@ -14,10 +14,10 @@ The marketplace catalog that lists all available plugins in this repository.
 - Plugin catalog with the "unraid" skill
 - Categories and tags for discoverability
 
-### 2. Plugin Manifest (`skills/unraid/.claude-plugin/plugin.json`)
+### 2. Plugin Manifest (`.claude-plugin/plugin.json`)
 The individual plugin configuration for the Unraid skill.
 
-**Location:** `skills/unraid/.claude-plugin/plugin.json`
+**Location:** `.claude-plugin/plugin.json`
 
 **Contents:**
 - Plugin name, version, author
@@ -73,12 +73,11 @@ Users can also install from a specific commit or branch:
 
 ```text
 unraid-mcp/
-├── .claude-plugin/          # Marketplace manifest
-│   ├── marketplace.json
-│   └── README.md
-├── skills/unraid/           # Plugin directory
-│   ├── .claude-plugin/      # Plugin manifest
-│   │   └── plugin.json
+├── .claude-plugin/          # Plugin manifest + marketplace manifest
+│   ├── plugin.json          # Plugin configuration (name, version, mcpServers)
+│   ├── marketplace.json     # Marketplace catalog
+│   └── README.md            # Marketplace installation guide
+├── skills/unraid/           # Skill documentation and helpers
 │   ├── SKILL.md             # Skill documentation
 │   ├── README.md            # Plugin documentation
 │   ├── examples/            # Example scripts
@@ -112,7 +111,7 @@ Before publishing to GitHub:
 
 2. **Update Version Numbers**
    - Bump version in `.claude-plugin/marketplace.json`
-   - Bump version in `skills/unraid/.claude-plugin/plugin.json`
+   - Bump version in `.claude-plugin/plugin.json`
    - Update version in `README.md` if needed
 
 3. **Test Locally**
@@ -123,15 +122,15 @@ Before publishing to GitHub:
 
 4. **Commit and Push**
    ```bash
-   git add .claude-plugin/ skills/unraid/.claude-plugin/
+   git add .claude-plugin/
    git commit -m "feat: add Claude Code marketplace configuration"
    git push origin main
    ```
 
 5. **Create Release Tag** (Optional)
    ```bash
-   git tag -a v0.2.0 -m "Release v0.2.0"
-   git push origin v0.2.0
+   git tag -a v1.0.0 -m "Release v1.0.0"
+   git push origin v1.0.0
    ```
 
 ## User Experience
@@ -159,7 +158,7 @@ After installation, users will:
 To release a new version:
 
 1. Make changes to the plugin
-2. Update version in `skills/unraid/.claude-plugin/plugin.json`
+2. Update version in `.claude-plugin/plugin.json`
 3. Update marketplace catalog in `.claude-plugin/marketplace.json`
 4. Run validation: `./scripts/validate-marketplace.sh`
 5. Commit and push

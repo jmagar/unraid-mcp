@@ -83,11 +83,34 @@ async def test_invalid_subaction_raises():
 
 @pytest.mark.asyncio
 async def test_snapshot_propagates_tool_error(_mock_subscribe_once):
+    """Non-event-driven (streaming) actions still propagate timeout as ToolError."""
     from unraid_mcp.core.exceptions import ToolError
 
     _mock_subscribe_once.side_effect = ToolError("Subscription timed out after 10s")
     with pytest.raises(ToolError, match="timed out"):
         await _make_tool()(action="live", subaction="cpu")
+
+
+@pytest.mark.asyncio
+async def test_event_driven_timeout_returns_no_recent_events(_mock_subscribe_once):
+    """Event-driven subscriptions return a graceful no_recent_events response on timeout."""
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_subscribe_once.side_effect = ToolError("Subscription timed out after 10s")
+    result = await _make_tool()(action="live", subaction="notifications_overview")
+    assert result["success"] is True
+    assert result["status"] == "no_recent_events"
+    assert "No events received" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_event_driven_non_timeout_error_propagates(_mock_subscribe_once):
+    """Non-timeout ToolErrors from event-driven subscriptions still propagate."""
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_subscribe_once.side_effect = ToolError("Subscription auth failed")
+    with pytest.raises(ToolError, match="auth failed"):
+        await _make_tool()(action="live", subaction="owner")
 
 
 @pytest.mark.asyncio

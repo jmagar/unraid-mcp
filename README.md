@@ -8,10 +8,10 @@
 
 ## ✨ Features
 
-- 🔧 **11 Tools, ~104 Actions**: Complete Unraid management through MCP protocol
-- 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase  
+- 🔧 **1 Tool, ~108 Actions**: Complete Unraid management through a single consolidated MCP tool
+- 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
-- 🔄 **Real-time Data**: WebSocket subscriptions for live log streaming
+- 🔄 **Real-time Data**: WebSocket subscriptions for live metrics, logs, array state, and more
 - 📊 **Health Monitoring**: Comprehensive system diagnostics and status
 - 🐳 **Docker Ready**: Full containerization support with Docker Compose
 - 🔒 **Secure**: Proper SSL/TLS configuration and API key management
@@ -46,8 +46,8 @@
 ```
 
 This provides instant access to Unraid monitoring and management through Claude Code with:
-- **11 MCP tools** exposing **~104 actions** via the consolidated action pattern
-- **10 slash commands** for quick CLI-style access (`commands/`)
+- **1 MCP tool** (`unraid`) exposing **~108 actions** via `action` + `subaction` routing
+- **11 slash commands** for quick CLI-style access (`commands/`)
 - Real-time system metrics and health monitoring
 - Docker container and VM lifecycle management
 - Disk health monitoring and storage management
@@ -61,7 +61,7 @@ Claude Code plugin, direct `uv run` invocations, and Docker.
 
 **Option 1 — Interactive (Claude Code plugin, elicitation-supported clients):**
 ```
-unraid_health action=setup
+unraid(action="health", subaction="setup")
 ```
 The server prompts for your API URL and key, writes `~/.unraid-mcp/.env` automatically
 (created with mode 700/600), and activates credentials without restart.
@@ -137,8 +137,8 @@ unraid-mcp/                      # ${CLAUDE_PLUGIN_ROOT}
 └── scripts/                     # Validation and helper scripts
 ```
 
-- **MCP Server**: 11 tools with ~104 actions via GraphQL API
-- **Slash Commands**: 10 commands in `commands/` for quick CLI-style access
+- **MCP Server**: 1 `unraid` tool with ~108 actions via GraphQL API
+- **Slash Commands**: 11 commands in `commands/` for quick CLI-style access
 - **Skill**: `/unraid` skill for monitoring and queries
 - **Entry Point**: `unraid-mcp-server` defined in pyproject.toml
 
@@ -242,49 +242,79 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 
 ## 🛠️ Available Tools & Resources
 
-Each tool uses a consolidated `action` parameter to expose multiple operations, reducing context window usage. Destructive actions require `confirm=True`.
+The single `unraid` tool uses `action` (domain) + `subaction` (operation) routing to expose all operations via one MCP tool, minimizing context window usage. Destructive actions require `confirm=True`.
 
-### Tool Categories (11 Tools, ~104 Actions)
+### Single Tool, 15 Domains, ~108 Actions
 
-| Tool | Actions | Description |
-|------|---------|-------------|
-| **`unraid_info`** | 21 | overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config, update_server, update_ssh |
-| **`unraid_array`** | 5 | parity_start, parity_pause, parity_resume, parity_cancel, parity_status |
-| **`unraid_storage`** | 7 | shares, disks, disk_details, unassigned, log_files, logs, flash_backup |
-| **`unraid_docker`** | 26 | list, details, start, stop, restart, pause, unpause, remove, update, update_all, logs, networks, network_details, port_conflicts, check_updates, create_folder, set_folder_children, delete_entries, move_to_folder, move_to_position, rename_folder, create_folder_with_items, update_view_prefs, sync_templates, reset_template_mappings, refresh_digests |
-| **`unraid_vm`** | 9 | list, details, start, stop, pause, resume, force_stop, reboot, reset |
-| **`unraid_notifications`** | 14 | overview, list, warnings, create, create_unique, archive, archive_many, unread, unarchive_many, unarchive_all, recalculate, delete, delete_archived, archive_all |
-| **`unraid_rclone`** | 4 | list_remotes, config_form, create_remote, delete_remote |
-| **`unraid_users`** | 1 | me |
-| **`unraid_keys`** | 5 | list, get, create, update, delete |
-| **`unraid_health`** | 3 | check, test_connection, diagnose |
-| **`unraid_settings`** | 9 | update, update_temperature, update_time, configure_ups, update_api, connect_sign_in, connect_sign_out, setup_remote_access, enable_dynamic_remote_access |
+Call pattern: `unraid(action="<domain>", subaction="<operation>")`
 
-### MCP Resources (Real-time Data)
-- `unraid://logs/stream` - Live log streaming from `/var/log/syslog` with WebSocket subscriptions
+| action= | Subactions | Description |
+|---------|-----------|-------------|
+| **`system`** | overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config | Server info, metrics, network, UPS (19 subactions) |
+| **`health`** | check, test_connection, diagnose, setup | Health checks, connection test, diagnostics, interactive setup (4 subactions) |
+| **`array`** | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array, add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats | Parity checks, array state, disk operations (13 subactions) |
+| **`disk`** | shares, disks, disk_details, log_files, logs, flash_backup | Shares, physical disks, log files (6 subactions) |
+| **`docker`** | list, details, start, stop, restart, networks, network_details | Container lifecycle and network inspection (7 subactions) |
+| **`vm`** | list, details, start, stop, pause, resume, force_stop, reboot, reset | Virtual machine lifecycle (9 subactions) |
+| **`notification`** | overview, list, create, archive, unread, delete, delete_archived, archive_all, archive_many, unarchive_many, unarchive_all, recalculate | System notifications CRUD (12 subactions) |
+| **`key`** | list, get, create, update, delete, add_role, remove_role | API key management (7 subactions) |
+| **`plugin`** | list, add, remove | Plugin management (3 subactions) |
+| **`rclone`** | list_remotes, config_form, create_remote, delete_remote | Cloud storage remote management (4 subactions) |
+| **`setting`** | update, configure_ups | System settings and UPS config (2 subactions) |
+| **`customization`** | theme, public_theme, is_initial_setup, sso_enabled, set_theme | Theme and UI customization (5 subactions) |
+| **`oidc`** | providers, provider, configuration, public_providers, validate_session | OIDC/SSO provider management (5 subactions) |
+| **`user`** | me | Current authenticated user (1 subaction) |
+| **`live`** | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, owner, server_status, log_tail, notification_feed | Real-time WebSocket subscription snapshots (11 subactions) |
 
-> **Note**: MCP Resources provide real-time data streams that can be accessed via MCP clients. The log stream resource automatically connects to your Unraid system logs and provides live updates.
+### Destructive Actions (require `confirm=True`)
+- **array**: `stop_array`, `remove_disk`, `clear_disk_stats`
+- **vm**: `force_stop`, `reset`
+- **notification**: `delete`, `delete_archived`
+- **rclone**: `delete_remote`
+- **key**: `delete`
+- **disk**: `flash_backup`
+- **setting**: `configure_ups`
+- **plugin**: `remove`
+
+### MCP Resources (Real-time Cached Data)
+
+The `unraid://live/*` resources expose cached subscription data from persistent WebSocket connections:
+
+- `unraid://live/cpu` — CPU utilization
+- `unraid://live/memory` — Memory usage
+- `unraid://live/cpu_telemetry` — Detailed CPU telemetry
+- `unraid://live/array_state` — Array state changes
+- `unraid://live/parity_progress` — Parity check progress
+- `unraid://live/ups_status` — UPS status
+- `unraid://live/notifications_overview` — Notification counts
+- `unraid://live/owner` — Owner info changes
+- `unraid://live/server_status` — Server status changes
+- `unraid://live/log_tail` — Live syslog tail
+- `unraid://live/notification_feed` — Real-time notification events
+
+> **Note**: Resources return cached data from persistent WebSocket subscriptions. A `{"status": "connecting"}` placeholder is returned while the subscription initializes — retry in a moment.
 
 ---
 
 ## 💬 Custom Slash Commands
 
-The project includes **10 custom slash commands** in `commands/` for quick access to Unraid operations:
+The project includes **11 custom slash commands** in `commands/` for quick access to Unraid operations. Each command maps to a domain of the `unraid` tool.
 
 ### Available Commands
 
-| Command | Actions | Quick Access |
-|---------|---------|--------------|
-| `/info` | 21 | System information, metrics, configuration |
-| `/array` | 5 | Parity check management |
-| `/storage` | 7 | Shares, disks, logs |
-| `/docker` | 26 | Container management and monitoring |
-| `/vm` | 9 | Virtual machine lifecycle |
-| `/notifications` | 14 | Alert management |
-| `/rclone` | 4 | Cloud storage remotes |
-| `/users` | 1 | Current user query |
-| `/keys` | 5 | API key management |
-| `/health` | 3 | System health checks |
+| Command | Domain (`action=`) | Quick Access |
+|---------|-------------------|--------------|
+| `/info` | `system` | System information, metrics, UPS, network |
+| `/array` | `array` | Parity checks, array state, disk operations |
+| `/storage` | `disk` | Shares, disks, log files |
+| `/docker` | `docker` | Container lifecycle and network inspection |
+| `/vm` | `vm` | Virtual machine lifecycle |
+| `/notifications` | `notification` | Alert management |
+| `/rclone` | `rclone` | Cloud storage remotes |
+| `/users` | `user` | Current user query |
+| `/keys` | `key` | API key management |
+| `/health` | `health` | System health checks and setup |
+| `/settings` | `setting` | System settings configuration |
 
 ### Example Usage
 
@@ -297,18 +327,17 @@ The project includes **10 custom slash commands** in `commands/` for quick acces
 # Container management
 /docker list
 /docker start plex
-/docker logs nginx
 
 # VM operations
 /vm list
 /vm start windows-10
 
 # Notifications
-/notifications warnings
+/notifications list
 /notifications archive_all
 
-# User management
-/users list
+# API key management
+/keys list
 /keys create "Automation Key" "For CI/CD"
 ```
 
@@ -336,27 +365,20 @@ unraid-mcp/
 │   ├── config/               # Configuration management
 │   │   ├── settings.py       # Environment & settings
 │   │   └── logging.py        # Logging setup
-│   ├── core/                 # Core infrastructure  
+│   ├── core/                 # Core infrastructure
 │   │   ├── client.py         # GraphQL client
 │   │   ├── exceptions.py     # Custom exceptions
+│   │   ├── guards.py         # Destructive action guards
 │   │   └── types.py          # Shared data types
 │   ├── subscriptions/        # Real-time subscriptions
-│   │   ├── manager.py        # WebSocket management
-│   │   ├── resources.py      # MCP resources
+│   │   ├── manager.py        # Persistent WebSocket manager
+│   │   ├── resources.py      # MCP resources (unraid://live/*)
+│   │   ├── snapshot.py       # Transient subscribe_once helpers
 │   │   └── diagnostics.py    # Diagnostic tools
-│   ├── tools/                # MCP tool categories (11 tools, ~104 actions)
-│   │   ├── info.py           # System information (21 actions)
-│   │   ├── array.py          # Parity checks (5 actions)
-│   │   ├── storage.py        # Storage & monitoring (7 actions)
-│   │   ├── docker.py         # Container management (26 actions)
-│   │   ├── virtualization.py # VM management (9 actions)
-│   │   ├── notifications.py  # Notification management (14 actions)
-│   │   ├── rclone.py         # Cloud storage (4 actions)
-│   │   ├── users.py          # Current user query (1 action)
-│   │   ├── keys.py           # API key management (5 actions)
-│   │   ├── settings.py       # Server settings (9 actions)
-│   │   └── health.py         # Health checks (3 actions)
+│   ├── tools/                # Single consolidated tool (~108 actions)
+│   │   └── unraid.py         # All 15 domains in one file
 │   └── server.py             # FastMCP server setup
+├── commands/                 # 11 custom slash commands
 ├── logs/                     # Log files (auto-created)
 └── docker-compose.yml        # Docker Compose deployment
 ```

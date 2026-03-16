@@ -1,78 +1,52 @@
 # Destructive Actions
 
-**Last Updated:** 2026-03-13
-**Total destructive actions:** 15 across 7 tools
+**Last Updated:** 2026-03-16
+**Total destructive actions:** 12 across 8 domains (single `unraid` tool)
 
 All destructive actions require `confirm=True` at the call site. There is no additional environment variable gate — `confirm` is the sole guard.
 
 > **mcporter commands below** use `$MCP_URL` (default: `http://localhost:6970/mcp`). Run `test-actions.sh` for automated non-destructive coverage; destructive actions are always skipped there and tested manually per the strategies below.
+>
+> **Calling convention (v1.0.0+):** All operations use the single `unraid` tool with `action` (domain) + `subaction` (operation). For example:
+> `mcporter call --http-url "$MCP_URL" --tool unraid --args '{"action":"docker","subaction":"list"}'`
 
 ---
 
-## `unraid_docker`
+## `array`
 
-### `remove` — Delete a container permanently
+### `stop_array` — Stop the Unraid array
+
+**Strategy: mock/safety audit only.**
+Stopping the array unmounts all shares and can interrupt running containers and VMs accessing array data. Test via `tests/safety/` confirming the `confirm=False` guard raises `ToolError`. Do not run live unless all containers and VMs are shut down first.
+
+---
+
+### `remove_disk` — Remove a disk from the array
 
 ```bash
-# 1. Provision a throwaway canary container
-docker run -d --name mcp-test-canary alpine sleep 3600
+# Prerequisite: array must already be stopped; use a disk you intend to remove
 
-# 2. Discover its MCP-assigned ID
-CID=$(mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args '{"action":"list"}' --output json \
-  | python3 -c "import json,sys; cs=json.load(sys.stdin).get('containers',[]); print(next(c['id'] for c in cs if 'mcp-test-canary' in c.get('name','')))")
-
-# 3. Remove via MCP
-mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args "{\"action\":\"remove\",\"container_id\":\"$CID\",\"confirm\":true}" --output json
-
-# 4. Verify
-docker ps -a | grep mcp-test-canary  # should return nothing
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"array","subaction":"remove_disk","disk_id":"<DISK_ID>","confirm":true}' --output json
 ```
 
 ---
 
-### `update_all` — Pull latest images and restart all containers
-
-**Strategy: mock/safety audit only.**
-No safe live isolation — this hits every running container. Test via `tests/safety/` confirming the `confirm=False` guard raises `ToolError`. Do not run live unless all containers can tolerate a simultaneous restart.
-
----
-
-### `delete_entries` — Delete Docker organizer folders/entries
+### `clear_disk_stats` — Clear I/O statistics for a disk (irreversible)
 
 ```bash
-# 1. Create a throwaway organizer folder
-#    Parameter: folder_name (str); ID is in organizer.views.flatEntries[type==FOLDER]
-FOLDER=$(mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args '{"action":"create_folder","folder_name":"mcp-test-delete-me"}' --output json)
-FID=$(echo "$FOLDER" | python3 -c "
-import json,sys
-data=json.load(sys.stdin)
-entries=(data.get('organizer',{}).get('views',{}).get('flatEntries') or [])
-match=next((e['id'] for e in entries if e.get('type')=='FOLDER' and 'mcp-test' in e.get('name','')),'' )
-print(match)")
+# Discover disk IDs
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"disk","subaction":"disks"}' --output json
 
-# 2. Delete it
-mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args "{\"action\":\"delete_entries\",\"entry_ids\":[\"$FID\"],\"confirm\":true}" --output json
-
-# 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid_docker \
-  --args '{"action":"list"}' --output json | python3 -c \
-  "import json,sys; folders=[x for x in json.load(sys.stdin).get('folders',[]) if 'mcp-test' in x.get('name','')]; print('clean' if not folders else folders)"
+# Clear stats for a specific disk
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"array","subaction":"clear_disk_stats","disk_id":"<DISK_ID>","confirm":true}' --output json
 ```
 
 ---
 
-### `reset_template_mappings` — Wipe all template-to-container associations
-
-**Strategy: mock/safety audit only.**
-Global state — wipes all template mappings, requires full remapping afterward. No safe isolation. Test via `tests/safety/` confirming the `confirm=False` guard raises `ToolError`.
-
----
-
-## `unraid_vm`
+## `vm`
 
 ### `force_stop` — Hard power-off a VM (potential data corruption)
 
@@ -80,16 +54,16 @@ Global state — wipes all template mappings, requires full remapping afterward.
 # Prerequisite: create a minimal Alpine test VM in Unraid VM manager
 # (Alpine ISO, 512MB RAM, no persistent disk, name contains "mcp-test")
 
-VID=$(mcporter call --http-url "$MCP_URL" --tool unraid_vm \
-  --args '{"action":"list"}' --output json \
+VID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"vm","subaction":"list"}' --output json \
   | python3 -c "import json,sys; vms=json.load(sys.stdin).get('vms',[]); print(next(v.get('uuid',v.get('id','')) for v in vms if 'mcp-test' in v.get('name','')))")
 
-mcporter call --http-url "$MCP_URL" --tool unraid_vm \
-  --args "{\"action\":\"force_stop\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"vm\",\"subaction\":\"force_stop\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
 
 # Verify: VM state should return to stopped
-mcporter call --http-url "$MCP_URL" --tool unraid_vm \
-  --args "{\"action\":\"details\",\"vm_id\":\"$VID\"}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"vm\",\"subaction\":\"details\",\"vm_id\":\"$VID\"}" --output json
 ```
 
 ---
@@ -98,27 +72,27 @@ mcporter call --http-url "$MCP_URL" --tool unraid_vm \
 
 ```bash
 # Same minimal Alpine test VM as above
-VID=$(mcporter call --http-url "$MCP_URL" --tool unraid_vm \
-  --args '{"action":"list"}' --output json \
+VID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"vm","subaction":"list"}' --output json \
   | python3 -c "import json,sys; vms=json.load(sys.stdin).get('vms',[]); print(next(v.get('uuid',v.get('id','')) for v in vms if 'mcp-test' in v.get('name','')))")
 
-mcporter call --http-url "$MCP_URL" --tool unraid_vm \
-  --args "{\"action\":\"reset\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"vm\",\"subaction\":\"reset\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
 ```
 
 ---
 
-## `unraid_notifications`
+## `notification`
 
 ### `delete` — Permanently delete a notification
 
 ```bash
 # 1. Create a test notification, then list to get the real stored ID (create response
 #    ID is ULID-based; stored filename uses a unix timestamp, so IDs differ)
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"create","title":"mcp-test-delete","subject":"safe to delete","description":"MCP destructive action test","importance":"INFO"}' --output json
-NID=$(mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"list","notification_type":"UNREAD"}' --output json \
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"create","title":"mcp-test-delete","subject":"safe to delete","description":"MCP destructive action test","importance":"INFO"}' --output json
+NID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"list","notification_type":"UNREAD"}' --output json \
   | python3 -c "
 import json,sys
 notifs=json.load(sys.stdin).get('notifications',[])
@@ -126,12 +100,12 @@ matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-delete']
 print(matches[0] if matches else '')")
 
 # 2. Delete it (notification_type required)
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args "{\"action\":\"delete\",\"notification_id\":\"$NID\",\"notification_type\":\"UNREAD\",\"confirm\":true}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"notification\",\"subaction\":\"delete\",\"notification_id\":\"$NID\",\"notification_type\":\"UNREAD\",\"confirm\":true}" --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"list"}' --output json | python3 -c \
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"list"}' --output json | python3 -c \
   "import json,sys; ns=[n for n in json.load(sys.stdin).get('notifications',[]) if 'mcp-test' in n.get('title','')]; print('clean' if not ns else ns)"
 ```
 
@@ -141,45 +115,45 @@ mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
 
 ```bash
 # 1. Create and archive a test notification
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"create","title":"mcp-test-archive-wipe","subject":"archive me","description":"safe to delete","importance":"INFO"}' --output json
-AID=$(mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"list","notification_type":"UNREAD"}' --output json \
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"create","title":"mcp-test-archive-wipe","subject":"archive me","description":"safe to delete","importance":"INFO"}' --output json
+AID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"list","notification_type":"UNREAD"}' --output json \
   | python3 -c "
 import json,sys
 notifs=json.load(sys.stdin).get('notifications',[])
 matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-archive-wipe']
 print(matches[0] if matches else '')")
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args "{\"action\":\"archive\",\"notification_id\":\"$AID\"}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"notification\",\"subaction\":\"archive\",\"notification_id\":\"$AID\"}" --output json
 
 # 2. Wipe all archived
 # NOTE: this deletes ALL archived notifications, not just the test one
-mcporter call --http-url "$MCP_URL" --tool unraid_notifications \
-  --args '{"action":"delete_archived","confirm":true}' --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"notification","subaction":"delete_archived","confirm":true}' --output json
 ```
 
 > Run on `shart` if archival history on `tootie` matters.
 
 ---
 
-## `unraid_rclone`
+## `rclone`
 
 ### `delete_remote` — Remove an rclone remote configuration
 
 ```bash
 # 1. Create a throwaway local remote (points to /tmp — no real data)
 #    Parameters: name (str), provider_type (str), config_data (dict)
-mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
-  --args '{"action":"create_remote","name":"mcp-test-remote","provider_type":"local","config_data":{"root":"/tmp"}}' --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"rclone","subaction":"create_remote","name":"mcp-test-remote","provider_type":"local","config_data":{"root":"/tmp"}}' --output json
 
 # 2. Delete it
-mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
-  --args '{"action":"delete_remote","name":"mcp-test-remote","confirm":true}' --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"rclone","subaction":"delete_remote","name":"mcp-test-remote","confirm":true}' --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
-  --args '{"action":"list_remotes"}' --output json | python3 -c \
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"rclone","subaction":"list_remotes"}' --output json | python3 -c \
   "import json,sys; remotes=json.load(sys.stdin).get('remotes',[]); print('clean' if 'mcp-test-remote' not in remotes else 'FOUND — cleanup failed')"
 ```
 
@@ -187,29 +161,29 @@ mcporter call --http-url "$MCP_URL" --tool unraid_rclone \
 
 ---
 
-## `unraid_keys`
+## `key`
 
 ### `delete` — Delete an API key (immediately revokes access)
 
 ```bash
 # 1. Create a test key (names cannot contain hyphens; ID is at key.id)
-KID=$(mcporter call --http-url "$MCP_URL" --tool unraid_keys \
-  --args '{"action":"create","name":"mcp test key","roles":["VIEWER"]}' --output json \
+KID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"key","subaction":"create","name":"mcp test key","roles":["VIEWER"]}' --output json \
   | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',{}).get('id',''))")
 
 # 2. Delete it
-mcporter call --http-url "$MCP_URL" --tool unraid_keys \
-  --args "{\"action\":\"delete\",\"key_id\":\"$KID\",\"confirm\":true}" --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args "{\"action\":\"key\",\"subaction\":\"delete\",\"key_id\":\"$KID\",\"confirm\":true}" --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid_keys \
-  --args '{"action":"list"}' --output json | python3 -c \
-  "import json,sys; ks=json.load(sys.stdin).get('keys',[]); print('clean' if not any('mcp-test-key' in k.get('name','') for k in ks) else 'FOUND — cleanup failed')"
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"key","subaction":"list"}' --output json | python3 -c \
+  "import json,sys; ks=json.load(sys.stdin).get('keys',[]); print('clean' if not any('mcp test key' in k.get('name','') for k in ks) else 'FOUND — cleanup failed')"
 ```
 
 ---
 
-## `unraid_storage`
+## `disk`
 
 ### `flash_backup` — Rclone backup of flash drive (overwrites destination)
 
@@ -217,70 +191,34 @@ mcporter call --http-url "$MCP_URL" --tool unraid_keys \
 # Prerequisite: create a dedicated test remote pointing away from real backup destination
 # (use rclone create_remote first, or configure mcp-test-remote manually)
 
-mcporter call --http-url "$MCP_URL" --tool unraid_storage \
-  --args '{"action":"flash_backup","remote_name":"mcp-test-remote","source_path":"/boot","destination_path":"/flash-backup-test","confirm":true}' --output json
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"disk","subaction":"flash_backup","remote_name":"mcp-test-remote","source_path":"/boot","destination_path":"/flash-backup-test","confirm":true}' --output json
 ```
 
 > Never point at the same destination as your real flash backup. Create a dedicated `mcp-test-remote` (see `rclone: delete_remote` above for provisioning pattern).
 
 ---
 
-## `unraid_settings`
+## `setting`
 
 ### `configure_ups` — Overwrite UPS monitoring configuration
 
 **Strategy: mock/safety audit only.**
-Wrong config can break UPS integration. If live testing is required: read current config via `unraid_info ups_config`, save values, re-apply identical values (no-op), verify response matches. Test via `tests/safety/` for guard behavior.
+Wrong config can break UPS integration. If live testing is required: read current config via `unraid(action="system", subaction="ups_config")`, save values, re-apply identical values (no-op), verify response matches. Test via `tests/safety/` for guard behavior.
 
 ---
 
-### `setup_remote_access` — Modify remote access configuration
+## `plugin`
+
+### `remove` — Uninstall a plugin (irreversible without re-install)
 
 **Strategy: mock/safety audit only.**
-Misconfiguration can break remote connectivity and lock you out. Do not run live. Test via `tests/safety/` confirming `confirm=False` raises `ToolError`.
-
----
-
-### `enable_dynamic_remote_access` — Toggle dynamic remote access
+Removing a plugin cannot be undone without a full re-install. Test via `tests/safety/` confirming the `confirm=False` guard raises `ToolError`. Do not run live unless the plugin is intentionally being uninstalled.
 
 ```bash
-# Strategy: toggle to false (disabling is reversible) on shart only, then restore
-# Step 1: Read current state
-CURRENT=$(mcporter call --http-url "$SHART_MCP_URL" --tool unraid_info \
-  --args '{"action":"settings"}' --output json)
-
-# Step 2: Disable (safe — can be re-enabled)
-mcporter call --http-url "$SHART_MCP_URL" --tool unraid_settings \
-  --args '{"action":"enable_dynamic_remote_access","access_url_type":"SUBDOMAINS","dynamic_enabled":false,"confirm":true}' --output json
-
-# Step 3: Restore to previous state
-mcporter call --http-url "$SHART_MCP_URL" --tool unraid_settings \
-  --args '{"action":"enable_dynamic_remote_access","access_url_type":"SUBDOMAINS","dynamic_enabled":true,"confirm":true}' --output json
-```
-
-> Run on `shart` (10.1.0.3) only — never `tootie`.
-
----
-
-## `unraid_info`
-
-### `update_ssh` — Change SSH enabled state and port
-
-```bash
-# Strategy: read current config, re-apply same values (no-op change)
-
-# 1. Read current SSH settings
-CURRENT=$(mcporter call --http-url "$MCP_URL" --tool unraid_info \
-  --args '{"action":"settings"}' --output json)
-SSH_ENABLED=$(echo "$CURRENT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ssh',{}).get('enabled', True))")
-SSH_PORT=$(echo "$CURRENT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('ssh',{}).get('port', 22))")
-
-# 2. Re-apply same values (no-op)
-mcporter call --http-url "$MCP_URL" --tool unraid_info \
-  --args "{\"action\":\"update_ssh\",\"ssh_enabled\":$SSH_ENABLED,\"ssh_port\":$SSH_PORT,\"confirm\":true}" --output json
-
-# 3. Verify SSH connectivity still works
-ssh root@"$UNRAID_HOST" -p "$SSH_PORT" exit
+# If live testing is necessary (intentional removal only):
+mcporter call --http-url "$MCP_URL" --tool unraid \
+  --args '{"action":"plugin","subaction":"remove","names":["<plugin-name>"],"confirm":true}' --output json
 ```
 
 ---
@@ -290,7 +228,9 @@ ssh root@"$UNRAID_HOST" -p "$SSH_PORT" exit
 The `tests/safety/` directory contains pytest tests that verify:
 - Every destructive action raises `ToolError` when called with `confirm=False`
 - Every destructive action raises `ToolError` when called without the `confirm` parameter
-- The `DESTRUCTIVE_ACTIONS` set in each tool file stays in sync with the actions listed above
+- The `_*_DESTRUCTIVE` sets in `unraid_mcp/tools/unraid.py` stay in sync with the actions listed above
+- No GraphQL request reaches the network layer when confirmation is missing (`TestNoGraphQLCallsWhenUnconfirmed`)
+- Non-destructive actions never require `confirm` (`TestNonDestructiveActionsNeverRequireConfirm`)
 
 These run as part of the standard test suite:
 
@@ -302,20 +242,17 @@ uv run pytest tests/safety/ -v
 
 ## Summary Table
 
-| Tool | Action | Strategy | Target Server |
-|------|--------|----------|---------------|
-| `unraid_docker` | `remove` | Pre-existing stopped container on Unraid server (skipped in test-destructive.sh) | either |
-| `unraid_docker` | `update_all` | Mock/safety audit only | — |
-| `unraid_docker` | `delete_entries` | Create folder → destroy | either |
-| `unraid_docker` | `reset_template_mappings` | Mock/safety audit only | — |
-| `unraid_vm` | `force_stop` | Minimal Alpine test VM | either |
-| `unraid_vm` | `reset` | Minimal Alpine test VM | either |
-| `unraid_notifications` | `delete` | Create notification → destroy | either |
-| `unraid_notifications` | `delete_archived` | Create → archive → wipe | shart preferred |
-| `unraid_rclone` | `delete_remote` | Create local:/tmp remote → destroy | either |
-| `unraid_keys` | `delete` | Create test key → destroy | either |
-| `unraid_storage` | `flash_backup` | Dedicated test remote, isolated path | either |
-| `unraid_settings` | `configure_ups` | Mock/safety audit only | — |
-| `unraid_settings` | `setup_remote_access` | Mock/safety audit only | — |
-| `unraid_settings` | `enable_dynamic_remote_access` | Toggle false → restore | shart only |
-| `unraid_info` | `update_ssh` | Read → re-apply same values (no-op) | either |
+| Domain (`action=`) | Subaction | Strategy | Target Server |
+|--------------------|-----------|----------|---------------|
+| `array` | `stop_array` | Mock/safety audit only | — |
+| `array` | `remove_disk` | Array must be stopped; use intended disk | either |
+| `array` | `clear_disk_stats` | Discover disk ID → clear | either |
+| `vm` | `force_stop` | Minimal Alpine test VM | either |
+| `vm` | `reset` | Minimal Alpine test VM | either |
+| `notification` | `delete` | Create notification → destroy | either |
+| `notification` | `delete_archived` | Create → archive → wipe | shart preferred |
+| `rclone` | `delete_remote` | Create local:/tmp remote → destroy | either |
+| `key` | `delete` | Create test key → destroy | either |
+| `disk` | `flash_backup` | Dedicated test remote, isolated path | either |
+| `setting` | `configure_ups` | Mock/safety audit only | — |
+| `plugin` | `remove` | Mock/safety audit only | — |

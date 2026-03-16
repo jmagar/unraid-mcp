@@ -1,36 +1,105 @@
-# Unraid API Troubleshooting Guide
+# Unraid MCP — Troubleshooting Guide
 
-Common issues and solutions when working with the Unraid GraphQL API.
+## Credentials Not Configured
 
-## "Cannot query field" error
+**Error:** `CredentialsNotConfiguredError` or message containing `~/.unraid-mcp/.env`
 
-Field name doesn't exist in your Unraid version. Use introspection to find valid fields:
-
-```bash
-./scripts/unraid-query.sh -q "{ __type(name: \"TypeName\") { fields { name } } }"
+**Fix:** Run setup to configure credentials interactively:
+```
+unraid(action="health", subaction="setup")
 ```
 
-## "API key validation failed"
-- Check API key is correct and not truncated
-- Verify key has appropriate permissions (use "Viewer" role)
-- Ensure URL includes `/graphql` endpoint (e.g. `http://host/graphql`)
+This writes `UNRAID_API_URL` and `UNRAID_API_KEY` to `~/.unraid-mcp/.env`. Re-run at any time to update or rotate credentials.
 
-## Empty results
-Many queries return empty arrays when no data exists:
-- `docker.containers` - No containers running
-- `vms` - No VMs configured (or VM service disabled)
-- `notifications` - No active alerts
-- `plugins` - No plugins installed
+---
 
-This is normal behavior, not an error. Ensure your scripts handle empty arrays gracefully.
+## Connection Failed / API Unreachable
 
-## "VMs are not available" (GraphQL Error)
-If the VM manager is disabled in Unraid settings, querying `{ vms { ... } }` will return a GraphQL error.
-**Solution:** Check if VM service is enabled before querying, or use error handling (like `IGNORE_ERRORS=true` in dashboard scripts) to process partial data.
+**Symptoms:** Timeout, connection refused, network error
 
-## URL connection issues
-- Use HTTPS (not HTTP) for remote access if configured
-- For local access: `http://unraid-server-ip/graphql`
-- For Unraid Connect: Use provided URL with token in hostname
-- Use `-k` (insecure) with curl if using self-signed certs on local HTTPS
-- Use `-L` (follow redirects) if Unraid redirects HTTP to HTTPS
+**Diagnostic steps:**
+
+1. Test basic connectivity:
+```
+unraid(action="health", subaction="test_connection")
+```
+
+2. Full diagnostic report:
+```
+unraid(action="health", subaction="diagnose")
+```
+
+3. Check that `UNRAID_API_URL` in `~/.unraid-mcp/.env` points to the correct Unraid GraphQL endpoint.
+
+4. Verify the API key has the required roles. Get a new key: **Unraid UI → Settings → Management Access → API Keys → Create** (select "Viewer" role for read-only, or appropriate roles for mutations).
+
+---
+
+## Invalid Action / Subaction
+
+**Error:** `Invalid action 'X'` or `Invalid subaction 'X' for action 'Y'`
+
+**Fix:** Check the domain table in `SKILL.md` for the exact `action=` and `subaction=` strings. Common mistakes:
+
+| Wrong | Correct |
+|-------|---------|
+| `action="info"` | `action="system"` |
+| `action="notifications"` | `action="notification"` |
+| `action="keys"` | `action="key"` |
+| `action="plugins"` | `action="plugin"` |
+| `action="settings"` | `action="setting"` |
+| `subaction="unread"` | `subaction="mark_unread"` |
+
+---
+
+## Destructive Action Blocked
+
+**Error:** `Action 'X' was not confirmed. Re-run with confirm=True to bypass elicitation.`
+
+**Fix:** Add `confirm=True` to the call:
+```
+unraid(action="array", subaction="stop_array", confirm=True)
+unraid(action="vm",    subaction="force_stop", vm_id="<id>", confirm=True)
+```
+
+See the Destructive Actions table in `SKILL.md` for the full list.
+
+---
+
+## Live Subscription Returns "Connecting"
+
+**Symptoms:** `unraid(action="live", ...)` returns `{"status": "connecting"}`
+
+**Explanation:** The persistent WebSocket subscription has not yet received its first event. Retry in a moment.
+
+**Known issue:** `live/array_state` uses `arraySubscription` which has a known Unraid API bug (returns null for a non-nullable field). This subscription will always show "connecting."
+
+**Event-driven subscriptions** (`live/notifications_overview`, `live/owner`, `live/server_status`, `live/ups_status`) only populate when the server emits a change event. If the server is idle, these may never populate during a session.
+
+**Workaround for array state:** Use `unraid(action="system", subaction="array")` for a synchronous snapshot instead.
+
+---
+
+## Rate Limit Exceeded
+
+**Limit:** 100 requests / 10 seconds
+
+**Symptoms:** HTTP 429 or rate limit error
+
+**Fix:** Space out requests. Avoid polling in tight loops. Use `live/` subscriptions for real-time data instead of polling `system/metrics` repeatedly.
+
+---
+
+## Log Path Rejected
+
+**Error:** `Invalid log path`
+
+**Valid log path prefixes:** `/var/log/`, `/boot/logs/`, `/mnt/`
+
+Use `unraid(action="disk", subaction="log_files")` to list available logs before reading.
+
+---
+
+## Container Logs Not Available
+
+Docker container stdout/stderr are **not accessible via the Unraid API**. SSH to the Unraid server and use `docker logs <container>` directly.

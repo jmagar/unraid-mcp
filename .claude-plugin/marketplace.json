@@ -5,8 +5,8 @@
     "email": "jmagar@users.noreply.github.com"
   },
   "metadata": {
-    "description": "Comprehensive Unraid server management and monitoring tools via GraphQL API",
-    "version": "0.2.0",
+    "description": "Comprehensive Unraid server management and monitoring via a single consolidated MCP tool (~108 actions across 15 domains)",
+    "version": "1.0.0",
     "homepage": "https://github.com/jmagar/unraid-mcp",
     "repository": "https://github.com/jmagar/unraid-mcp"
   },
@@ -14,8 +14,8 @@
     {
       "name": "unraid",
       "source": "./",
-      "description": "Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
-      "version": "0.2.0",
+      "description": "Query and monitor Unraid servers via GraphQL API — single `unraid` tool with action+subaction routing for array, disk, docker, VM, notifications, live metrics, and more",
+      "version": "1.0.0",
       "tags": ["unraid", "monitoring", "homelab", "graphql", "docker", "virtualization"],
       "category": "infrastructure"
     }

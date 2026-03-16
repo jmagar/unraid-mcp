@@ -107,8 +107,17 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
             data = await subscription_manager.get_resource_data(action)
-            if data:
+            if data is not None:
                 return json.dumps(data, indent=2)
+            # Surface permanent errors instead of reporting "connecting" indefinitely
+            last_error = subscription_manager.last_error.get(action)
+            if last_error:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"Subscription '{action}' failed: {last_error}",
+                    }
+                )
             return json.dumps(
                 {
                     "status": "connecting",

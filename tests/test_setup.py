@@ -468,8 +468,12 @@ async def test_elicit_reset_confirmation_returns_false_when_cancelled():
 
 
 @pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_not_implemented():
-    """Returns False when the MCP client does not support elicitation."""
+async def test_elicit_reset_confirmation_returns_true_when_not_implemented():
+    """Returns True (proceed with reset) when the MCP client does not support elicitation.
+
+    Non-interactive clients (stdio, CI) must not be permanently blocked from
+    reconfiguring credentials just because they can't ask the user a yes/no question.
+    """
     from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
@@ -478,7 +482,7 @@ async def test_elicit_reset_confirmation_returns_false_when_not_implemented():
     mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
 
     result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is False
+    assert result is True
 
 
 @pytest.mark.asyncio

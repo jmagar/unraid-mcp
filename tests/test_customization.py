@@ -25,14 +25,14 @@ async def test_theme_returns_customization(_mock_graphql):
         "customization": {"theme": {"name": "azure"}, "partnerInfo": None, "activationCode": None}
     }
     result = await _make_tool()(action="customization", subaction="theme")
-    assert "customization" in result
+    assert result["customization"]["theme"]["name"] == "azure"
 
 
 @pytest.mark.asyncio
 async def test_public_theme(_mock_graphql):
     _mock_graphql.return_value = {"publicTheme": {"name": "black"}}
     result = await _make_tool()(action="customization", subaction="public_theme")
-    assert "publicTheme" in result
+    assert result["publicTheme"]["name"] == "black"
 
 
 @pytest.mark.asyncio

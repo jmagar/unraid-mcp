@@ -35,7 +35,7 @@ async def test_providers_returns_list(_mock_graphql):
 async def test_public_providers(_mock_graphql):
     _mock_graphql.return_value = {"publicOidcProviders": []}
     result = await _make_tool()(action="oidc", subaction="public_providers")
-    assert "providers" in result
+    assert result["providers"] == []
 
 
 @pytest.mark.asyncio
@@ -60,4 +60,5 @@ async def test_configuration(_mock_graphql):
         "oidcConfiguration": {"providers": [], "defaultAllowedOrigins": []}
     }
     result = await _make_tool()(action="oidc", subaction="configuration")
-    assert "providers" in result
+    assert result["providers"] == []
+    assert result["defaultAllowedOrigins"] == []

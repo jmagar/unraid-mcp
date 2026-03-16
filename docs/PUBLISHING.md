@@ -40,7 +40,7 @@ Before publishing, update the version in `pyproject.toml`:
 
 ```toml
 [project]
-version = "0.2.1"  # Follow semantic versioning: MAJOR.MINOR.PATCH
+version = "1.0.0"  # Follow semantic versioning: MAJOR.MINOR.PATCH
 ```
 
 **Semantic Versioning Guide:**
@@ -156,7 +156,7 @@ UNRAID_API_URL=https://your-server uvx unraid-mcp-server
 **Benefits of uvx:**
 - No installation required
 - Automatic virtual environment management
-- Always uses the latest version (or specify version: `uvx unraid-mcp-server@0.2.0`)
+- Always uses the latest version (or specify version: `uvx unraid-mcp-server@1.0.0`)
 - Clean execution environment
 
 ## Automation with GitHub Actions (Future)

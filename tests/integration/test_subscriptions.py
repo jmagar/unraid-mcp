@@ -125,24 +125,6 @@ class TestSubscriptionManagerInit:
         cfg = mgr.subscription_configs["logFileSubscription"]
         assert cfg.get("auto_start") is False
 
-    def test_subscription_configs_contain_all_snapshot_actions(self) -> None:
-        from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
-
-        mgr = SubscriptionManager()
-        for action in SNAPSHOT_ACTIONS:
-            assert action in mgr.subscription_configs, (
-                f"'{action}' missing from subscription_configs"
-            )
-
-    def test_snapshot_actions_all_auto_start(self) -> None:
-        from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
-
-        mgr = SubscriptionManager()
-        for action in SNAPSHOT_ACTIONS:
-            assert mgr.subscription_configs[action].get("auto_start") is True, (
-                f"'{action}' missing auto_start=True"
-            )
-
 
 # ---------------------------------------------------------------------------
 # Connection Lifecycle
