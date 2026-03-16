@@ -3,6 +3,8 @@
 import importlib
 from unittest.mock import MagicMock, patch
 
+from unraid_mcp.server import _build_google_auth
+
 
 def test_build_google_auth_returns_none_when_unconfigured(monkeypatch):
     """Returns None when Google OAuth env vars are absent."""
@@ -13,8 +15,6 @@ def test_build_google_auth_returns_none_when_unconfigured(monkeypatch):
     import unraid_mcp.config.settings as s
 
     importlib.reload(s)
-
-    from unraid_mcp.server import _build_google_auth
 
     result = _build_google_auth()
     assert result is None
@@ -35,8 +35,6 @@ def test_build_google_auth_returns_provider_when_configured(monkeypatch):
     mock_provider_class = MagicMock(return_value=mock_provider)
 
     with patch("unraid_mcp.server.GoogleProvider", mock_provider_class):
-        from unraid_mcp.server import _build_google_auth
-
         result = _build_google_auth()
 
     assert result is mock_provider
@@ -62,8 +60,6 @@ def test_build_google_auth_omits_jwt_key_when_empty(monkeypatch):
     mock_provider_class = MagicMock(return_value=MagicMock())
 
     with patch("unraid_mcp.server.GoogleProvider", mock_provider_class):
-        from unraid_mcp.server import _build_google_auth
-
         _build_google_auth()
 
     call_kwargs = mock_provider_class.call_args.kwargs
@@ -82,8 +78,6 @@ def test_build_google_auth_warns_on_stdio_transport(monkeypatch):
     importlib.reload(s)
 
     warning_messages: list[str] = []
-
-    from unraid_mcp.server import _build_google_auth
 
     with (
         patch("unraid_mcp.server.GoogleProvider", MagicMock(return_value=MagicMock())),
