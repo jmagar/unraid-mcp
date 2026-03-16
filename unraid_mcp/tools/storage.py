@@ -1,7 +1,7 @@
 """Storage and disk management.
 
 Provides the `unraid_storage` tool with 6 actions for shares, physical disks,
-unassigned devices, log files, and log content retrieval.
+log files, and log content retrieval.
 """
 
 import os
@@ -39,11 +39,6 @@ QUERIES: dict[str, str] = {
           }
         }
     """,
-    "unassigned": """
-        query GetUnassignedDevices {
-          unassignedDevices { id device name size type }
-        }
-    """,
     "log_files": """
         query ListLogFiles {
           logFiles { name path size modifiedAt }
@@ -73,7 +68,6 @@ STORAGE_ACTIONS = Literal[
     "shares",
     "disks",
     "disk_details",
-    "unassigned",
     "log_files",
     "logs",
     "flash_backup",
@@ -109,7 +103,6 @@ def register_storage_tool(mcp: FastMCP) -> None:
           shares - List all user shares with capacity info
           disks - List all physical disks
           disk_details - Detailed SMART info for a disk (requires disk_id)
-          unassigned - List unassigned devices
           log_files - List available log files
           logs - Retrieve log content (requires log_path, optional tail_lines)
           flash_backup - Initiate flash backup via rclone (requires remote_name, source_path, destination_path, confirm=True)
@@ -202,9 +195,6 @@ def register_storage_tool(mcp: FastMCP) -> None:
                     ),
                 }
                 return {"summary": summary, "details": raw}
-
-            if action == "unassigned":
-                return {"devices": data.get("unassignedDevices", [])}
 
             if action == "log_files":
                 return {"log_files": data.get("logFiles", [])}

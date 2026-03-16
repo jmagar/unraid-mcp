@@ -1,6 +1,7 @@
 """Tests for unraid_storage tool."""
 
 from collections.abc import Generator
+from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,6 +9,13 @@ from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
 from unraid_mcp.core.utils import format_bytes, format_kb, safe_get
+from unraid_mcp.tools.storage import STORAGE_ACTIONS
+
+
+def test_unassigned_action_removed() -> None:
+    assert "unassigned" not in get_args(STORAGE_ACTIONS), (
+        "unassigned action references unassignedDevices which is not in live API"
+    )
 
 
 # --- Unit tests for helpers ---
@@ -235,12 +243,6 @@ class TestStorageActions:
         with pytest.raises(ToolError, match="not found"):
             await tool_fn(action="disk_details", disk_id="d:missing")
 
-    async def test_unassigned(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {"unassignedDevices": []}
-        tool_fn = _make_tool()
-        result = await tool_fn(action="unassigned")
-        assert result["devices"] == []
-
     async def test_log_files(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"logFiles": [{"name": "syslog", "path": "/var/log/syslog"}]}
         tool_fn = _make_tool()
@@ -289,7 +291,9 @@ class TestStorageFlashBackup:
     async def test_flash_backup_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="destructive"):
-            await tool_fn(action="flash_backup", remote_name="r", source_path="/boot", destination_path="r:b")
+            await tool_fn(
+                action="flash_backup", remote_name="r", source_path="/boot", destination_path="r:b"
+            )
 
     async def test_flash_backup_requires_remote_name(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
@@ -309,12 +313,25 @@ class TestStorageFlashBackup:
     async def test_flash_backup_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:1"}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b")
+        result = await tool_fn(
+            action="flash_backup",
+            confirm=True,
+            remote_name="r",
+            source_path="/boot",
+            destination_path="r:b",
+        )
         assert result["success"] is True
         assert result["data"]["status"] == "started"
 
     async def test_flash_backup_passes_options(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:2"}}
         tool_fn = _make_tool()
-        await tool_fn(action="flash_backup", confirm=True, remote_name="r", source_path="/boot", destination_path="r:b", backup_options={"dryRun": True})
+        await tool_fn(
+            action="flash_backup",
+            confirm=True,
+            remote_name="r",
+            source_path="/boot",
+            destination_path="r:b",
+            backup_options={"dryRun": True},
+        )
         assert _mock_graphql.call_args[0][1]["input"]["options"] == {"dryRun": True}
