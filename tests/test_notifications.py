@@ -17,6 +17,12 @@ def test_warnings_action_removed() -> None:
     )
 
 
+def test_create_unique_action_removed() -> None:
+    assert "create_unique" not in get_args(NOTIFICATION_ACTIONS), (
+        "create_unique references notifyIfUnique which is not in live API"
+    )
+
+
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
     with patch(
@@ -264,40 +270,6 @@ class TestNewNotificationMutations:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="notification_ids"):
             await tool_fn(action="archive_many")
-
-    async def test_create_unique_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "notifyIfUnique": {"id": "n:1", "title": "Test", "importance": "INFO"}
-        }
-        tool_fn = _make_tool()
-        result = await tool_fn(
-            action="create_unique",
-            title="Test",
-            subject="Subj",
-            description="Desc",
-            importance="info",
-        )
-        assert result["success"] is True
-
-    async def test_create_unique_returns_none_when_duplicate(
-        self, _mock_graphql: AsyncMock
-    ) -> None:
-        _mock_graphql.return_value = {"notifyIfUnique": None}
-        tool_fn = _make_tool()
-        result = await tool_fn(
-            action="create_unique",
-            title="T",
-            subject="S",
-            description="D",
-            importance="info",
-        )
-        assert result["success"] is True
-        assert result["duplicate"] is True
-
-    async def test_create_unique_requires_fields(self, _mock_graphql: AsyncMock) -> None:
-        tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="requires title"):
-            await tool_fn(action="create_unique")
 
     async def test_unarchive_many_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {

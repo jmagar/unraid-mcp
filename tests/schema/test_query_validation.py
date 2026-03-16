@@ -575,7 +575,6 @@ class TestNotificationMutations:
 
         expected = {
             "create",
-            "create_unique",
             "archive",
             "unread",
             "delete",
@@ -739,14 +738,6 @@ class TestSettingsMutations:
         expected = {
             "update",
             "configure_ups",
-            "update_temperature",
-            "update_time",
-            "update_api",
-            "connect_sign_in",
-            "connect_sign_out",
-            "setup_remote_access",
-            "enable_dynamic_remote_access",
-            "update_ssh",
         }
         assert set(MUTATIONS.keys()) == expected
 

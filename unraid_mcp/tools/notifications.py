@@ -83,11 +83,6 @@ MUTATIONS: dict[str, str] = {
           }
         }
     """,
-    "create_unique": """
-        mutation NotifyIfUnique($input: NotificationData!) {
-          notifyIfUnique(input: $input) { id title importance }
-        }
-    """,
     "unarchive_many": """
         mutation UnarchiveNotifications($ids: [PrefixedID!]!) {
           unarchiveNotifications(ids: $ids) {
@@ -128,7 +123,6 @@ NOTIFICATION_ACTIONS = Literal[
     "delete_archived",
     "archive_all",
     "archive_many",
-    "create_unique",
     "unarchive_many",
     "unarchive_all",
     "recalculate",
@@ -173,7 +167,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
           delete_archived - Delete all archived notifications (requires confirm=True)
           archive_all - Archive all notifications (optional importance filter)
           archive_many - Archive multiple notifications by ID (requires notification_ids)
-          create_unique - Create notification only if no equivalent unread exists (requires title, subject, description, importance)
           unarchive_many - Move notifications back to unread (requires notification_ids)
           unarchive_all - Move all archived notifications to unread (optional importance filter)
           recalculate - Recompute overview counts from disk
@@ -283,36 +276,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                     MUTATIONS["archive_many"], {"ids": notification_ids}
                 )
                 return {"success": True, "action": "archive_many", "data": data}
-
-            if action == "create_unique":
-                if title is None or subject is None or description is None or importance is None:
-                    raise ToolError(
-                        "create_unique requires title, subject, description, and importance"
-                    )
-                if importance.upper() not in _VALID_IMPORTANCE:
-                    raise ToolError(
-                        f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}. "
-                        f"Got: '{importance}'"
-                    )
-                if len(title) > 200:
-                    raise ToolError(f"title must be at most 200 characters (got {len(title)})")
-                if len(subject) > 500:
-                    raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
-                if len(description) > 2000:
-                    raise ToolError(
-                        f"description must be at most 2000 characters (got {len(description)})"
-                    )
-                input_data = {
-                    "title": title,
-                    "subject": subject,
-                    "description": description,
-                    "importance": importance.upper(),
-                }
-                data = await make_graphql_request(MUTATIONS["create_unique"], {"input": input_data})
-                notification = data.get("notifyIfUnique")
-                if notification is None:
-                    return {"success": True, "duplicate": True, "data": None}
-                return {"success": True, "duplicate": False, "data": notification}
 
             if action == "unarchive_many":
                 if not notification_ids:

@@ -153,22 +153,9 @@ QUERIES: dict[str, str] = {
     """,
 }
 
-MUTATIONS: dict[str, str] = {
-    "update_server": """
-        mutation UpdateServerIdentity($name: String!, $comment: String, $sysModel: String) {
-          updateServerIdentity(name: $name, comment: $comment, sysModel: $sysModel) {
-            id name comment status
-          }
-        }
-    """,
-    "update_ssh": """
-        mutation UpdateSshSettings($input: UpdateSshInput!) {
-          updateSshSettings(input: $input) { id useSsh portssh }
-        }
-    """,
-}
+MUTATIONS: dict[str, str] = {}
 
-DESTRUCTIVE_ACTIONS = {"update_ssh"}
+DESTRUCTIVE_ACTIONS: set[str] = set()
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS)
 
 INFO_ACTIONS = Literal[
@@ -191,8 +178,6 @@ INFO_ACTIONS = Literal[
     "ups_devices",
     "ups_device",
     "ups_config",
-    "update_server",
-    "update_ssh",
 ]
 
 if set(get_args(INFO_ACTIONS)) != ALL_ACTIONS:
@@ -324,13 +309,7 @@ def register_info_tool(mcp: FastMCP) -> None:
     @mcp.tool()
     async def unraid_info(
         action: INFO_ACTIONS,
-        confirm: bool = False,
         device_id: str | None = None,
-        server_name: str | None = None,
-        server_comment: str | None = None,
-        sys_model: str | None = None,
-        ssh_enabled: bool | None = None,
-        ssh_port: int | None = None,
     ) -> dict[str, Any]:
         """Query Unraid system information.
 
@@ -354,51 +333,12 @@ def register_info_tool(mcp: FastMCP) -> None:
           ups_devices - List UPS devices
           ups_device - Single UPS device (requires device_id)
           ups_config - UPS configuration
-          update_server - Update server name, comment, and model (requires server_name)
-          update_ssh - Enable/disable SSH and set port (requires ssh_enabled, ssh_port)
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
-
         if action == "ups_device" and not device_id:
             raise ToolError("device_id is required for ups_device action")
-
-        # Mutation handlers — must return before query = QUERIES[action]
-        if action == "update_server":
-            if server_name is None:
-                raise ToolError("server_name is required for 'update_server' action")
-            variables_mut: dict[str, Any] = {"name": server_name}
-            if server_comment is not None:
-                variables_mut["comment"] = server_comment
-            if sys_model is not None:
-                variables_mut["sysModel"] = sys_model
-            with tool_error_handler("info", action, logger):
-                logger.info("Executing unraid_info action=update_server")
-                data = await make_graphql_request(MUTATIONS["update_server"], variables_mut)
-                return {
-                    "success": True,
-                    "action": "update_server",
-                    "data": data.get("updateServerIdentity"),
-                }
-
-        if action == "update_ssh":
-            if ssh_enabled is None:
-                raise ToolError("ssh_enabled is required for 'update_ssh' action")
-            if ssh_port is None:
-                raise ToolError("ssh_port is required for 'update_ssh' action")
-            with tool_error_handler("info", action, logger):
-                logger.info("Executing unraid_info action=update_ssh")
-                data = await make_graphql_request(
-                    MUTATIONS["update_ssh"], {"input": {"enabled": ssh_enabled, "port": ssh_port}}
-                )
-                return {
-                    "success": True,
-                    "action": "update_ssh",
-                    "data": data.get("updateSshSettings"),
-                }
 
         # connect is not available on all Unraid API versions
         if action == "connect":
