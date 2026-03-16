@@ -59,21 +59,32 @@ MUTATIONS: dict[str, str] = {
           enableDynamicRemoteAccess(input: $input)
         }
     """,
+    "update_ssh": """
+        mutation UpdateSshSettings($input: UpdateSshInput!) {
+          updateSshSettings(input: $input) { useSsh portssh }
+        }
+    """,
 }
 
-DESTRUCTIVE_ACTIONS = {"configure_ups", "setup_remote_access", "enable_dynamic_remote_access"}
+DESTRUCTIVE_ACTIONS = {
+    "configure_ups",
+    "setup_remote_access",
+    "enable_dynamic_remote_access",
+    "update_ssh",
+}
 ALL_ACTIONS = set(MUTATIONS)
 
 SETTINGS_ACTIONS = Literal[
-    "update",
-    "update_temperature",
-    "update_time",
     "configure_ups",
-    "update_api",
     "connect_sign_in",
     "connect_sign_out",
-    "setup_remote_access",
     "enable_dynamic_remote_access",
+    "setup_remote_access",
+    "update",
+    "update_api",
+    "update_ssh",
+    "update_temperature",
+    "update_time",
 ]
 
 if set(get_args(SETTINGS_ACTIONS)) != ALL_ACTIONS:
@@ -111,6 +122,8 @@ def register_settings_tool(mcp: FastMCP) -> None:
         access_url_ipv4: str | None = None,
         access_url_ipv6: str | None = None,
         dynamic_enabled: bool | None = None,
+        ssh_enabled: bool | None = None,
+        ssh_port: int | None = None,
     ) -> dict[str, Any]:
         """Update Unraid system settings, time, UPS, and remote access configuration.
 
@@ -124,6 +137,7 @@ def register_settings_tool(mcp: FastMCP) -> None:
           connect_sign_out - Sign out from Unraid Connect
           setup_remote_access - Configure remote access (requires access_type, confirm=True)
           enable_dynamic_remote_access - Enable/disable dynamic remote access (requires access_url_type, dynamic_enabled, confirm=True)
+          update_ssh - Enable/disable SSH and set port (requires ssh_enabled, ssh_port, confirm=True)
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
@@ -278,6 +292,21 @@ def register_settings_tool(mcp: FastMCP) -> None:
                     "success": True,
                     "action": "enable_dynamic_remote_access",
                     "result": data.get("enableDynamicRemoteAccess"),
+                }
+
+            if action == "update_ssh":
+                if ssh_enabled is None:
+                    raise ToolError("ssh_enabled is required for 'update_ssh' action")
+                if ssh_port is None:
+                    raise ToolError("ssh_port is required for 'update_ssh' action")
+                data = await make_graphql_request(
+                    MUTATIONS["update_ssh"],
+                    {"input": {"enabled": ssh_enabled, "port": ssh_port}},
+                )
+                return {
+                    "success": True,
+                    "action": "update_ssh",
+                    "data": data.get("updateSshSettings"),
                 }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")

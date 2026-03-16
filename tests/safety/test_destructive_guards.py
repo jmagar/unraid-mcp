@@ -89,7 +89,12 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
         "module": "unraid_mcp.tools.settings",
         "register_fn": "register_settings_tool",
         "tool_name": "unraid_settings",
-        "actions": {"configure_ups", "setup_remote_access", "enable_dynamic_remote_access"},
+        "actions": {
+            "configure_ups",
+            "setup_remote_access",
+            "enable_dynamic_remote_access",
+            "update_ssh",
+        },
         "runtime_set": SETTINGS_DESTRUCTIVE,
     },
     "plugins": {
@@ -217,6 +222,7 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     ),
     # Settings
     ("settings", "configure_ups", {"ups_config": {"mode": "slave"}}),
+    ("settings", "update_ssh", {"ssh_enabled": True, "ssh_port": 22}),
     # Plugins
     ("plugins", "remove", {"names": ["my-plugin"]}),
 ]
@@ -453,6 +459,16 @@ class TestConfirmAllowsExecution:
         result = await tool_fn(
             action="configure_ups", confirm=True, ups_config={"mode": "master", "cable": "usb"}
         )
+        assert result["success"] is True
+
+    async def test_settings_update_ssh_with_confirm(
+        self, _mock_settings_graphql: AsyncMock
+    ) -> None:
+        _mock_settings_graphql.return_value = {"updateSshSettings": {"useSsh": True, "portssh": 22}}
+        tool_fn = make_tool_fn(
+            "unraid_mcp.tools.settings", "register_settings_tool", "unraid_settings"
+        )
+        result = await tool_fn(action="update_ssh", confirm=True, ssh_enabled=True, ssh_port=22)
         assert result["success"] is True
 
     async def test_array_remove_disk_with_confirm(self, _mock_array_graphql: AsyncMock) -> None:

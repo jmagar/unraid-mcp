@@ -58,6 +58,11 @@ class TestSettingsValidation:
                 action="enable_dynamic_remote_access", access_url_type="WAN", dynamic_enabled=True
             )
 
+    async def test_destructive_update_ssh_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="confirm=True"):
+            await tool_fn(action="update_ssh", ssh_enabled=True, ssh_port=22)
+
 
 class TestSettingsUpdate:
     """Tests for update action."""
@@ -267,3 +272,32 @@ class TestRemoteAccess:
             access_url_ipv6="::1",
         )
         assert result["success"] is True
+
+
+class TestSshSettings:
+    """Tests for update_ssh action."""
+
+    async def test_update_ssh_requires_ssh_enabled(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="ssh_enabled is required"):
+            await tool_fn(action="update_ssh", confirm=True, ssh_port=22)
+
+    async def test_update_ssh_requires_ssh_port(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="ssh_port is required"):
+            await tool_fn(action="update_ssh", confirm=True, ssh_enabled=True)
+
+    async def test_update_ssh_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateSshSettings": {"useSsh": True, "portssh": 22}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="update_ssh", confirm=True, ssh_enabled=True, ssh_port=22)
+        assert result["success"] is True
+        assert result["action"] == "update_ssh"
+
+    async def test_update_ssh_disable(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateSshSettings": {"useSsh": False, "portssh": 22}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="update_ssh", confirm=True, ssh_enabled=False, ssh_port=22)
+        assert result["success"] is True
+        call_vars = _mock_graphql.call_args[0][1]
+        assert call_vars["input"] == {"enabled": False, "port": 22}

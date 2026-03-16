@@ -765,6 +765,7 @@ class TestSettingsMutations:
             "connect_sign_out",
             "setup_remote_access",
             "enable_dynamic_remote_access",
+            "update_ssh",
         }
         assert set(MUTATIONS.keys()) == expected
 
