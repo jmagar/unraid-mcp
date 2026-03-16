@@ -61,6 +61,25 @@ docker compose down
   - `UNRAID_MCP_PORT`: Server port (default: 6970)
   - `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
 
+### Google OAuth (Optional — protects the HTTP server)
+
+When `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `UNRAID_MCP_BASE_URL` are all set,
+the MCP server requires Google login before any tool call.
+
+| Env Var | Required | Purpose |
+|---------|----------|---------|
+| `GOOGLE_CLIENT_ID` | For OAuth | Google OAuth 2.0 Client ID |
+| `GOOGLE_CLIENT_SECRET` | For OAuth | Google OAuth 2.0 Client Secret |
+| `UNRAID_MCP_BASE_URL` | For OAuth | Public URL of this server (e.g. `http://10.1.0.2:6970`) |
+| `UNRAID_MCP_JWT_SIGNING_KEY` | Recommended | Stable 32+ char secret — prevents token invalidation on restart |
+
+**Google Cloud Console setup:**
+1. APIs & Services → Credentials → Create OAuth 2.0 Client ID (Web application)
+2. Authorized redirect URIs: `<UNRAID_MCP_BASE_URL>/auth/callback`
+3. Copy Client ID + Secret to `~/.unraid-mcp/.env`
+
+**Omit `GOOGLE_CLIENT_ID` to run without auth** (default — preserves existing behaviour).
+
 ## Architecture
 
 ### Core Components
