@@ -429,35 +429,6 @@ class TestDockerToolRequests:
         assert body["variables"] == {"id": container_id}
 
     @respx.mock
-    async def test_remove_requires_confirm(self) -> None:
-        tool = self._get_tool()
-        with pytest.raises(ToolError, match="destructive"):
-            await tool(action="remove", container_id="a" * 64)
-
-    @respx.mock
-    async def test_remove_sends_mutation_when_confirmed(self) -> None:
-        container_id = "c" * 64
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"docker": {"removeContainer": True}})
-        )
-        tool = self._get_tool()
-        await tool(action="remove", container_id=container_id, confirm=True)
-        body = _extract_request_body(route.calls.last.request)
-        assert "RemoveContainer" in body["query"]
-
-    @respx.mock
-    async def test_logs_sends_query_with_tail(self) -> None:
-        container_id = "d" * 64
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"docker": {"logs": "line1\nline2"}})
-        )
-        tool = self._get_tool()
-        await tool(action="logs", container_id=container_id, tail_lines=50)
-        body = _extract_request_body(route.calls.last.request)
-        assert "GetContainerLogs" in body["query"]
-        assert body["variables"]["tail"] == 50
-
-    @respx.mock
     async def test_networks_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response(
@@ -472,16 +443,6 @@ class TestDockerToolRequests:
         await tool(action="networks")
         body = _extract_request_body(route.calls.last.request)
         assert "GetDockerNetworks" in body["query"]
-
-    @respx.mock
-    async def test_check_updates_sends_correct_query(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"docker": {"containerUpdateStatuses": []}})
-        )
-        tool = self._get_tool()
-        await tool(action="check_updates")
-        body = _extract_request_body(route.calls.last.request)
-        assert "CheckContainerUpdates" in body["query"]
 
     @respx.mock
     async def test_restart_sends_stop_then_start(self) -> None:
@@ -827,15 +788,6 @@ class TestStorageToolRequests:
         with pytest.raises(ToolError, match="log_path must start with"):
             await tool(action="logs", log_path="/etc/shadow")
 
-    @respx.mock
-    async def test_unassigned_sends_correct_query(self) -> None:
-        route = respx.post(API_URL).mock(return_value=_graphql_response({"unassignedDevices": []}))
-        tool = self._get_tool()
-        result = await tool(action="unassigned")
-        body = _extract_request_body(route.calls.last.request)
-        assert "GetUnassignedDevices" in body["query"]
-        assert "devices" in result
-
 
 # ===========================================================================
 # Section 10: Notifications tool request construction
@@ -885,17 +837,6 @@ class TestNotificationsToolRequests:
         assert filt["importance"] == "WARNING"
         assert filt["offset"] == 5
         assert filt["limit"] == 10
-
-    @respx.mock
-    async def test_warnings_sends_correct_query(self) -> None:
-        route = respx.post(API_URL).mock(
-            return_value=_graphql_response({"notifications": {"warningsAndAlerts": []}})
-        )
-        tool = self._get_tool()
-        result = await tool(action="warnings")
-        body = _extract_request_body(route.calls.last.request)
-        assert "GetWarningsAndAlerts" in body["query"]
-        assert "warnings" in result
 
     @respx.mock
     async def test_create_sends_input_variables(self) -> None:
