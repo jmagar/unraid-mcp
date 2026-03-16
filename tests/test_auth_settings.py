@@ -1,9 +1,10 @@
 """Tests for Google OAuth settings loading."""
 
 import importlib
+from typing import Any
 
 
-def _reload_settings(monkeypatch, overrides: dict) -> object:
+def _reload_settings(monkeypatch, overrides: dict) -> Any:
     """Reload settings module with given env vars set."""
     for k, v in overrides.items():
         monkeypatch.setenv(k, v)
