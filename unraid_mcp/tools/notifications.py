@@ -1,6 +1,6 @@
 """Notification management.
 
-Provides the `unraid_notifications` tool with 9 actions for viewing,
+Provides the `unraid_notifications` tool with 13 actions for viewing,
 creating, archiving, and deleting system notifications.
 """
 
@@ -30,13 +30,6 @@ QUERIES: dict[str, str] = {
             list(filter: $filter) {
               id title subject description importance link type timestamp formattedTimestamp
             }
-          }
-        }
-    """,
-    "warnings": """
-        query GetWarningsAndAlerts {
-          notifications {
-            warningsAndAlerts { id title subject description importance type timestamp }
           }
         }
     """,
@@ -128,7 +121,6 @@ _VALID_IMPORTANCE = {"ALERT", "WARNING", "INFO"}
 NOTIFICATION_ACTIONS = Literal[
     "overview",
     "list",
-    "warnings",
     "create",
     "archive",
     "unread",
@@ -174,7 +166,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
         Actions:
           overview - Notification counts by severity (unread/archive)
           list - List notifications with filtering (list_type=UNREAD/ARCHIVE, importance=INFO/WARNING/ALERT)
-          warnings - Get deduplicated unread warnings and alerts
           create - Create notification (requires title, subject, description, importance)
           archive - Archive a notification (requires notification_id)
           unread - Mark notification as unread (requires notification_id)
@@ -232,11 +223,6 @@ def register_notifications_tool(mcp: FastMCP) -> None:
                 data = await make_graphql_request(QUERIES["list"], {"filter": filter_vars})
                 notifications = data.get("notifications", {})
                 return {"notifications": notifications.get("list", [])}
-
-            if action == "warnings":
-                data = await make_graphql_request(QUERIES["warnings"])
-                notifications = data.get("notifications", {})
-                return {"warnings": notifications.get("warningsAndAlerts", [])}
 
             if action == "create":
                 if title is None or subject is None or description is None or importance is None:

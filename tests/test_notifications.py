@@ -1,12 +1,20 @@
 """Tests for unraid_notifications tool."""
 
 from collections.abc import Generator
+from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
+from unraid_mcp.tools.notifications import NOTIFICATION_ACTIONS
+
+
+def test_warnings_action_removed() -> None:
+    assert "warnings" not in get_args(NOTIFICATION_ACTIONS), (
+        "warnings action references warningsAndAlerts which is not in live API"
+    )
 
 
 @pytest.fixture
@@ -71,14 +79,6 @@ class TestNotificationsActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="list")
         assert len(result["notifications"]) == 1
-
-    async def test_warnings(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "notifications": {"warningsAndAlerts": [{"id": "n:1", "importance": "WARNING"}]}
-        }
-        tool_fn = _make_tool()
-        result = await tool_fn(action="warnings")
-        assert len(result["warnings"]) == 1
 
     async def test_create(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
