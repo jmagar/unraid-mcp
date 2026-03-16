@@ -5,6 +5,7 @@ separate modules for configuration, core functionality, subscriptions, and tools
 """
 
 import sys
+from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.server.auth.providers.google import GoogleProvider
@@ -95,7 +96,7 @@ def _build_google_auth() -> "GoogleProvider | None":
             "Auth will be applied but may not work as expected."
         )
 
-    kwargs: dict[str, str] = {
+    kwargs: dict[str, Any] = {
         "client_id": GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
         "base_url": UNRAID_MCP_BASE_URL,
