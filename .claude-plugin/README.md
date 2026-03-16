@@ -49,7 +49,7 @@ Query and monitor Unraid servers via GraphQL API - array status, disk health, co
 
 After installation, run setup to configure credentials interactively:
 
-```
+```python
 unraid(action="health", subaction="setup")
 ```
 

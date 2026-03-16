@@ -2,7 +2,7 @@
 # =============================================================================
 # test-tools.sh — Integration smoke-test for unraid-mcp MCP server tools
 #
-# Exercises every non-destructive action using the consolidated `unraid` tool
+# Exercises broad non-destructive smoke coverage of the consolidated `unraid` tool
 # (action + subaction pattern). The server is launched ad-hoc via mcporter's
 # --stdio flag so no persistent process or registered server entry is required.
 #
@@ -299,6 +299,24 @@ skip_test() {
 }
 
 # ---------------------------------------------------------------------------
+# Safe JSON payload builder
+#   Usage: _json_payload '<jq-template-with-$vars>' key1=value1 key2=value2 ...
+#   Uses jq --arg to safely encode shell values into JSON, preventing injection
+#   via special characters in variable values (e.g., quotes, backslashes).
+# ---------------------------------------------------------------------------
+_json_payload() {
+  local template="${1:?template required}"; shift
+  local jq_args=()
+  local pair k v
+  for pair in "$@"; do
+    k="${pair%%=*}"
+    v="${pair#*=}"
+    jq_args+=(--arg "$k" "$v")
+  done
+  jq -n "${jq_args[@]}" "$template"
+}
+
+# ---------------------------------------------------------------------------
 # ID extractors
 # ---------------------------------------------------------------------------
 
@@ -441,9 +459,9 @@ suite_system() {
   ups_id="$(get_ups_id)" || ups_id=''
   if [[ -n "${ups_id}" ]]; then
     run_test "system: ups_device" \
-      "$(printf '{"action":"system","subaction":"ups_device","device_id":"%s"}' "${ups_id}")"
+      "$(_json_payload '{"action":"system","subaction":"ups_device","device_id":$v}' v="${ups_id}")"
     run_test "system: ups_config" \
-      "$(printf '{"action":"system","subaction":"ups_config","device_id":"%s"}' "${ups_id}")"
+      "$(_json_payload '{"action":"system","subaction":"ups_config","device_id":$v}' v="${ups_id}")"
   else
     skip_test "system: ups_device" "no UPS devices found"
     skip_test "system: ups_config" "no UPS devices found"
@@ -469,7 +487,7 @@ suite_disk() {
   disk_id="$(get_disk_id)" || disk_id=''
   if [[ -n "${disk_id}" ]]; then
     run_test "disk: disk_details" \
-      "$(printf '{"action":"disk","subaction":"disk_details","disk_id":"%s"}' "${disk_id}")"
+      "$(_json_payload '{"action":"disk","subaction":"disk_details","disk_id":$v}' v="${disk_id}")"
   else
     skip_test "disk: disk_details" "no disks found"
   fi
@@ -478,7 +496,7 @@ suite_disk() {
   log_path="$(get_log_path)" || log_path=''
   if [[ -n "${log_path}" ]]; then
     run_test "disk: logs" \
-      "$(printf '{"action":"disk","subaction":"logs","log_path":"%s","tail_lines":20}' "${log_path}")"
+      "$(_json_payload '{"action":"disk","subaction":"logs","log_path":$v,"tail_lines":20}' v="${log_path}")"
   else
     skip_test "disk: logs" "no log files found"
   fi
@@ -495,7 +513,7 @@ suite_docker() {
   container_id="$(get_docker_id)" || container_id=''
   if [[ -n "${container_id}" ]]; then
     run_test "docker: details" \
-      "$(printf '{"action":"docker","subaction":"details","container_id":"%s"}' "${container_id}")"
+      "$(_json_payload '{"action":"docker","subaction":"details","container_id":$v}' v="${container_id}")"
   else
     skip_test "docker: details" "no containers found"
   fi
@@ -504,7 +522,7 @@ suite_docker() {
   network_id="$(get_network_id)" || network_id=''
   if [[ -n "${network_id}" ]]; then
     run_test "docker: network_details" \
-      "$(printf '{"action":"docker","subaction":"network_details","network_id":"%s"}' "${network_id}")"
+      "$(_json_payload '{"action":"docker","subaction":"network_details","network_id":$v}' v="${network_id}")"
   else
     skip_test "docker: network_details" "no networks found"
   fi
@@ -520,7 +538,7 @@ suite_vm() {
   vm_id="$(get_vm_id)" || vm_id=''
   if [[ -n "${vm_id}" ]]; then
     run_test "vm: details" \
-      "$(printf '{"action":"vm","subaction":"details","vm_id":"%s"}' "${vm_id}")"
+      "$(_json_payload '{"action":"vm","subaction":"details","vm_id":$v}' v="${vm_id}")"
   else
     skip_test "vm: details" "no VMs found (or VM service unavailable)"
   fi
@@ -558,7 +576,7 @@ suite_key() {
   key_id="$(get_key_id)" || key_id=''
   if [[ -n "${key_id}" ]]; then
     run_test "key: get" \
-      "$(printf '{"action":"key","subaction":"get","key_id":"%s"}' "${key_id}")"
+      "$(_json_payload '{"action":"key","subaction":"get","key_id":$v}' v="${key_id}")"
   else
     skip_test "key: get" "no API keys found"
   fi

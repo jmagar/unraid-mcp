@@ -5,7 +5,8 @@
 **Error:** `CredentialsNotConfiguredError` or message containing `~/.unraid-mcp/.env`
 
 **Fix:** Run setup to configure credentials interactively:
-```
+
+```python
 unraid(action="health", subaction="setup")
 ```
 
@@ -20,12 +21,14 @@ This writes `UNRAID_API_URL` and `UNRAID_API_KEY` to `~/.unraid-mcp/.env`. Re-ru
 **Diagnostic steps:**
 
 1. Test basic connectivity:
-```
+
+```python
 unraid(action="health", subaction="test_connection")
 ```
 
 2. Full diagnostic report:
-```
+
+```python
 unraid(action="health", subaction="diagnose")
 ```
 
@@ -57,7 +60,8 @@ unraid(action="health", subaction="diagnose")
 **Error:** `Action 'X' was not confirmed. Re-run with confirm=True to bypass elicitation.`
 
 **Fix:** Add `confirm=True` to the call:
-```
+
+```python
 unraid(action="array", subaction="stop_array", confirm=True)
 unraid(action="vm",    subaction="force_stop", vm_id="<id>", confirm=True)
 ```
