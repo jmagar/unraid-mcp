@@ -76,6 +76,28 @@ elif raw_verify_ssl in ["true", "1", "yes"]:
 else:  # Path to CA bundle
     UNRAID_VERIFY_SSL = raw_verify_ssl
 
+# Google OAuth Configuration (Optional)
+# -------------------------------------
+# When set, the MCP HTTP server requires Google login before tool calls.
+# UNRAID_MCP_BASE_URL must match the public URL clients use to reach this server.
+# Google Cloud Console → Credentials → Authorized redirect URIs:
+#   Add: <UNRAID_MCP_BASE_URL>/auth/callback
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+UNRAID_MCP_BASE_URL = os.getenv("UNRAID_MCP_BASE_URL", "")
+
+# JWT signing key for FastMCP OAuth tokens.
+# MUST be set to a stable secret so tokens survive server restarts.
+# Generate once: python3 -c "import secrets; print(secrets.token_hex(32))"
+# Never change this value — all existing tokens will be invalidated.
+UNRAID_MCP_JWT_SIGNING_KEY = os.getenv("UNRAID_MCP_JWT_SIGNING_KEY", "")
+
+
+def is_google_auth_configured() -> bool:
+    """Return True when all required Google OAuth vars are present."""
+    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and UNRAID_MCP_BASE_URL)
+
+
 # Logging Configuration
 LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
 LOG_FILE_NAME = os.getenv("UNRAID_MCP_LOG_FILE", "unraid-mcp.log")
@@ -155,6 +177,9 @@ def get_config_summary() -> dict[str, Any]:
         "log_file": str(LOG_FILE_PATH),
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
+        "google_auth_enabled": is_google_auth_configured(),
+        "google_auth_base_url": UNRAID_MCP_BASE_URL if is_google_auth_configured() else None,
+        "jwt_signing_key_configured": bool(UNRAID_MCP_JWT_SIGNING_KEY),
     }
 
 
