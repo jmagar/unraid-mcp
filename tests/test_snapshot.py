@@ -116,3 +116,10 @@ async def test_subscribe_collect_returns_multiple_events(mock_ws):
 
     assert len(result) == 2
     assert result[0]["notificationAdded"]["id"] == "1"
+
+
+def test_snapshot_actions_importable_from_subscriptions() -> None:
+    from unraid_mcp.subscriptions.queries import COLLECT_ACTIONS, SNAPSHOT_ACTIONS
+
+    assert "cpu" in SNAPSHOT_ACTIONS
+    assert "log_tail" in COLLECT_ACTIONS
