@@ -129,6 +129,11 @@ class TestHealthActions:
         mock_manager.active_subscriptions = {}
         mock_manager.resource_data = {}
 
+        mock_cache = MagicMock()
+        mock_cache.statistics.return_value = MagicMock(call_tool=None)
+        mock_error = MagicMock()
+        mock_error.get_error_stats.return_value = {}
+
         with (
             patch("unraid_mcp.subscriptions.manager.subscription_manager", mock_manager),
             patch("unraid_mcp.subscriptions.resources.ensure_subscriptions_started", AsyncMock()),
@@ -136,10 +141,14 @@ class TestHealthActions:
                 "unraid_mcp.subscriptions.utils._analyze_subscription_status",
                 return_value=(0, []),
             ),
+            patch("unraid_mcp.server.cache_middleware", mock_cache),
+            patch("unraid_mcp.server.error_middleware", mock_error),
         ):
             result = await tool_fn(action="health", subaction="diagnose")
         assert "subscriptions" in result
         assert "summary" in result
+        assert "cache" in result
+        assert "errors" in result
 
     async def test_diagnose_wraps_exception(self, _mock_graphql: AsyncMock) -> None:
         """When subscription manager raises, tool wraps in ToolError."""
@@ -223,7 +232,7 @@ async def test_health_setup_action_calls_elicitation() -> None:
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=True)
+            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
         ) as mock_elicit,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
@@ -242,7 +251,7 @@ async def test_health_setup_action_returns_declined_message() -> None:
 
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch("unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=False)),
+        patch("unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=False)),
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 
@@ -268,10 +277,10 @@ async def test_health_setup_already_configured_and_working_no_reset() -> None:
             new=AsyncMock(return_value={"online": True}),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
             new=AsyncMock(return_value=False),
         ),
-        patch("unraid_mcp.core.setup.elicit_and_configure") as mock_configure,
+        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 
@@ -295,11 +304,11 @@ async def test_health_setup_already_configured_user_confirms_reset() -> None:
             new=AsyncMock(return_value={"online": True}),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=True)
+            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
         ) as mock_configure,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
@@ -323,11 +332,11 @@ async def test_health_setup_credentials_exist_but_connection_fails_user_confirms
             new=AsyncMock(side_effect=Exception("connection refused")),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
             new=AsyncMock(return_value=True),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=True)
+            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
         ) as mock_configure,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
@@ -351,10 +360,10 @@ async def test_health_setup_credentials_exist_connection_fails_user_declines() -
             new=AsyncMock(side_effect=Exception("connection refused")),
         ),
         patch(
-            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
             new=AsyncMock(return_value=False),
         ),
-        patch("unraid_mcp.core.setup.elicit_and_configure") as mock_configure,
+        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 
@@ -376,7 +385,7 @@ async def test_health_setup_ctx_none_already_configured_returns_no_changes() -> 
             "unraid_mcp.tools.unraid.make_graphql_request",
             new=AsyncMock(return_value={"online": True}),
         ),
-        patch("unraid_mcp.core.setup.elicit_and_configure") as mock_configure,
+        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=None)
 
@@ -399,7 +408,7 @@ async def test_health_setup_declined_message_includes_manual_path() -> None:
 
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch("unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=False)),
+        patch("unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=False)),
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 

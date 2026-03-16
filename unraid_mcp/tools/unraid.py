@@ -34,6 +34,7 @@ from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.setup import elicit_and_configure, elicit_reset_confirmation
 from ..core.utils import format_bytes, format_kb, safe_get
 
 
@@ -78,7 +79,6 @@ _SYSTEM_QUERIES: dict[str, str] = {
           registration { id type keyFile { location } state expiration updateExpiration }
         }
     """,
-    "connect": "query GetConnectSettings { connect { id dynamicRemoteAccess { enabledType runningType error } } }",
     "variables": """
         query GetSelectiveUnraidVariables {
           vars {
@@ -150,10 +150,6 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             f"Invalid subaction '{subaction}' for system. Must be one of: {sorted(_SYSTEM_SUBACTIONS)}"
         )
 
-    if subaction == "connect":
-        raise ToolError(
-            "The 'connect' query is not available on this Unraid API version. Use 'settings' instead."
-        )
     if subaction == "ups_device" and not device_id:
         raise ToolError("device_id is required for system/ups_device")
 
@@ -302,14 +298,13 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
         CREDENTIALS_ENV_PATH,
         UNRAID_API_URL,
     )
-    from ..core.setup import elicit_and_configure, elicit_reset_confirmation
     from ..core.utils import safe_display_url
     from ..subscriptions.utils import _analyze_subscription_status
 
     if subaction == "setup":
         if CREDENTIALS_ENV_PATH.exists():
             try:
-                await make_graphql_request("query { online }")
+                await make_graphql_request(_SYSTEM_QUERIES["online"])
                 connection_ok = True
             except Exception:
                 connection_ok = False
@@ -343,7 +338,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
 
         if subaction == "test_connection":
             start = time.time()
-            data = await make_graphql_request("query { online }")
+            data = await make_graphql_request(_SYSTEM_QUERIES["online"])
             latency = round((time.time() - start) * 1000, 2)
             return {"status": "connected", "online": data.get("online"), "latency_ms": latency}
 
@@ -351,12 +346,14 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
             return await _comprehensive_health_check()
 
         if subaction == "diagnose":
+            from ..server import cache_middleware, error_middleware
             from ..subscriptions.manager import subscription_manager
             from ..subscriptions.resources import ensure_subscriptions_started
 
             await ensure_subscriptions_started()
             status = await subscription_manager.get_subscription_status()
             error_count, connection_issues = _analyze_subscription_status(status)
+            cache_stats = cache_middleware.statistics()
             return {
                 "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
                 "environment": {
@@ -372,6 +369,16 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                     "in_error_state": error_count,
                     "connection_issues": connection_issues,
                 },
+                "cache": {
+                    "call_tool": {
+                        "hits": cache_stats.call_tool.get.hit,
+                        "misses": cache_stats.call_tool.get.miss,
+                        "puts": cache_stats.call_tool.put.total,
+                    }
+                    if cache_stats.call_tool
+                    else {"hits": 0, "misses": 0, "puts": 0},
+                },
+                "errors": error_middleware.get_error_stats(),
             }
 
         raise ToolError(f"Unhandled health subaction '{subaction}' — this is a bug")
@@ -731,6 +738,7 @@ _DOCKER_QUERIES: dict[str, str] = {
     "details": "query GetContainerDetails { docker { containers(skipCache: false) { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
     "networks": "query GetDockerNetworks { docker { networks { id name driver scope } } }",
     "network_details": "query GetDockerNetwork { docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } } }",
+    "_resolve": "query ResolveContainerID { docker { containers(skipCache: true) { id names } } }",
 }
 
 _DOCKER_MUTATIONS: dict[str, str] = {
@@ -767,9 +775,7 @@ def _find_container(
 async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
-    data = await make_graphql_request(
-        "query { docker { containers(skipCache: true) { id names } } }"
-    )
+    data = await make_graphql_request(_DOCKER_QUERIES["_resolve"])
     containers = safe_get(data, "docker", "containers", default=[])
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()

@@ -28,6 +28,46 @@ def _validate_operation(schema: GraphQLSchema, query_str: str) -> list[str]:
     return [str(e) for e in errors]
 
 
+def _all_domain_dicts(unraid_mod: object) -> list[tuple[str, dict[str, str]]]:
+    """Return all query/mutation dicts from the consolidated unraid module.
+
+    Single source of truth used by both test_all_tool_queries_validate and
+    test_total_operations_count so the two lists stay in sync automatically.
+    """
+    import types
+
+    m = unraid_mod  # type: ignore[assignment]
+    if not isinstance(m, types.ModuleType):
+        import importlib
+
+        m = importlib.import_module("unraid_mcp.tools.unraid")
+
+    return [
+        ("system/QUERIES", m._SYSTEM_QUERIES),
+        ("array/QUERIES", m._ARRAY_QUERIES),
+        ("array/MUTATIONS", m._ARRAY_MUTATIONS),
+        ("disk/QUERIES", m._DISK_QUERIES),
+        ("disk/MUTATIONS", m._DISK_MUTATIONS),
+        ("docker/QUERIES", m._DOCKER_QUERIES),
+        ("docker/MUTATIONS", m._DOCKER_MUTATIONS),
+        ("vm/QUERIES", m._VM_QUERIES),
+        ("vm/MUTATIONS", m._VM_MUTATIONS),
+        ("notification/QUERIES", m._NOTIFICATION_QUERIES),
+        ("notification/MUTATIONS", m._NOTIFICATION_MUTATIONS),
+        ("rclone/QUERIES", m._RCLONE_QUERIES),
+        ("rclone/MUTATIONS", m._RCLONE_MUTATIONS),
+        ("user/QUERIES", m._USER_QUERIES),
+        ("key/QUERIES", m._KEY_QUERIES),
+        ("key/MUTATIONS", m._KEY_MUTATIONS),
+        ("setting/MUTATIONS", m._SETTING_MUTATIONS),
+        ("customization/QUERIES", m._CUSTOMIZATION_QUERIES),
+        ("customization/MUTATIONS", m._CUSTOMIZATION_MUTATIONS),
+        ("plugin/QUERIES", m._PLUGIN_QUERIES),
+        ("plugin/MUTATIONS", m._PLUGIN_MUTATIONS),
+        ("oidc/QUERIES", m._OIDC_QUERIES),
+    ]
+
+
 # ============================================================================
 # Info Tool (19 queries)
 # ============================================================================
@@ -165,7 +205,6 @@ class TestInfoQueries:
             "ups_devices",
             "ups_device",
             "ups_config",
-            "connect",
         }
         assert set(QUERIES.keys()) == expected_actions
 
@@ -378,6 +417,7 @@ class TestDockerQueries:
             "details",
             "networks",
             "network_details",
+            "_resolve",
         }
         assert set(QUERIES.keys()) == expected
 
@@ -920,30 +960,7 @@ class TestSchemaCompleteness:
         import unraid_mcp.tools.unraid as unraid_mod
 
         # All query/mutation dicts in the consolidated module, keyed by domain/type label
-        all_operation_dicts: list[tuple[str, dict[str, str]]] = [
-            ("system/QUERIES", unraid_mod._SYSTEM_QUERIES),
-            ("array/QUERIES", unraid_mod._ARRAY_QUERIES),
-            ("array/MUTATIONS", unraid_mod._ARRAY_MUTATIONS),
-            ("disk/QUERIES", unraid_mod._DISK_QUERIES),
-            ("disk/MUTATIONS", unraid_mod._DISK_MUTATIONS),
-            ("docker/QUERIES", unraid_mod._DOCKER_QUERIES),
-            ("docker/MUTATIONS", unraid_mod._DOCKER_MUTATIONS),
-            ("vm/QUERIES", unraid_mod._VM_QUERIES),
-            ("vm/MUTATIONS", unraid_mod._VM_MUTATIONS),
-            ("notification/QUERIES", unraid_mod._NOTIFICATION_QUERIES),
-            ("notification/MUTATIONS", unraid_mod._NOTIFICATION_MUTATIONS),
-            ("rclone/QUERIES", unraid_mod._RCLONE_QUERIES),
-            ("rclone/MUTATIONS", unraid_mod._RCLONE_MUTATIONS),
-            ("user/QUERIES", unraid_mod._USER_QUERIES),
-            ("key/QUERIES", unraid_mod._KEY_QUERIES),
-            ("key/MUTATIONS", unraid_mod._KEY_MUTATIONS),
-            ("setting/MUTATIONS", unraid_mod._SETTING_MUTATIONS),
-            ("customization/QUERIES", unraid_mod._CUSTOMIZATION_QUERIES),
-            ("customization/MUTATIONS", unraid_mod._CUSTOMIZATION_MUTATIONS),
-            ("plugin/QUERIES", unraid_mod._PLUGIN_QUERIES),
-            ("plugin/MUTATIONS", unraid_mod._PLUGIN_MUTATIONS),
-            ("oidc/QUERIES", unraid_mod._OIDC_QUERIES),
-        ]
+        all_operation_dicts = _all_domain_dicts(unraid_mod)
 
         # Known schema mismatches — bugs in tool implementation, not in tests.
         # Remove entries as they are fixed.
@@ -995,30 +1012,7 @@ class TestSchemaCompleteness:
         """Verify the expected number of tool operations exist."""
         import unraid_mcp.tools.unraid as unraid_mod
 
-        all_dicts = [
-            unraid_mod._SYSTEM_QUERIES,
-            unraid_mod._ARRAY_QUERIES,
-            unraid_mod._ARRAY_MUTATIONS,
-            unraid_mod._DISK_QUERIES,
-            unraid_mod._DISK_MUTATIONS,
-            unraid_mod._DOCKER_QUERIES,
-            unraid_mod._DOCKER_MUTATIONS,
-            unraid_mod._VM_QUERIES,
-            unraid_mod._VM_MUTATIONS,
-            unraid_mod._NOTIFICATION_QUERIES,
-            unraid_mod._NOTIFICATION_MUTATIONS,
-            unraid_mod._RCLONE_QUERIES,
-            unraid_mod._RCLONE_MUTATIONS,
-            unraid_mod._USER_QUERIES,
-            unraid_mod._KEY_QUERIES,
-            unraid_mod._KEY_MUTATIONS,
-            unraid_mod._SETTING_MUTATIONS,
-            unraid_mod._CUSTOMIZATION_QUERIES,
-            unraid_mod._CUSTOMIZATION_MUTATIONS,
-            unraid_mod._PLUGIN_QUERIES,
-            unraid_mod._PLUGIN_MUTATIONS,
-            unraid_mod._OIDC_QUERIES,
-        ]
+        all_dicts = [d for _, d in _all_domain_dicts(unraid_mod)]
 
         total = sum(len(d) for d in all_dicts)
-        assert total >= 50, f"Expected at least 50 operations, found {total}"
+        assert total >= 90, f"Expected at least 90 operations, found {total}"

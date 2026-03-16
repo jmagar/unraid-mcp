@@ -120,7 +120,7 @@ class TestUnraidInfoTool:
 
     async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="connect.*not available"):
+        with pytest.raises(ToolError, match="Invalid subaction 'connect'"):
             await tool_fn(action="system", subaction="connect")
 
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:

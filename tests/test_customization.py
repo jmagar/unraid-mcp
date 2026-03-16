@@ -15,7 +15,7 @@ def _mock_graphql():
         yield m
 
 
-def _make_tool():
+def _make_tool() -> Any:
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 

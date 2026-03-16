@@ -60,7 +60,7 @@ def _assert_only_tool_error(exc: BaseException) -> None:
     )
 
 
-def _make_tool():
+def _make_tool() -> Any:
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
@@ -82,7 +82,7 @@ class TestDockerContainerIdFuzzing:
     def test_details_arbitrary_container_id(self, container_id: str) -> None:
         """Arbitrary container IDs for 'details' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -99,7 +99,7 @@ class TestDockerContainerIdFuzzing:
     def test_start_arbitrary_container_id(self, container_id: str) -> None:
         """Arbitrary container IDs for 'start' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -115,7 +115,7 @@ class TestDockerContainerIdFuzzing:
     def test_stop_arbitrary_container_id(self, container_id: str) -> None:
         """Arbitrary container IDs for 'stop' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -131,7 +131,7 @@ class TestDockerContainerIdFuzzing:
     def test_restart_arbitrary_container_id(self, container_id: str) -> None:
         """Arbitrary container IDs for 'restart' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -172,7 +172,7 @@ class TestDockerInvalidActions:
         if subaction in valid_subactions:
             return  # Skip valid subactions — they have different semantics
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:
@@ -209,7 +209,7 @@ class TestNotificationsEnumFuzzing:
         if importance.upper() in valid_importances:
             return  # Skip valid values
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -242,7 +242,7 @@ class TestNotificationsEnumFuzzing:
         if list_type.upper() in valid_list_types:
             return  # Skip valid values
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -273,7 +273,7 @@ class TestNotificationsEnumFuzzing:
         must raise ToolError for oversized values, never truncate silently or crash.
         """
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -308,7 +308,7 @@ class TestNotificationsEnumFuzzing:
         if notif_type.upper() in valid_types:
             return
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -353,7 +353,7 @@ class TestNotificationsEnumFuzzing:
         if subaction in valid_subactions:
             return
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -389,7 +389,7 @@ class TestKeysInputFuzzing:
     def test_get_arbitrary_key_id(self, key_id: str) -> None:
         """Arbitrary key_id for 'get' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -409,7 +409,7 @@ class TestKeysInputFuzzing:
     def test_create_arbitrary_key_name(self, name: str) -> None:
         """Arbitrary name strings for 'create' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -431,7 +431,7 @@ class TestKeysInputFuzzing:
     def test_add_role_arbitrary_roles(self, roles: list[str]) -> None:
         """Arbitrary role lists for 'add_role' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -456,7 +456,7 @@ class TestKeysInputFuzzing:
         if subaction in valid_subactions:
             return
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:
@@ -489,7 +489,7 @@ class TestVMInputFuzzing:
     def test_start_arbitrary_vm_id(self, vm_id: str) -> None:
         """Arbitrary vm_id for 'start' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -510,7 +510,7 @@ class TestVMInputFuzzing:
     def test_stop_arbitrary_vm_id(self, vm_id: str) -> None:
         """Arbitrary vm_id for 'stop' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -531,7 +531,7 @@ class TestVMInputFuzzing:
     def test_details_arbitrary_vm_id(self, vm_id: str) -> None:
         """Arbitrary vm_id for 'details' must not crash the tool."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -566,7 +566,7 @@ class TestVMInputFuzzing:
         if subaction in valid_subactions:
             return
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -616,7 +616,7 @@ class TestBoundaryValues:
     def test_docker_details_adversarial_inputs(self, container_id: str) -> None:
         """Adversarial container_id values must not crash the Docker domain."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -649,7 +649,7 @@ class TestBoundaryValues:
     def test_notifications_importance_adversarial(self, importance: str) -> None:
         """Adversarial importance values must raise ToolError, not crash."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request",
@@ -687,7 +687,7 @@ class TestBoundaryValues:
     def test_keys_get_adversarial_key_ids(self, key_id: str) -> None:
         """Adversarial key_id values must not crash the keys get action."""
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
                 "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
@@ -739,7 +739,7 @@ class TestInfoActionGuard:
         if action in valid_actions:
             return
 
-        async def _run_test():
+        async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:

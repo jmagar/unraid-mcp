@@ -30,9 +30,8 @@ class TestLiveResourcesUseManagerCache:
     """All live resources must read from the persistent SubscriptionManager cache."""
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
-    async def test_resource_returns_cached_data(
-        self, action: str, _mock_ensure_started: AsyncMock
-    ) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_resource_returns_cached_data(self, action: str) -> None:
         cached = {"systemMetricsCpu": {"percentTotal": 12.5}}
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=cached)
@@ -42,8 +41,9 @@ class TestLiveResourcesUseManagerCache:
         assert json.loads(result) == cached
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_resource_returns_connecting_when_no_cache_and_no_error(
-        self, action: str, _mock_ensure_started: AsyncMock
+        self, action: str
     ) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
@@ -55,9 +55,8 @@ class TestLiveResourcesUseManagerCache:
         assert parsed["status"] == "connecting"
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
-    async def test_resource_returns_error_status_on_permanent_failure(
-        self, action: str, _mock_ensure_started: AsyncMock
-    ) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_resource_returns_error_status_on_permanent_failure(self, action: str) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mock_mgr.last_error = {action: "WebSocket auth failed"}
@@ -91,7 +90,8 @@ class TestSnapshotSubscriptionsRegistered:
 
 
 class TestLogsStreamResource:
-    async def test_logs_stream_no_data(self, _mock_ensure_started: AsyncMock) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_logs_stream_no_data(self) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mcp = _make_resources()
@@ -101,9 +101,8 @@ class TestLogsStreamResource:
             parsed = json.loads(result)
             assert "status" in parsed
 
-    async def test_logs_stream_returns_data_with_empty_dict(
-        self, _mock_ensure_started: AsyncMock
-    ) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_logs_stream_returns_data_with_empty_dict(self) -> None:
         """Empty dict cache hit must return data, not 'connecting' status."""
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value={})
@@ -118,9 +117,8 @@ class TestAutoStartDisabledFallback:
     """When auto_start is disabled, resources fall back to on-demand subscribe_once."""
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
-    async def test_fallback_returns_subscribe_once_data(
-        self, action: str, _mock_ensure_started: AsyncMock
-    ) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_fallback_returns_subscribe_once_data(self, action: str) -> None:
         fallback_data = {"systemMetricsCpu": {"percentTotal": 42.0}}
         with (
             patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
@@ -138,9 +136,8 @@ class TestAutoStartDisabledFallback:
         assert json.loads(result) == fallback_data
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
-    async def test_fallback_failure_returns_connecting(
-        self, action: str, _mock_ensure_started: AsyncMock
-    ) -> None:
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_fallback_failure_returns_connecting(self, action: str) -> None:
         """When on-demand fallback itself fails, still return 'connecting' status."""
         with (
             patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,

@@ -7,6 +7,11 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.server.middleware.caching import CallToolSettings, ResponseCachingMiddleware
+from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
+from fastmcp.server.middleware.logging import LoggingMiddleware
+from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
+from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 
 from .config.logging import logger
 from .config.settings import (
@@ -22,11 +27,59 @@ from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
 
+# Middleware chain order matters — each layer wraps everything inside it:
+#   logging → error_handling → rate_limiter → response_limiter → cache → tool
+
+# 1. Log every tools/call and resources/read: method, duration, errors.
+#    Outermost so it captures errors after they've been converted by error_handling.
+_logging_middleware = LoggingMiddleware(
+    logger=logger,
+    methods=["tools/call", "resources/read"],
+)
+
+# 2. Catch any unhandled exceptions and convert to proper MCP errors.
+#    Tracks error_counts per (exception_type:method) for health diagnose.
+error_middleware = ErrorHandlingMiddleware(
+    logger=logger,
+    include_traceback=True,
+)
+
+# 3. Unraid API rate limit: 100 requests per 10 seconds.
+#    Use a sliding window that stays comfortably under that cap.
+_rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=90, window_minutes=1)
+
+# 4. Cap tool responses at 512 KB to protect the client context window.
+#    Oversized responses are truncated with a clear suffix rather than erroring.
+_response_limiter = ResponseLimitingMiddleware(max_size=512_000)
+
+# 5. Cache tool calls in-memory (MemoryStore default — no extra deps).
+#    Short 30 s TTL absorbs burst duplicate requests while keeping data fresh.
+#    Destructive calls won't hit the cache in practice (unique confirm=True + IDs).
+cache_middleware = ResponseCachingMiddleware(
+    call_tool_settings=CallToolSettings(
+        ttl=30,
+        included_tools=["unraid"],
+    ),
+    # Disable caching for list/resource/prompt — those are cheap.
+    list_tools_settings={"enabled": False},
+    list_resources_settings={"enabled": False},
+    list_prompts_settings={"enabled": False},
+    read_resource_settings={"enabled": False},
+    get_prompt_settings={"enabled": False},
+)
+
 # Initialize FastMCP instance
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
+    middleware=[
+        _logging_middleware,
+        error_middleware,
+        _rate_limiter,
+        _response_limiter,
+        cache_middleware,
+    ],
 )
 
 # Note: SubscriptionManager singleton is defined in subscriptions/manager.py

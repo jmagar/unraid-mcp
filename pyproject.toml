@@ -71,7 +71,7 @@ classifiers = [
 # ============================================================================
 dependencies = [
     "python-dotenv>=1.1.1",
-    "fastmcp>=2.14.5",
+    "fastmcp>=3.0.0",
     "httpx>=0.28.1",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
