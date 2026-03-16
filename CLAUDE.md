@@ -83,10 +83,11 @@ docker compose down
 - **Data Processing**: Tools return both human-readable summaries and detailed raw data
 - **Health Monitoring**: Comprehensive health check tool for system monitoring
 - **Real-time Subscriptions**: WebSocket-based live data streaming
-- **Persistent Subscription Manager**: `unraid_live` actions use a shared `SubscriptionManager`
+- **Persistent Subscription Manager**: `live` action subactions use a shared `SubscriptionManager`
   that maintains persistent WebSocket connections. Resources serve cached data via
   `subscription_manager.get_resource_data(action)`. A "connecting" placeholder is returned
-  while the subscription starts — callers should retry in a moment.
+  while the subscription starts — callers should retry in a moment. When
+  `UNRAID_AUTO_START_SUBSCRIPTIONS=false`, resources fall back to on-demand `subscribe_once`.
 
 ### Tool Categories (1 Tool, ~107 Subactions)
 
@@ -202,8 +203,8 @@ When bumping the version, **always update both files** — they must stay in syn
 ### Credential Storage (`~/.unraid-mcp/.env`)
 All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
 - **Plugin/direct:** `unraid action=health subaction=setup` writes this file automatically via elicitation,
-  **Safe to re-run**: if credentials exist and are working, it asks before overwriting.
-  If credentials exist but connection fails, it silently re-configures without prompting.
+  **Safe to re-run**: always prompts for confirmation before overwriting existing credentials,
+  whether the connection is working or not (failed probe may be a transient outage, not bad creds).
   or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.
 - **Docker:** `docker-compose.yml` loads it via `env_file` before container start.
 - **No symlinks needed.** Version bumps do not affect this path.

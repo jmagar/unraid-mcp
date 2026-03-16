@@ -100,3 +100,59 @@ class TestLogsStreamResource:
             result = await resource.fn()
             parsed = json.loads(result)
             assert "status" in parsed
+
+    async def test_logs_stream_returns_data_with_empty_dict(
+        self, _mock_ensure_started: AsyncMock
+    ) -> None:
+        """Empty dict cache hit must return data, not 'connecting' status."""
+        with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
+            mock_mgr.get_resource_data = AsyncMock(return_value={})
+            mcp = _make_resources()
+            local_provider = mcp.providers[0]
+            resource = local_provider._components["resource:unraid://logs/stream@"]
+            result = await resource.fn()
+            assert json.loads(result) == {}
+
+
+class TestAutoStartDisabledFallback:
+    """When auto_start is disabled, resources fall back to on-demand subscribe_once."""
+
+    @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    async def test_fallback_returns_subscribe_once_data(
+        self, action: str, _mock_ensure_started: AsyncMock
+    ) -> None:
+        fallback_data = {"systemMetricsCpu": {"percentTotal": 42.0}}
+        with (
+            patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
+            patch(
+                "unraid_mcp.subscriptions.resources.subscribe_once",
+                new=AsyncMock(return_value=fallback_data),
+            ),
+        ):
+            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.last_error = {}
+            mock_mgr.auto_start_enabled = False
+            mcp = _make_resources()
+            resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
+            result = await resource.fn()
+        assert json.loads(result) == fallback_data
+
+    @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    async def test_fallback_failure_returns_connecting(
+        self, action: str, _mock_ensure_started: AsyncMock
+    ) -> None:
+        """When on-demand fallback itself fails, still return 'connecting' status."""
+        with (
+            patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
+            patch(
+                "unraid_mcp.subscriptions.resources.subscribe_once",
+                new=AsyncMock(side_effect=Exception("WebSocket failed")),
+            ),
+        ):
+            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.last_error = {}
+            mock_mgr.auto_start_enabled = False
+            mcp = _make_resources()
+            resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
+            result = await resource.fn()
+        assert json.loads(result)["status"] == "connecting"

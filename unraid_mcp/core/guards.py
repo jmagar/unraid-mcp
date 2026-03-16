@@ -90,10 +90,19 @@ async def gate_destructive_action(
             Pass a str when one description covers all destructive actions.
             Pass a dict[action_name, description] when descriptions differ.
     """
-    if action not in destructive_actions or confirm:
+    if action not in destructive_actions:
         return
 
-    desc = description[action] if isinstance(description, dict) else description
+    if confirm:
+        logger.info("Destructive action '%s' bypassed via confirm=True.", action)
+        return
+
+    if isinstance(description, dict):
+        desc = description.get(action)
+        if desc is None:
+            raise ToolError(f"Missing destructive-action description for '{action}'.")
+    else:
+        desc = description
     confirmed = await elicit_destructive_confirmation(ctx, action, desc)
     if not confirmed:
         raise ToolError(

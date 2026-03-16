@@ -309,8 +309,8 @@ async def test_health_setup_already_configured_user_confirms_reset() -> None:
 
 
 @pytest.mark.asyncio
-async def test_health_setup_credentials_exist_but_connection_fails() -> None:
-    """setup proceeds with elicitation when credentials exist but connection fails."""
+async def test_health_setup_credentials_exist_but_connection_fails_user_confirms() -> None:
+    """setup prompts for confirmation even on failed probe, then reconfigures if confirmed."""
     tool_fn = _make_tool()
 
     mock_path = MagicMock()
@@ -323,6 +323,10 @@ async def test_health_setup_credentials_exist_but_connection_fails() -> None:
             new=AsyncMock(side_effect=Exception("connection refused")),
         ),
         patch(
+            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
             "unraid_mcp.core.setup.elicit_and_configure", new=AsyncMock(return_value=True)
         ) as mock_configure,
     ):
@@ -330,6 +334,32 @@ async def test_health_setup_credentials_exist_but_connection_fails() -> None:
 
     mock_configure.assert_called_once()
     assert "configured" in result.lower() or "success" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_health_setup_credentials_exist_connection_fails_user_declines() -> None:
+    """setup returns 'no changes' when credentials exist (even with failed probe) and user declines."""
+    tool_fn = _make_tool()
+
+    mock_path = MagicMock()
+    mock_path.exists.return_value = True
+
+    with (
+        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
+        patch(
+            "unraid_mcp.tools.unraid.make_graphql_request",
+            new=AsyncMock(side_effect=Exception("connection refused")),
+        ),
+        patch(
+            "unraid_mcp.core.setup.elicit_reset_confirmation",
+            new=AsyncMock(return_value=False),
+        ),
+        patch("unraid_mcp.core.setup.elicit_and_configure") as mock_configure,
+    ):
+        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
+
+    mock_configure.assert_not_called()
+    assert "no changes" in result.lower()
 
 
 @pytest.mark.asyncio

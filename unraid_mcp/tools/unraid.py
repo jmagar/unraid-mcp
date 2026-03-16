@@ -21,6 +21,7 @@ Actions:
   live         - Real-time WebSocket subscription snapshots (11 subactions)
 """
 
+import asyncio
 import datetime
 import os
 import re
@@ -312,10 +313,20 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                 connection_ok = True
             except Exception:
                 connection_ok = False
-            if connection_ok:
-                reset = await elicit_reset_confirmation(ctx, safe_display_url(UNRAID_API_URL) or "")
-                if not reset:
-                    return f"✅ Credentials already configured and working.\nURL: `{safe_display_url(UNRAID_API_URL)}`\n\nNo changes made."
+            status_note = (
+                "and working"
+                if connection_ok
+                else "but the connection test failed — may be a transient outage"
+            )
+            reset = await elicit_reset_confirmation(
+                ctx,
+                f"{safe_display_url(UNRAID_API_URL) or ''} ({status_note})",
+            )
+            if not reset:
+                return (
+                    f"✅ Credentials already configured ({status_note}).\n"
+                    f"URL: `{safe_display_url(UNRAID_API_URL)}`\n\nNo changes made."
+                )
         configured = await elicit_and_configure(ctx)
         if configured:
             return "✅ Credentials configured successfully. You can now use all Unraid MCP tools."
@@ -641,7 +652,7 @@ async def _handle_disk(
             raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
         if not log_path:
             raise ToolError("log_path is required for disk/logs")
-        normalized = os.path.realpath(log_path)  # noqa: ASYNC240
+        normalized = await asyncio.to_thread(os.path.realpath, log_path)
         if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
             raise ToolError(f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}")
         log_path = normalized

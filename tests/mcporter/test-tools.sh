@@ -600,6 +600,18 @@ suite_oidc() {
   # provider and validate_session require IDs — skipped
 }
 
+suite_live() {
+  printf '\n%b== live (snapshot subscriptions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+  # Note: these subactions open a transient WebSocket and wait for the first event.
+  # Event-driven actions (parity_progress, ups_status, notifications_overview,
+  # owner, server_status) return status=no_recent_events when no events arrive.
+  run_test "live: cpu"                   '{"action":"live","subaction":"cpu"}'
+  run_test "live: memory"                '{"action":"live","subaction":"memory"}'
+  run_test "live: cpu_telemetry"         '{"action":"live","subaction":"cpu_telemetry"}'
+  run_test "live: notifications_overview" '{"action":"live","subaction":"notifications_overview"}'
+  run_test "live: log_tail"              '{"action":"live","subaction":"log_tail"}'
+}
+
 # ---------------------------------------------------------------------------
 # Print final summary
 # ---------------------------------------------------------------------------
@@ -650,6 +662,7 @@ run_parallel() {
     suite_customization
     suite_plugin
     suite_oidc
+    suite_live
   )
 
   local pids=()
@@ -705,6 +718,7 @@ run_sequential() {
   suite_customization
   suite_plugin
   suite_oidc
+  suite_live
 }
 
 # ---------------------------------------------------------------------------

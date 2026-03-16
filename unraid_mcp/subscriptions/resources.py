@@ -15,6 +15,7 @@ from fastmcp import FastMCP
 from ..config.logging import logger
 from .manager import subscription_manager
 from .queries import SNAPSHOT_ACTIONS
+from .snapshot import subscribe_once
 
 
 # Global flag to track subscription startup
@@ -94,7 +95,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         """Real-time log stream data from subscription."""
         await ensure_subscriptions_started()
         data = await subscription_manager.get_resource_data("logFileSubscription")
-        if data:
+        if data is not None:
             return json.dumps(data, indent=2)
         return json.dumps(
             {
@@ -118,6 +119,16 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                         "message": f"Subscription '{action}' failed: {last_error}",
                     }
                 )
+            # When auto-start is disabled, fall back to a one-shot fetch so the
+            # resource returns real data instead of a perpetual "connecting" placeholder.
+            if not subscription_manager.auto_start_enabled:
+                try:
+                    query_info = SNAPSHOT_ACTIONS.get(action)
+                    if query_info is not None:
+                        fallback_data = await subscribe_once(query_info)
+                        return json.dumps(fallback_data, indent=2)
+                except Exception as e:
+                    logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
             return json.dumps(
                 {
                     "status": "connecting",

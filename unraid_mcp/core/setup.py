@@ -30,11 +30,11 @@ class _UnraidCredentials:
 
 
 async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bool:
-    """Ask the user whether to overwrite already-working credentials.
+    """Ask the user whether to overwrite existing credentials.
 
     Args:
         ctx: The MCP context for elicitation. If None, returns False immediately.
-        current_url: The currently configured URL (displayed for context).
+        current_url: The currently configured URL and status (displayed for context).
 
     Returns:
         True if the user confirmed the reset, False otherwise.
@@ -45,7 +45,7 @@ async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bo
     try:
         result = await ctx.elicit(
             message=(
-                "Credentials are already configured and working.\n\n"
+                "Credentials are already configured.\n\n"
                 f"**Current URL:** `{current_url}`\n\n"
                 "Do you want to reset your API URL and key?"
             ),
