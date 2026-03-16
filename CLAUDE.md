@@ -119,7 +119,7 @@ The server registers a **single consolidated `unraid` tool** with `action` (doma
 - **notifications**: delete, delete_archived
 - **rclone**: delete_remote
 - **keys**: delete
-- **storage**: flash_backup
+- **disk**: flash_backup
 - **settings**: configure_ups
 - **plugins**: remove
 
@@ -152,10 +152,10 @@ The server loads environment variables from multiple locations in order:
 ## Critical Gotchas
 
 ### Mutation Handler Ordering
-**Mutation handlers MUST return before the `QUERIES[action]` lookup.** Mutations are not in the `QUERIES` dict — reaching that line for a mutation action causes a `KeyError`. Always add early-return `if action == "mutation_name": ... return` blocks BEFORE the `QUERIES` lookup.
+**Mutation handlers MUST return before the domain query dict lookup.** Mutations are not in the domain `_*_QUERIES` dicts (e.g., `_DOCKER_QUERIES`, `_ARRAY_QUERIES`) — reaching that line for a mutation subaction causes a `KeyError`. Always add early-return `if subaction == "mutation_name": ... return` blocks BEFORE the queries lookup.
 
 ### Test Patching
-- Patch at the **tool module level**: `unraid_mcp.tools.info.make_graphql_request` (not core)
+- Patch at the **tool module level**: `unraid_mcp.tools.unraid.make_graphql_request` (not core)
 - `conftest.py`'s `mock_graphql_request` patches the core module — wrong for tool-level tests
 - Use `conftest.py`'s `make_tool_fn()` helper or local `_make_tool()` pattern
 
@@ -186,6 +186,9 @@ uv run pytest -x                     # Fail fast on first error
 
 # stdio smoke-test, no running server needed (good for CI)
 ./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
+
+# Destructive action smoke-test (confirms guard blocks without confirm=True)
+./tests/mcporter/test-destructive.sh [MCP_URL]
 ```
 See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_ACTIONS.md` for exact destructive-action test commands.
 
