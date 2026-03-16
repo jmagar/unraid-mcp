@@ -14,6 +14,8 @@ from fastmcp import FastMCP
 
 from ..config.logging import logger
 from .manager import subscription_manager
+from .queries import SNAPSHOT_ACTIONS
+from .snapshot import subscribe_once
 
 
 # Global flag to track subscription startup
@@ -101,5 +103,23 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                 "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
             }
         )
+
+    def _make_resource_fn(action: str, query: str):
+        async def _live_resource() -> str:
+            await ensure_subscriptions_started()
+            try:
+                data = await subscribe_once(query)
+                return json.dumps(data, indent=2)
+            except Exception as exc:
+                return json.dumps({"error": str(exc), "action": action})
+
+        _live_resource.__name__ = f"{action}_resource"
+        _live_resource.__doc__ = (
+            f"Real-time {action.replace('_', ' ')} data via WebSocket subscription."
+        )
+        return _live_resource
+
+    for _action, _query in SNAPSHOT_ACTIONS.items():
+        mcp.resource(f"unraid://live/{_action}")(_make_resource_fn(_action, _query))
 
     logger.info("Subscription resources registered successfully")
