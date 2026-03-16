@@ -78,7 +78,14 @@ the MCP server requires Google login before any tool call.
 2. Authorized redirect URIs: `<UNRAID_MCP_BASE_URL>/auth/callback`
 3. Copy Client ID + Secret to `~/.unraid-mcp/.env`
 
+**Generate a stable JWT signing key:**
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
 **Omit `GOOGLE_CLIENT_ID` to run without auth** (default — preserves existing behaviour).
+
+**Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
 
 ## Architecture
 

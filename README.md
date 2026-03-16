@@ -14,7 +14,7 @@
 - 🔄 **Real-time Data**: WebSocket subscriptions for live metrics, logs, array state, and more
 - 📊 **Health Monitoring**: Comprehensive system diagnostics and status
 - 🐳 **Docker Ready**: Full containerization support with Docker Compose
-- 🔒 **Secure**: Proper SSL/TLS configuration and API key management
+- 🔒 **Secure**: Optional Google OAuth 2.0 authentication + SSL/TLS + API key management
 - 📝 **Rich Logging**: Structured logging with rotation and multiple levels
 
 ---
@@ -25,6 +25,7 @@
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
+- [Google OAuth](#-google-oauth-optional)
 - [Available Tools & Resources](#-available-tools--resources)
 - [Development](#-development)
 - [Architecture](#-architecture)
@@ -229,7 +230,7 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 
 # Subscription Configuration
 UNRAID_AUTO_START_SUBSCRIPTIONS=true  # Auto-start WebSocket subscriptions on startup (default: true)
-UNRAID_MAX_RECONNECT_ATTEMPTS=5       # Max WebSocket reconnection attempts (default: 5)
+UNRAID_MAX_RECONNECT_ATTEMPTS=10      # Max WebSocket reconnection attempts (default: 10)
 
 # Optional: Log Stream Configuration
 # UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog  # Path for log streaming resource (unraid://logs/stream)
@@ -242,6 +243,32 @@ UNRAID_MAX_RECONNECT_ATTEMPTS=5       # Max WebSocket reconnection attempts (def
 | `streamable-http` | HTTP-based (recommended) | Most compatible, best performance |
 | `sse` | Server-Sent Events (deprecated) | Legacy support only |
 | `stdio` | Standard I/O | Direct integration scenarios |
+
+---
+
+## 🔐 Google OAuth (Optional)
+
+Protect the HTTP server with Google OAuth 2.0 — clients must complete a Google login before any tool call is executed.
+
+Add these to `~/.unraid-mcp/.env`:
+
+```bash
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-your-secret
+UNRAID_MCP_BASE_URL=http://10.1.0.2:6970        # public URL of this server
+UNRAID_MCP_JWT_SIGNING_KEY=<64-char-hex>         # prevents token invalidation on restart
+```
+
+**Quick setup:**
+1. [Google Cloud Console](https://console.cloud.google.com/) → Credentials → OAuth 2.0 Client ID (Web application)
+2. Authorized redirect URI: `<UNRAID_MCP_BASE_URL>/auth/callback`
+3. Copy Client ID + Secret into `~/.unraid-mcp/.env`
+4. Generate a signing key: `python3 -c "import secrets; print(secrets.token_hex(32))"`
+5. Restart the server
+
+Omit `GOOGLE_CLIENT_ID` to run without authentication (default behavior).
+
+**Full guide:** [`docs/GOOGLE_OAUTH.md`](docs/GOOGLE_OAUTH.md)
 
 ---
 
