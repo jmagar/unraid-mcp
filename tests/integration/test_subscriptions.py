@@ -816,6 +816,15 @@ class TestAutoStart:
 
     async def test_auto_start_only_starts_marked_subscriptions(self) -> None:
         mgr = SubscriptionManager()
+        # Clear default SNAPSHOT_ACTIONS configs; add one with auto_start=False
+        # to verify that unmarked subscriptions are never started.
+        mgr.subscription_configs.clear()
+        mgr.subscription_configs["no_auto_sub"] = {
+            "query": "subscription { test }",
+            "resource": "unraid://test",
+            "description": "Unmarked sub",
+            "auto_start": False,
+        }
         with patch.object(mgr, "start_subscription", new_callable=AsyncMock) as mock_start:
             await mgr.auto_start_all_subscriptions()
             mock_start.assert_not_called()
@@ -837,6 +846,7 @@ class TestAutoStart:
 
     async def test_auto_start_calls_start_for_marked(self) -> None:
         mgr = SubscriptionManager()
+        mgr.subscription_configs.clear()
         mgr.subscription_configs["auto_sub"] = {
             "query": "subscription { auto }",
             "resource": "unraid://auto",
