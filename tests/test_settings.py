@@ -22,8 +22,8 @@ def _make_tool() -> AsyncMock:
     register_settings_tool(test_mcp)
     # FastMCP 3.x stores tools in providers[0]._components keyed as "tool:{name}@"
     local_provider = test_mcp.providers[0]
-    tool = local_provider._components["tool:unraid_settings@"]
-    return tool.fn  # type: ignore[union-attr]
+    tool = local_provider._components["tool:unraid_settings@"]  # ty: ignore[unresolved-attribute]
+    return tool.fn
 
 
 # ---------------------------------------------------------------------------
