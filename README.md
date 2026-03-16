@@ -399,6 +399,28 @@ uv run unraid-mcp-server
 
 # Or run via module directly
 uv run -m unraid_mcp.main
+
+# Hot-reload dev server (restarts on file changes)
+fastmcp run fastmcp.http.json --reload
+
+# Run via named config files
+fastmcp run fastmcp.http.json   # streamable-http on :6970
+fastmcp run fastmcp.stdio.json  # stdio transport
+```
+
+### Ad-hoc Tool Testing (fastmcp CLI)
+```bash
+# Introspect the running server
+fastmcp list http://localhost:6970/mcp
+fastmcp list http://localhost:6970/mcp --input-schema
+
+# Call a tool directly (HTTP)
+fastmcp call http://localhost:6970/mcp unraid action=health subaction=check
+fastmcp call http://localhost:6970/mcp unraid action=docker subaction=list
+
+# Call without a running server (stdio config)
+fastmcp list fastmcp.stdio.json
+fastmcp call fastmcp.stdio.json unraid action=health subaction=check
 ```
 
 ---

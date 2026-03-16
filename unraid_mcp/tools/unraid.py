@@ -1722,7 +1722,7 @@ UNRAID_ACTIONS = Literal[
 def register_unraid_tool(mcp: FastMCP) -> None:
     """Register the single `unraid` tool with the FastMCP instance."""
 
-    @mcp.tool()
+    @mcp.tool(timeout=120)
     async def unraid(
         action: UNRAID_ACTIONS,
         subaction: str,

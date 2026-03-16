@@ -85,6 +85,10 @@ mcp = FastMCP(
 # Note: SubscriptionManager singleton is defined in subscriptions/manager.py
 # and imported by resources.py - no duplicate instance needed here
 
+# Register all modules at import time so `fastmcp run server.py --reload` can
+# discover the fully-configured `mcp` object without going through run_server().
+# run_server() no longer calls this — tools are registered exactly once here.
+
 
 def register_all_modules() -> None:
     """Register all tools and resources with the MCP instance."""
@@ -101,6 +105,9 @@ def register_all_modules() -> None:
     except Exception as e:
         logger.error(f"Failed to register modules: {e}", exc_info=True)
         raise
+
+
+register_all_modules()
 
 
 def run_server() -> None:
@@ -124,9 +131,6 @@ def run_server() -> None:
             "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
             "Only use this in trusted networks or for development."
         )
-
-    # Register all modules
-    register_all_modules()
 
     logger.info(
         f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport..."
