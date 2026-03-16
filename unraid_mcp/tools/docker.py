@@ -1,7 +1,7 @@
 """Docker container management.
 
-Provides the `unraid_docker` tool with 26 actions for container lifecycle,
-logs, networks, update management, and Docker organizer operations.
+Provides the `unraid_docker` tool with 7 actions for container lifecycle
+and network inspection.
 """
 
 import re
@@ -34,11 +34,6 @@ QUERIES: dict[str, str] = {
           } }
         }
     """,
-    "logs": """
-        query GetContainerLogs($id: PrefixedID!, $tail: Int) {
-          docker { logs(id: $id, tail: $tail) { containerId lines { timestamp message } cursor } }
-        }
-    """,
     "networks": """
         query GetDockerNetworks {
           docker { networks { id name driver scope } }
@@ -47,16 +42,6 @@ QUERIES: dict[str, str] = {
     "network_details": """
         query GetDockerNetwork {
           docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } }
-        }
-    """,
-    "port_conflicts": """
-        query GetPortConflicts {
-          docker { portConflicts { containerPorts { privatePort type containers { id name } } lanPorts { lanIpPort publicPort type containers { id name } } } }
-        }
-    """,
-    "check_updates": """
-        query CheckContainerUpdates {
-          docker { containerUpdateStatuses { name updateStatus } }
         }
     """,
 }
@@ -72,121 +57,14 @@ MUTATIONS: dict[str, str] = {
           docker { stop(id: $id) { id names state status } }
         }
     """,
-    "pause": """
-        mutation PauseContainer($id: PrefixedID!) {
-          docker { pause(id: $id) { id names state status } }
-        }
-    """,
-    "unpause": """
-        mutation UnpauseContainer($id: PrefixedID!) {
-          docker { unpause(id: $id) { id names state status } }
-        }
-    """,
-    "remove": """
-        mutation RemoveContainer($id: PrefixedID!) {
-          docker { removeContainer(id: $id) }
-        }
-    """,
-    "update": """
-        mutation UpdateContainer($id: PrefixedID!) {
-          docker { updateContainer(id: $id) { id names state status } }
-        }
-    """,
-    "update_all": """
-        mutation UpdateAllContainers {
-          docker { updateAllContainers { id names state status } }
-        }
-    """,
-    "create_folder": """
-        mutation CreateDockerFolder($name: String!, $parentId: String, $childrenIds: [String!]) {
-          createDockerFolder(name: $name, parentId: $parentId, childrenIds: $childrenIds) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "set_folder_children": """
-        mutation SetDockerFolderChildren($folderId: String, $childrenIds: [String!]!) {
-          setDockerFolderChildren(folderId: $folderId, childrenIds: $childrenIds) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "delete_entries": """
-        mutation DeleteDockerEntries($entryIds: [String!]!) {
-          deleteDockerEntries(entryIds: $entryIds) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "move_to_folder": """
-        mutation MoveDockerEntriesToFolder($sourceEntryIds: [String!]!, $destinationFolderId: String!) {
-          moveDockerEntriesToFolder(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "move_to_position": """
-        mutation MoveDockerItemsToPosition($sourceEntryIds: [String!]!, $destinationFolderId: String!, $position: Float!) {
-          moveDockerItemsToPosition(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId, position: $position) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "rename_folder": """
-        mutation RenameDockerFolder($folderId: String!, $newName: String!) {
-          renameDockerFolder(folderId: $folderId, newName: $newName) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "create_folder_with_items": """
-        mutation CreateDockerFolderWithItems($name: String!, $parentId: String, $sourceEntryIds: [String!], $position: Float) {
-          createDockerFolderWithItems(name: $name, parentId: $parentId, sourceEntryIds: $sourceEntryIds, position: $position) {
-            version views { id name rootId flatEntries { id type name parentId depth position path hasChildren childrenIds } }
-          }
-        }
-    """,
-    "update_view_prefs": """
-        mutation UpdateDockerViewPreferences($viewId: String, $prefs: JSON!) {
-          updateDockerViewPreferences(viewId: $viewId, prefs: $prefs) {
-            version views { id name rootId }
-          }
-        }
-    """,
-    "sync_templates": """
-        mutation SyncDockerTemplatePaths {
-          syncDockerTemplatePaths { scanned matched skipped errors }
-        }
-    """,
-    "reset_template_mappings": """
-        mutation ResetDockerTemplateMappings {
-          resetDockerTemplateMappings
-        }
-    """,
-    "refresh_digests": """
-        mutation RefreshDockerDigests {
-          refreshDockerDigests
-        }
-    """,
 }
 
-DESTRUCTIVE_ACTIONS = {"remove", "update_all", "delete_entries", "reset_template_mappings"}
-# NOTE (Code-M-07): "details" and "logs" are listed here because they require a
-# container_id parameter, but unlike mutations they use fuzzy name matching (not
-# strict). This is intentional: read-only queries are safe with fuzzy matching.
-_ACTIONS_REQUIRING_CONTAINER_ID = {
-    "start",
-    "stop",
-    "restart",
-    "pause",
-    "unpause",
-    "remove",
-    "update",
-    "details",
-    "logs",
-}
+DESTRUCTIVE_ACTIONS: set[str] = set()
+# NOTE (Code-M-07): "details" is listed here because it requires a container_id
+# parameter, but unlike mutations it uses fuzzy name matching (not strict).
+# This is intentional: read-only queries are safe with fuzzy matching.
+_ACTIONS_REQUIRING_CONTAINER_ID = {"start", "stop", "details"}
 ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart"}
-_MAX_TAIL_LINES = 10_000
 
 DOCKER_ACTIONS = Literal[
     "list",
@@ -194,27 +72,8 @@ DOCKER_ACTIONS = Literal[
     "start",
     "stop",
     "restart",
-    "pause",
-    "unpause",
-    "remove",
-    "update",
-    "update_all",
-    "logs",
     "networks",
     "network_details",
-    "port_conflicts",
-    "check_updates",
-    "create_folder",
-    "set_folder_children",
-    "delete_entries",
-    "move_to_folder",
-    "move_to_position",
-    "rename_folder",
-    "create_folder_with_items",
-    "update_view_prefs",
-    "sync_templates",
-    "reset_template_mappings",
-    "refresh_digests",
 ]
 
 if set(get_args(DOCKER_ACTIONS)) != ALL_ACTIONS:
@@ -364,20 +223,8 @@ def register_docker_tool(mcp: FastMCP) -> None:
         network_id: str | None = None,
         *,
         confirm: bool = False,
-        tail_lines: int = 100,
-        folder_name: str | None = None,
-        folder_id: str | None = None,
-        parent_id: str | None = None,
-        children_ids: list[str] | None = None,
-        entry_ids: list[str] | None = None,
-        source_entry_ids: list[str] | None = None,
-        destination_folder_id: str | None = None,
-        position: float | None = None,
-        new_folder_name: str | None = None,
-        view_id: str = "default",
-        view_prefs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Manage Docker containers, networks, and updates.
+        """Manage Docker containers and networks.
 
         Actions:
           list - List all containers
@@ -385,42 +232,17 @@ def register_docker_tool(mcp: FastMCP) -> None:
           start - Start a container (requires container_id)
           stop - Stop a container (requires container_id)
           restart - Stop then start a container (requires container_id)
-          pause - Pause a container (requires container_id)
-          unpause - Unpause a container (requires container_id)
-          remove - Remove a container (requires container_id, confirm=True)
-          update - Update a container to latest image (requires container_id)
-          update_all - Update all containers with available updates
-          logs - Get container logs (requires container_id, optional tail_lines)
           networks - List Docker networks
           network_details - Details of a network (requires network_id)
-          port_conflicts - Check for port conflicts
-          check_updates - Check which containers have updates available
-          create_folder - Create Docker organizer folder (requires folder_name)
-          set_folder_children - Set children of a folder (requires children_ids)
-          delete_entries - Delete organizer entries (requires entry_ids, confirm=True)
-          move_to_folder - Move entries to a folder (requires source_entry_ids, destination_folder_id)
-          move_to_position - Move entries to position in folder (requires source_entry_ids, destination_folder_id, position)
-          rename_folder - Rename a folder (requires folder_id, new_folder_name)
-          create_folder_with_items - Create folder with items (requires folder_name)
-          update_view_prefs - Update organizer view preferences (requires view_prefs)
-          sync_templates - Sync Docker template paths
-          reset_template_mappings - Reset template mappings (confirm=True)
-          refresh_digests - Refresh container image digests
         """
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
-
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            raise ToolError(f"Action '{action}' is destructive. Set confirm=True to proceed.")
 
         if action in _ACTIONS_REQUIRING_CONTAINER_ID and not container_id:
             raise ToolError(f"container_id is required for '{action}' action")
 
         if action == "network_details" and not network_id:
             raise ToolError("network_id is required for 'network_details' action")
-
-        if action == "logs" and (tail_lines < 1 or tail_lines > _MAX_TAIL_LINES):
-            raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
 
         with tool_error_handler("docker", action, logger):
             logger.info(f"Executing unraid_docker action={action}")
@@ -442,27 +264,6 @@ def register_docker_tool(mcp: FastMCP) -> None:
                         return c
                 raise ToolError(f"Container '{container_id}' not found in details response.")
 
-            if action == "logs":
-                actual_id = await _resolve_container_id(container_id or "")
-                data = await make_graphql_request(
-                    QUERIES["logs"], {"id": actual_id, "tail": tail_lines}
-                )
-                logs_data = safe_get(data, "docker", "logs")
-                if logs_data is None:
-                    raise ToolError(f"No logs returned for container '{container_id}'")
-                # Extract log lines into a plain text string for backward compatibility.
-                # The GraphQL response is { containerId, lines: [{ timestamp, message }], cursor }
-                # but callers expect result["logs"] to be a string of log text.
-                lines = logs_data.get("lines", []) if isinstance(logs_data, dict) else []
-                log_text = "\n".join(
-                    f"{line.get('timestamp', '')} {line.get('message', '')}".strip()
-                    for line in lines
-                )
-                return {
-                    "logs": log_text,
-                    "cursor": logs_data.get("cursor") if isinstance(logs_data, dict) else None,
-                }
-
             if action == "networks":
                 data = await make_graphql_request(QUERIES["networks"])
                 networks = safe_get(data, "docker", "networks", default=[])
@@ -476,25 +277,6 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     if net.get("id") == network_id or net.get("name") == network_id:
                         return dict(net)
                 raise ToolError(f"Network '{network_id}' not found.")
-
-            if action == "port_conflicts":
-                data = await make_graphql_request(QUERIES["port_conflicts"])
-                conflicts_data = safe_get(data, "docker", "portConflicts", default={})
-                # The GraphQL response is { containerPorts: [...], lanPorts: [...] }
-                # but callers expect result["port_conflicts"] to be a flat list.
-                # Merge both conflict lists for backward compatibility.
-                if isinstance(conflicts_data, dict):
-                    conflicts: list[Any] = []
-                    conflicts.extend(conflicts_data.get("containerPorts", []))
-                    conflicts.extend(conflicts_data.get("lanPorts", []))
-                else:
-                    conflicts = list(conflicts_data) if conflicts_data else []
-                return {"port_conflicts": conflicts}
-
-            if action == "check_updates":
-                data = await make_graphql_request(QUERIES["check_updates"])
-                statuses = safe_get(data, "docker", "containerUpdateStatuses", default=[])
-                return {"update_statuses": statuses}
 
             # --- Mutations (strict matching: no fuzzy/substring) ---
             if action == "restart":
@@ -525,150 +307,7 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     response["note"] = "Container was already stopped before restart"
                 return response
 
-            if action == "update_all":
-                data = await make_graphql_request(MUTATIONS["update_all"])
-                results = safe_get(data, "docker", "updateAllContainers", default=[])
-                return {"success": True, "action": "update_all", "containers": results}
-
-            # --- Docker organizer mutations ---
-            if action == "create_folder":
-                if not folder_name:
-                    raise ToolError("folder_name is required for 'create_folder' action")
-                _vars: dict[str, Any] = {"name": folder_name}
-                if parent_id is not None:
-                    _vars["parentId"] = parent_id
-                if children_ids is not None:
-                    _vars["childrenIds"] = children_ids
-                data = await make_graphql_request(MUTATIONS["create_folder"], _vars)
-                organizer = data.get("createDockerFolder")
-                if organizer is None:
-                    raise ToolError("create_folder failed: server returned no data")
-                return {"success": True, "action": "create_folder", "organizer": organizer}
-
-            if action == "set_folder_children":
-                if children_ids is None:
-                    raise ToolError("children_ids is required for 'set_folder_children' action")
-                _vars = {"childrenIds": children_ids}
-                if folder_id is not None:
-                    _vars["folderId"] = folder_id
-                data = await make_graphql_request(MUTATIONS["set_folder_children"], _vars)
-                organizer = data.get("setDockerFolderChildren")
-                if organizer is None:
-                    raise ToolError("set_folder_children failed: server returned no data")
-                return {"success": True, "action": "set_folder_children", "organizer": organizer}
-
-            if action == "delete_entries":
-                if not entry_ids:
-                    raise ToolError("entry_ids is required for 'delete_entries' action")
-                data = await make_graphql_request(
-                    MUTATIONS["delete_entries"], {"entryIds": entry_ids}
-                )
-                organizer = data.get("deleteDockerEntries")
-                if organizer is None:
-                    raise ToolError("delete_entries failed: server returned no data")
-                return {"success": True, "action": "delete_entries", "organizer": organizer}
-
-            if action == "move_to_folder":
-                if not source_entry_ids:
-                    raise ToolError("source_entry_ids is required for 'move_to_folder' action")
-                if not destination_folder_id:
-                    raise ToolError("destination_folder_id is required for 'move_to_folder' action")
-                _move_vars = {
-                    "sourceEntryIds": source_entry_ids,
-                    "destinationFolderId": destination_folder_id,
-                }
-                data = await make_graphql_request(MUTATIONS["move_to_folder"], _move_vars)
-                organizer = data.get("moveDockerEntriesToFolder")
-                if organizer is None:
-                    raise ToolError("move_to_folder failed: server returned no data")
-                return {"success": True, "action": "move_to_folder", "organizer": organizer}
-
-            if action == "move_to_position":
-                if not source_entry_ids:
-                    raise ToolError("source_entry_ids is required for 'move_to_position' action")
-                if not destination_folder_id:
-                    raise ToolError(
-                        "destination_folder_id is required for 'move_to_position' action"
-                    )
-                if position is None:
-                    raise ToolError("position is required for 'move_to_position' action")
-                _mtp_vars = {
-                    "sourceEntryIds": source_entry_ids,
-                    "destinationFolderId": destination_folder_id,
-                    "position": position,
-                }
-                data = await make_graphql_request(MUTATIONS["move_to_position"], _mtp_vars)
-                organizer = data.get("moveDockerItemsToPosition")
-                if organizer is None:
-                    raise ToolError("move_to_position failed: server returned no data")
-                return {"success": True, "action": "move_to_position", "organizer": organizer}
-
-            if action == "rename_folder":
-                if not folder_id:
-                    raise ToolError("folder_id is required for 'rename_folder' action")
-                if not new_folder_name:
-                    raise ToolError("new_folder_name is required for 'rename_folder' action")
-                _rf_vars = {"folderId": folder_id, "newName": new_folder_name}
-                data = await make_graphql_request(MUTATIONS["rename_folder"], _rf_vars)
-                organizer = data.get("renameDockerFolder")
-                if organizer is None:
-                    raise ToolError("rename_folder failed: server returned no data")
-                return {"success": True, "action": "rename_folder", "organizer": organizer}
-
-            if action == "create_folder_with_items":
-                if not folder_name:
-                    raise ToolError("folder_name is required for 'create_folder_with_items' action")
-                _vars = {"name": folder_name}
-                if parent_id is not None:
-                    _vars["parentId"] = parent_id
-                if source_entry_ids is not None:
-                    _vars["sourceEntryIds"] = source_entry_ids
-                if position is not None:
-                    _vars["position"] = position
-                data = await make_graphql_request(MUTATIONS["create_folder_with_items"], _vars)
-                organizer = data.get("createDockerFolderWithItems")
-                if organizer is None:
-                    raise ToolError("create_folder_with_items failed: server returned no data")
-                return {
-                    "success": True,
-                    "action": "create_folder_with_items",
-                    "organizer": organizer,
-                }
-
-            if action == "update_view_prefs":
-                if view_prefs is None:
-                    raise ToolError("view_prefs is required for 'update_view_prefs' action")
-                _uvp_vars = {"viewId": view_id, "prefs": view_prefs}
-                data = await make_graphql_request(MUTATIONS["update_view_prefs"], _uvp_vars)
-                organizer = data.get("updateDockerViewPreferences")
-                if organizer is None:
-                    raise ToolError("update_view_prefs failed: server returned no data")
-                return {"success": True, "action": "update_view_prefs", "organizer": organizer}
-
-            if action == "sync_templates":
-                data = await make_graphql_request(MUTATIONS["sync_templates"])
-                result = data.get("syncDockerTemplatePaths")
-                if result is None:
-                    raise ToolError("sync_templates failed: server returned no data")
-                return {"success": True, "action": "sync_templates", "result": result}
-
-            if action == "reset_template_mappings":
-                data = await make_graphql_request(MUTATIONS["reset_template_mappings"])
-                return {
-                    "success": True,
-                    "action": "reset_template_mappings",
-                    "result": data.get("resetDockerTemplateMappings"),
-                }
-
-            if action == "refresh_digests":
-                data = await make_graphql_request(MUTATIONS["refresh_digests"])
-                return {
-                    "success": True,
-                    "action": "refresh_digests",
-                    "result": data.get("refreshDockerDigests"),
-                }
-
-            # Single-container mutations
+            # Single-container mutations (start, stop)
             if action in MUTATIONS:
                 actual_id = await _resolve_container_id(container_id or "", strict=True)
                 op_context: dict[str, str] | None = (
@@ -690,17 +329,12 @@ def register_docker_tool(mcp: FastMCP) -> None:
                     }
 
                 docker_data = data.get("docker") or {}
-                # Map action names to GraphQL response field names where they differ
-                response_field_map = {
-                    "update": "updateContainer",
-                    "remove": "removeContainer",
-                }
-                field = response_field_map.get(action, action)
-                result = docker_data.get(field)
+                field = action
+                result_container = docker_data.get(field)
                 return {
                     "success": True,
                     "action": action,
-                    "container": result,
+                    "container": result_container,
                 }
 
             raise ToolError(f"Unhandled action '{action}' — this is a bug")

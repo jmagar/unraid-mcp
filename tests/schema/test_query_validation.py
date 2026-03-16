@@ -321,7 +321,7 @@ class TestStorageQueries:
     def test_all_storage_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.storage import QUERIES
 
-        expected = {"shares", "disks", "disk_details", "log_files", "logs", "unassigned"}
+        expected = {"shares", "disks", "disk_details", "log_files", "logs"}
         assert set(QUERIES.keys()) == expected
 
 
@@ -378,9 +378,6 @@ class TestDockerQueries:
             "details",
             "networks",
             "network_details",
-            "port_conflicts",
-            "check_updates",
-            "logs",
         }
         assert set(QUERIES.keys()) == expected
 
@@ -406,22 +403,6 @@ class TestDockerMutations:
         expected = {
             "start",
             "stop",
-            "pause",
-            "unpause",
-            "remove",
-            "update",
-            "update_all",
-            "create_folder",
-            "set_folder_children",
-            "delete_entries",
-            "move_to_folder",
-            "move_to_position",
-            "rename_folder",
-            "create_folder_with_items",
-            "update_view_prefs",
-            "sync_templates",
-            "reset_template_mappings",
-            "refresh_digests",
         }
         assert set(MUTATIONS.keys()) == expected
 
@@ -523,7 +504,7 @@ class TestNotificationQueries:
     def test_all_notification_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools.notifications import QUERIES
 
-        assert set(QUERIES.keys()) == {"overview", "list", "warnings"}
+        assert set(QUERIES.keys()) == {"overview", "list"}
 
 
 class TestNotificationMutations:
