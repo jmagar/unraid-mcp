@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 [project]
 name = "unraid-mcp"
-version = "0.5.0"
+version = "0.6.0"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -196,7 +196,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D104"]
-"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "PLR2004"]  # Allow test-only patterns
+"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "PLR2004", "N815"]  # Allow test-only patterns; N815 permits camelCase Pydantic fields that mirror GraphQL response keys
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -298,4 +298,5 @@ dev = [
     "build>=1.2.2",
     "twine>=6.0.1",
     "graphql-core>=3.2.0",
+    "hypothesis>=6.151.9",
 ]
