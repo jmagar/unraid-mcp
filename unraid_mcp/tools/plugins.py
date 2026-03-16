@@ -10,7 +10,7 @@ from fastmcp import Context, FastMCP
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.setup import elicit_destructive_confirmation
+from ..core.guards import elicit_destructive_confirmation
 
 
 QUERIES: dict[str, str] = {
