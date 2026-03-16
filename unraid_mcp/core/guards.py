@@ -10,9 +10,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from fastmcp import Context
 
-from fastmcp.exceptions import ToolError
-
 from ..config.logging import logger
+from .exceptions import ToolError
 
 
 async def elicit_destructive_confirmation(

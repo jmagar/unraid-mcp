@@ -10,7 +10,7 @@ from fastmcp import Context, FastMCP
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.guards import elicit_destructive_confirmation
+from ..core.guards import gate_destructive_action
 
 
 QUERIES: dict[str, str] = {
@@ -75,14 +75,13 @@ def register_plugins_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            _desc = f"Remove plugin(s) **{names}** from the Unraid API. This cannot be undone without re-installing."
-            confirmed = await elicit_destructive_confirmation(ctx, action, _desc)
-            if not confirmed:
-                raise ToolError(
-                    f"Action '{action}' was not confirmed. "
-                    "Re-run with confirm=True to bypass elicitation."
-                )
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            f"Remove plugin(s) **{names}** from the Unraid API. This cannot be undone without re-installing.",
+        )
 
         with tool_error_handler("plugins", action, logger):
             logger.info(f"Executing unraid_plugins action={action}")

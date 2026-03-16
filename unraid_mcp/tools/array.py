@@ -11,7 +11,7 @@ from fastmcp import Context, FastMCP
 from ..config.logging import logger
 from ..core.client import make_graphql_request
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.guards import elicit_destructive_confirmation
+from ..core.guards import gate_destructive_action
 
 
 QUERIES: dict[str, str] = {
@@ -159,18 +159,17 @@ def register_array_tool(mcp: FastMCP) -> None:
         if action not in ALL_ACTIONS:
             raise ToolError(f"Invalid action '{action}'. Must be one of: {sorted(ALL_ACTIONS)}")
 
-        if action in DESTRUCTIVE_ACTIONS and not confirm:
-            desc_map = {
+        await gate_destructive_action(
+            ctx,
+            action,
+            DESTRUCTIVE_ACTIONS,
+            confirm,
+            {
                 "remove_disk": f"Remove disk **{disk_id}** from the array. The array must be stopped first.",
                 "clear_disk_stats": f"Clear all I/O statistics for disk **{disk_id}**. This cannot be undone.",
                 "stop_array": "Stop the Unraid array. Running containers and VMs may lose access to array shares.",
-            }
-            confirmed = await elicit_destructive_confirmation(ctx, action, desc_map[action])
-            if not confirmed:
-                raise ToolError(
-                    f"Action '{action}' was not confirmed. "
-                    "Re-run with confirm=True to bypass elicitation."
-                )
+            },
+        )
 
         with tool_error_handler("array", action, logger):
             logger.info(f"Executing unraid_array action={action}")
