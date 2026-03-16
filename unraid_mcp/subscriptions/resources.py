@@ -15,7 +15,6 @@ from fastmcp import FastMCP
 from ..config.logging import logger
 from .manager import subscription_manager
 from .queries import SNAPSHOT_ACTIONS
-from .snapshot import subscribe_once
 
 
 # Global flag to track subscription startup
@@ -104,14 +103,18 @@ def register_subscription_resources(mcp: FastMCP) -> None:
             }
         )
 
-    def _make_resource_fn(action: str, query: str):
+    def _make_resource_fn(action: str):
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
-            try:
-                data = await subscribe_once(query)
+            data = await subscription_manager.get_resource_data(action)
+            if data:
                 return json.dumps(data, indent=2)
-            except Exception as exc:
-                return json.dumps({"error": str(exc), "action": action})
+            return json.dumps(
+                {
+                    "status": "connecting",
+                    "message": f"Subscription '{action}' is starting. Retry in a moment.",
+                }
+            )
 
         _live_resource.__name__ = f"{action}_resource"
         _live_resource.__doc__ = (
@@ -119,7 +122,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         )
         return _live_resource
 
-    for _action, _query in SNAPSHOT_ACTIONS.items():
-        mcp.resource(f"unraid://live/{_action}")(_make_resource_fn(_action, _query))
+    for _action in SNAPSHOT_ACTIONS:
+        mcp.resource(f"unraid://live/{_action}")(_make_resource_fn(_action))
 
     logger.info("Subscription resources registered successfully")

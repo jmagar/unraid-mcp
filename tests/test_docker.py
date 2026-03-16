@@ -1,58 +1,12 @@
-"""Tests for unraid_docker tool."""
+"""Tests for docker subactions of the consolidated unraid tool."""
 
 from collections.abc import Generator
-from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.docker import (
-    DOCKER_ACTIONS,
-    find_container_by_identifier,
-    get_available_container_names,
-)
-
-
-# --- Unit tests for helpers ---
-
-
-class TestFindContainerByIdentifier:
-    def test_by_exact_id(self) -> None:
-        containers = [{"id": "abc123", "names": ["plex"]}]
-        assert find_container_by_identifier("abc123", containers) == containers[0]
-
-    def test_by_exact_name(self) -> None:
-        containers = [{"id": "abc123", "names": ["plex"]}]
-        assert find_container_by_identifier("plex", containers) == containers[0]
-
-    def test_fuzzy_match(self) -> None:
-        containers = [{"id": "abc123", "names": ["plex-media-server"]}]
-        result = find_container_by_identifier("plex", containers)
-        assert result == containers[0]
-
-    def test_not_found(self) -> None:
-        containers = [{"id": "abc123", "names": ["plex"]}]
-        assert find_container_by_identifier("sonarr", containers) is None
-
-    def test_empty_list(self) -> None:
-        assert find_container_by_identifier("plex", []) is None
-
-
-class TestGetAvailableContainerNames:
-    def test_extracts_names(self) -> None:
-        containers = [
-            {"names": ["plex"]},
-            {"names": ["sonarr", "sonarr-v3"]},
-        ]
-        names = get_available_container_names(containers)
-        assert "plex" in names
-        assert "sonarr" in names
-        assert "sonarr-v3" in names
-
-    def test_empty(self) -> None:
-        assert get_available_container_names([]) == []
 
 
 # --- Integration tests ---
@@ -60,55 +14,34 @@ class TestGetAvailableContainerNames:
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 def _make_tool():
-    return make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 class TestDockerValidation:
-    @pytest.mark.parametrize(
-        "action",
-        [
-            "logs",
-            "port_conflicts",
-            "check_updates",
-            "pause",
-            "unpause",
-            "remove",
-            "update",
-            "update_all",
-            "create_folder",
-            "delete_entries",
-            "reset_template_mappings",
-        ],
-    )
-    def test_removed_actions_are_gone(self, action: str) -> None:
-        assert action not in get_args(DOCKER_ACTIONS), (
-            f"Action '{action}' should have been removed from DOCKER_ACTIONS"
-        )
-
-    @pytest.mark.parametrize("action", ["start", "stop", "details"])
+    @pytest.mark.parametrize("subaction", ["start", "stop", "details"])
     async def test_container_actions_require_id(
-        self, _mock_graphql: AsyncMock, action: str
+        self, _mock_graphql: AsyncMock, subaction: str
     ) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="container_id"):
-            await tool_fn(action=action)
+            await tool_fn(action="docker", subaction=subaction)
 
     async def test_network_details_requires_id(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="network_id"):
-            await tool_fn(action="network_details")
+            await tool_fn(action="docker", subaction="network_details")
 
     async def test_non_logs_action_ignores_tail_lines_validation(
         self, _mock_graphql: AsyncMock
     ) -> None:
         _mock_graphql.return_value = {"docker": {"containers": []}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="list")
+        result = await tool_fn(action="docker", subaction="list")
         assert result["containers"] == []
 
 
@@ -118,7 +51,7 @@ class TestDockerActions:
             "docker": {"containers": [{"id": "c1", "names": ["plex"], "state": "running"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="list")
+        result = await tool_fn(action="docker", subaction="list")
         assert len(result["containers"]) == 1
 
     async def test_start_container(self, _mock_graphql: AsyncMock) -> None:
@@ -136,13 +69,13 @@ class TestDockerActions:
             },
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="start", container_id="plex")
+        result = await tool_fn(action="docker", subaction="start", container_id="plex")
         assert result["success"] is True
 
     async def test_networks(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"docker": {"networks": [{"id": "net:1", "name": "bridge"}]}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="networks")
+        result = await tool_fn(action="docker", subaction="networks")
         assert len(result["networks"]) == 1
 
     async def test_idempotent_start(self, _mock_graphql: AsyncMock) -> None:
@@ -152,7 +85,7 @@ class TestDockerActions:
             {"idempotent_success": True, "docker": {}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="start", container_id="plex")
+        result = await tool_fn(action="docker", subaction="start", container_id="plex")
         assert result["idempotent"] is True
 
     async def test_restart(self, _mock_graphql: AsyncMock) -> None:
@@ -163,9 +96,9 @@ class TestDockerActions:
             {"docker": {"start": {"id": cid, "state": "running"}}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="restart", container_id="plex")
+        result = await tool_fn(action="docker", subaction="restart", container_id="plex")
         assert result["success"] is True
-        assert result["action"] == "restart"
+        assert result["subaction"] == "restart"
 
     async def test_restart_idempotent_stop(self, _mock_graphql: AsyncMock) -> None:
         cid = "a" * 64 + ":local"
@@ -175,7 +108,7 @@ class TestDockerActions:
             {"docker": {"start": {"id": cid, "state": "running"}}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="restart", container_id="plex")
+        result = await tool_fn(action="docker", subaction="restart", container_id="plex")
         assert result["success"] is True
         assert "note" in result
 
@@ -188,14 +121,14 @@ class TestDockerActions:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="details", container_id="plex")
+        result = await tool_fn(action="docker", subaction="details", container_id="plex")
         assert result["names"] == ["plex"]
 
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Failed to execute docker/list"):
-            await tool_fn(action="list")
+            await tool_fn(action="docker", subaction="list")
 
     async def test_short_id_prefix_ambiguous_rejected(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -214,7 +147,7 @@ class TestDockerActions:
         }
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="ambiguous"):
-            await tool_fn(action="details", container_id="abcdef123456")
+            await tool_fn(action="docker", subaction="details", container_id="abcdef123456")
 
 
 class TestDockerMutationFailures:
@@ -228,7 +161,7 @@ class TestDockerMutationFailures:
             {"docker": {}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="start", container_id="plex")
+        result = await tool_fn(action="docker", subaction="start", container_id="plex")
         assert result["success"] is True
         assert result["container"] is None
 
@@ -240,7 +173,7 @@ class TestDockerMutationFailures:
             {"docker": {"stop": {"id": cid, "state": "running"}}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="stop", container_id="plex")
+        result = await tool_fn(action="docker", subaction="stop", container_id="plex")
         assert result["success"] is True
         assert result["container"]["state"] == "running"
 
@@ -254,7 +187,7 @@ class TestDockerMutationFailures:
         ]
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="timed out"):
-            await tool_fn(action="start", container_id="plex")
+            await tool_fn(action="docker", subaction="start", container_id="plex")
 
 
 class TestDockerNetworkErrors:
@@ -267,14 +200,14 @@ class TestDockerNetworkErrors:
         )
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Connection refused"):
-            await tool_fn(action="list")
+            await tool_fn(action="docker", subaction="list")
 
     async def test_list_http_401_unauthorized(self, _mock_graphql: AsyncMock) -> None:
         """HTTP 401 should propagate as ToolError."""
         _mock_graphql.side_effect = ToolError("HTTP error 401: Unauthorized")
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="401"):
-            await tool_fn(action="list")
+            await tool_fn(action="docker", subaction="list")
 
     async def test_json_decode_error_on_list(self, _mock_graphql: AsyncMock) -> None:
         """Invalid JSON response should be wrapped in ToolError."""
@@ -283,4 +216,4 @@ class TestDockerNetworkErrors:
         )
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid JSON"):
-            await tool_fn(action="list")
+            await tool_fn(action="docker", subaction="list")

@@ -6,11 +6,11 @@ Uses Hypothesis to fuzz tool inputs and verify the core invariant:
     other unhandled exception from arbitrary inputs is a bug.
 
 Each test class targets a distinct tool domain and strategy profile:
-- Docker: arbitrary container IDs, action names, numeric params
+- Docker: arbitrary container IDs, subaction names, numeric params
 - Notifications: importance strings, list_type strings, field lengths
 - Keys: arbitrary key IDs, role lists, name strings
-- VM: arbitrary VM IDs, action names
-- Info: invalid action names (cross-tool invariant for the action guard)
+- VM: arbitrary VM IDs, subaction names
+- Info: invalid subaction names (cross-tool invariant for the subaction guard)
 """
 
 import asyncio
@@ -60,6 +60,10 @@ def _assert_only_tool_error(exc: BaseException) -> None:
     )
 
 
+def _make_tool():
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
+
+
 # ---------------------------------------------------------------------------
 # Docker: arbitrary container IDs
 # ---------------------------------------------------------------------------
@@ -79,16 +83,14 @@ class TestDockerContainerIdFuzzing:
         """Arbitrary container IDs for 'details' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
                     # ToolError is the only acceptable exception — suppress it
-                    await tool_fn(action="details", container_id=container_id)
+                    await tool_fn(action="docker", subaction="details", container_id=container_id)
 
         _run(_run_test())
 
@@ -98,15 +100,13 @@ class TestDockerContainerIdFuzzing:
         """Arbitrary container IDs for 'start' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
-                    await tool_fn(action="start", container_id=container_id)
+                    await tool_fn(action="docker", subaction="start", container_id=container_id)
 
         _run(_run_test())
 
@@ -116,15 +116,13 @@ class TestDockerContainerIdFuzzing:
         """Arbitrary container IDs for 'stop' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
-                    await tool_fn(action="stop", container_id=container_id)
+                    await tool_fn(action="docker", subaction="stop", container_id=container_id)
 
         _run(_run_test())
 
@@ -134,80 +132,57 @@ class TestDockerContainerIdFuzzing:
         """Arbitrary container IDs for 'restart' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 # stop then start both need container list + mutation responses
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
-                    await tool_fn(action="restart", container_id=container_id)
+                    await tool_fn(action="docker", subaction="restart", container_id=container_id)
 
         _run(_run_test())
 
 
 # ---------------------------------------------------------------------------
-# Docker: invalid action names
+# Docker: invalid subaction names
 # ---------------------------------------------------------------------------
 
 
 class TestDockerInvalidActions:
-    """Fuzz the action parameter with arbitrary strings.
+    """Fuzz the subaction parameter with arbitrary strings for the docker domain.
 
-    Invariant: invalid action names raise ToolError, never KeyError or crash.
-    This validates the action guard that sits at the top of every tool function.
+    Invariant: invalid subaction names raise ToolError, never KeyError or crash.
+    This validates the subaction guard that sits inside every domain handler.
     """
 
     @given(st.text())
     @settings(max_examples=200, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_invalid_action_raises_tool_error(self, action: str) -> None:
-        """Any non-valid action string must raise ToolError, not crash."""
-        valid_actions = {
+    def test_invalid_action_raises_tool_error(self, subaction: str) -> None:
+        """Any non-valid subaction string for docker must raise ToolError, not crash."""
+        valid_subactions = {
             "list",
             "details",
             "start",
             "stop",
             "restart",
-            "pause",
-            "unpause",
-            "remove",
-            "update",
-            "update_all",
-            "logs",
             "networks",
             "network_details",
-            "port_conflicts",
-            "check_updates",
-            "create_folder",
-            "set_folder_children",
-            "delete_entries",
-            "move_to_folder",
-            "move_to_position",
-            "rename_folder",
-            "create_folder_with_items",
-            "update_view_prefs",
-            "sync_templates",
-            "reset_template_mappings",
-            "refresh_digests",
         }
-        if action in valid_actions:
-            return  # Skip valid actions — they have different semantics
+        if subaction in valid_subactions:
+            return  # Skip valid subactions — they have different semantics
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
-            with patch("unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock):
+            tool_fn = _make_tool()
+            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:
-                    await tool_fn(action=action)
+                    await tool_fn(action="docker", subaction=subaction)
                 except ToolError:
-                    pass  # Correct: invalid action raises ToolError
+                    pass  # Correct: invalid subaction raises ToolError
                 except Exception as exc:
                     # Any other exception is a bug
                     pytest.fail(
-                        f"Action '{action!r}' raised {type(exc).__name__} "
+                        f"subaction={subaction!r} raised {type(exc).__name__} "
                         f"instead of ToolError: {exc!r}"
                     )
 
@@ -235,13 +210,9 @@ class TestNotificationsEnumFuzzing:
             return  # Skip valid values
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -249,7 +220,8 @@ class TestNotificationsEnumFuzzing:
                 }
                 try:
                     await tool_fn(
-                        action="create",
+                        action="notification",
+                        subaction="create",
                         title="Test",
                         subject="Sub",
                         description="Desc",
@@ -271,18 +243,14 @@ class TestNotificationsEnumFuzzing:
             return  # Skip valid values
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"notifications": {"list": []}}
                 try:
-                    await tool_fn(action="list", list_type=list_type)
+                    await tool_fn(action="notification", subaction="list", list_type=list_type)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -306,13 +274,9 @@ class TestNotificationsEnumFuzzing:
         """
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -320,7 +284,8 @@ class TestNotificationsEnumFuzzing:
                 }
                 try:
                     await tool_fn(
-                        action="create",
+                        action="notification",
+                        subaction="create",
                         title=title,
                         subject=subject,
                         description=description,
@@ -344,19 +309,16 @@ class TestNotificationsEnumFuzzing:
             return
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"deleteNotification": {}}
                 try:
                     await tool_fn(
-                        action="delete",
+                        action="notification",
+                        subaction="delete",
                         notification_id="some-id",
                         notification_type=notif_type,
                         confirm=True,
@@ -372,12 +334,11 @@ class TestNotificationsEnumFuzzing:
 
     @given(st.text())
     @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_invalid_action_raises_tool_error(self, action: str) -> None:
-        """Invalid action names for notifications tool raise ToolError."""
-        valid_actions = {
+    def test_invalid_action_raises_tool_error(self, subaction: str) -> None:
+        """Invalid subaction names for notifications domain raise ToolError."""
+        valid_subactions = {
             "overview",
             "list",
-            "warnings",
             "create",
             "archive",
             "unread",
@@ -385,31 +346,26 @@ class TestNotificationsEnumFuzzing:
             "delete_archived",
             "archive_all",
             "archive_many",
-            "create_unique",
             "unarchive_many",
             "unarchive_all",
             "recalculate",
         }
-        if action in valid_actions:
+        if subaction in valid_subactions:
             return
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ):
                 try:
-                    await tool_fn(action=action)
+                    await tool_fn(action="notification", subaction=subaction)
                 except ToolError:
                     pass
                 except Exception as exc:
                     pytest.fail(
-                        f"Action {action!r} raised {type(exc).__name__} "
+                        f"subaction={subaction!r} raised {type(exc).__name__} "
                         f"instead of ToolError: {exc!r}"
                     )
 
@@ -425,7 +381,7 @@ class TestKeysInputFuzzing:
     """Fuzz API key management parameters.
 
     Invariant: arbitrary key_id strings, names, and role lists never crash
-    the keys tool — only ToolError or clean return values are acceptable.
+    the keys domain — only ToolError or clean return values are acceptable.
     """
 
     @given(st.text())
@@ -434,13 +390,13 @@ class TestKeysInputFuzzing:
         """Arbitrary key_id for 'get' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": None}
                 try:
-                    await tool_fn(action="get", key_id=key_id)
+                    await tool_fn(action="key", subaction="get", key_id=key_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -454,15 +410,15 @@ class TestKeysInputFuzzing:
         """Arbitrary name strings for 'create' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {
                     "apiKey": {"create": {"id": "1", "name": name, "key": "k", "roles": []}}
                 }
                 try:
-                    await tool_fn(action="create", name=name)
+                    await tool_fn(action="key", subaction="create", name=name)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -476,13 +432,15 @@ class TestKeysInputFuzzing:
         """Arbitrary role lists for 'add_role' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": {"addRole": True}}
                 try:
-                    await tool_fn(action="add_role", key_id="some-key-id", roles=roles)
+                    await tool_fn(
+                        action="key", subaction="add_role", key_id="some-key-id", roles=roles
+                    )
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -492,22 +450,22 @@ class TestKeysInputFuzzing:
 
     @given(st.text())
     @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_invalid_action_raises_tool_error(self, action: str) -> None:
-        """Invalid action names for keys tool raise ToolError."""
-        valid_actions = {"list", "get", "create", "update", "delete", "add_role", "remove_role"}
-        if action in valid_actions:
+    def test_invalid_action_raises_tool_error(self, subaction: str) -> None:
+        """Invalid subaction names for keys domain raise ToolError."""
+        valid_subactions = {"list", "get", "create", "update", "delete", "add_role", "remove_role"}
+        if subaction in valid_subactions:
             return
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
-            with patch("unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock):
+            tool_fn = _make_tool()
+            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:
-                    await tool_fn(action=action)
+                    await tool_fn(action="key", subaction=subaction)
                 except ToolError:
                     pass
                 except Exception as exc:
                     pytest.fail(
-                        f"Action {action!r} raised {type(exc).__name__} "
+                        f"subaction={subaction!r} raised {type(exc).__name__} "
                         f"instead of ToolError: {exc!r}"
                     )
 
@@ -515,15 +473,15 @@ class TestKeysInputFuzzing:
 
 
 # ---------------------------------------------------------------------------
-# VM: arbitrary VM IDs and action names
+# VM: arbitrary VM IDs and subaction names
 # ---------------------------------------------------------------------------
 
 
 class TestVMInputFuzzing:
     """Fuzz VM management parameters.
 
-    Invariant: arbitrary vm_id strings and action names must never crash
-    the VM tool — only ToolError or clean return values are acceptable.
+    Invariant: arbitrary vm_id strings and subaction names must never crash
+    the VM domain — only ToolError or clean return values are acceptable.
     """
 
     @given(st.text())
@@ -532,16 +490,14 @@ class TestVMInputFuzzing:
         """Arbitrary vm_id for 'start' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.virtualization.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"vm": {"start": True}}
                 try:
-                    await tool_fn(action="start", vm_id=vm_id)
+                    await tool_fn(action="vm", subaction="start", vm_id=vm_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -555,16 +511,14 @@ class TestVMInputFuzzing:
         """Arbitrary vm_id for 'stop' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.virtualization.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"vm": {"stop": True}}
                 try:
-                    await tool_fn(action="stop", vm_id=vm_id)
+                    await tool_fn(action="vm", subaction="stop", vm_id=vm_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -578,17 +532,15 @@ class TestVMInputFuzzing:
         """Arbitrary vm_id for 'details' must not crash the tool."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.virtualization.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 # Return an empty VM list so the lookup gracefully fails
                 mock.return_value = {"vms": {"domains": []}}
                 try:
-                    await tool_fn(action="details", vm_id=vm_id)
+                    await tool_fn(action="vm", subaction="details", vm_id=vm_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -598,9 +550,9 @@ class TestVMInputFuzzing:
 
     @given(st.text())
     @settings(max_examples=200, suppress_health_check=[HealthCheck.function_scoped_fixture])
-    def test_invalid_action_raises_tool_error(self, action: str) -> None:
-        """Invalid action names for VM tool raise ToolError."""
-        valid_actions = {
+    def test_invalid_action_raises_tool_error(self, subaction: str) -> None:
+        """Invalid subaction names for VM domain raise ToolError."""
+        valid_subactions = {
             "list",
             "details",
             "start",
@@ -611,24 +563,22 @@ class TestVMInputFuzzing:
             "reboot",
             "reset",
         }
-        if action in valid_actions:
+        if subaction in valid_subactions:
             return
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.virtualization.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ):
                 try:
-                    await tool_fn(action=action)
+                    await tool_fn(action="vm", subaction=subaction)
                 except ToolError:
                     pass
                 except Exception as exc:
                     pytest.fail(
-                        f"Action {action!r} raised {type(exc).__name__} "
+                        f"subaction={subaction!r} raised {type(exc).__name__} "
                         f"instead of ToolError: {exc!r}"
                     )
 
@@ -664,18 +614,16 @@ class TestBoundaryValues:
     )
     @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_docker_details_adversarial_inputs(self, container_id: str) -> None:
-        """Adversarial container_id values must not crash the Docker tool."""
+        """Adversarial container_id values must not crash the Docker domain."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker"
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 try:
-                    await tool_fn(action="details", container_id=container_id)
+                    await tool_fn(action="docker", subaction="details", container_id=container_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -702,13 +650,9 @@ class TestBoundaryValues:
         """Adversarial importance values must raise ToolError, not crash."""
 
         async def _run_test():
-            tool_fn = make_tool_fn(
-                "unraid_mcp.tools.notifications",
-                "register_notifications_tool",
-                "unraid_notifications",
-            )
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.notifications.make_graphql_request",
+                "unraid_mcp.tools.unraid.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -716,7 +660,8 @@ class TestBoundaryValues:
                 }
                 try:
                     await tool_fn(
-                        action="create",
+                        action="notification",
+                        subaction="create",
                         title="t",
                         subject="s",
                         description="d",
@@ -743,13 +688,13 @@ class TestBoundaryValues:
         """Adversarial key_id values must not crash the keys get action."""
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
+            tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": None}
                 try:
-                    await tool_fn(action="get", key_id=key_id)
+                    await tool_fn(action="key", subaction="get", key_id=key_id)
                 except ToolError:
                     pass
                 except Exception as exc:
@@ -759,49 +704,46 @@ class TestBoundaryValues:
 
 
 # ---------------------------------------------------------------------------
-# Info: action guard (invalid actions on a read-only tool)
+# Top-level action guard (invalid domain names)
 # ---------------------------------------------------------------------------
 
 
 class TestInfoActionGuard:
-    """Fuzz the action parameter on unraid_info.
+    """Fuzz the top-level action parameter (domain selector).
 
-    Invariant: the info tool exposes no mutations and its action guard must
-    reject any invalid action with a ToolError rather than a KeyError crash.
+    Invariant: the consolidated unraid tool must reject any invalid domain
+    with a ToolError rather than a KeyError crash.
     """
 
     @given(st.text())
     @settings(max_examples=200, suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_invalid_action_raises_tool_error(self, action: str) -> None:
-        """Invalid action names for the info tool raise ToolError."""
+        """Invalid domain names raise ToolError."""
         valid_actions = {
-            "overview",
             "array",
-            "network",
-            "registration",
-            "variables",
-            "metrics",
-            "services",
-            "display",
-            "config",
-            "online",
-            "owner",
-            "settings",
-            "server",
-            "servers",
-            "flash",
-            "ups_devices",
-            "ups_device",
-            "ups_config",
+            "customization",
+            "disk",
+            "docker",
+            "health",
+            "key",
+            "live",
+            "notification",
+            "oidc",
+            "plugin",
+            "rclone",
+            "setting",
+            "system",
+            "user",
+            "vm",
         }
         if action in valid_actions:
             return
 
         async def _run_test():
-            tool_fn = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
-            with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock):
+            tool_fn = _make_tool()
+            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
                 try:
-                    await tool_fn(action=action)
+                    await tool_fn(action=action, subaction="list")
                 except ToolError:
                     pass
                 except Exception as exc:

@@ -100,9 +100,19 @@ class SubscriptionManager:
         self._connection_start_times: dict[str, float] = {}  # Track when connections started
 
         # Define subscription configurations
-        self.subscription_configs = {
-            "logFileSubscription": {
-                "query": """
+        from .queries import SNAPSHOT_ACTIONS
+
+        self.subscription_configs: dict[str, dict] = {
+            action: {
+                "query": query,
+                "resource": f"unraid://live/{action}",
+                "description": f"Real-time {action.replace('_', ' ')} data",
+                "auto_start": True,
+            }
+            for action, query in SNAPSHOT_ACTIONS.items()
+        }
+        self.subscription_configs["logFileSubscription"] = {
+            "query": """
                 subscription LogFileSubscription($path: String!) {
                     logFile(path: $path) {
                         path
@@ -111,10 +121,9 @@ class SubscriptionManager:
                     }
                 }
                 """,
-                "resource": "unraid://logs/stream",
-                "description": "Real-time log file streaming",
-                "auto_start": False,  # Started manually with path parameter
-            }
+            "resource": "unraid://logs/stream",
+            "description": "Real-time log file streaming",
+            "auto_start": False,  # Started manually with path parameter
         }
 
         logger.info(

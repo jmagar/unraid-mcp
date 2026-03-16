@@ -261,11 +261,11 @@ class TestGraphQLErrorHandling:
 
 
 class TestInfoToolRequests:
-    """Verify unraid_info tool constructs correct GraphQL queries."""
+    """Verify unraid system tool constructs correct GraphQL queries."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_overview_sends_correct_query(self) -> None:
@@ -281,7 +281,7 @@ class TestInfoToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="overview")
+        await tool(action="system", subaction="overview")
         body = _extract_request_body(route.calls.last.request)
         assert "GetSystemInfo" in body["query"]
         assert "info" in body["query"]
@@ -292,7 +292,7 @@ class TestInfoToolRequests:
             return_value=_graphql_response({"array": {"state": "STARTED", "capacity": {}}})
         )
         tool = self._get_tool()
-        await tool(action="array")
+        await tool(action="system", subaction="array")
         body = _extract_request_body(route.calls.last.request)
         assert "GetArrayStatus" in body["query"]
 
@@ -302,7 +302,7 @@ class TestInfoToolRequests:
             return_value=_graphql_response({"network": {"id": "n1", "accessUrls": []}})
         )
         tool = self._get_tool()
-        await tool(action="network")
+        await tool(action="system", subaction="network")
         body = _extract_request_body(route.calls.last.request)
         assert "GetNetworkInfo" in body["query"]
 
@@ -314,7 +314,7 @@ class TestInfoToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="metrics")
+        await tool(action="system", subaction="metrics")
         body = _extract_request_body(route.calls.last.request)
         assert "GetMetrics" in body["query"]
 
@@ -324,7 +324,7 @@ class TestInfoToolRequests:
             return_value=_graphql_response({"upsDeviceById": {"id": "ups1", "model": "APC"}})
         )
         tool = self._get_tool()
-        await tool(action="ups_device", device_id="ups1")
+        await tool(action="system", subaction="ups_device", device_id="ups1")
         body = _extract_request_body(route.calls.last.request)
         assert body["variables"] == {"id": "ups1"}
         assert "GetUpsDevice" in body["query"]
@@ -333,7 +333,7 @@ class TestInfoToolRequests:
     async def test_online_sends_correct_query(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
-        await tool(action="online")
+        await tool(action="system", subaction="online")
         body = _extract_request_body(route.calls.last.request)
         assert "GetOnline" in body["query"]
 
@@ -343,7 +343,7 @@ class TestInfoToolRequests:
             return_value=_graphql_response({"servers": [{"id": "s1", "name": "tower"}]})
         )
         tool = self._get_tool()
-        await tool(action="servers")
+        await tool(action="system", subaction="servers")
         body = _extract_request_body(route.calls.last.request)
         assert "GetServers" in body["query"]
 
@@ -353,7 +353,7 @@ class TestInfoToolRequests:
             return_value=_graphql_response({"flash": {"id": "f1", "guid": "abc"}})
         )
         tool = self._get_tool()
-        await tool(action="flash")
+        await tool(action="system", subaction="flash")
         body = _extract_request_body(route.calls.last.request)
         assert "GetFlash" in body["query"]
 
@@ -364,11 +364,11 @@ class TestInfoToolRequests:
 
 
 class TestDockerToolRequests:
-    """Verify unraid_docker tool constructs correct requests."""
+    """Verify unraid docker tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_list_sends_correct_query(self) -> None:
@@ -378,7 +378,7 @@ class TestDockerToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="list")
+        await tool(action="docker", subaction="list")
         body = _extract_request_body(route.calls.last.request)
         assert "ListDockerContainers" in body["query"]
 
@@ -400,7 +400,7 @@ class TestDockerToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="start", container_id=container_id)
+        await tool(action="docker", subaction="start", container_id=container_id)
         body = _extract_request_body(route.calls.last.request)
         assert "StartContainer" in body["query"]
         assert body["variables"] == {"id": container_id}
@@ -423,7 +423,7 @@ class TestDockerToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="stop", container_id=container_id)
+        await tool(action="docker", subaction="stop", container_id=container_id)
         body = _extract_request_body(route.calls.last.request)
         assert "StopContainer" in body["query"]
         assert body["variables"] == {"id": container_id}
@@ -440,7 +440,7 @@ class TestDockerToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="networks")
+        await tool(action="docker", subaction="networks")
         body = _extract_request_body(route.calls.last.request)
         assert "GetDockerNetworks" in body["query"]
 
@@ -484,9 +484,9 @@ class TestDockerToolRequests:
 
         respx.post(API_URL).mock(side_effect=side_effect)
         tool = self._get_tool()
-        result = await tool(action="restart", container_id=container_id)
+        result = await tool(action="docker", subaction="restart", container_id=container_id)
         assert result["success"] is True
-        assert result["action"] == "restart"
+        assert result["subaction"] == "restart"
         assert call_count == 2
 
     @respx.mock
@@ -499,7 +499,8 @@ class TestDockerToolRequests:
             nonlocal call_count
             body = json.loads(request.content.decode())
             call_count += 1
-            if "ResolveContainerID" in body["query"]:
+            if "skipCache" in body["query"]:
+                # Resolution query: docker { containers(skipCache: true) { id names } }
                 return _graphql_response(
                     {"docker": {"containers": [{"id": resolved_id, "names": ["plex"]}]}}
                 )
@@ -520,7 +521,7 @@ class TestDockerToolRequests:
 
         respx.post(API_URL).mock(side_effect=side_effect)
         tool = self._get_tool()
-        result = await tool(action="start", container_id="plex")
+        result = await tool(action="docker", subaction="start", container_id="plex")
         assert call_count == 2  # resolve + start
         assert result["success"] is True
 
@@ -531,11 +532,11 @@ class TestDockerToolRequests:
 
 
 class TestVMToolRequests:
-    """Verify unraid_vm tool constructs correct requests."""
+    """Verify unraid vm tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_list_sends_correct_query(self) -> None:
@@ -549,7 +550,7 @@ class TestVMToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="list")
+        result = await tool(action="vm", subaction="list")
         body = _extract_request_body(route.calls.last.request)
         assert "ListVMs" in body["query"]
         assert "vms" in result
@@ -558,7 +559,7 @@ class TestVMToolRequests:
     async def test_start_sends_mutation_with_id(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({"vm": {"start": True}}))
         tool = self._get_tool()
-        result = await tool(action="start", vm_id="vm-123")
+        result = await tool(action="vm", subaction="start", vm_id="vm-123")
         body = _extract_request_body(route.calls.last.request)
         assert "StartVM" in body["query"]
         assert body["variables"] == {"id": "vm-123"}
@@ -568,7 +569,7 @@ class TestVMToolRequests:
     async def test_stop_sends_mutation_with_id(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({"vm": {"stop": True}}))
         tool = self._get_tool()
-        await tool(action="stop", vm_id="vm-456")
+        await tool(action="vm", subaction="stop", vm_id="vm-456")
         body = _extract_request_body(route.calls.last.request)
         assert "StopVM" in body["query"]
         assert body["variables"] == {"id": "vm-456"}
@@ -577,7 +578,7 @@ class TestVMToolRequests:
     async def test_force_stop_requires_confirm(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool(action="force_stop", vm_id="vm-789")
+            await tool(action="vm", subaction="force_stop", vm_id="vm-789")
 
     @respx.mock
     async def test_force_stop_sends_mutation_when_confirmed(self) -> None:
@@ -585,7 +586,7 @@ class TestVMToolRequests:
             return_value=_graphql_response({"vm": {"forceStop": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="force_stop", vm_id="vm-789", confirm=True)
+        result = await tool(action="vm", subaction="force_stop", vm_id="vm-789", confirm=True)
         body = _extract_request_body(route.calls.last.request)
         assert "ForceStopVM" in body["query"]
         assert result["success"] is True
@@ -594,7 +595,7 @@ class TestVMToolRequests:
     async def test_reset_requires_confirm(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool(action="reset", vm_id="vm-abc")
+            await tool(action="vm", subaction="reset", vm_id="vm-abc")
 
     @respx.mock
     async def test_details_finds_vm_by_name(self) -> None:
@@ -611,7 +612,7 @@ class TestVMToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="details", vm_id="ubuntu")
+        result = await tool(action="vm", subaction="details", vm_id="ubuntu")
         assert result["name"] == "ubuntu"
 
 
@@ -621,11 +622,11 @@ class TestVMToolRequests:
 
 
 class TestArrayToolRequests:
-    """Verify unraid_array tool constructs correct requests."""
+    """Verify unraid array tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_parity_status_sends_correct_query(self) -> None:
@@ -643,7 +644,7 @@ class TestArrayToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="parity_status")
+        result = await tool(action="array", subaction="parity_status")
         body = _extract_request_body(route.calls.last.request)
         assert "GetParityStatus" in body["query"]
         assert result["success"] is True
@@ -654,7 +655,7 @@ class TestArrayToolRequests:
             return_value=_graphql_response({"parityCheck": {"start": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="parity_start", correct=False)
+        result = await tool(action="array", subaction="parity_start", correct=False)
         body = _extract_request_body(route.calls.last.request)
         assert "StartParityCheck" in body["query"]
         assert body["variables"] == {"correct": False}
@@ -666,7 +667,7 @@ class TestArrayToolRequests:
             return_value=_graphql_response({"parityCheck": {"start": True}})
         )
         tool = self._get_tool()
-        await tool(action="parity_start", correct=True)
+        await tool(action="array", subaction="parity_start", correct=True)
         body = _extract_request_body(route.calls.last.request)
         assert body["variables"] == {"correct": True}
 
@@ -676,7 +677,7 @@ class TestArrayToolRequests:
             return_value=_graphql_response({"parityCheck": {"pause": True}})
         )
         tool = self._get_tool()
-        await tool(action="parity_pause")
+        await tool(action="array", subaction="parity_pause")
         body = _extract_request_body(route.calls.last.request)
         assert "PauseParityCheck" in body["query"]
 
@@ -686,7 +687,7 @@ class TestArrayToolRequests:
             return_value=_graphql_response({"parityCheck": {"cancel": True}})
         )
         tool = self._get_tool()
-        await tool(action="parity_cancel")
+        await tool(action="array", subaction="parity_cancel")
         body = _extract_request_body(route.calls.last.request)
         assert "CancelParityCheck" in body["query"]
 
@@ -697,11 +698,11 @@ class TestArrayToolRequests:
 
 
 class TestStorageToolRequests:
-    """Verify unraid_storage tool constructs correct requests."""
+    """Verify unraid disk tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_shares_sends_correct_query(self) -> None:
@@ -709,7 +710,7 @@ class TestStorageToolRequests:
             return_value=_graphql_response({"shares": [{"id": "s1", "name": "appdata"}]})
         )
         tool = self._get_tool()
-        result = await tool(action="shares")
+        result = await tool(action="disk", subaction="shares")
         body = _extract_request_body(route.calls.last.request)
         assert "GetSharesInfo" in body["query"]
         assert "shares" in result
@@ -722,7 +723,7 @@ class TestStorageToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="disks")
+        await tool(action="disk", subaction="disks")
         body = _extract_request_body(route.calls.last.request)
         assert "ListPhysicalDisks" in body["query"]
 
@@ -743,7 +744,7 @@ class TestStorageToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="disk_details", disk_id="d1")
+        await tool(action="disk", subaction="disk_details", disk_id="d1")
         body = _extract_request_body(route.calls.last.request)
         assert "GetDiskDetails" in body["query"]
         assert body["variables"] == {"id": "d1"}
@@ -756,7 +757,7 @@ class TestStorageToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="log_files")
+        result = await tool(action="disk", subaction="log_files")
         body = _extract_request_body(route.calls.last.request)
         assert "ListLogFiles" in body["query"]
         assert "log_files" in result
@@ -776,7 +777,7 @@ class TestStorageToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="logs", log_path="/var/log/syslog", tail_lines=50)
+        await tool(action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=50)
         body = _extract_request_body(route.calls.last.request)
         assert "GetLogContent" in body["query"]
         assert body["variables"]["path"] == "/var/log/syslog"
@@ -786,7 +787,7 @@ class TestStorageToolRequests:
     async def test_logs_rejects_path_traversal(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="log_path must start with"):
-            await tool(action="logs", log_path="/etc/shadow")
+            await tool(action="disk", subaction="logs", log_path="/etc/shadow")
 
 
 # ===========================================================================
@@ -795,15 +796,11 @@ class TestStorageToolRequests:
 
 
 class TestNotificationsToolRequests:
-    """Verify unraid_notifications tool constructs correct requests."""
+    """Verify unraid notification tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn(
-            "unraid_mcp.tools.notifications",
-            "register_notifications_tool",
-            "unraid_notifications",
-        )
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_overview_sends_correct_query(self) -> None:
@@ -819,7 +816,7 @@ class TestNotificationsToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="overview")
+        await tool(action="notification", subaction="overview")
         body = _extract_request_body(route.calls.last.request)
         assert "GetNotificationsOverview" in body["query"]
 
@@ -829,7 +826,14 @@ class TestNotificationsToolRequests:
             return_value=_graphql_response({"notifications": {"list": []}})
         )
         tool = self._get_tool()
-        await tool(action="list", list_type="ARCHIVE", importance="WARNING", offset=5, limit=10)
+        await tool(
+            action="notification",
+            subaction="list",
+            list_type="ARCHIVE",
+            importance="WARNING",
+            offset=5,
+            limit=10,
+        )
         body = _extract_request_body(route.calls.last.request)
         assert "ListNotifications" in body["query"]
         filt = body["variables"]["filter"]
@@ -853,7 +857,8 @@ class TestNotificationsToolRequests:
         )
         tool = self._get_tool()
         await tool(
-            action="create",
+            action="notification",
+            subaction="create",
             title="Test",
             subject="Sub",
             description="Desc",
@@ -872,7 +877,7 @@ class TestNotificationsToolRequests:
             return_value=_graphql_response({"archiveNotification": {"id": "notif-1"}})
         )
         tool = self._get_tool()
-        await tool(action="archive", notification_id="notif-1")
+        await tool(action="notification", subaction="archive", notification_id="notif-1")
         body = _extract_request_body(route.calls.last.request)
         assert "ArchiveNotification" in body["query"]
         assert body["variables"] == {"id": "notif-1"}
@@ -881,7 +886,12 @@ class TestNotificationsToolRequests:
     async def test_delete_requires_confirm(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool(action="delete", notification_id="n1", notification_type="UNREAD")
+            await tool(
+                action="notification",
+                subaction="delete",
+                notification_id="n1",
+                notification_type="UNREAD",
+            )
 
     @respx.mock
     async def test_delete_sends_id_and_type(self) -> None:
@@ -890,7 +900,8 @@ class TestNotificationsToolRequests:
         )
         tool = self._get_tool()
         await tool(
-            action="delete",
+            action="notification",
+            subaction="delete",
             notification_id="n1",
             notification_type="unread",
             confirm=True,
@@ -906,7 +917,7 @@ class TestNotificationsToolRequests:
             return_value=_graphql_response({"archiveAll": {"archive": {"total": 1}}})
         )
         tool = self._get_tool()
-        await tool(action="archive_all", importance="warning")
+        await tool(action="notification", subaction="archive_all", importance="warning")
         body = _extract_request_body(route.calls.last.request)
         assert "ArchiveAllNotifications" in body["query"]
         assert body["variables"]["importance"] == "WARNING"
@@ -918,11 +929,11 @@ class TestNotificationsToolRequests:
 
 
 class TestRCloneToolRequests:
-    """Verify unraid_rclone tool constructs correct requests."""
+    """Verify unraid rclone tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_list_remotes_sends_correct_query(self) -> None:
@@ -932,7 +943,7 @@ class TestRCloneToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="list_remotes")
+        result = await tool(action="rclone", subaction="list_remotes")
         body = _extract_request_body(route.calls.last.request)
         assert "ListRCloneRemotes" in body["query"]
         assert "remotes" in result
@@ -953,7 +964,7 @@ class TestRCloneToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="config_form", provider_type="s3")
+        await tool(action="rclone", subaction="config_form", provider_type="s3")
         body = _extract_request_body(route.calls.last.request)
         assert "GetRCloneConfigForm" in body["query"]
         assert body["variables"]["formOptions"]["providerType"] == "s3"
@@ -975,7 +986,8 @@ class TestRCloneToolRequests:
         )
         tool = self._get_tool()
         await tool(
-            action="create_remote",
+            action="rclone",
+            subaction="create_remote",
             name="my-s3",
             provider_type="s3",
             config_data={"bucket": "my-bucket"},
@@ -991,7 +1003,7 @@ class TestRCloneToolRequests:
     async def test_delete_remote_requires_confirm(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool(action="delete_remote", name="old-remote")
+            await tool(action="rclone", subaction="delete_remote", name="old-remote")
 
     @respx.mock
     async def test_delete_remote_sends_name_when_confirmed(self) -> None:
@@ -999,7 +1011,9 @@ class TestRCloneToolRequests:
             return_value=_graphql_response({"rclone": {"deleteRCloneRemote": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="delete_remote", name="old-remote", confirm=True)
+        result = await tool(
+            action="rclone", subaction="delete_remote", name="old-remote", confirm=True
+        )
         body = _extract_request_body(route.calls.last.request)
         assert "DeleteRCloneRemote" in body["query"]
         assert body["variables"]["input"]["name"] == "old-remote"
@@ -1012,11 +1026,11 @@ class TestRCloneToolRequests:
 
 
 class TestUsersToolRequests:
-    """Verify unraid_users tool constructs correct requests."""
+    """Verify unraid user tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.users", "register_users_tool", "unraid_users")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_me_sends_correct_query(self) -> None:
@@ -1033,7 +1047,7 @@ class TestUsersToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="me")
+        result = await tool(action="user", subaction="me")
         body = _extract_request_body(route.calls.last.request)
         assert "GetMe" in body["query"]
         assert result["name"] == "admin"
@@ -1045,11 +1059,11 @@ class TestUsersToolRequests:
 
 
 class TestKeysToolRequests:
-    """Verify unraid_keys tool constructs correct requests."""
+    """Verify unraid key tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_list_sends_correct_query(self) -> None:
@@ -1057,7 +1071,7 @@ class TestKeysToolRequests:
             return_value=_graphql_response({"apiKeys": [{"id": "k1", "name": "my-key"}]})
         )
         tool = self._get_tool()
-        result = await tool(action="list")
+        result = await tool(action="key", subaction="list")
         body = _extract_request_body(route.calls.last.request)
         assert "ListApiKeys" in body["query"]
         assert "keys" in result
@@ -1070,7 +1084,7 @@ class TestKeysToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="get", key_id="k1")
+        await tool(action="key", subaction="get", key_id="k1")
         body = _extract_request_body(route.calls.last.request)
         assert "GetApiKey" in body["query"]
         assert body["variables"] == {"id": "k1"}
@@ -1092,7 +1106,7 @@ class TestKeysToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="create", name="new-key", roles=["read"])
+        result = await tool(action="key", subaction="create", name="new-key", roles=["read"])
         body = _extract_request_body(route.calls.last.request)
         assert "CreateApiKey" in body["query"]
         inp = body["variables"]["input"]
@@ -1108,7 +1122,7 @@ class TestKeysToolRequests:
             )
         )
         tool = self._get_tool()
-        await tool(action="update", key_id="k1", name="renamed")
+        await tool(action="key", subaction="update", key_id="k1", name="renamed")
         body = _extract_request_body(route.calls.last.request)
         assert "UpdateApiKey" in body["query"]
         inp = body["variables"]["input"]
@@ -1119,7 +1133,7 @@ class TestKeysToolRequests:
     async def test_delete_requires_confirm(self) -> None:
         tool = self._get_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool(action="delete", key_id="k1")
+            await tool(action="key", subaction="delete", key_id="k1")
 
     @respx.mock
     async def test_delete_sends_ids_when_confirmed(self) -> None:
@@ -1127,7 +1141,7 @@ class TestKeysToolRequests:
             return_value=_graphql_response({"apiKey": {"delete": True}})
         )
         tool = self._get_tool()
-        result = await tool(action="delete", key_id="k1", confirm=True)
+        result = await tool(action="key", subaction="delete", key_id="k1", confirm=True)
         body = _extract_request_body(route.calls.last.request)
         assert "DeleteApiKey" in body["query"]
         assert body["variables"]["input"]["ids"] == ["k1"]
@@ -1140,17 +1154,17 @@ class TestKeysToolRequests:
 
 
 class TestHealthToolRequests:
-    """Verify unraid_health tool constructs correct requests."""
+    """Verify unraid health tool constructs correct requests."""
 
     @staticmethod
     def _get_tool():
-        return make_tool_fn("unraid_mcp.tools.health", "register_health_tool", "unraid_health")
+        return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
     async def test_test_connection_sends_online_query(self) -> None:
         route = respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
-        result = await tool(action="test_connection")
+        result = await tool(action="health", subaction="test_connection")
         body = _extract_request_body(route.calls.last.request)
         assert "online" in body["query"]
         assert result["status"] == "connected"
@@ -1178,7 +1192,7 @@ class TestHealthToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="check")
+        result = await tool(action="health", subaction="check")
         body = _extract_request_body(route.calls.last.request)
         assert "ComprehensiveHealthCheck" in body["query"]
         assert result["status"] == "healthy"
@@ -1188,7 +1202,7 @@ class TestHealthToolRequests:
     async def test_test_connection_measures_latency(self) -> None:
         respx.post(API_URL).mock(return_value=_graphql_response({"online": True}))
         tool = self._get_tool()
-        result = await tool(action="test_connection")
+        result = await tool(action="health", subaction="test_connection")
         assert "latency_ms" in result
         assert isinstance(result["latency_ms"], float)
 
@@ -1212,7 +1226,7 @@ class TestHealthToolRequests:
             )
         )
         tool = self._get_tool()
-        result = await tool(action="check")
+        result = await tool(action="health", subaction="check")
         assert result["status"] == "warning"
         assert any("alert" in issue for issue in result.get("issues", []))
 
@@ -1249,17 +1263,17 @@ class TestCrossCuttingConcerns:
     async def test_tool_error_from_http_layer_propagates(self) -> None:
         """When an HTTP error occurs, the ToolError bubbles up through the tool."""
         respx.post(API_URL).mock(return_value=httpx.Response(500, text="Server Error"))
-        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+        tool = make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
         with pytest.raises(ToolError, match="Unraid API returned HTTP 500"):
-            await tool(action="online")
+            await tool(action="system", subaction="online")
 
     @respx.mock
     async def test_network_error_propagates_through_tool(self) -> None:
         """When a network error occurs, the ToolError bubbles up through the tool."""
         respx.post(API_URL).mock(side_effect=httpx.ConnectError("Connection refused"))
-        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+        tool = make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
         with pytest.raises(ToolError, match="Network error connecting to Unraid API"):
-            await tool(action="online")
+            await tool(action="system", subaction="online")
 
     @respx.mock
     async def test_graphql_error_propagates_through_tool(self) -> None:
@@ -1267,6 +1281,6 @@ class TestCrossCuttingConcerns:
         respx.post(API_URL).mock(
             return_value=_graphql_response(errors=[{"message": "Permission denied"}])
         )
-        tool = make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+        tool = make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
         with pytest.raises(ToolError, match="Permission denied"):
-            await tool(action="online")
+            await tool(action="system", subaction="online")

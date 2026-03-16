@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastmcp import FastMCP
 
+from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
 from unraid_mcp.subscriptions.resources import register_subscription_resources
 
 
@@ -17,15 +18,6 @@ def _make_resources():
 
 
 @pytest.fixture
-def _mock_subscribe_once():
-    with patch(
-        "unraid_mcp.subscriptions.resources.subscribe_once",
-        new_callable=AsyncMock,
-    ) as mock:
-        yield mock
-
-
-@pytest.fixture
 def _mock_ensure_started():
     with patch(
         "unraid_mcp.subscriptions.resources.ensure_subscriptions_started",
@@ -34,55 +26,59 @@ def _mock_ensure_started():
         yield mock
 
 
-class TestLiveResources:
-    @pytest.mark.parametrize(
-        "action",
-        [
-            "cpu",
-            "memory",
-            "cpu_telemetry",
-            "array_state",
-            "parity_progress",
-            "ups_status",
-            "notifications_overview",
-            "owner",
-            "server_status",
-        ],
-    )
-    async def test_resource_returns_json(
-        self,
-        action: str,
-        _mock_subscribe_once: AsyncMock,
-        _mock_ensure_started: AsyncMock,
+class TestLiveResourcesUseManagerCache:
+    """All live resources must read from the persistent SubscriptionManager cache."""
+
+    @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    async def test_resource_returns_cached_data(
+        self, action: str, _mock_ensure_started: AsyncMock
     ) -> None:
-        _mock_subscribe_once.return_value = {"data": "ok"}
-        mcp = _make_resources()
+        cached = {"systemMetricsCpu": {"percentTotal": 12.5}}
+        with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
+            mock_mgr.get_resource_data = AsyncMock(return_value=cached)
+            mcp = _make_resources()
+            resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
+            result = await resource.fn()
+        assert json.loads(result) == cached
 
-        local_provider = mcp.providers[0]
-        resource_key = f"resource:unraid://live/{action}@"
-        resource = local_provider._components[resource_key]
-        result = await resource.fn()
-
-        parsed = json.loads(result)
-        assert parsed == {"data": "ok"}
-
-    async def test_resource_returns_error_dict_on_failure(
-        self,
-        _mock_subscribe_once: AsyncMock,
-        _mock_ensure_started: AsyncMock,
+    @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
+    async def test_resource_returns_status_when_no_cache(
+        self, action: str, _mock_ensure_started: AsyncMock
     ) -> None:
-        from fastmcp.exceptions import ToolError
-
-        _mock_subscribe_once.side_effect = ToolError("WebSocket timeout")
-        mcp = _make_resources()
-
-        local_provider = mcp.providers[0]
-        resource = local_provider._components["resource:unraid://live/cpu@"]
-        result = await resource.fn()
-
+        with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
+            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mcp = _make_resources()
+            resource = mcp.providers[0]._components[f"resource:unraid://live/{action}@"]
+            result = await resource.fn()
         parsed = json.loads(result)
-        assert "error" in parsed
-        assert "WebSocket timeout" in parsed["error"]
+        assert "status" in parsed
+
+    def test_subscribe_once_not_imported(self) -> None:
+        """subscribe_once must not be imported — resources use manager cache exclusively."""
+        import unraid_mcp.subscriptions.resources as res_module
+
+        assert not hasattr(res_module, "subscribe_once")
+
+
+class TestSnapshotSubscriptionsRegistered:
+    """All SNAPSHOT_ACTIONS must be registered in the SubscriptionManager with auto_start=True."""
+
+    def test_all_snapshot_actions_in_configs(self) -> None:
+        from unraid_mcp.subscriptions.manager import subscription_manager
+
+        for action in SNAPSHOT_ACTIONS:
+            assert action in subscription_manager.subscription_configs, (
+                f"'{action}' not registered in subscription_configs"
+            )
+
+    def test_all_snapshot_actions_autostart(self) -> None:
+        from unraid_mcp.subscriptions.manager import subscription_manager
+
+        for action in SNAPSHOT_ACTIONS:
+            config = subscription_manager.subscription_configs[action]
+            assert config.get("auto_start") is True, (
+                f"'{action}' missing auto_start=True in subscription_configs"
+            )
 
 
 class TestLogsStreamResource:

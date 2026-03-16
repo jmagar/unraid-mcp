@@ -19,21 +19,7 @@ from .config.settings import (
 )
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
-from .tools.array import register_array_tool
-from .tools.customization import register_customization_tool
-from .tools.docker import register_docker_tool
-from .tools.health import register_health_tool
-from .tools.info import register_info_tool
-from .tools.keys import register_keys_tool
-from .tools.live import register_live_tool
-from .tools.notifications import register_notifications_tool
-from .tools.oidc import register_oidc_tool
-from .tools.plugins import register_plugins_tool
-from .tools.rclone import register_rclone_tool
-from .tools.settings import register_settings_tool
-from .tools.storage import register_storage_tool
-from .tools.users import register_users_tool
-from .tools.virtualization import register_vm_tool
+from .tools.unraid import register_unraid_tool
 
 
 # Initialize FastMCP instance
@@ -55,28 +41,9 @@ def register_all_modules() -> None:
         register_diagnostic_tools(mcp)
         logger.info("Subscription resources and diagnostic tools registered")
 
-        # Register all consolidated tools
-        registrars = [
-            register_info_tool,
-            register_array_tool,
-            register_storage_tool,
-            register_docker_tool,
-            register_vm_tool,
-            register_notifications_tool,
-            register_plugins_tool,
-            register_rclone_tool,
-            register_users_tool,
-            register_keys_tool,
-            register_health_tool,
-            register_settings_tool,
-            register_live_tool,
-            register_customization_tool,
-            register_oidc_tool,
-        ]
-        for registrar in registrars:
-            registrar(mcp)
-
-        logger.info(f"All {len(registrars)} tools registered successfully - Server ready!")
+        # Register the consolidated unraid tool
+        register_unraid_tool(mcp)
+        logger.info("unraid tool registered successfully - Server ready!")
 
     except Exception as e:
         logger.error(f"Failed to register modules: {e}", exc_info=True)

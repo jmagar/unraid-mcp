@@ -1,63 +1,16 @@
-"""Tests for unraid_info tool."""
+"""Tests for system subactions of the consolidated unraid tool."""
 
 from collections.abc import Generator
-from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.info import (
-    INFO_ACTIONS,
-    _analyze_disk_health,
-    _process_array_status,
-    _process_system_info,
-)
+from unraid_mcp.tools.unraid import _analyze_disk_health
 
 
 # --- Unit tests for helper functions ---
-
-
-class TestProcessSystemInfo:
-    def test_processes_os_info(self) -> None:
-        raw = {
-            "os": {
-                "distro": "Unraid",
-                "release": "7.2",
-                "platform": "linux",
-                "arch": "x86_64",
-                "hostname": "tower",
-                "uptime": 3600,
-            },
-            "cpu": {"manufacturer": "AMD", "brand": "Ryzen", "cores": 8, "threads": 16},
-        }
-        result = _process_system_info(raw)
-        assert "summary" in result
-        assert "details" in result
-        assert result["summary"]["hostname"] == "tower"
-        assert "AMD" in result["summary"]["cpu"]
-
-    def test_handles_missing_fields(self) -> None:
-        result = _process_system_info({})
-        assert result["summary"] == {"memory_summary": "Memory information not available."}
-
-    def test_processes_memory_layout(self) -> None:
-        raw = {
-            "memory": {
-                "layout": [
-                    {
-                        "bank": "0",
-                        "type": "DDR4",
-                        "clockSpeed": 3200,
-                        "manufacturer": "G.Skill",
-                        "partNum": "XYZ",
-                    }
-                ]
-            }
-        }
-        result = _process_system_info(raw)
-        assert len(result["summary"]["memory_layout_details"]) == 1
 
 
 class TestAnalyzeDiskHealth:
@@ -100,51 +53,17 @@ class TestAnalyzeDiskHealth:
         assert result["healthy"] == 0
 
 
-class TestProcessArrayStatus:
-    def test_basic_array(self) -> None:
-        raw = {
-            "state": "STARTED",
-            "capacity": {"kilobytes": {"free": "1048576", "used": "524288", "total": "1572864"}},
-            "parities": [{"status": "DISK_OK"}],
-            "disks": [{"status": "DISK_OK"}],
-            "caches": [],
-        }
-        result = _process_array_status(raw)
-        assert result["summary"]["state"] == "STARTED"
-        assert result["summary"]["overall_health"] == "HEALTHY"
-
-    def test_critical_disk_threshold_array(self) -> None:
-        raw = {
-            "state": "STARTED",
-            "parities": [],
-            "disks": [{"status": "DISK_OK", "critical": 55}],
-            "caches": [],
-        }
-        result = _process_array_status(raw)
-        assert result["summary"]["overall_health"] == "CRITICAL"
-
-    def test_degraded_array(self) -> None:
-        raw = {
-            "state": "STARTED",
-            "parities": [],
-            "disks": [{"status": "DISK_NP"}],
-            "caches": [],
-        }
-        result = _process_array_status(raw)
-        assert result["summary"]["overall_health"] == "DEGRADED"
-
-
 # --- Integration tests for the tool function ---
 
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 def _make_tool():
-    return make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 class TestUnraidInfoTool:
@@ -162,14 +81,14 @@ class TestUnraidInfoTool:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="overview")
+        result = await tool_fn(action="system", subaction="overview")
         assert "summary" in result
         _mock_graphql.assert_called_once()
 
     async def test_ups_device_requires_device_id(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="device_id is required"):
-            await tool_fn(action="ups_device")
+            await tool_fn(action="system", subaction="ups_device")
 
     async def test_network_action(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -193,7 +112,7 @@ class TestUnraidInfoTool:
             },
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="network")
+        result = await tool_fn(action="system", subaction="network")
         assert "accessUrls" in result
         assert result["httpPort"] == 6969
         assert result["httpsPort"] == 31337
@@ -202,26 +121,26 @@ class TestUnraidInfoTool:
     async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="connect.*not available"):
-            await tool_fn(action="connect")
+            await tool_fn(action="system", subaction="connect")
 
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Failed to execute info/online"):
-            await tool_fn(action="online")
+        with pytest.raises(ToolError, match="Failed to execute system/online"):
+            await tool_fn(action="system", subaction="online")
 
     async def test_metrics(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "metrics": {"cpu": {"used": 25.5}, "memory": {"used": 8192, "total": 32768}}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="metrics")
+        result = await tool_fn(action="system", subaction="metrics")
         assert result["cpu"]["used"] == 25.5
 
     async def test_services(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"services": [{"name": "docker", "state": "running"}]}
         tool_fn = _make_tool()
-        result = await tool_fn(action="services")
+        result = await tool_fn(action="system", subaction="services")
         assert "services" in result
         assert len(result["services"]) == 1
         assert result["services"][0]["name"] == "docker"
@@ -231,14 +150,14 @@ class TestUnraidInfoTool:
             "settings": {"unified": {"values": {"timezone": "US/Eastern"}}}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="settings")
+        result = await tool_fn(action="system", subaction="settings")
         assert result["timezone"] == "US/Eastern"
 
     async def test_settings_non_dict_values(self, _mock_graphql: AsyncMock) -> None:
         """Settings values that are not a dict should be wrapped in {'raw': ...}."""
         _mock_graphql.return_value = {"settings": {"unified": {"values": "raw_string"}}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="settings")
+        result = await tool_fn(action="system", subaction="settings")
         assert result == {"raw": "raw_string"}
 
     async def test_servers(self, _mock_graphql: AsyncMock) -> None:
@@ -246,7 +165,7 @@ class TestUnraidInfoTool:
             "servers": [{"id": "s:1", "name": "tower", "status": "online"}]
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="servers")
+        result = await tool_fn(action="system", subaction="servers")
         assert "servers" in result
         assert len(result["servers"]) == 1
         assert result["servers"][0]["name"] == "tower"
@@ -262,7 +181,7 @@ class TestUnraidInfoTool:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="flash")
+        result = await tool_fn(action="system", subaction="flash")
         assert result["product"] == "SanDisk"
 
     async def test_ups_devices(self, _mock_graphql: AsyncMock) -> None:
@@ -270,7 +189,7 @@ class TestUnraidInfoTool:
             "upsDevices": [{"id": "ups:1", "model": "APC", "status": "online", "charge": 100}]
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="ups_devices")
+        result = await tool_fn(action="system", subaction="ups_devices")
         assert "ups_devices" in result
         assert len(result["ups_devices"]) == 1
         assert result["ups_devices"][0]["model"] == "APC"
@@ -284,7 +203,7 @@ class TestInfoNetworkErrors:
         _mock_graphql.side_effect = ToolError("HTTP error 401: Unauthorized")
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="401"):
-            await tool_fn(action="overview")
+            await tool_fn(action="system", subaction="overview")
 
     async def test_overview_connection_refused(self, _mock_graphql: AsyncMock) -> None:
         """Connection refused should propagate as ToolError."""
@@ -293,7 +212,7 @@ class TestInfoNetworkErrors:
         )
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Connection refused"):
-            await tool_fn(action="overview")
+            await tool_fn(action="system", subaction="overview")
 
     async def test_network_json_decode_error(self, _mock_graphql: AsyncMock) -> None:
         """Invalid JSON from API should propagate as ToolError."""
@@ -302,16 +221,17 @@ class TestInfoNetworkErrors:
         )
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid JSON"):
-            await tool_fn(action="network")
+            await tool_fn(action="system", subaction="network")
 
 
 # ---------------------------------------------------------------------------
-# Regression: removed actions must not appear in INFO_ACTIONS
+# Regression: removed actions must not be valid subactions
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("action", ["update_server", "update_ssh"])
-def test_removed_info_actions_are_gone(action: str) -> None:
-    assert action not in get_args(INFO_ACTIONS), (
-        f"{action} references a non-existent mutation and must not be in INFO_ACTIONS"
-    )
+@pytest.mark.asyncio
+@pytest.mark.parametrize("subaction", ["update_server", "update_ssh"])
+async def test_removed_info_subactions_are_invalid(subaction: str) -> None:
+    tool_fn = _make_tool()
+    with pytest.raises(ToolError, match="Invalid subaction"):
+        await tool_fn(action="system", subaction=subaction)

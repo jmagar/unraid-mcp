@@ -2,12 +2,12 @@
 # =============================================================================
 # test-tools.sh — Integration smoke-test for unraid-mcp MCP server tools
 #
-# Exercises every non-destructive action across all 10 tools using mcporter.
-# The server is launched ad-hoc via mcporter's --stdio flag so no persistent
-# process or registered server entry is required.
+# Exercises every non-destructive action using the consolidated `unraid` tool
+# (action + subaction pattern). The server is launched ad-hoc via mcporter's
+# --stdio flag so no persistent process or registered server entry is required.
 #
 # Usage:
-#   ./scripts/test-tools.sh [--timeout-ms N] [--parallel] [--verbose]
+#   ./tests/mcporter/test-tools.sh [--timeout-ms N] [--parallel] [--verbose]
 #
 # Options:
 #   --timeout-ms N   Per-call timeout in milliseconds (default: 25000)
@@ -146,9 +146,8 @@ check_prerequisites() {
 
 # ---------------------------------------------------------------------------
 # Server startup smoke-test
-#   Launches the stdio server and calls unraid_health action=check.
-#   Returns 0 if the server responds (even with an API error — that still
-#   means the Python process started cleanly), non-zero on import failure.
+#   Launches the stdio server and calls unraid action=health subaction=check.
+#   Returns 0 if the server responds, non-zero on import failure.
 # ---------------------------------------------------------------------------
 smoke_test_server() {
   log_info "Smoke-testing server startup..."
@@ -159,14 +158,13 @@ smoke_test_server() {
       --stdio "uv run unraid-mcp-server" \
       --cwd "${PROJECT_DIR}" \
       --name "unraid-smoke" \
-      --tool unraid_health \
-      --args '{"action":"check"}' \
+      --tool unraid \
+      --args '{"action":"health","subaction":"check"}' \
       --timeout 30000 \
       --output json \
       2>&1
   )" || true
 
-  # If mcporter returns the offline error the server failed to import/start
   if printf '%s' "${output}" | grep -q '"kind": "offline"'; then
     log_error "Server failed to start. Output:"
     printf '%s\n' "${output}" >&2
@@ -177,8 +175,6 @@ smoke_test_server() {
     return 2
   fi
 
-  # Assert the response contains a valid tool response field, not a bare JSON error.
-  # unraid_health action=check always returns {"status": ...} on success.
   local key_check
   key_check="$(
     printf '%s' "${output}" | python3 -c "
@@ -206,19 +202,17 @@ except Exception as e:
 
 # ---------------------------------------------------------------------------
 # mcporter call wrapper
-#   Usage: mcporter_call <tool_name> <args_json>
-#   Writes the mcporter JSON output to stdout.
-#   Returns the mcporter exit code.
+#   Usage: mcporter_call <args_json>
+#   All calls go to the single `unraid` tool.
 # ---------------------------------------------------------------------------
 mcporter_call() {
-  local tool_name="${1:?tool_name required}"
-  local args_json="${2:?args_json required}"
+  local args_json="${1:?args_json required}"
 
   mcporter call \
     --stdio "uv run unraid-mcp-server" \
     --cwd "${PROJECT_DIR}" \
     --name "unraid" \
-    --tool "${tool_name}" \
+    --tool unraid \
     --args "${args_json}" \
     --timeout "${CALL_TIMEOUT_MS}" \
     --output json \
@@ -227,25 +221,18 @@ mcporter_call() {
 
 # ---------------------------------------------------------------------------
 # Test runner
-#   Usage: run_test <label> <tool_name> <args_json> [expected_key]
-#
-#   expected_key — optional jq-style python key path to validate in the
-#                  response (e.g. ".status" or ".containers").  If omitted,
-#                  any non-offline response is a PASS (tool errors from the
-#                  API — e.g. VMs disabled — are still considered PASS because
-#                  the tool itself responded correctly).
+#   Usage: run_test <label> <args_json> [expected_key]
 # ---------------------------------------------------------------------------
 run_test() {
   local label="${1:?label required}"
-  local tool="${2:?tool required}"
-  local args="${3:?args required}"
-  local expected_key="${4:-}"
+  local args="${2:?args required}"
+  local expected_key="${3:-}"
 
   local t0
   t0="$(date +%s%N)"
 
   local output
-  output="$(mcporter_call "${tool}" "${args}" 2>&1)" || true
+  output="$(mcporter_call "${args}" 2>&1)" || true
 
   local elapsed_ms
   elapsed_ms="$(( ( $(date +%s%N) - t0 ) / 1000000 ))"
@@ -302,7 +289,7 @@ except Exception as e:
 }
 
 # ---------------------------------------------------------------------------
-# Skip helper — use when a prerequisite (like a list) returned empty
+# Skip helper
 # ---------------------------------------------------------------------------
 skip_test() {
   local label="${1:?label required}"
@@ -313,14 +300,11 @@ skip_test() {
 
 # ---------------------------------------------------------------------------
 # ID extractors
-#   Each function calls the relevant list action and prints the first ID.
-#   Prints nothing (empty string) if the list is empty or the call fails.
 # ---------------------------------------------------------------------------
 
-# Extract first docker container ID
 get_docker_id() {
   local raw
-  raw="$(mcporter_call unraid_docker '{"action":"list"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"docker","subaction":"list"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
@@ -333,10 +317,9 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# Extract first docker network ID
 get_network_id() {
   local raw
-  raw="$(mcporter_call unraid_docker '{"action":"networks"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"docker","subaction":"networks"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
@@ -349,10 +332,9 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# Extract first VM ID
 get_vm_id() {
   local raw
-  raw="$(mcporter_call unraid_vm '{"action":"list"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"vm","subaction":"list"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
@@ -365,10 +347,9 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# Extract first API key ID
 get_key_id() {
   local raw
-  raw="$(mcporter_call unraid_keys '{"action":"list"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"key","subaction":"list"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
@@ -381,10 +362,9 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# Extract first disk ID
 get_disk_id() {
   local raw
-  raw="$(mcporter_call unraid_storage '{"action":"disks"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"disk","subaction":"disks"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
@@ -397,16 +377,14 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# Extract first log file path
 get_log_path() {
   local raw
-  raw="$(mcporter_call unraid_storage '{"action":"log_files"}' 2>/dev/null)" || return 0
+  raw="$(mcporter_call '{"action":"disk","subaction":"log_files"}' 2>/dev/null)" || return 0
   printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
     files = d.get('log_files', [])
-    # Prefer a plain text log (not binary like btmp/lastlog)
     for f in files:
         p = f.get('path', '')
         if p.endswith('.log') or 'syslog' in p or 'messages' in p:
@@ -420,35 +398,10 @@ except Exception:
 " 2>/dev/null || true
 }
 
-# ---------------------------------------------------------------------------
-# Grouped test suites
-# ---------------------------------------------------------------------------
-
-suite_unraid_info() {
-  printf '\n%b== unraid_info (19 actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
-
-  run_test "unraid_info: overview"     unraid_info '{"action":"overview"}'
-  run_test "unraid_info: array"        unraid_info '{"action":"array"}'
-  run_test "unraid_info: network"      unraid_info '{"action":"network"}'
-  run_test "unraid_info: registration" unraid_info '{"action":"registration"}'
-  run_test "unraid_info: connect"      unraid_info '{"action":"connect"}'
-  run_test "unraid_info: variables"    unraid_info '{"action":"variables"}'
-  run_test "unraid_info: metrics"      unraid_info '{"action":"metrics"}'
-  run_test "unraid_info: services"     unraid_info '{"action":"services"}'
-  run_test "unraid_info: display"      unraid_info '{"action":"display"}'
-  run_test "unraid_info: config"       unraid_info '{"action":"config"}'
-  run_test "unraid_info: online"       unraid_info '{"action":"online"}'
-  run_test "unraid_info: owner"        unraid_info '{"action":"owner"}'
-  run_test "unraid_info: settings"     unraid_info '{"action":"settings"}'
-  run_test "unraid_info: server"       unraid_info '{"action":"server"}'
-  run_test "unraid_info: servers"      unraid_info '{"action":"servers"}'
-  run_test "unraid_info: flash"        unraid_info '{"action":"flash"}'
-  run_test "unraid_info: ups_devices"  unraid_info '{"action":"ups_devices"}'
-  # ups_device and ups_config require a device_id — skip if no UPS devices found
-  local ups_raw
-  ups_raw="$(mcporter_call unraid_info '{"action":"ups_devices"}' 2>/dev/null)" || ups_raw=''
-  local ups_id
-  ups_id="$(printf '%s' "${ups_raw}" | python3 -c "
+get_ups_id() {
+  local raw
+  raw="$(mcporter_call '{"action":"system","subaction":"ups_devices"}' 2>/dev/null)" || return 0
+  printf '%s' "${raw}" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
@@ -457,153 +410,193 @@ try:
         print(devs[0].get('id', devs[0].get('name', '')))
 except Exception:
     pass
-" 2>/dev/null)" || ups_id=''
+" 2>/dev/null || true
+}
 
+# ---------------------------------------------------------------------------
+# Grouped test suites
+# ---------------------------------------------------------------------------
+
+suite_system() {
+  printf '\n%b== system (info/metrics/UPS) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+
+  run_test "system: overview"     '{"action":"system","subaction":"overview"}'
+  run_test "system: network"      '{"action":"system","subaction":"network"}'
+  run_test "system: registration" '{"action":"system","subaction":"registration"}'
+  run_test "system: variables"    '{"action":"system","subaction":"variables"}'
+  run_test "system: metrics"      '{"action":"system","subaction":"metrics"}'
+  run_test "system: services"     '{"action":"system","subaction":"services"}'
+  run_test "system: display"      '{"action":"system","subaction":"display"}'
+  run_test "system: config"       '{"action":"system","subaction":"config"}'
+  run_test "system: online"       '{"action":"system","subaction":"online"}'
+  run_test "system: owner"        '{"action":"system","subaction":"owner"}'
+  run_test "system: settings"     '{"action":"system","subaction":"settings"}'
+  run_test "system: server"       '{"action":"system","subaction":"server"}'
+  run_test "system: servers"      '{"action":"system","subaction":"servers"}'
+  run_test "system: flash"        '{"action":"system","subaction":"flash"}'
+  run_test "system: ups_devices"  '{"action":"system","subaction":"ups_devices"}'
+
+  local ups_id
+  ups_id="$(get_ups_id)" || ups_id=''
   if [[ -n "${ups_id}" ]]; then
-    run_test "unraid_info: ups_device" unraid_info \
-      "$(printf '{"action":"ups_device","device_id":"%s"}' "${ups_id}")"
-    run_test "unraid_info: ups_config" unraid_info \
-      "$(printf '{"action":"ups_config","device_id":"%s"}' "${ups_id}")"
+    run_test "system: ups_device" \
+      "$(printf '{"action":"system","subaction":"ups_device","device_id":"%s"}' "${ups_id}")"
+    run_test "system: ups_config" \
+      "$(printf '{"action":"system","subaction":"ups_config","device_id":"%s"}' "${ups_id}")"
   else
-    skip_test "unraid_info: ups_device" "no UPS devices found"
-    skip_test "unraid_info: ups_config" "no UPS devices found"
+    skip_test "system: ups_device" "no UPS devices found"
+    skip_test "system: ups_config" "no UPS devices found"
   fi
 }
 
-suite_unraid_array() {
-  printf '\n%b== unraid_array (1 read-only action) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
-  run_test "unraid_array: parity_status" unraid_array '{"action":"parity_status"}'
-  # Destructive actions (parity_start/pause/resume/cancel) skipped
+suite_array() {
+  printf '\n%b== array (read-only) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+  run_test "array: parity_status"  '{"action":"array","subaction":"parity_status"}'
+  run_test "array: parity_history" '{"action":"array","subaction":"parity_history"}'
+  # Destructive: parity_start/pause/resume/cancel, start_array, stop_array,
+  #              add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats — skipped
 }
 
-suite_unraid_storage() {
-  printf '\n%b== unraid_storage (6 actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_disk() {
+  printf '\n%b== disk (storage/shares/logs) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_storage: shares"   unraid_storage '{"action":"shares"}'
-  run_test "unraid_storage: disks"    unraid_storage '{"action":"disks"}'
-  run_test "unraid_storage: unassigned" unraid_storage '{"action":"unassigned"}'
-  run_test "unraid_storage: log_files"  unraid_storage '{"action":"log_files"}'
+  run_test "disk: shares"    '{"action":"disk","subaction":"shares"}'
+  run_test "disk: disks"     '{"action":"disk","subaction":"disks"}'
+  run_test "disk: log_files" '{"action":"disk","subaction":"log_files"}'
 
-  # disk_details needs a disk ID
   local disk_id
   disk_id="$(get_disk_id)" || disk_id=''
   if [[ -n "${disk_id}" ]]; then
-    run_test "unraid_storage: disk_details" unraid_storage \
-      "$(printf '{"action":"disk_details","disk_id":"%s"}' "${disk_id}")"
+    run_test "disk: disk_details" \
+      "$(printf '{"action":"disk","subaction":"disk_details","disk_id":"%s"}' "${disk_id}")"
   else
-    skip_test "unraid_storage: disk_details" "no disks found"
+    skip_test "disk: disk_details" "no disks found"
   fi
 
-  # logs needs a valid log path
   local log_path
   log_path="$(get_log_path)" || log_path=''
   if [[ -n "${log_path}" ]]; then
-    run_test "unraid_storage: logs" unraid_storage \
-      "$(printf '{"action":"logs","log_path":"%s","tail_lines":20}' "${log_path}")"
+    run_test "disk: logs" \
+      "$(printf '{"action":"disk","subaction":"logs","log_path":"%s","tail_lines":20}' "${log_path}")"
   else
-    skip_test "unraid_storage: logs" "no log files found"
+    skip_test "disk: logs" "no log files found"
   fi
+  # Destructive: flash_backup — skipped
 }
 
-suite_unraid_docker() {
-  printf '\n%b== unraid_docker (7 read-only actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_docker() {
+  printf '\n%b== docker ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_docker: list"           unraid_docker '{"action":"list"}'
-  run_test "unraid_docker: networks"       unraid_docker '{"action":"networks"}'
-  run_test "unraid_docker: port_conflicts" unraid_docker '{"action":"port_conflicts"}'
-  run_test "unraid_docker: check_updates"  unraid_docker '{"action":"check_updates"}'
+  run_test "docker: list"     '{"action":"docker","subaction":"list"}'
+  run_test "docker: networks" '{"action":"docker","subaction":"networks"}'
 
-  # details, logs, network_details need IDs
   local container_id
   container_id="$(get_docker_id)" || container_id=''
   if [[ -n "${container_id}" ]]; then
-    run_test "unraid_docker: details" unraid_docker \
-      "$(printf '{"action":"details","container_id":"%s"}' "${container_id}")"
-    run_test "unraid_docker: logs" unraid_docker \
-      "$(printf '{"action":"logs","container_id":"%s","tail_lines":20}' "${container_id}")"
+    run_test "docker: details" \
+      "$(printf '{"action":"docker","subaction":"details","container_id":"%s"}' "${container_id}")"
   else
-    skip_test "unraid_docker: details" "no containers found"
-    skip_test "unraid_docker: logs"    "no containers found"
+    skip_test "docker: details" "no containers found"
   fi
 
   local network_id
   network_id="$(get_network_id)" || network_id=''
   if [[ -n "${network_id}" ]]; then
-    run_test "unraid_docker: network_details" unraid_docker \
-      "$(printf '{"action":"network_details","network_id":"%s"}' "${network_id}")"
+    run_test "docker: network_details" \
+      "$(printf '{"action":"docker","subaction":"network_details","network_id":"%s"}' "${network_id}")"
   else
-    skip_test "unraid_docker: network_details" "no networks found"
+    skip_test "docker: network_details" "no networks found"
   fi
-
-  # Destructive actions (start/stop/restart/pause/unpause/remove/update/update_all) skipped
+  # Destructive/mutating: start/stop/restart — skipped
 }
 
-suite_unraid_vm() {
-  printf '\n%b== unraid_vm (2 read-only actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_vm() {
+  printf '\n%b== vm ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_vm: list" unraid_vm '{"action":"list"}'
+  run_test "vm: list" '{"action":"vm","subaction":"list"}'
 
   local vm_id
   vm_id="$(get_vm_id)" || vm_id=''
   if [[ -n "${vm_id}" ]]; then
-    run_test "unraid_vm: details" unraid_vm \
-      "$(printf '{"action":"details","vm_id":"%s"}' "${vm_id}")"
+    run_test "vm: details" \
+      "$(printf '{"action":"vm","subaction":"details","vm_id":"%s"}' "${vm_id}")"
   else
-    skip_test "unraid_vm: details" "no VMs found (or VM service unavailable)"
+    skip_test "vm: details" "no VMs found (or VM service unavailable)"
   fi
-
-  # Destructive actions (start/stop/pause/resume/force_stop/reboot/reset) skipped
+  # Destructive: start/stop/pause/resume/force_stop/reboot/reset — skipped
 }
 
-suite_unraid_notifications() {
-  printf '\n%b== unraid_notifications (4 read-only actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_notification() {
+  printf '\n%b== notification ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_notifications: overview" unraid_notifications '{"action":"overview"}'
-  run_test "unraid_notifications: list"     unraid_notifications '{"action":"list"}'
-  run_test "unraid_notifications: warnings" unraid_notifications '{"action":"warnings"}'
-  run_test "unraid_notifications: unread"   unraid_notifications '{"action":"unread"}'
-
-  # Destructive actions (create/archive/delete/delete_archived/archive_all/etc.) skipped
+  run_test "notification: overview" '{"action":"notification","subaction":"overview"}'
+  run_test "notification: list"     '{"action":"notification","subaction":"list"}'
+  run_test "notification: unread"   '{"action":"notification","subaction":"unread"}'
+  # Mutating: create/archive/delete/delete_archived/archive_all/etc. — skipped
 }
 
-suite_unraid_rclone() {
-  printf '\n%b== unraid_rclone (2 read-only actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_rclone() {
+  printf '\n%b== rclone ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_rclone: list_remotes" unraid_rclone '{"action":"list_remotes"}'
-  # config_form requires a provider_type — use "s3" as a safe, always-available provider
-  run_test "unraid_rclone: config_form"  unraid_rclone '{"action":"config_form","provider_type":"s3"}'
-
-  # Destructive actions (create_remote/delete_remote) skipped
+  run_test "rclone: list_remotes" '{"action":"rclone","subaction":"list_remotes"}'
+  run_test "rclone: config_form"  '{"action":"rclone","subaction":"config_form","provider_type":"s3"}'
+  # Destructive: create_remote/delete_remote — skipped
 }
 
-suite_unraid_users() {
-  printf '\n%b== unraid_users (1 action) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
-  run_test "unraid_users: me" unraid_users '{"action":"me"}'
+suite_user() {
+  printf '\n%b== user ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+  run_test "user: me" '{"action":"user","subaction":"me"}'
 }
 
-suite_unraid_keys() {
-  printf '\n%b== unraid_keys (2 read-only actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_key() {
+  printf '\n%b== key (API keys) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_keys: list" unraid_keys '{"action":"list"}'
+  run_test "key: list" '{"action":"key","subaction":"list"}'
 
   local key_id
   key_id="$(get_key_id)" || key_id=''
   if [[ -n "${key_id}" ]]; then
-    run_test "unraid_keys: get" unraid_keys \
-      "$(printf '{"action":"get","key_id":"%s"}' "${key_id}")"
+    run_test "key: get" \
+      "$(printf '{"action":"key","subaction":"get","key_id":"%s"}' "${key_id}")"
   else
-    skip_test "unraid_keys: get" "no API keys found"
+    skip_test "key: get" "no API keys found"
   fi
-
-  # Destructive actions (create/update/delete) skipped
+  # Destructive: create/update/delete/add_role/remove_role — skipped
 }
 
-suite_unraid_health() {
-  printf '\n%b== unraid_health (3 actions) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+suite_health() {
+  printf '\n%b== health ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
 
-  run_test "unraid_health: check"           unraid_health '{"action":"check"}'
-  run_test "unraid_health: test_connection" unraid_health '{"action":"test_connection"}'
-  run_test "unraid_health: diagnose"        unraid_health '{"action":"diagnose"}'
+  run_test "health: check"           '{"action":"health","subaction":"check"}'
+  run_test "health: test_connection" '{"action":"health","subaction":"test_connection"}'
+  run_test "health: diagnose"        '{"action":"health","subaction":"diagnose"}'
+  # setup triggers elicitation — skipped
+}
+
+suite_customization() {
+  printf '\n%b== customization ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+
+  run_test "customization: theme"        '{"action":"customization","subaction":"theme"}'
+  run_test "customization: public_theme" '{"action":"customization","subaction":"public_theme"}'
+  run_test "customization: sso_enabled"  '{"action":"customization","subaction":"sso_enabled"}'
+  run_test "customization: is_initial_setup" '{"action":"customization","subaction":"is_initial_setup"}'
+  # Mutating: set_theme — skipped
+}
+
+suite_plugin() {
+  printf '\n%b== plugin ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+
+  run_test "plugin: list" '{"action":"plugin","subaction":"list"}'
+  # Destructive: add/remove — skipped
+}
+
+suite_oidc() {
+  printf '\n%b== oidc ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
+
+  run_test "oidc: providers"        '{"action":"oidc","subaction":"providers"}'
+  run_test "oidc: public_providers" '{"action":"oidc","subaction":"public_providers"}'
+  run_test "oidc: configuration"    '{"action":"oidc","subaction":"configuration"}'
+  # provider and validate_session require IDs — skipped
 }
 
 # ---------------------------------------------------------------------------
@@ -633,13 +626,9 @@ print_summary() {
 }
 
 # ---------------------------------------------------------------------------
-# Parallel runner — wraps each suite in a background subshell and waits
+# Parallel runner
 # ---------------------------------------------------------------------------
 run_parallel() {
-  # Each suite is independent (only cross-suite dependency: IDs are fetched
-  # fresh inside each suite function, not shared across suites).
-  # Counter updates from subshells won't propagate to the parent — collect
-  # results via temp files instead.
   log_warn "--parallel mode: per-suite counters aggregated via temp files."
 
   local tmp_dir
@@ -647,23 +636,25 @@ run_parallel() {
   trap 'rm -rf -- "${tmp_dir}"' RETURN
 
   local suites=(
-    suite_unraid_info
-    suite_unraid_array
-    suite_unraid_storage
-    suite_unraid_docker
-    suite_unraid_vm
-    suite_unraid_notifications
-    suite_unraid_rclone
-    suite_unraid_users
-    suite_unraid_keys
-    suite_unraid_health
+    suite_system
+    suite_array
+    suite_disk
+    suite_docker
+    suite_vm
+    suite_notification
+    suite_rclone
+    suite_user
+    suite_key
+    suite_health
+    suite_customization
+    suite_plugin
+    suite_oidc
   )
 
   local pids=()
   local suite
   for suite in "${suites[@]}"; do
     (
-      # Reset counters in subshell
       PASS_COUNT=0; FAIL_COUNT=0; SKIP_COUNT=0; FAIL_NAMES=()
       "${suite}"
       printf '%d %d %d\n' "${PASS_COUNT}" "${FAIL_COUNT}" "${SKIP_COUNT}" \
@@ -673,13 +664,11 @@ run_parallel() {
     pids+=($!)
   done
 
-  # Wait for all background suites
   local pid
   for pid in "${pids[@]}"; do
     wait "${pid}" || true
   done
 
-  # Aggregate counters
   local f
   for f in "${tmp_dir}"/*.counts; do
     [[ -f "${f}" ]] || continue
@@ -702,16 +691,19 @@ run_parallel() {
 # Sequential runner
 # ---------------------------------------------------------------------------
 run_sequential() {
-  suite_unraid_info
-  suite_unraid_array
-  suite_unraid_storage
-  suite_unraid_docker
-  suite_unraid_vm
-  suite_unraid_notifications
-  suite_unraid_rclone
-  suite_unraid_users
-  suite_unraid_keys
-  suite_unraid_health
+  suite_system
+  suite_array
+  suite_disk
+  suite_docker
+  suite_vm
+  suite_notification
+  suite_rclone
+  suite_user
+  suite_key
+  suite_health
+  suite_customization
+  suite_plugin
+  suite_oidc
 }
 
 # ---------------------------------------------------------------------------
@@ -721,29 +713,21 @@ main() {
   parse_args "$@"
 
   printf '%b%s%b\n' "${C_BOLD}" "$(printf '=%.0s' {1..65})" "${C_RESET}"
-  printf '%b  unraid-mcp integration smoke-test%b\n' "${C_BOLD}" "${C_RESET}"
+  printf '%b  unraid-mcp integration smoke-test (single unraid tool)%b\n' "${C_BOLD}" "${C_RESET}"
   printf '%b  Project: %s%b\n' "${C_BOLD}" "${PROJECT_DIR}" "${C_RESET}"
   printf '%b  Timeout: %dms/call | Parallel: %s%b\n' \
     "${C_BOLD}" "${CALL_TIMEOUT_MS}" "${USE_PARALLEL}" "${C_RESET}"
   printf '%b  Log: %s%b\n' "${C_BOLD}" "${LOG_FILE}" "${C_RESET}"
   printf '%b%s%b\n\n' "${C_BOLD}" "$(printf '=%.0s' {1..65})" "${C_RESET}"
 
-  # Prerequisite gate
   check_prerequisites || exit 2
 
-  # Server startup gate — fail fast if the Python process can't start
   smoke_test_server || {
     log_error ""
     log_error "Server startup failed. Aborting — no tests will run."
     log_error ""
     log_error "To diagnose, run:"
     log_error "  cd ${PROJECT_DIR} && uv run unraid-mcp-server"
-    log_error ""
-    log_error "If server.py has a broken import (e.g. missing tools/settings.py),"
-    log_error "stash or revert the uncommitted server.py change first:"
-    log_error "  git stash -- unraid_mcp/server.py"
-    log_error "  ./scripts/test-tools.sh"
-    log_error "  git stash pop"
     exit 2
   }
 

@@ -387,6 +387,119 @@ def test_tool_error_handler_credentials_error_message_includes_path():
     assert "setup" in str(exc_info.value).lower()
 
 
+# ---------------------------------------------------------------------------
+# elicit_reset_confirmation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_false_when_ctx_none():
+    """Returns False immediately when no MCP context is available."""
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    result = await elicit_reset_confirmation(None, "https://example.com")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_true_when_user_confirms():
+    """Returns True when the user accepts and answers True."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "accept"
+    mock_result.data = True
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_false_when_user_answers_false():
+    """Returns False when the user accepts but answers False (does not want to reset)."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "accept"
+    mock_result.data = False
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_false_when_declined():
+    """Returns False when the user declines via action (dismisses the prompt)."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "decline"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_false_when_cancelled():
+    """Returns False when the user cancels the prompt."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "cancel"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_returns_false_when_not_implemented():
+    """Returns False when the MCP client does not support elicitation."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
+
+    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_elicit_reset_confirmation_includes_current_url_in_prompt():
+    """The elicitation message includes the current URL so the user knows what they're replacing."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from unraid_mcp.core.setup import elicit_reset_confirmation
+
+    mock_ctx = MagicMock()
+    mock_result = MagicMock()
+    mock_result.action = "decline"
+    mock_ctx.elicit = AsyncMock(return_value=mock_result)
+
+    await elicit_reset_confirmation(mock_ctx, "https://my-unraid.example.com:31337")
+
+    call_kwargs = mock_ctx.elicit.call_args
+    message = call_kwargs.kwargs.get("message") or call_kwargs.args[0]
+    assert "https://my-unraid.example.com:31337" in message
+
+
 @pytest.mark.asyncio
 async def test_credentials_not_configured_surfaces_as_tool_error_with_path():
     """CredentialsNotConfiguredError from a tool becomes ToolError with the credentials path."""
@@ -396,15 +509,15 @@ async def test_credentials_not_configured_surfaces_as_tool_error_with_path():
     from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
     from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError
 
-    tool_fn = make_tool_fn("unraid_mcp.tools.users", "register_users_tool", "unraid_users")
+    tool_fn = make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     with (
         patch(
-            "unraid_mcp.tools.users.make_graphql_request",
+            "unraid_mcp.tools.unraid.make_graphql_request",
             new=AsyncMock(side_effect=CredentialsNotConfiguredError()),
         ),
         pytest.raises(ToolError) as exc_info,
     ):
-        await tool_fn(action="me")
+        await tool_fn(action="user", subaction="me")
 
     assert str(CREDENTIALS_ENV_PATH) in str(exc_info.value)

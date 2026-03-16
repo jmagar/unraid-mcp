@@ -83,9 +83,13 @@ docker compose down
 - **Data Processing**: Tools return both human-readable summaries and detailed raw data
 - **Health Monitoring**: Comprehensive health check tool for system monitoring
 - **Real-time Subscriptions**: WebSocket-based live data streaming
+- **Persistent Subscription Manager**: `unraid_live` actions use a shared `SubscriptionManager`
+  that maintains persistent WebSocket connections. Resources serve cached data via
+  `subscription_manager.get_resource_data(action)`. A "connecting" placeholder is returned
+  while the subscription starts — callers should retry in a moment.
 
-### Tool Categories (15 Tools, ~103 Actions)
-1. **`unraid_info`** (18 actions): overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
+### Tool Categories (15 Tools, ~108 Actions)
+1. **`unraid_info`** (19 actions): overview, array, network, registration, connect, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
 2. **`unraid_array`** (13 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status, parity_history, start_array, stop_array, add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats
 3. **`unraid_storage`** (6 actions): shares, disks, disk_details, log_files, logs, flash_backup
 4. **`unraid_docker`** (7 actions): list, details, start, stop, restart, networks, network_details
@@ -102,7 +106,7 @@ docker compose down
 15. **`unraid_live`** (11 actions): cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status
 
 ### Destructive Actions (require `confirm=True`)
-- **array**: remove_disk, clear_disk_stats
+- **array**: stop_array, remove_disk, clear_disk_stats
 - **vm**: force_stop, reset
 - **notifications**: delete, delete_archived
 - **rclone**: delete_remote
@@ -191,6 +195,8 @@ When bumping the version, **always update both files** — they must stay in syn
 ### Credential Storage (`~/.unraid-mcp/.env`)
 All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
 - **Plugin/direct:** `unraid_health action=setup` writes this file automatically via elicitation,
+  **Safe to re-run**: if credentials exist and are working, it asks before overwriting.
+  If credentials exist but connection fails, it silently re-configures without prompting.
   or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.
 - **Docker:** `docker-compose.yml` loads it via `env_file` before container start.
 - **No symlinks needed.** Version bumps do not affect this path.
