@@ -87,3 +87,25 @@ def test_build_google_auth_warns_on_stdio_transport(monkeypatch):
         _build_google_auth()
 
     assert any("stdio" in m.lower() for m in warning_messages)
+
+
+def test_mcp_instance_has_no_auth_by_default():
+    """The FastMCP mcp instance has no auth provider when Google vars are absent."""
+    import os
+
+    for var in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "UNRAID_MCP_BASE_URL"):
+        os.environ.pop(var, None)
+
+    import importlib
+
+    import unraid_mcp.config.settings as s
+
+    importlib.reload(s)
+
+    import unraid_mcp.server as srv
+
+    importlib.reload(srv)
+
+    # FastMCP stores auth on ._auth_provider or .auth
+    auth = getattr(srv.mcp, "_auth_provider", None) or getattr(srv.mcp, "auth", None)
+    assert auth is None

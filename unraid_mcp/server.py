@@ -117,11 +117,15 @@ def _build_google_auth() -> "GoogleProvider | None":
     return GoogleProvider(**kwargs)
 
 
+# Build auth provider — returns GoogleProvider when configured, None otherwise.
+_google_auth = _build_google_auth()
+
 # Initialize FastMCP instance
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
+    auth=_google_auth,
     middleware=[
         _logging_middleware,
         error_middleware,
@@ -179,6 +183,19 @@ def run_server() -> None:
             "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
             "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
             "Only use this in trusted networks or for development."
+        )
+
+    if _google_auth is not None:
+        from .config.settings import UNRAID_MCP_BASE_URL
+
+        logger.info(
+            "Google OAuth ENABLED — clients must authenticate before calling tools. "
+            f"Redirect URI: {UNRAID_MCP_BASE_URL}/auth/callback"
+        )
+    else:
+        logger.warning(
+            "No authentication configured — MCP server is open to all clients on the network. "
+            "Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + UNRAID_MCP_BASE_URL to enable OAuth."
         )
 
     logger.info(
