@@ -6,12 +6,18 @@ tool action with interactive user confirmation or confirm=True bypass.
 
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, Field
+
 
 if TYPE_CHECKING:
     from fastmcp import Context
 
 from ..config.logging import logger
 from .exceptions import ToolError
+
+
+class _ConfirmAction(BaseModel):
+    confirmed: bool = Field(False, description="Check the box to confirm and proceed")
 
 
 async def elicit_destructive_confirmation(
@@ -42,7 +48,7 @@ async def elicit_destructive_confirmation(
                 f"{description}\n\n"
                 "Are you sure you want to proceed?"
             ),
-            response_type=bool,
+            response_type=_ConfirmAction,
         )
     except NotImplementedError:
         logger.warning(
@@ -56,7 +62,7 @@ async def elicit_destructive_confirmation(
         logger.info("Destructive action '%s' declined by user (%s).", action, result.action)
         return False
 
-    confirmed: bool = result.data  # type: ignore[union-attr]
+    confirmed: bool = result.data.confirmed  # type: ignore[union-attr]
     if not confirmed:
         logger.info("Destructive action '%s' not confirmed by user.", action)
     return confirmed
