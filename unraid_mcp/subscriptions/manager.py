@@ -280,9 +280,8 @@ class SubscriptionManager:
 
                     if UNRAID_API_KEY:
                         logger.debug(f"[AUTH:{subscription_name}] Adding authentication payload")
-                        # Use standard X-API-Key header format (matching HTTP client)
-                        auth_payload = {"headers": {"X-API-Key": UNRAID_API_KEY}}
-                        init_payload["payload"] = auth_payload
+                        # Use graphql-ws connectionParams format (direct key, not nested headers)
+                        init_payload["payload"] = {"x-api-key": UNRAID_API_KEY}
                     else:
                         logger.warning(
                             f"[AUTH:{subscription_name}] No API key available for authentication"

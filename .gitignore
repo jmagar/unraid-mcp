@@ -10,6 +10,9 @@ wheels/
 # Tool artifacts (pytest, ruff, ty, coverage all write here)
 .cache/
 
+# Hypothesis example database (machine-local, auto-regenerated)
+.hypothesis/
+
 # Legacy artifact locations (in case tools run outside pyproject config)
 .pytest_cache/
 .ruff_cache/

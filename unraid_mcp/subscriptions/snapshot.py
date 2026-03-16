@@ -52,7 +52,7 @@ async def subscribe_once(
         # Handshake
         init: dict[str, Any] = {"type": "connection_init"}
         if UNRAID_API_KEY:
-            init["payload"] = {"headers": {"X-API-Key": UNRAID_API_KEY}}
+            init["payload"] = {"x-api-key": UNRAID_API_KEY}
         await ws.send(json.dumps(init))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
@@ -127,7 +127,7 @@ async def subscribe_collect(
 
         init: dict[str, Any] = {"type": "connection_init"}
         if UNRAID_API_KEY:
-            init["payload"] = {"headers": {"X-API-Key": UNRAID_API_KEY}}
+            init["payload"] = {"x-api-key": UNRAID_API_KEY}
         await ws.send(json.dumps(init))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)

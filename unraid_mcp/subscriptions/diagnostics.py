@@ -130,7 +130,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                     json.dumps(
                         {
                             "type": "connection_init",
-                            "payload": {"headers": {"X-API-Key": UNRAID_API_KEY}},
+                            "payload": {"x-api-key": UNRAID_API_KEY},
                         }
                     )
                 )
