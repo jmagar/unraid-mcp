@@ -7,6 +7,7 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.middleware.caching import CallToolSettings, ResponseCachingMiddleware
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
@@ -67,6 +68,53 @@ cache_middleware = ResponseCachingMiddleware(
     read_resource_settings={"enabled": False},
     get_prompt_settings={"enabled": False},
 )
+
+
+def _build_google_auth() -> "GoogleProvider | None":
+    """Build GoogleProvider when OAuth env vars are configured, else return None.
+
+    Returns None (no auth) when GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET are absent,
+    preserving backward compatibility for existing unprotected setups.
+    """
+    from .config.settings import (
+        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET,
+        UNRAID_MCP_BASE_URL,
+        UNRAID_MCP_JWT_SIGNING_KEY,
+        UNRAID_MCP_TRANSPORT,
+        is_google_auth_configured,
+    )
+
+    if not is_google_auth_configured():
+        return None
+
+    if UNRAID_MCP_TRANSPORT == "stdio":
+        logger.warning(
+            "Google OAuth is configured but UNRAID_MCP_TRANSPORT=stdio. "
+            "OAuth requires HTTP transport (streamable-http or sse). "
+            "Auth will be applied but may not work as expected."
+        )
+
+    kwargs: dict[str, str] = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "base_url": UNRAID_MCP_BASE_URL,
+    }
+    if UNRAID_MCP_JWT_SIGNING_KEY:
+        kwargs["jwt_signing_key"] = UNRAID_MCP_JWT_SIGNING_KEY
+    else:
+        logger.warning(
+            "UNRAID_MCP_JWT_SIGNING_KEY is not set. FastMCP will derive a key automatically, "
+            "but tokens may be invalidated on server restart. "
+            "Set UNRAID_MCP_JWT_SIGNING_KEY to a stable secret."
+        )
+
+    logger.info(
+        f"Google OAuth enabled — base_url={UNRAID_MCP_BASE_URL}, "
+        f"redirect_uri={UNRAID_MCP_BASE_URL}/auth/callback"
+    )
+    return GoogleProvider(**kwargs)
+
 
 # Initialize FastMCP instance
 mcp = FastMCP(
