@@ -22,8 +22,6 @@ class SubscriptionData:
 
     def __post_init__(self) -> None:
         if self.last_updated.tzinfo is None:
-            raise ValueError(
-                "last_updated must be timezone-aware; use datetime.now(UTC)"
-            )
+            raise ValueError("last_updated must be timezone-aware; use datetime.now(UTC)")
         if not self.subscription_type.strip():
             raise ValueError("subscription_type must be a non-empty string")
