@@ -54,12 +54,28 @@ docker compose down
 ```
 
 ### Environment Setup
-- Copy `.env.example` to `.env` and configure:
-  - `UNRAID_API_URL`: Unraid GraphQL endpoint (required)
-  - `UNRAID_API_KEY`: Unraid API key (required)
-  - `UNRAID_MCP_TRANSPORT`: Transport type (default: streamable-http)
-  - `UNRAID_MCP_PORT`: Server port (default: 6970)
-  - `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
+Copy `.env.example` to `.env` and configure:
+
+**Required:**
+- `UNRAID_API_URL`: Unraid GraphQL endpoint
+- `UNRAID_API_KEY`: Unraid API key
+
+**Server:**
+- `UNRAID_MCP_TRANSPORT`: Transport type (default: streamable-http)
+- `UNRAID_MCP_PORT`: Server port (default: 6970)
+- `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
+- `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
+- `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
+
+**SSL/TLS:**
+- `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
+
+**Subscriptions:**
+- `UNRAID_AUTO_START_SUBSCRIPTIONS`: Auto-start live subscriptions on startup (default: true)
+- `UNRAID_MAX_RECONNECT_ATTEMPTS`: WebSocket reconnect limit (default: 10)
+
+**Credentials override:**
+- `UNRAID_CREDENTIALS_DIR`: Override the `~/.unraid-mcp/` credentials directory path
 
 ### Authentication (Optional — protects the HTTP server)
 
@@ -119,13 +135,16 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
   while the subscription starts — callers should retry in a moment. When
   `UNRAID_AUTO_START_SUBSCRIPTIONS=false`, resources fall back to on-demand `subscribe_once`.
 
-### Tool Categories (1 Tool, ~107 Subactions)
+### Tool Categories (3 Tools: 1 Primary + 2 Diagnostic)
 
-The server registers a **single consolidated `unraid` tool** with `action` (domain) + `subaction` (operation) routing. Call it as `unraid(action="docker", subaction="list")`.
+The server registers **3 MCP tools**:
+- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 107 subactions. Call it as `unraid(action="docker", subaction="list")`.
+- **`diagnose_subscriptions`** — inspect subscription connection states, errors, and WebSocket URLs.
+- **`test_subscription_query`** — test a specific GraphQL subscription query (allowlisted fields only).
 
 | action | subactions |
 |--------|-----------|
-| **system** (19) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **system** (18) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
 | **health** (4) | check, test_connection, diagnose, setup |
 | **array** (13) | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
@@ -211,7 +230,7 @@ uv run pytest -x                     # Fail fast on first error
 
 ### Scripts
 ```bash
-# HTTP smoke-test against a live server (11 tools, all non-destructive actions)
+# HTTP smoke-test against a live server (non-destructive actions, all domains)
 ./tests/mcporter/test-actions.sh [MCP_URL]  # default: http://localhost:6970/mcp
 
 # stdio smoke-test, no running server needed (good for CI)

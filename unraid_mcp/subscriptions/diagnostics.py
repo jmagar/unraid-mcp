@@ -15,8 +15,8 @@ import websockets
 from fastmcp import FastMCP
 from websockets.typing import Subprotocol
 
+from ..config import settings as _settings
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY, UNRAID_API_URL
 from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
@@ -130,7 +130,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                     json.dumps(
                         {
                             "type": "connection_init",
-                            "payload": {"x-api-key": UNRAID_API_KEY},
+                            "payload": {"x-api-key": _settings.UNRAID_API_KEY},
                         }
                     )
                 )
@@ -203,7 +203,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
 
             # Calculate WebSocket URL
             ws_url_display: str | None = None
-            if UNRAID_API_URL:
+            if _settings.UNRAID_API_URL:
                 try:
                     ws_url_display = build_ws_url()
                 except ValueError:
@@ -215,8 +215,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 "environment": {
                     "auto_start_enabled": subscription_manager.auto_start_enabled,
                     "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
-                    "unraid_api_url": safe_display_url(UNRAID_API_URL),
-                    "api_key_configured": bool(UNRAID_API_KEY),
+                    "unraid_api_url": safe_display_url(_settings.UNRAID_API_URL),
+                    "api_key_configured": bool(_settings.UNRAID_API_KEY),
                     "websocket_url": ws_url_display,
                 },
                 "subscriptions": status,

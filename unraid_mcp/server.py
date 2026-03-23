@@ -18,6 +18,7 @@ from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddlewa
 
 from .config.logging import logger
 from .config.settings import (
+    LOG_LEVEL_STR,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
     UNRAID_MCP_TRANSPORT,
@@ -44,7 +45,7 @@ _logging_middleware = LoggingMiddleware(
 #    Tracks error_counts per (exception_type:method) for health diagnose.
 _error_middleware = ErrorHandlingMiddleware(
     logger=logger,
-    include_traceback=True,
+    include_traceback=LOG_LEVEL_STR == "DEBUG",
 )
 
 # 3. Unraid API rate limit: 100 requests per 10 seconds.
@@ -93,7 +94,9 @@ class ApiKeyVerifier(TokenVerifier):
         self._api_key = api_key
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        if self._api_key and token == self._api_key:
+        import hmac
+
+        if self._api_key and hmac.compare_digest(token.encode(), self._api_key.encode()):
             return AccessToken(
                 token=token,
                 client_id="api-key-client",
@@ -131,6 +134,14 @@ def _build_google_auth() -> "GoogleProvider | None":
         "client_id": GOOGLE_CLIENT_ID,
         "client_secret": GOOGLE_CLIENT_SECRET,
         "base_url": UNRAID_MCP_BASE_URL,
+        # Prefer short-lived access tokens without refresh-token rotation churn.
+        # This reduces reconnect instability in MCP clients that re-auth frequently.
+        "extra_authorize_params": {"access_type": "online", "prompt": "consent"},
+        # Skip the FastMCP consent page — goes directly to Google.
+        # The consent page has a CSRF double-load race: two concurrent GET requests
+        # each regenerate the CSRF token, the second overwrites the first in the
+        # transaction store, and the POST fails with "Invalid or expired consent token".
+        "require_authorization_consent": False,
     }
     if UNRAID_MCP_JWT_SIGNING_KEY:
         kwargs["jwt_signing_key"] = UNRAID_MCP_JWT_SIGNING_KEY

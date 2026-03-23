@@ -70,6 +70,20 @@ else
     echo -e "Checking: Plugin source path is valid... ${RED}✗${NC} (plugin not found in marketplace)"
 fi
 
+# Check version sync between pyproject.toml and plugin.json
+echo "Checking version sync..."
+TOML_VER=$(grep '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
+PLUGIN_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "ERROR_READING")
+if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
+    echo -e "${RED}FAIL: Version mismatch — pyproject.toml=$TOML_VER, plugin.json=$PLUGIN_VER${NC}"
+    CHECKS=$((CHECKS + 1))
+    FAILED=$((FAILED + 1))
+else
+    echo -e "${GREEN}PASS: Versions in sync ($TOML_VER)${NC}"
+    CHECKS=$((CHECKS + 1))
+    PASSED=$((PASSED + 1))
+fi
+
 echo ""
 echo "=== Results ==="
 echo -e "Total checks: $CHECKS"

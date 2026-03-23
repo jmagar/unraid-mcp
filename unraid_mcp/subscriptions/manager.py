@@ -15,8 +15,8 @@ from typing import Any
 import websockets
 from websockets.typing import Subprotocol
 
+from ..config import settings as _settings
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY
 from ..core.client import redact_sensitive
 from ..core.types import SubscriptionData
 from .utils import build_ws_ssl_context, build_ws_url
@@ -250,7 +250,7 @@ class SubscriptionManager:
                 ws_url = build_ws_url()
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
                 logger.debug(
-                    f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}"
+                    f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if _settings.UNRAID_API_KEY else 'No'}"
                 )
 
                 ssl_context = build_ws_ssl_context(ws_url)
@@ -287,10 +287,10 @@ class SubscriptionManager:
                     init_type = "connection_init"
                     init_payload: dict[str, Any] = {"type": init_type}
 
-                    if UNRAID_API_KEY:
+                    if _settings.UNRAID_API_KEY:
                         logger.debug(f"[AUTH:{subscription_name}] Adding authentication payload")
                         # Use graphql-ws connectionParams format (direct key, not nested headers)
-                        init_payload["payload"] = {"x-api-key": UNRAID_API_KEY}
+                        init_payload["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
                     else:
                         logger.warning(
                             f"[AUTH:{subscription_name}] No API key available for authentication"

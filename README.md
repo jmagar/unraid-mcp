@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- 🔧 **1 Tool, ~108 Actions**: Complete Unraid management through a single consolidated MCP tool
+- 🔧 **1 primary tool + 2 diagnostic tools, 107 subactions**: Complete Unraid management through a consolidated MCP tool
 - 🏗️ **Modular Architecture**: Clean, maintainable, and extensible codebase
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
 - 🔄 **Real-time Data**: WebSocket subscriptions for live metrics, logs, array state, and more
@@ -46,7 +46,7 @@
 ```
 
 This provides instant access to Unraid monitoring and management through Claude Code with:
-- **1 MCP tool** (`unraid`) exposing **~108 actions** via `action` + `subaction` routing
+- **1 primary MCP tool** (`unraid`) exposing **107 subactions** via `action` + `subaction` routing, plus `diagnose_subscriptions` and `test_subscription_query` diagnostic tools
 - Real-time system metrics and health monitoring
 - Docker container and VM lifecycle management
 - Disk health monitoring and storage management
@@ -140,7 +140,7 @@ unraid-mcp/                      # ${CLAUDE_PLUGIN_ROOT}
 └── scripts/                     # Validation and helper scripts
 ```
 
-- **MCP Server**: 1 `unraid` tool with ~108 actions via GraphQL API
+- **MCP Server**: 3 tools — `unraid` (107 subactions) + `diagnose_subscriptions` + `test_subscription_query`
 - **Skill**: `/unraid` skill for monitoring and queries
 - **Entry Point**: `unraid-mcp-server` defined in pyproject.toml
 
@@ -233,7 +233,7 @@ UNRAID_AUTO_START_SUBSCRIPTIONS=true  # Auto-start WebSocket subscriptions on st
 UNRAID_MAX_RECONNECT_ATTEMPTS=10      # Max WebSocket reconnection attempts (default: 10)
 
 # Optional: Log Stream Configuration
-# UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog  # Path for log streaming resource (unraid://logs/stream)
+# UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog  # Override log path for unraid://logs/stream (auto-detects /var/log/syslog if unset)
 ```
 
 ### Transport Options
@@ -290,7 +290,7 @@ Omit both to run without authentication (default — open server).
 
 The single `unraid` tool uses `action` (domain) + `subaction` (operation) routing to expose all operations via one MCP tool, minimizing context window usage. Destructive actions require `confirm=True`.
 
-### Single Tool, 15 Domains, ~108 Actions
+### Primary Tool: 15 Domains, 107 Subactions
 
 Call pattern: `unraid(action="<domain>", subaction="<operation>")`
 
@@ -343,6 +343,8 @@ The server exposes two classes of MCP resources backed by persistent WebSocket c
 >
 > **`log_tail` and `notification_feed`** are accessible as tool subactions (`unraid(action="live", subaction="log_tail")`) but are not registered as MCP resources — they use transient one-shot subscriptions and require parameters.
 
+> **Security note**: The `disk/logs` and `live/log_tail` subactions allow reading files under `/var/log/` and `/boot/logs/` on the Unraid server. Authenticated MCP clients can stream any log file within these directories.
+
 ---
 
 
@@ -372,7 +374,7 @@ unraid-mcp/
 │   │   ├── queries.py        # Subscription query constants
 │   │   ├── diagnostics.py    # Diagnostic tools
 │   │   └── utils.py          # Subscription utility functions
-│   └── tools/                # Single consolidated tool (~108 actions)
+│   └── tools/                # Consolidated tools (unraid: 107 subactions + 2 diagnostic tools)
 │       └── unraid.py         # All 15 domains in one file
 ├── tests/                    # Test suite
 │   ├── conftest.py           # Shared fixtures

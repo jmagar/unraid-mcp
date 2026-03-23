@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from unraid_mcp.server import ApiKeyVerifier, _build_auth
+import unraid_mcp.server as srv
 
 
 # ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ from unraid_mcp.server import ApiKeyVerifier, _build_auth
 @pytest.mark.asyncio
 async def test_api_key_verifier_accepts_correct_key():
     """Returns AccessToken when the presented token matches the configured key."""
-    verifier = ApiKeyVerifier("secret-key-abc123")
+    verifier = srv.ApiKeyVerifier("secret-key-abc123")
     result = await verifier.verify_token("secret-key-abc123")
 
     assert result is not None
@@ -27,7 +27,7 @@ async def test_api_key_verifier_accepts_correct_key():
 @pytest.mark.asyncio
 async def test_api_key_verifier_rejects_wrong_key():
     """Returns None when the token does not match."""
-    verifier = ApiKeyVerifier("secret-key-abc123")
+    verifier = srv.ApiKeyVerifier("secret-key-abc123")
     result = await verifier.verify_token("wrong-key")
 
     assert result is None
@@ -36,7 +36,7 @@ async def test_api_key_verifier_rejects_wrong_key():
 @pytest.mark.asyncio
 async def test_api_key_verifier_rejects_empty_token():
     """Returns None for an empty string token."""
-    verifier = ApiKeyVerifier("secret-key-abc123")
+    verifier = srv.ApiKeyVerifier("secret-key-abc123")
     result = await verifier.verify_token("")
 
     assert result is None
@@ -50,7 +50,7 @@ async def test_api_key_verifier_empty_key_rejects_empty_token():
     should not be instantiated in that case.  But if it is, it must not
     grant access via an empty bearer token.
     """
-    verifier = ApiKeyVerifier("")
+    verifier = srv.ApiKeyVerifier("")
     result = await verifier.verify_token("")
 
     assert result is None
@@ -72,7 +72,7 @@ def test_build_auth_returns_none_when_nothing_configured(monkeypatch):
 
     importlib.reload(s)
 
-    result = _build_auth()
+    result = srv._build_auth()
     assert result is None
 
 
@@ -87,8 +87,8 @@ def test_build_auth_returns_api_key_verifier_when_only_api_key_set(monkeypatch):
 
     importlib.reload(s)
 
-    result = _build_auth()
-    assert isinstance(result, ApiKeyVerifier)
+    result = srv._build_auth()
+    assert isinstance(result, srv.ApiKeyVerifier)
 
 
 def test_build_auth_returns_google_provider_when_only_oauth_set(monkeypatch):
@@ -105,7 +105,7 @@ def test_build_auth_returns_google_provider_when_only_oauth_set(monkeypatch):
 
     mock_provider = MagicMock()
     with patch("unraid_mcp.server.GoogleProvider", return_value=mock_provider):
-        result = _build_auth()
+        result = srv._build_auth()
 
     assert result is mock_provider
 
@@ -126,14 +126,14 @@ def test_build_auth_returns_multi_auth_when_both_configured(monkeypatch):
 
     mock_provider = MagicMock()
     with patch("unraid_mcp.server.GoogleProvider", return_value=mock_provider):
-        result = _build_auth()
+        result = srv._build_auth()
 
     assert isinstance(result, MultiAuth)
     # Server is the Google provider
     assert result.server is mock_provider
     # One additional verifier — the ApiKeyVerifier
     assert len(result.verifiers) == 1
-    assert isinstance(result.verifiers[0], ApiKeyVerifier)
+    assert isinstance(result.verifiers[0], srv.ApiKeyVerifier)
 
 
 def test_build_auth_multi_auth_api_key_verifier_uses_correct_key(monkeypatch):
@@ -149,7 +149,7 @@ def test_build_auth_multi_auth_api_key_verifier_uses_correct_key(monkeypatch):
     importlib.reload(s)
 
     with patch("unraid_mcp.server.GoogleProvider", return_value=MagicMock()):
-        result = _build_auth()
+        result = srv._build_auth()
 
     verifier = result.verifiers[0]
     assert verifier._api_key == "super-secret-token"

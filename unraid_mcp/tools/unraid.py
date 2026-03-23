@@ -21,7 +21,6 @@ Actions:
   live         - Real-time WebSocket subscription snapshots (11 subactions)
 """
 
-import asyncio
 import datetime
 import os
 import re
@@ -32,7 +31,7 @@ from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
 from ..core.client import DISK_TIMEOUT, make_graphql_request
-from ..core.exceptions import ToolError, tool_error_handler
+from ..core.exceptions import CredentialsNotConfiguredError, ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.setup import elicit_and_configure, elicit_reset_confirmation
 from ..core.utils import format_bytes, format_kb, safe_get
@@ -110,7 +109,7 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "servers": "query GetServers { servers { id name status wanip lanip localurl remoteurl } }",
     "flash": "query GetFlash { flash { id vendor product } }",
     "ups_devices": "query GetUpsDevices { upsDevices { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
-    "ups_device": "query GetUpsDevice($id: String!) { upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage nominalPower currentPower } } }",
+    "ups_device": "query GetUpsDevice($id: String!) { upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
     "ups_config": "query GetUpsConfig { upsConfiguration { service upsCable upsType device batteryLevel minutes timeout killUps upsName } }",
 }
 
@@ -505,6 +504,8 @@ async def _comprehensive_health_check() -> dict[str, Any]:
         }
         return health_info
 
+    except CredentialsNotConfiguredError:
+        raise  # Let tool_error_handler convert to setup instructions
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         return {
@@ -625,7 +626,7 @@ _DISK_MUTATIONS: dict[str, str] = {
 
 _DISK_SUBACTIONS: set[str] = set(_DISK_QUERIES) | set(_DISK_MUTATIONS)
 _DISK_DESTRUCTIVE: set[str] = {"flash_backup"}
-_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
+_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/")
 _MAX_TAIL_LINES = 10_000
 
 
@@ -662,7 +663,10 @@ async def _handle_disk(
             raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
         if not log_path:
             raise ToolError("log_path is required for disk/logs")
-        normalized = await asyncio.to_thread(os.path.realpath, log_path)
+        # Validate without filesystem access — path is consumed on the remote Unraid server
+        if ".." in log_path:
+            raise ToolError("log_path must not contain path traversal sequences (../)")
+        normalized = os.path.normpath(log_path)  # noqa: ASYNC240 — pure string normalization, no I/O
         if not any(normalized.startswith(p) for p in _ALLOWED_LOG_PREFIXES):
             raise ToolError(f"log_path must start with one of: {', '.join(_ALLOWED_LOG_PREFIXES)}")
         log_path = normalized
@@ -674,6 +678,14 @@ async def _handle_disk(
             raise ToolError("source_path is required for disk/flash_backup")
         if not destination_path:
             raise ToolError("destination_path is required for disk/flash_backup")
+        # Validate paths — flash backup source must come from /boot/ only
+        if ".." in source_path:
+            raise ToolError("source_path must not contain path traversal sequences (../)")
+        _norm_src = os.path.normpath(source_path)  # noqa: ASYNC240 — pure string normalization, no I/O
+        if not (_norm_src == "/boot" or _norm_src.startswith("/boot/")):
+            raise ToolError("source_path must start with /boot/ (flash drive only)")
+        if ".." in destination_path:
+            raise ToolError("destination_path must not contain path traversal sequences (../)")
         input_data: dict[str, Any] = {
             "remoteName": remote_name,
             "sourcePath": source_path,
@@ -1629,11 +1641,14 @@ async def _handle_user(subaction: str) -> dict[str, Any]:
 # LIVE (subscriptions)
 # ===========================================================================
 
-_LIVE_ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/", "/mnt/")
+_LIVE_ALLOWED_LOG_PREFIXES = _ALLOWED_LOG_PREFIXES
 
 
 async def _handle_live(
-    subaction: str, path: str | None, collect_for: float, timeout: float
+    subaction: str,
+    path: str | None,
+    collect_for: float,
+    timeout: float,  # noqa: ASYNC109
 ) -> dict[str, Any]:
     from ..subscriptions.queries import COLLECT_ACTIONS, EVENT_DRIVEN_ACTIONS, SNAPSHOT_ACTIONS
     from ..subscriptions.snapshot import subscribe_collect, subscribe_once
@@ -1647,7 +1662,10 @@ async def _handle_live(
     if subaction == "log_tail":
         if not path:
             raise ToolError("path is required for live/log_tail")
-        normalized = await asyncio.to_thread(os.path.realpath, path)
+        # Validate without filesystem access — path is consumed on the remote Unraid server
+        if ".." in path:
+            raise ToolError("path must not contain path traversal sequences (../)")
+        normalized = os.path.normpath(path)  # noqa: ASYNC240 — pure string normalization, no I/O
         if not any(normalized.startswith(p) for p in _LIVE_ALLOWED_LOG_PREFIXES):
             raise ToolError(f"path must start with one of: {', '.join(_LIVE_ALLOWED_LOG_PREFIXES)}")
         path = normalized
@@ -1787,7 +1805,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         # live
         path: str | None = None,
         collect_for: float = 5.0,
-        timeout: float = 10.0,
+        timeout: float = 10.0,  # noqa: ASYNC109
     ) -> dict[str, Any] | str:
         """Interact with an Unraid server's GraphQL API.
 
@@ -1804,7 +1822,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │ health          │ check, test_connection, diagnose, setup                              │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ array           │ parity_status, parity_history, parity_start, parity_pause,          │
-        │                 │ parity_resume, parity_cancel, start_array*, stop_array*,             │
+        │                 │ parity_resume, parity_cancel, start_array, stop_array*,              │
         │                 │ add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats*  │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ disk            │ shares, disks, disk_details, log_files, logs, flash_backup*          │

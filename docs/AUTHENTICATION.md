@@ -1,6 +1,6 @@
-# Google OAuth Setup Guide
+# Authentication Setup Guide
 
-This document explains how to protect the Unraid MCP HTTP server with Google OAuth 2.0 authentication using FastMCP's built-in `GoogleProvider`.
+This document covers both Google OAuth 2.0 and API key bearer token authentication for the Unraid MCP HTTP server. It explains how to protect the server using FastMCP's built-in `GoogleProvider` for OAuth, or a static bearer token for headless/machine access.
 
 ---
 

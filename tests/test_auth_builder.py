@@ -8,9 +8,10 @@ from unraid_mcp.server import _build_google_auth
 
 def test_build_google_auth_returns_none_when_unconfigured(monkeypatch):
     """Returns None when Google OAuth env vars are absent."""
-    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
-    monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
-    monkeypatch.delenv("UNRAID_MCP_BASE_URL", raising=False)
+    # Use explicit empty values so dotenv reload cannot re-inject from ~/.unraid-mcp/.env.
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "")
+    monkeypatch.setenv("UNRAID_MCP_BASE_URL", "")
 
     import unraid_mcp.config.settings as s
 
@@ -42,6 +43,8 @@ def test_build_google_auth_returns_provider_when_configured(monkeypatch):
         client_id="test-id.apps.googleusercontent.com",
         client_secret="GOCSPX-test-secret",
         base_url="http://10.1.0.2:6970",
+        extra_authorize_params={"access_type": "online", "prompt": "consent"},
+        require_authorization_consent=False,
         jwt_signing_key="x" * 32,
     )
 
@@ -95,7 +98,7 @@ def test_mcp_instance_has_no_auth_by_default():
     import os
 
     for var in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "UNRAID_MCP_BASE_URL"):
-        os.environ.pop(var, None)
+        os.environ[var] = ""
 
     import importlib
 

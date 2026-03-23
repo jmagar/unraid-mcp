@@ -11,8 +11,6 @@ WebSocket per call. This is intentional: MCP tools are request-response.
 Use the SubscriptionManager for long-lived monitoring resources.
 """
 
-from __future__ import annotations
-
 import asyncio
 import json
 from typing import Any
@@ -20,8 +18,8 @@ from typing import Any
 import websockets
 from websockets.typing import Subprotocol
 
+from ..config import settings as _settings
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY
 from ..core.exceptions import ToolError
 from .utils import build_ws_ssl_context, build_ws_url
 
@@ -51,8 +49,8 @@ async def subscribe_once(
 
         # Handshake
         init: dict[str, Any] = {"type": "connection_init"}
-        if UNRAID_API_KEY:
-            init["payload"] = {"x-api-key": UNRAID_API_KEY}
+        if _settings.UNRAID_API_KEY:
+            init["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
         await ws.send(json.dumps(init))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
@@ -126,8 +124,8 @@ async def subscribe_collect(
         sub_id = "snapshot-1"
 
         init: dict[str, Any] = {"type": "connection_init"}
-        if UNRAID_API_KEY:
-            init["payload"] = {"x-api-key": UNRAID_API_KEY}
+        if _settings.UNRAID_API_KEY:
+            init["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
         await ws.send(json.dumps(init))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
