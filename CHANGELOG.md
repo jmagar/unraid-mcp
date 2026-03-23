@@ -1,0 +1,135 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+## [1.1.2] - 2026-03-23
+
+### Security
+- **Path traversal**: Removed `/mnt/` from `_ALLOWED_LOG_PREFIXES` — was exposing all Unraid user shares to path-based reads
+- **Path traversal**: Added early `..` detection for `disk/logs` and `live/log_tail` before any filesystem access; added `/boot/` prefix restriction for `flash_backup` source paths
+- **Timing-safe auth**: `verify_token` now uses `hmac.compare_digest` instead of `==` to prevent timing oracle attacks on API key comparison
+- **Traceback leak**: `include_traceback` in `ErrorHandlingMiddleware` is now gated on `DEBUG` log level; production deployments no longer expose stack traces
+
+### Fixed
+- **Health check**: `_comprehensive_health_check` now re-raises `CredentialsNotConfiguredError` instead of swallowing it into a generic unhealthy status
+- **UPS device query**: Removed non-existent `nominalPower` and `currentPower` fields from `ups_device` query — every call was failing against the live API
+- **Stale credential bindings**: Subscription modules (`manager.py`, `snapshot.py`, `utils.py`, `diagnostics.py`) previously captured `UNRAID_API_KEY`/`UNRAID_API_URL` at import time; replaced with `_settings.ATTR` call-time access so `apply_runtime_config()` updates propagate correctly after credential elicitation
+
+### Added
+- **CI pipeline**: `.github/workflows/ci.yml` with 5 jobs — lint (`ruff`), typecheck (`ty`), test (`pytest -m "not integration"`), version-sync check, and `uv audit` dependency scan
+- **Coverage threshold**: `fail_under = 80` added to `[tool.coverage.report]`
+- **Version sync check**: `scripts/validate-marketplace.sh` now verifies `pyproject.toml` and `plugin.json` versions match
+
+### Changed
+- **Docs**: Updated `CLAUDE.md`, `README.md` to reflect 3 tools (1 primary + 2 diagnostic); corrected system domain count (19→18); fixed scripts comment
+- **Docs**: `docs/AUTHENTICATION.md` H1 retitled to "Authentication Setup Guide"
+- **Docs**: Added `UNRAID_CREDENTIALS_DIR` commented entry to `.env.example`
+- Removed `from __future__ import annotations` from `snapshot.py` (caused TC002 false positives with FastMCP)
+- Added `# noqa: ASYNC109` to `timeout` parameters in `_handle_live` and `unraid()` (valid suppressions)
+- Fixed `start_array*` → `start_array` in tool docstring table (`start_array` is not in `_ARRAY_DESTRUCTIVE`)
+
+---
+
+## [1.1.1] - 2026-03-16
+
+### Added
+- **API key auth**: `Authorization: Bearer <UNRAID_MCP_API_KEY>` bearer token authentication via `ApiKeyVerifier` — machine-to-machine access without OAuth browser flow
+- **MultiAuth**: When both Google OAuth and API key are configured, `MultiAuth` accepts either method
+- **Google OAuth**: Full `GoogleProvider` integration — browser-based OAuth 2.0 flow with JWT session tokens; `UNRAID_MCP_JWT_SIGNING_KEY` for stable tokens across restarts
+- **`fastmcp.json`**: Dev tooling configs for FastMCP
+
+### Fixed
+- Auth test isolation: use `os.environ[k] = ""` instead of `delenv` to prevent dotenv re-injection between test reloads
+
+---
+
+## [1.1.0] - 2026-03-16
+
+### Breaking Changes
+- **Tool consolidation**: 15 individual domain tools (`unraid_docker`, `unraid_vm`, etc.) merged into single `unraid` tool with `action` + `subaction` routing
+  - Old: `unraid_docker(action="list")`
+  - New: `unraid(action="docker", subaction="list")`
+
+### Added
+- **`live` tool** (11 subactions): Real-time WebSocket subscription snapshots — `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notification_feed`, `log_tail`, `owner`, `server_status`
+- **`customization` tool** (5 subactions): `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`
+- **`plugin` tool** (3 subactions): `list`, `add`, `remove`
+- **`oidc` tool** (5 subactions): `providers`, `provider`, `configuration`, `public_providers`, `validate_session`
+- **Persistent `SubscriptionManager`**: `unraid://live/*` MCP resources backed by long-lived WebSocket connections with auto-start and reconnection
+- **`diagnose_subscriptions`** and **`test_subscription_query`** diagnostic tools
+- `array`: Added `parity_history`, `start_array`, `stop_array`, `add_disk`, `remove_disk`, `mount_disk`, `unmount_disk`, `clear_disk_stats`
+- `keys`: Added `add_role`, `remove_role`
+- `settings`: Added `update_ssh` (confirm required)
+- `stop_array` added to `_ARRAY_DESTRUCTIVE`
+- `gate_destructive_action` helper in `core/guards.py` — centralized elicitation + confirm guard
+- Full safety test suite: `TestNoGraphQLCallsWhenUnconfirmed` (zero-I/O guarantee for all 13 destructive actions)
+
+### Fixed
+- Removed 29 actions confirmed absent from live API v4.29.2 via GraphQL introspection (Docker organizer mutations, `unassignedDevices`, `warningsAndAlerts`, etc.)
+- `log_tail` path validated against allowlist before subscription start
+- WebSocket auth uses `x-api-key` connectionParams format
+
+---
+
+## [1.0.0] - 2026-03-14 through 2026-03-15
+
+### Breaking Changes
+- Credential storage moved to `~/.unraid-mcp/.env` (dir 700, file 600); all runtimes load from this path
+- `unraid_health(action="setup")` is the only tool that triggers credential elicitation; all others propagate `CredentialsNotConfiguredError`
+
+### Added
+- `CredentialsNotConfiguredError` sentinel — propagates cleanly through `tool_error_handler` with exact credential path in the error message
+- `is_configured()` and `apply_runtime_config()` in `settings.py` for runtime credential injection
+- `elicit_and_configure()` with `.env` persistence and confirmation before overwrite
+- 28 GraphQL mutations across storage, docker, notifications, and new settings tool
+- Comprehensive test suite expansion: schema validation (99 tests), HTTP layer (respx), property tests, safety audit, contract tests
+
+### Fixed
+- Numerous PR review fixes across 50+ commits (CodeRabbit, ChatGPT-Codex review rounds)
+- Shell scripts hardened against injection and null guards
+- Notification enum validation, subscription lock split, safe_get semantics
+
+---
+
+## [0.6.0] - 2026-03-15
+
+### Added
+- Subscription byte/line cap to prevent unbounded memory growth
+- `asyncio.timeout` bounds on `subscribe_once` / `subscribe_collect`
+- Partial auto-start for subscriptions (best-effort on startup)
+
+### Fixed
+- WebSocket URL scheme handling (`ws://`/`wss://`)
+- `flash_backup` path validation and smoke test assertions
+
+---
+
+## [0.5.0] - 2026-03-15
+
+*Tool expansion and live subscription foundation.*
+
+---
+
+## [0.4.x] - 2026-03-13 through 2026-03-14
+
+*Credential elicitation system, per-tool refactors, and mutation additions.*
+
+---
+
+## [0.2.x] - 2026-02-15 through 2026-03-13
+
+*Initial public release hardening: PR review cycles, test suite expansion, security fixes, plugin manifest.*
+
+---
+
+## [0.1.0] - 2026-02-08
+
+### Added
+- Consolidated 26 tools into 10 tools with 90 actions
+- FastMCP architecture migration with `uv` toolchain
+- Docker Compose support with health checks
+- WebSocket subscription infrastructure
+
+---
+
+*Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). Versioning: [Semantic Versioning](https://semver.org/).*
