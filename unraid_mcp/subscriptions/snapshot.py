@@ -18,10 +18,9 @@ from typing import Any
 import websockets
 from websockets.typing import Subprotocol
 
-from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.exceptions import ToolError
-from .utils import build_ws_ssl_context, build_ws_url
+from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 
 
 async def subscribe_once(
@@ -48,10 +47,7 @@ async def subscribe_once(
         sub_id = "snapshot-1"
 
         # Handshake
-        init: dict[str, Any] = {"type": "connection_init"}
-        if _settings.UNRAID_API_KEY:
-            init["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
-        await ws.send(json.dumps(init))
+        await ws.send(json.dumps(build_connection_init()))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
         ack = json.loads(raw)
@@ -123,10 +119,7 @@ async def subscribe_collect(
         proto = ws.subprotocol or "graphql-transport-ws"
         sub_id = "snapshot-1"
 
-        init: dict[str, Any] = {"type": "connection_init"}
-        if _settings.UNRAID_API_KEY:
-            init["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
-        await ws.send(json.dumps(init))
+        await ws.send(json.dumps(build_connection_init()))
 
         raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
         ack = json.loads(raw)

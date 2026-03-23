@@ -4,6 +4,7 @@ This is the main server implementation using the modular architecture with
 separate modules for configuration, core functionality, subscriptions, and tools.
 """
 
+import hmac
 import sys
 from typing import Any
 
@@ -94,8 +95,6 @@ class ApiKeyVerifier(TokenVerifier):
         self._api_key = api_key
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        import hmac
-
         if self._api_key and hmac.compare_digest(token.encode(), self._api_key.encode()):
             return AccessToken(
                 token=token,

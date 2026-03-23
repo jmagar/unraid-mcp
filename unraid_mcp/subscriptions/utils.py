@@ -45,7 +45,7 @@ def build_ws_ssl_context(ws_url: str) -> _ssl.SSLContext | None:
         ws_url: The WebSocket URL to connect to.
 
     Returns:
-        An SSLContext configured per _settings.UNRAID_VERIFY_SSL, or None for non-TLS URLs.
+        An SSLContext configured per UNRAID_VERIFY_SSL, or None for non-TLS URLs.
     """
     if not ws_url.startswith("wss://"):
         return None
@@ -58,6 +58,18 @@ def build_ws_ssl_context(ws_url: str) -> _ssl.SSLContext | None:
     ctx.check_hostname = False
     ctx.verify_mode = _ssl.CERT_NONE
     return ctx
+
+
+def build_connection_init() -> dict[str, Any]:
+    """Build the graphql-ws connection_init message.
+
+    Omits the payload key entirely when no API key is configured —
+    sending {"x-api-key": None} and omitting the key differ for some servers.
+    """
+    msg: dict[str, Any] = {"type": "connection_init"}
+    if _settings.UNRAID_API_KEY:
+        msg["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
+    return msg
 
 
 def _analyze_subscription_status(

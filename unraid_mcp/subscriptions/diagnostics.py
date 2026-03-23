@@ -21,7 +21,12 @@ from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
 from .resources import ensure_subscriptions_started
-from .utils import _analyze_subscription_status, build_ws_ssl_context, build_ws_url
+from .utils import (
+    _analyze_subscription_status,
+    build_connection_init,
+    build_ws_ssl_context,
+    build_ws_url,
+)
 
 
 # Schema field names that appear inside the selection set of allowed subscriptions.
@@ -125,15 +130,8 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                 ping_interval=30,
                 ping_timeout=10,
             ) as websocket:
-                # Send connection init (using standard X-API-Key format)
-                await websocket.send(
-                    json.dumps(
-                        {
-                            "type": "connection_init",
-                            "payload": {"x-api-key": _settings.UNRAID_API_KEY},
-                        }
-                    )
-                )
+                # Send connection init
+                await websocket.send(json.dumps(build_connection_init()))
 
                 # Wait for ack
                 response = await websocket.recv()
