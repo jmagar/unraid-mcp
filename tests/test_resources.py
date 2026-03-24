@@ -64,6 +64,8 @@ class TestLiveResourcesUseManagerCache:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
             mock_mgr.last_error = {action: "WebSocket auth failed"}
+            mock_mgr.connection_states = {action: "auth_failed"}
+            mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
             # Accessing FastMCP internals intentionally for unit test isolation.
             # This may break on FastMCP upgrades — consider a make_resource_fn() helper if it does.

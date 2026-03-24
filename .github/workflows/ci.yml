@@ -45,9 +45,7 @@ jobs:
           version: "0.9.25"
       - name: Install dependencies
         run: uv sync --group dev
-      - name: Run tests (excluding integration/slow)
-        run: uv run pytest -m "not slow and not integration" --tb=short -q
-      - name: Check coverage
+      - name: Run tests with coverage (excluding integration/slow)
         run: uv run pytest -m "not slow and not integration" --cov=unraid_mcp --cov-report=term-missing --tb=short -q
 
   version-sync:

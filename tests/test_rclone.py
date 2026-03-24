@@ -20,20 +20,23 @@ def _make_tool():
 
 
 class TestRcloneValidation:
-    async def test_delete_requires_confirm(self) -> None:
+    async def test_delete_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="not confirmed"):
             await tool_fn(action="rclone", subaction="delete_remote", name="gdrive")
+        _mock_graphql.assert_not_awaited()
 
-    async def test_create_requires_fields(self) -> None:
+    async def test_create_requires_fields(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="requires name"):
             await tool_fn(action="rclone", subaction="create_remote")
+        _mock_graphql.assert_not_awaited()
 
-    async def test_delete_requires_name(self) -> None:
+    async def test_delete_requires_name(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="name is required"):
             await tool_fn(action="rclone", subaction="delete_remote", confirm=True)
+        _mock_graphql.assert_not_awaited()
 
 
 class TestRcloneActions:

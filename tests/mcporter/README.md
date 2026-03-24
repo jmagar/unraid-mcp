@@ -4,17 +4,7 @@ Live integration smoke-tests for the unraid-mcp server, exercising real API call
 
 ---
 
-## Two Scripts, Two Transports
-
-| | `test-tools.sh` | `test-actions.sh` |
-|-|-----------------|-------------------|
-| **Transport** | stdio | HTTP |
-| **Server required** | No — launched ad-hoc per call | Yes — must be running at `$MCP_URL` |
-| **Flags** | `--timeout-ms N`, `--parallel`, `--verbose` | positional `[MCP_URL]` |
-| **Coverage** | 10 tools (read-only actions only) | 11 tools (all non-destructive actions) |
-| **Use case** | CI / offline local check | Live server smoke-test |
-
-### `test-tools.sh` — stdio, no running server needed
+## `test-tools.sh` — stdio, no running server needed
 
 ```bash
 ./tests/mcporter/test-tools.sh                        # sequential, 25s timeout
@@ -25,19 +15,9 @@ Live integration smoke-tests for the unraid-mcp server, exercising real API call
 
 Launches `uv run unraid-mcp-server` in stdio mode for each tool call. Requires `mcporter`, `uv`, and `python3` in `PATH`. Good for CI pipelines — no persistent server process needed.
 
-### `test-actions.sh` — HTTP, requires a live server
-
-```bash
-./tests/mcporter/test-actions.sh                              # default: http://localhost:6970/mcp
-./tests/mcporter/test-actions.sh http://10.1.0.2:6970/mcp    # explicit URL
-UNRAID_MCP_URL=http://10.1.0.2:6970/mcp ./tests/mcporter/test-actions.sh
-```
-
-Connects to an already-running streamable-http server. Covers all read-only actions across 10 tools (`unraid_settings` is all-mutations and skipped; all destructive mutations are explicitly skipped).
-
 ---
 
-## What `test-actions.sh` Tests
+## What `test-tools.sh` Tests
 
 ### Phase 1 — Param-free reads
 
@@ -137,15 +117,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # python3 — used for inline JSON extraction
 python3 --version  # 3.12+
-
-# Running server (for test-actions.sh only)
-docker compose up -d
-# or
-uv run unraid-mcp-server
 ```
 
 ---
 
 ## Cleanup
 
-`test-actions.sh` connects to an existing server and leaves it running; it creates no temporary files. `test-tools.sh` spawns stdio server subprocesses per call — they exit when mcporter finishes each invocation — and may write a timestamped log file under `${TMPDIR:-/tmp}`. Neither script leaves background processes.
+`test-tools.sh` spawns stdio server subprocesses per call — they exit when mcporter finishes each invocation — and may write a timestamped log file under `${TMPDIR:-/tmp}`. It does not leave background processes.

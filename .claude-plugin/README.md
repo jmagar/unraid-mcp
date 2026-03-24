@@ -41,7 +41,7 @@ Query and monitor Unraid servers via GraphQL API - array status, disk health, co
 - Notification management
 - Plugin, rclone, API key, and OIDC management
 
-**Version:** 1.0.0
+**Version:** 1.1.2
 **Category:** Infrastructure
 **Tags:** unraid, monitoring, homelab, graphql, docker, virtualization
 

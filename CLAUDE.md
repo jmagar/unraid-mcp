@@ -38,21 +38,6 @@ uv run ty check unraid_mcp/
 uv run pytest
 ```
 
-### Docker Development
-```bash
-# Build the Docker image
-docker build -t unraid-mcp-server .
-
-# Run with Docker Compose
-docker compose up -d
-
-# View logs
-docker compose logs -f unraid-mcp
-
-# Stop service
-docker compose down
-```
-
 ### Environment Setup
 Copy `.env.example` to `.env` and configure:
 
@@ -61,9 +46,6 @@ Copy `.env.example` to `.env` and configure:
 - `UNRAID_API_KEY`: Unraid API key
 
 **Server:**
-- `UNRAID_MCP_TRANSPORT`: Transport type (default: streamable-http)
-- `UNRAID_MCP_PORT`: Server port (default: 6970)
-- `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
 - `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
 - `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
 
@@ -77,36 +59,6 @@ Copy `.env.example` to `.env` and configure:
 **Credentials override:**
 - `UNRAID_CREDENTIALS_DIR`: Override the `~/.unraid-mcp/` credentials directory path
 
-### Authentication (Optional — protects the HTTP server)
-
-Two independent methods. Use either or both — when both are set, `MultiAuth` accepts either.
-
-**Google OAuth** — requires all three vars:
-
-| Env Var | Purpose |
-|---------|---------|
-| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 Client Secret |
-| `UNRAID_MCP_BASE_URL` | Public URL of this server (e.g. `http://10.1.0.2:6970`) |
-| `UNRAID_MCP_JWT_SIGNING_KEY` | Stable 32+ char secret — prevents token invalidation on restart |
-
-Google Cloud Console setup: APIs & Services → Credentials → OAuth 2.0 Client ID (Web application) → Authorized redirect URIs: `<UNRAID_MCP_BASE_URL>/auth/callback`
-
-**API Key** — clients present as `Authorization: Bearer <key>`:
-
-| Env Var | Purpose |
-|---------|---------|
-| `UNRAID_MCP_API_KEY` | Static bearer token (can be same value as `UNRAID_API_KEY`) |
-
-**Generate a stable JWT signing key:**
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
-
-**Omit all auth vars to run without auth** (default — open server).
-
-**Full guide:** [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md)
-
 ## Architecture
 
 ### Core Components
@@ -114,10 +66,13 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 - **Entry Point**: `unraid_mcp/main.py` - Application entry point and startup logic
 - **Configuration**: `unraid_mcp/config/` - Settings management and logging configuration
 - **Core Infrastructure**: `unraid_mcp/core/` - GraphQL client, exceptions, and shared types
+  - `guards.py` — destructive action gating via MCP elicitation
+  - `utils.py` — shared helpers (`safe_get`, `safe_display_url`, path validation)
+  - `setup.py` — elicitation-based credential setup flow
 - **Subscriptions**: `unraid_mcp/subscriptions/` - Real-time WebSocket subscriptions and diagnostics
 - **Tools**: `unraid_mcp/tools/` - Domain-specific tool implementations
 - **GraphQL Client**: Uses httpx for async HTTP requests to Unraid API
-- **Transport Layer**: Supports streamable-http (recommended), SSE (deprecated), and stdio
+- **Version Helper**: `unraid_mcp/version.py` - Reads version from package metadata via importlib
 
 ### Key Design Patterns
 - **Consolidated Action Pattern**: Each tool uses `action: Literal[...]` parameter to expose multiple operations via a single MCP tool, reducing context window usage
@@ -165,32 +120,34 @@ The server registers **3 MCP tools**:
 ### Destructive Actions (require `confirm=True`)
 - **array**: stop_array, remove_disk, clear_disk_stats
 - **vm**: force_stop, reset
-- **notifications**: delete, delete_archived
+- **notification**: delete, delete_archived
 - **rclone**: delete_remote
-- **keys**: delete
+- **key**: delete
 - **disk**: flash_backup
-- **settings**: configure_ups
-- **plugins**: remove
+- **setting**: configure_ups
+- **plugin**: remove
 
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:
 1. `~/.unraid-mcp/.env` (primary — canonical credentials dir, all runtimes)
 2. `~/.unraid-mcp/.env.local` (local overrides, only used if primary is absent)
-3. `/app/.env.local` (Docker container mount)
-4. `../.env.local` (project root local overrides)
-5. `../.env` (project root fallback)
-6. `unraid_mcp/.env` (last resort)
-
-### Transport Configuration
-- **streamable-http** (recommended): HTTP-based transport on `/mcp` endpoint
-- **sse** (deprecated): Server-Sent Events transport
-- **stdio**: Standard input/output for direct integration
+3. `../.env.local` (project root local overrides)
+4. `../.env` (project root fallback)
+5. `unraid_mcp/.env` (last resort)
 
 ### Error Handling Strategy
 - GraphQL errors are converted to ToolError with descriptive messages
 - HTTP errors include status codes and response details
 - Network errors are caught and wrapped with connection context
 - All errors are logged with full context for debugging
+
+### Middleware Chain
+`server.py` wraps all tools in a 5-layer stack (order matters — outermost first):
+1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
+2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
+3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
+4. **ResponseLimitingMiddleware** — truncates responses > 512 KB with a clear suffix
+5. **ResponseCachingMiddleware** — caching disabled entirely for `unraid` tool (mutations and reads share one tool name, so no per-subaction exclusion is possible)
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
@@ -216,7 +173,9 @@ tests/
 ├── http_layer/           # httpx-level request/response tests (respx)
 ├── integration/          # WebSocket subscription lifecycle tests (slow)
 ├── safety/               # Destructive action guard tests
-└── schema/               # GraphQL query validation (99 tests, all passing)
+├── schema/               # GraphQL query validation (119 tests)
+├── contract/             # Response shape contract tests
+└── property/             # Input validation property-based tests
 ```
 
 ### Running Targeted Tests
@@ -244,6 +203,8 @@ See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_A
 ### API Reference Docs
 - `docs/UNRAID_API_COMPLETE_REFERENCE.md` — Full GraphQL schema reference
 - `docs/UNRAID_API_OPERATIONS.md` — All supported operations with examples
+- `docs/MARKETPLACE.md` — Plugin marketplace listing and publishing guide
+- `docs/PUBLISHING.md` — Step-by-step instructions for publishing to Claude plugin registry
 
 Use these when adding new queries/mutations.
 
@@ -253,12 +214,11 @@ When bumping the version, **always update both files** — they must stay in syn
 - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
 
 ### Credential Storage (`~/.unraid-mcp/.env`)
-All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
+All runtimes (plugin, direct `uv run`) load credentials from `~/.unraid-mcp/.env`.
 - **Plugin/direct:** `unraid action=health subaction=setup` writes this file automatically via elicitation,
   **Safe to re-run**: always prompts for confirmation before overwriting existing credentials,
   whether the connection is working or not (failed probe may be a transient outage, not bad creds).
   or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.
-- **Docker:** `docker-compose.yml` loads it via `env_file` before container start.
 - **No symlinks needed.** Version bumps do not affect this path.
 - **Permissions:** dir=700, file=600 (set automatically by elicitation; set manually if
   using `cp`: `chmod 700 ~/.unraid-mcp && chmod 600 ~/.unraid-mcp/.env`).

@@ -8,6 +8,7 @@ to verify the full request pipeline.
 """
 
 import json
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import patch
 
@@ -264,7 +265,7 @@ class TestInfoToolRequests:
     """Verify unraid system tool constructs correct GraphQL queries."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -367,7 +368,7 @@ class TestDockerToolRequests:
     """Verify unraid docker tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -535,7 +536,7 @@ class TestVMToolRequests:
     """Verify unraid vm tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -625,7 +626,7 @@ class TestArrayToolRequests:
     """Verify unraid array tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -701,7 +702,7 @@ class TestStorageToolRequests:
     """Verify unraid disk tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -799,7 +800,7 @@ class TestNotificationsToolRequests:
     """Verify unraid notification tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -932,7 +933,7 @@ class TestRCloneToolRequests:
     """Verify unraid rclone tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -1029,7 +1030,7 @@ class TestUsersToolRequests:
     """Verify unraid user tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -1062,7 +1063,7 @@ class TestKeysToolRequests:
     """Verify unraid key tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock
@@ -1157,7 +1158,7 @@ class TestHealthToolRequests:
     """Verify unraid health tool constructs correct requests."""
 
     @staticmethod
-    def _get_tool():
+    def _get_tool() -> Callable[..., Any]:
         return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
     @respx.mock

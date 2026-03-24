@@ -1,5 +1,7 @@
+import os
+import stat
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -100,8 +102,6 @@ def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
 @pytest.mark.asyncio
 async def test_elicit_and_configure_writes_env_file(tmp_path):
     """elicit_and_configure writes a .env file and calls apply_runtime_config."""
-    from unittest.mock import AsyncMock, MagicMock, patch
-
     from unraid_mcp.core.setup import elicit_and_configure
 
     mock_ctx = MagicMock()
@@ -133,7 +133,6 @@ async def test_elicit_and_configure_writes_env_file(tmp_path):
 
 @pytest.mark.asyncio
 async def test_elicit_and_configure_returns_false_on_decline():
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_and_configure
 
@@ -148,7 +147,6 @@ async def test_elicit_and_configure_returns_false_on_decline():
 
 @pytest.mark.asyncio
 async def test_elicit_and_configure_returns_false_on_cancel():
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_and_configure
 
@@ -179,9 +177,6 @@ async def test_make_graphql_request_raises_sentinel_when_unconfigured():
     finally:
         settings_mod.UNRAID_API_URL = original_url
         settings_mod.UNRAID_API_KEY = original_key
-
-
-import os  # noqa: E402 — needed for reload-based tests below
 
 
 def test_credentials_dir_defaults_to_home_unraid_mcp():
@@ -221,9 +216,6 @@ def test_credentials_env_path_is_dot_env_inside_credentials_dir():
     import unraid_mcp.config.settings as s
 
     assert s.CREDENTIALS_ENV_PATH == s.CREDENTIALS_DIR / ".env"
-
-
-import stat  # noqa: E402
 
 
 def test_write_env_creates_credentials_dir_with_700_permissions(tmp_path):
@@ -342,7 +334,6 @@ def test_write_env_updates_existing_credentials_in_place(tmp_path):
 @pytest.mark.asyncio
 async def test_elicit_and_configure_returns_false_when_client_not_supported():
     """elicit_and_configure returns False when client raises NotImplementedError."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_and_configure
 
@@ -404,7 +395,6 @@ async def test_elicit_reset_confirmation_returns_false_when_ctx_none():
 @pytest.mark.asyncio
 async def test_elicit_reset_confirmation_returns_true_when_user_confirms():
     """Returns True when the user accepts and answers True."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -421,7 +411,6 @@ async def test_elicit_reset_confirmation_returns_true_when_user_confirms():
 @pytest.mark.asyncio
 async def test_elicit_reset_confirmation_returns_false_when_user_answers_false():
     """Returns False when the user accepts but answers False (does not want to reset)."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -438,7 +427,6 @@ async def test_elicit_reset_confirmation_returns_false_when_user_answers_false()
 @pytest.mark.asyncio
 async def test_elicit_reset_confirmation_returns_false_when_declined():
     """Returns False when the user declines via action (dismisses the prompt)."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -454,7 +442,6 @@ async def test_elicit_reset_confirmation_returns_false_when_declined():
 @pytest.mark.asyncio
 async def test_elicit_reset_confirmation_returns_false_when_cancelled():
     """Returns False when the user cancels the prompt."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -468,13 +455,13 @@ async def test_elicit_reset_confirmation_returns_false_when_cancelled():
 
 
 @pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_true_when_not_implemented():
-    """Returns True (proceed with reset) when the MCP client does not support elicitation.
+async def test_elicit_reset_confirmation_returns_false_when_not_implemented():
+    """Returns False (decline reset) when the MCP client does not support elicitation.
 
-    Non-interactive clients (stdio, CI) must not be permanently blocked from
-    reconfiguring credentials just because they can't ask the user a yes/no question.
+    Auto-approving a destructive credential reset on non-interactive clients would
+    silently overwrite working credentials. Callers must use a client that supports
+    elicitation or configure credentials directly via the .env file.
     """
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -482,13 +469,12 @@ async def test_elicit_reset_confirmation_returns_true_when_not_implemented():
     mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
 
     result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is True
+    assert result is False
 
 
 @pytest.mark.asyncio
 async def test_elicit_reset_confirmation_includes_current_url_in_prompt():
     """The elicitation message includes the current URL so the user knows what they're replacing."""
-    from unittest.mock import AsyncMock, MagicMock
 
     from unraid_mcp.core.setup import elicit_reset_confirmation
 
@@ -507,8 +493,6 @@ async def test_elicit_reset_confirmation_includes_current_url_in_prompt():
 @pytest.mark.asyncio
 async def test_credentials_not_configured_surfaces_as_tool_error_with_path():
     """CredentialsNotConfiguredError from a tool becomes ToolError with the credentials path."""
-    from unittest.mock import AsyncMock, patch
-
     from tests.conftest import make_tool_fn
     from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
     from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError

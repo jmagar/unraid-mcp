@@ -28,6 +28,12 @@ All notable changes to this project are documented here.
 - Added `# noqa: ASYNC109` to `timeout` parameters in `_handle_live` and `unraid()` (valid suppressions)
 - Fixed `start_array*` → `start_array` in tool docstring table (`start_array` is not in `_ARRAY_DESTRUCTIVE`)
 
+### Refactored
+- **Path validation**: Extracted `_validate_path()` in `unraid.py` — consolidates traversal check, `normpath`, and prefix validation used by both `disk/logs` and `live/log_tail` into one place; eliminates duplication
+- **WebSocket auth payload**: Extracted `build_connection_init()` in `subscriptions/utils.py` — removes 4 duplicate `connection_init` blocks from `snapshot.py` (×2), `manager.py`, and `diagnostics.py`; also fixes a bug in `diagnostics.py` where `x-api-key: None` was sent when no API key was configured
+- Removed `_LIVE_ALLOWED_LOG_PREFIXES` alias — direct reference to `_ALLOWED_LOG_PREFIXES`
+- Moved `import hmac` to module level in `server.py` (was inside `verify_token` hot path)
+
 ---
 
 ## [1.1.1] - 2026-03-16

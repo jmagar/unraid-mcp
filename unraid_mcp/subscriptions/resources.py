@@ -7,7 +7,8 @@ and the MCP protocol, providing fallback queries when subscription data is unava
 import asyncio
 import json
 import os
-from typing import Final
+from collections.abc import Callable, Coroutine
+from typing import Any, Final
 
 import anyio
 from fastmcp import FastMCP
@@ -21,6 +22,8 @@ from .snapshot import subscribe_once
 # Global flag to track subscription startup
 _subscriptions_started = False
 _startup_lock: Final[asyncio.Lock] = asyncio.Lock()
+
+_terminal_states = frozenset({"failed", "auth_failed", "max_retries_exceeded"})
 
 
 async def ensure_subscriptions_started() -> None:
@@ -104,15 +107,17 @@ def register_subscription_resources(mcp: FastMCP) -> None:
             }
         )
 
-    def _make_resource_fn(action: str):
+    def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
             data = await subscription_manager.get_resource_data(action)
             if data is not None:
                 return json.dumps(data, indent=2)
-            # Surface permanent errors instead of reporting "connecting" indefinitely
+            # Surface permanent errors only when the connection is in a terminal failure
+            # state — if the subscription has since reconnected, ignore the stale error.
             last_error = subscription_manager.last_error.get(action)
-            if last_error:
+            conn_state = subscription_manager.connection_states.get(action, "")
+            if last_error and conn_state in _terminal_states:
                 return json.dumps(
                     {
                         "status": "error",

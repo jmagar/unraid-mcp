@@ -56,11 +56,13 @@ class TestStorageValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="log_path"):
             await tool_fn(action="disk", subaction="logs")
+        _mock_graphql.assert_not_awaited()
 
     async def test_logs_rejects_invalid_path(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="log_path must start with"):
             await tool_fn(action="disk", subaction="logs", log_path="/etc/shadow")
+        _mock_graphql.assert_not_awaited()
 
     async def test_logs_rejects_path_traversal(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
@@ -70,6 +72,7 @@ class TestStorageValidation:
         # Traversal via .. — detected by early .. check
         with pytest.raises(ToolError, match="log_path"):
             await tool_fn(action="disk", subaction="logs", log_path="/var/log/../etc/passwd")
+        _mock_graphql.assert_not_awaited()
 
     async def test_logs_allows_valid_paths(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}
@@ -83,11 +86,13 @@ class TestStorageValidation:
             await tool_fn(
                 action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=10_001
             )
+        _mock_graphql.assert_not_awaited()
 
     async def test_logs_tail_lines_zero_rejected(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="tail_lines must be between"):
             await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=0)
+        _mock_graphql.assert_not_awaited()
 
     async def test_logs_tail_lines_at_max_accepted(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"logFile": {"path": "/var/log/syslog", "content": "ok"}}

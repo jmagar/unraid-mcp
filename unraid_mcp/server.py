@@ -4,20 +4,16 @@ This is the main server implementation using the modular architecture with
 separate modules for configuration, core functionality, subscriptions, and tools.
 """
 
-import hmac
 import sys
-from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.server.auth import AccessToken, MultiAuth, TokenVerifier
-from fastmcp.server.auth.providers.google import GoogleProvider
 from fastmcp.server.middleware.caching import CallToolSettings, ResponseCachingMiddleware
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 
-from .config.logging import logger
+from .config.logging import log_configuration_status, logger
 from .config.settings import (
     LOG_LEVEL_STR,
     UNRAID_MCP_HOST,
@@ -49,10 +45,14 @@ _error_middleware = ErrorHandlingMiddleware(
     include_traceback=LOG_LEVEL_STR == "DEBUG",
 )
 
-# 3. Unraid API rate limit: 100 requests per 10 seconds.
-#    SlidingWindowRateLimitingMiddleware only accepts window_minutes (int), so express
-#    the 10-second budget as a 1-minute equivalent: 540 req/60 s to stay comfortably
-#    under the 600 req/min ceiling.
+# 3. Rate limiting: 540 requests per 60-second sliding window.
+#    SlidingWindowRateLimitingMiddleware only supports window_minutes (int), so the
+#    upstream Unraid "100 req/10 s" burst limit cannot be enforced exactly here.
+#    540 req/min is a conservative 1-minute equivalent that prevents sustained
+#    overload while staying well under the 600 req/min ceiling.
+#    Note: this does NOT cap bursts within a 10 s window; a client can still send
+#    up to 540 requests in the first 10 s of a window. Add a sub-minute rate limiter
+#    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
 _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
 
 # 4. Cap tool responses at 512 KB to protect the client context window.
@@ -80,117 +80,13 @@ _cache_middleware = ResponseCachingMiddleware(
 )
 
 
-class ApiKeyVerifier(TokenVerifier):
-    """Bearer token verifier that validates against a static API key.
-
-    Clients present the key as a standard OAuth bearer token:
-        Authorization: Bearer <UNRAID_MCP_API_KEY>
-
-    This allows machine-to-machine access (e.g. CI, scripts, other agents)
-    without going through the Google OAuth browser flow.
-    """
-
-    def __init__(self, api_key: str) -> None:
-        super().__init__()
-        self._api_key = api_key
-
-    async def verify_token(self, token: str) -> AccessToken | None:
-        if self._api_key and hmac.compare_digest(token.encode(), self._api_key.encode()):
-            return AccessToken(
-                token=token,
-                client_id="api-key-client",
-                scopes=[],
-            )
-        return None
-
-
-def _build_google_auth() -> "GoogleProvider | None":
-    """Build GoogleProvider when OAuth env vars are configured, else return None.
-
-    Returns None (no auth) when GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET are absent,
-    preserving backward compatibility for existing unprotected setups.
-    """
-    from .config.settings import (
-        GOOGLE_CLIENT_ID,
-        GOOGLE_CLIENT_SECRET,
-        UNRAID_MCP_BASE_URL,
-        UNRAID_MCP_JWT_SIGNING_KEY,
-        UNRAID_MCP_TRANSPORT,
-        is_google_auth_configured,
-    )
-
-    if not is_google_auth_configured():
-        return None
-
-    if UNRAID_MCP_TRANSPORT == "stdio":
-        logger.warning(
-            "Google OAuth is configured but UNRAID_MCP_TRANSPORT=stdio. "
-            "OAuth requires HTTP transport (streamable-http or sse). "
-            "Auth will be applied but may not work as expected."
-        )
-
-    kwargs: dict[str, Any] = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
-        "base_url": UNRAID_MCP_BASE_URL,
-        # Prefer short-lived access tokens without refresh-token rotation churn.
-        # This reduces reconnect instability in MCP clients that re-auth frequently.
-        "extra_authorize_params": {"access_type": "online", "prompt": "consent"},
-        # Skip the FastMCP consent page — goes directly to Google.
-        # The consent page has a CSRF double-load race: two concurrent GET requests
-        # each regenerate the CSRF token, the second overwrites the first in the
-        # transaction store, and the POST fails with "Invalid or expired consent token".
-        "require_authorization_consent": False,
-    }
-    if UNRAID_MCP_JWT_SIGNING_KEY:
-        kwargs["jwt_signing_key"] = UNRAID_MCP_JWT_SIGNING_KEY
-    else:
-        logger.warning(
-            "UNRAID_MCP_JWT_SIGNING_KEY is not set. FastMCP will derive a key automatically, "
-            "but tokens may be invalidated on server restart. "
-            "Set UNRAID_MCP_JWT_SIGNING_KEY to a stable secret."
-        )
-
-    logger.info(
-        f"Google OAuth enabled — base_url={UNRAID_MCP_BASE_URL}, "
-        f"redirect_uri={UNRAID_MCP_BASE_URL}/auth/callback"
-    )
-    return GoogleProvider(**kwargs)
-
-
-def _build_auth() -> "GoogleProvider | ApiKeyVerifier | MultiAuth | None":
-    """Build the active auth stack from environment configuration.
-
-    Returns:
-        - MultiAuth(server=GoogleProvider, verifiers=[ApiKeyVerifier])
-          when both GOOGLE_CLIENT_ID and UNRAID_MCP_API_KEY are set.
-        - GoogleProvider alone when only Google OAuth vars are set.
-        - ApiKeyVerifier alone when only UNRAID_MCP_API_KEY is set.
-        - None when no auth vars are configured (open server).
-    """
-    from .config.settings import UNRAID_MCP_API_KEY, is_api_key_auth_configured
-
-    google = _build_google_auth()
-    api_key = ApiKeyVerifier(UNRAID_MCP_API_KEY) if is_api_key_auth_configured() else None
-
-    if google and api_key:
-        logger.info("Auth: Google OAuth + API key both enabled (MultiAuth)")
-        return MultiAuth(server=google, verifiers=[api_key])
-    if api_key:
-        logger.info("Auth: API key authentication enabled")
-        return api_key
-    return google  # GoogleProvider or None
-
-
-# Build auth stack — GoogleProvider, ApiKeyVerifier, MultiAuth, or None.
-_auth = _build_auth()
-
-# Initialize FastMCP instance
+# Initialize FastMCP instance — no built-in auth.
+# Authentication is delegated to an external OAuth gateway (nginx, Caddy,
+# Authelia, Authentik, etc.) placed in front of this server.
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
-    auth=_auth,
     middleware=[
         _logging_middleware,
         _error_middleware,
@@ -238,9 +134,6 @@ def run_server() -> None:
             "Server will prompt for credentials on first tool call via elicitation."
         )
 
-    # Log configuration (delegated to shared function)
-    from .config.logging import log_configuration_status
-
     log_configuration_status(logger)
 
     if UNRAID_VERIFY_SSL is False:
@@ -250,25 +143,11 @@ def run_server() -> None:
             "Only use this in trusted networks or for development."
         )
 
-    if _auth is not None:
-        from .config.settings import is_google_auth_configured
-
-        if is_google_auth_configured():
-            from .config.settings import UNRAID_MCP_BASE_URL
-
-            logger.info(
-                "Google OAuth ENABLED — clients must authenticate before calling tools. "
-                f"Redirect URI: {UNRAID_MCP_BASE_URL}/auth/callback"
-            )
-        else:
-            logger.info(
-                "API key authentication ENABLED — present UNRAID_MCP_API_KEY as bearer token."
-            )
-    else:
+    if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
         logger.warning(
-            "No authentication configured — MCP server is open to all clients on the network. "
-            "Set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET + UNRAID_MCP_BASE_URL to enable Google OAuth, "
-            "or set UNRAID_MCP_API_KEY to enable bearer token authentication."
+            "⚠️  NO AUTHENTICATION — HTTP server is open to all clients on the network. "
+            "Protect this server with an external OAuth gateway (nginx, Caddy, Authelia, Authentik) "
+            "or restrict access at the network layer (firewall, VPN, Tailscale)."
         )
 
     logger.info(
@@ -276,13 +155,17 @@ def run_server() -> None:
     )
 
     try:
-        if UNRAID_MCP_TRANSPORT == "streamable-http":
+        if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
+            if UNRAID_MCP_TRANSPORT == "sse":
+                logger.warning(
+                    "SSE transport is deprecated. Consider switching to 'streamable-http'."
+                )
             mcp.run(
-                transport="streamable-http", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp"
+                transport=UNRAID_MCP_TRANSPORT,
+                host=UNRAID_MCP_HOST,
+                port=UNRAID_MCP_PORT,
+                path="/mcp",
             )
-        elif UNRAID_MCP_TRANSPORT == "sse":
-            logger.warning("SSE transport is deprecated. Consider switching to 'streamable-http'.")
-            mcp.run(transport="sse", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp")
         elif UNRAID_MCP_TRANSPORT == "stdio":
             mcp.run()
         else:

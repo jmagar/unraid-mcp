@@ -11,37 +11,77 @@ The marketplace catalog that lists all available plugins in this repository.
 
 **Contents:**
 - Marketplace metadata (name, version, owner, repository)
-- Plugin catalog with the "unraid" skill
+- Plugin catalog with the "unraid" plugin
 - Categories and tags for discoverability
 
 ### 2. Plugin Manifest (`.claude-plugin/plugin.json`)
-The individual plugin configuration for the Unraid skill.
+The individual plugin configuration for the Unraid MCP server.
 
 **Location:** `.claude-plugin/plugin.json`
 
 **Contents:**
-- Plugin name, version, author
+- Plugin name (`unraid`), version (`1.1.2`), author
 - Repository and homepage links
-- Plugin-specific metadata
+- `mcpServers` block that configures the server to run via `uv run unraid-mcp-server` in stdio mode
 
-### 3. Documentation
-- `.claude-plugin/README.md` - Marketplace installation guide
-- Updated root `README.md` with plugin installation section
+### 3. Validation Script
+- `scripts/validate-marketplace.sh` — Automated validation of marketplace structure
 
-### 4. Validation Script
-- `scripts/validate-marketplace.sh` - Automated validation of marketplace structure
+## MCP Tools Exposed
+
+The plugin registers **3 MCP tools**:
+
+| Tool | Purpose |
+|------|---------|
+| `unraid` | Primary tool — `action` (domain) + `subaction` (operation) routing, ~107 subactions across 15 domains |
+| `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
+| `test_subscription_query` | Test a specific GraphQL subscription query (allowlisted fields only) |
+
+### Calling Convention
+
+All Unraid operations go through the single `unraid` tool:
+
+```
+unraid(action="docker", subaction="list")
+unraid(action="system", subaction="overview")
+unraid(action="array", subaction="parity_status")
+unraid(action="vm", subaction="list")
+unraid(action="live", subaction="cpu")
+```
+
+### Domains (action=)
+
+| action | example subactions |
+|--------|--------------------|
+| `system` | overview, array, network, metrics, services, ups_devices |
+| `health` | check, test_connection, diagnose, setup |
+| `array` | parity_status, parity_start, start_array, add_disk |
+| `disk` | shares, disks, disk_details, logs |
+| `docker` | list, details, start, stop, restart |
+| `vm` | list, details, start, stop, pause, resume |
+| `notification` | overview, list, create, archive, archive_all |
+| `key` | list, get, create, update, delete |
+| `plugin` | list, add, remove |
+| `rclone` | list_remotes, config_form, create_remote |
+| `setting` | update, configure_ups |
+| `customization` | theme, set_theme, sso_enabled |
+| `oidc` | providers, configuration, validate_session |
+| `user` | me |
+| `live` | cpu, memory, array_state, log_tail, notification_feed |
+
+Destructive subactions (e.g. `stop_array`, `force_stop`, `delete`) require `confirm=True`.
 
 ## Installation Methods
 
 ### Method 1: GitHub Distribution (Recommended for Users)
 
-Once you push this to GitHub, users can install via:
+Once pushed to GitHub, users install via:
 
 ```bash
-# Add your marketplace
+# Add the marketplace
 /plugin marketplace add jmagar/unraid-mcp
 
-# Install the Unraid skill
+# Install the Unraid plugin
 /plugin install unraid @unraid-mcp
 ```
 
@@ -59,7 +99,7 @@ For testing locally before publishing:
 
 ### Method 3: Direct URL
 
-Users can also install from a specific commit or branch:
+Install from a specific branch or commit:
 
 ```bash
 # From specific branch
@@ -75,14 +115,14 @@ Users can also install from a specific commit or branch:
 unraid-mcp/
 ├── .claude-plugin/          # Plugin manifest + marketplace manifest
 │   ├── plugin.json          # Plugin configuration (name, version, mcpServers)
-│   ├── marketplace.json     # Marketplace catalog
-│   └── README.md            # Marketplace installation guide
-├── skills/unraid/           # Skill documentation and helpers
-│   ├── SKILL.md             # Skill documentation
-│   ├── README.md            # Plugin documentation
-│   ├── examples/            # Example scripts
-│   ├── scripts/             # Helper scripts
-│   └── references/          # API reference docs
+│   └── marketplace.json     # Marketplace catalog
+├── unraid_mcp/              # Python package (the actual MCP server)
+│   ├── main.py              # Entry point
+│   ├── server.py            # FastMCP server registration
+│   ├── tools/unraid.py      # Consolidated tool (all 3 tools registered here)
+│   ├── config/              # Settings management
+│   ├── core/                # GraphQL client, exceptions, shared types
+│   └── subscriptions/       # Real-time WebSocket subscription manager
 └── scripts/
     └── validate-marketplace.sh  # Validation tool
 ```
@@ -90,15 +130,15 @@ unraid-mcp/
 ## Marketplace Metadata
 
 ### Categories
-- `infrastructure` - Server management and monitoring tools
+- `infrastructure` — Server management and monitoring tools
 
 ### Tags
-- `unraid` - Unraid-specific functionality
-- `monitoring` - System monitoring capabilities
-- `homelab` - Homelab automation
-- `graphql` - GraphQL API integration
-- `docker` - Docker container management
-- `virtualization` - VM management
+- `unraid` — Unraid-specific functionality
+- `monitoring` — System monitoring capabilities
+- `homelab` — Homelab automation
+- `graphql` — GraphQL API integration
+- `docker` — Docker container management
+- `virtualization` — VM management
 
 ## Publishing Checklist
 
@@ -109,10 +149,10 @@ Before publishing to GitHub:
    ./scripts/validate-marketplace.sh
    ```
 
-2. **Update Version Numbers**
-   - Bump version in `.claude-plugin/marketplace.json`
-   - Bump version in `.claude-plugin/plugin.json`
-   - Update version in `README.md` if needed
+2. **Update Version Numbers** (must be in sync)
+   - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
+   - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
+   - `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
 
 3. **Test Locally**
    ```bash
@@ -123,33 +163,38 @@ Before publishing to GitHub:
 4. **Commit and Push**
    ```bash
    git add .claude-plugin/
-   git commit -m "feat: add Claude Code marketplace configuration"
+   git commit -m "chore: bump marketplace to vX.Y.Z"
    git push origin main
    ```
 
-5. **Create Release Tag** (Optional)
+5. **Create Release Tag**
    ```bash
-   git tag -a v1.0.0 -m "Release v1.0.0"
-   git push origin v1.0.0
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
    ```
 
 ## User Experience
 
-After installation, users will:
+After installation, users can:
 
-1. **See the skill in their skill list**
-   ```bash
-   /skill list
+1. **Invoke Unraid operations directly in Claude Code**
+   ```
+   unraid(action="system", subaction="overview")
+   unraid(action="docker", subaction="list")
+   unraid(action="health", subaction="check")
    ```
 
-2. **Access Unraid functionality directly**
-   - Claude Code will automatically detect when to invoke the skill
-   - Users can explicitly invoke with `/unraid`
+2. **Use the credential setup tool on first run**
+   ```
+   unraid(action="health", subaction="setup")
+   ```
+   This triggers elicitation to collect and persist credentials to `~/.unraid-mcp/.env`.
 
-3. **Have access to all helper scripts**
-   - Example scripts in `examples/`
-   - Utility scripts in `scripts/`
-   - API reference in `references/`
+3. **Monitor live data via subscriptions**
+   ```
+   unraid(action="live", subaction="cpu")
+   unraid(action="live", subaction="log_tail")
+   ```
 
 ## Maintenance
 
@@ -157,31 +202,21 @@ After installation, users will:
 
 To release a new version:
 
-1. Make changes to the plugin
-2. Update version in `.claude-plugin/plugin.json`
-3. Update marketplace catalog in `.claude-plugin/marketplace.json`
-4. Run validation: `./scripts/validate-marketplace.sh`
-5. Commit and push
+1. Make changes to the plugin code
+2. Update version in `pyproject.toml`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`
+3. Run validation: `./scripts/validate-marketplace.sh`
+4. Commit and push
 
-Users with the plugin installed will see the update available and can upgrade with:
+Users with the plugin installed will see the update available and can upgrade:
 ```bash
 /plugin update unraid
 ```
-
-### Adding More Plugins
-
-To add additional plugins to this marketplace:
-
-1. Create new plugin directory: `skills/new-plugin/`
-2. Add plugin manifest: `skills/new-plugin/.claude-plugin/plugin.json`
-3. Update marketplace catalog: add entry to `.plugins[]` array in `.claude-plugin/marketplace.json`
-4. Validate: `./scripts/validate-marketplace.sh`
 
 ## Support
 
 - **Repository:** https://github.com/jmagar/unraid-mcp
 - **Issues:** https://github.com/jmagar/unraid-mcp/issues
-- **Documentation:** See `.claude-plugin/README.md` and `skills/unraid/README.md`
+- **Destructive Actions:** `docs/DESTRUCTIVE_ACTIONS.md`
 
 ## Validation
 
@@ -198,5 +233,3 @@ This checks:
 - Plugin structure
 - Source path accuracy
 - Documentation completeness
-
-All 17 checks must pass before publishing.

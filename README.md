@@ -13,8 +13,7 @@
 - ⚡ **High Performance**: Async/concurrent operations with optimized timeouts
 - 🔄 **Real-time Data**: WebSocket subscriptions for live metrics, logs, array state, and more
 - 📊 **Health Monitoring**: Comprehensive system diagnostics and status
-- 🐳 **Docker Ready**: Full containerization support with Docker Compose
-- 🔒 **Secure**: Optional Google OAuth 2.0 authentication + SSL/TLS + API key management
+- 🔒 **Secure**: Network-layer isolation
 - 📝 **Rich Logging**: Structured logging with rotation and multiple levels
 
 ---
@@ -25,7 +24,7 @@
 - [Quick Start](#-quick-start)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
-- [Google OAuth](#-google-oauth-optional)
+- [Authentication](#-authentication)
 - [Available Tools & Resources](#-available-tools--resources)
 - [Development](#-development)
 - [Architecture](#-architecture)
@@ -56,7 +55,7 @@ This provides instant access to Unraid monitoring and management through Claude 
 ### ⚙️ Credential Setup
 
 Credentials are stored in `~/.unraid-mcp/.env` — one location that works for the
-Claude Code plugin, direct `uv run` invocations, and Docker.
+Claude Code plugin and direct `uv run` invocations.
 
 **Option 1 — Interactive (Claude Code plugin, elicitation-supported clients):**
 ```
@@ -74,9 +73,6 @@ cp .env.example ~/.unraid-mcp/.env && chmod 600 ~/.unraid-mcp/.env
 #   UNRAID_API_KEY=your-key-from-unraid-settings
 ```
 
-**Docker:** `~/.unraid-mcp/.env` is loaded via `env_file` in `docker-compose.yml` —
-same file, no duplication needed.
-
 > **Finding your API key:** Unraid → Settings → Management Access → API Keys
 
 ---
@@ -84,8 +80,7 @@ same file, no duplication needed.
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose (recommended)
-- OR Python 3.12+ with [uv](https://github.com/astral-sh/uv) for development
+- Python 3.12+ with [uv](https://github.com/astral-sh/uv) for development
 - Unraid server with GraphQL API enabled
 
 ### 1. Clone Repository
@@ -96,7 +91,7 @@ cd unraid-mcp
 
 ### 2. Configure Environment
 ```bash
-# For Docker/production use — canonical credential location (all runtimes)
+# Canonical credential location (all runtimes)
 mkdir -p ~/.unraid-mcp && chmod 700 ~/.unraid-mcp
 cp .env.example ~/.unraid-mcp/.env && chmod 600 ~/.unraid-mcp/.env
 # Edit ~/.unraid-mcp/.env with your values
@@ -105,16 +100,7 @@ cp .env.example ~/.unraid-mcp/.env && chmod 600 ~/.unraid-mcp/.env
 cp .env.example .env
 ```
 
-### 3. Deploy with Docker (Recommended)
-```bash
-# Start with Docker Compose
-docker compose up -d
-
-# View logs
-docker compose logs -f unraid-mcp
-```
-
-### OR 3. Run for Development
+### 3. Run for Development
 ```bash
 # Install dependencies
 uv sync
@@ -148,38 +134,6 @@ unraid-mcp/                      # ${CLAUDE_PLUGIN_ROOT}
 
 ## 📦 Installation
 
-### 🐳 Docker Deployment (Recommended)
-
-The easiest way to run the Unraid MCP Server is with Docker:
-
-```bash
-# Clone repository
-git clone https://github.com/jmagar/unraid-mcp
-cd unraid-mcp
-
-# Set required environment variables
-export UNRAID_API_URL="http://your-unraid-server/graphql"
-export UNRAID_API_KEY="your_api_key_here"
-
-# Deploy with Docker Compose
-docker compose up -d
-
-# View logs
-docker compose logs -f unraid-mcp
-```
-
-#### Manual Docker Build
-```bash
-# Build and run manually
-docker build -t unraid-mcp-server .
-docker run -d --name unraid-mcp \
-  --restart unless-stopped \
-  -p 6970:6970 \
-  -e UNRAID_API_URL="http://your-unraid-server/graphql" \
-  -e UNRAID_API_KEY="your_api_key_here" \
-  unraid-mcp-server
-```
-
 ### 🔧 Development Installation
 
 For development and testing:
@@ -209,7 +163,7 @@ uv run unraid-mcp-server
 
 ### Environment Variables
 
-Create `.env` file in the project root:
+Credentials and settings go in `~/.unraid-mcp/.env` (the canonical location loaded by all runtimes — plugin and direct `uv run`). See the [Credential Setup](#%EF%B8%8F-credential-setup) section above for how to create it.
 
 ```bash
 # Core API Configuration (Required)
@@ -217,7 +171,7 @@ UNRAID_API_URL=https://your-unraid-server-url/graphql
 UNRAID_API_KEY=your_unraid_api_key
 
 # MCP Server Settings
-UNRAID_MCP_TRANSPORT=streamable-http  # streamable-http (recommended), sse (deprecated), stdio
+UNRAID_MCP_TRANSPORT=stdio  # stdio (default)
 UNRAID_MCP_HOST=0.0.0.0
 UNRAID_MCP_PORT=6970
 
@@ -232,57 +186,14 @@ UNRAID_VERIFY_SSL=true  # true, false, or path to CA bundle
 UNRAID_AUTO_START_SUBSCRIPTIONS=true  # Auto-start WebSocket subscriptions on startup (default: true)
 UNRAID_MAX_RECONNECT_ATTEMPTS=10      # Max WebSocket reconnection attempts (default: 10)
 
-# Optional: Log Stream Configuration
-# UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog  # Override log path for unraid://logs/stream (auto-detects /var/log/syslog if unset)
+# Optional: Auto-start log file subscription path
+# Defaults to /var/log/syslog if it exists and this is unset
+# UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog
+
+# Optional: Credentials directory override (default: ~/.unraid-mcp/)
+# Useful for containers or non-standard home directory layouts
+# UNRAID_CREDENTIALS_DIR=/custom/path/to/credentials
 ```
-
-### Transport Options
-
-| Transport | Description | Use Case |
-|-----------|-------------|----------|
-| `streamable-http` | HTTP-based (recommended) | Most compatible, best performance |
-| `sse` | Server-Sent Events (deprecated) | Legacy support only |
-| `stdio` | Standard I/O | Direct integration scenarios |
-
----
-
-## 🔐 Authentication (Optional)
-
-Two independent auth methods — use either or both.
-
-### Google OAuth
-
-Protect the HTTP server with Google OAuth 2.0 — clients must complete a Google login before any tool call is executed.
-
-```bash
-# Add to ~/.unraid-mcp/.env
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-your-secret
-UNRAID_MCP_BASE_URL=http://10.1.0.2:6970        # public URL of this server
-UNRAID_MCP_JWT_SIGNING_KEY=<64-char-hex>         # prevents token invalidation on restart
-```
-
-**Quick setup:**
-1. [Google Cloud Console](https://console.cloud.google.com/) → Credentials → OAuth 2.0 Client ID (Web application)
-2. Authorized redirect URI: `<UNRAID_MCP_BASE_URL>/auth/callback`
-3. Copy Client ID + Secret into `~/.unraid-mcp/.env`
-4. Generate a signing key: `python3 -c "import secrets; print(secrets.token_hex(32))"`
-5. Restart the server
-
-### API Key (Bearer Token)
-
-Simpler option for headless/machine access — no browser flow required:
-
-```bash
-# Add to ~/.unraid-mcp/.env
-UNRAID_MCP_API_KEY=your-secret-token    # can be same value as UNRAID_API_KEY
-```
-
-Clients present it as `Authorization: Bearer <UNRAID_MCP_API_KEY>`. Set both `GOOGLE_CLIENT_ID` and `UNRAID_MCP_API_KEY` to accept either method simultaneously.
-
-Omit both to run without authentication (default — open server).
-
-**Full guide:** [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md)
 
 ---
 
@@ -388,8 +299,6 @@ unraid-mcp/
 ├── skills/unraid/            # Claude skill assets
 ├── .claude-plugin/           # Plugin manifest & marketplace config
 ├── .env.example              # Environment template
-├── Dockerfile                # Container image definition
-├── docker-compose.yml        # Docker Compose deployment
 ├── pyproject.toml            # Project config & dependencies
 └── logs/                     # Log files (auto-created, gitignored)
 ```
@@ -409,17 +318,14 @@ uv run pytest
 
 ### Integration Smoke-Tests (mcporter)
 
-Live integration tests that exercise all non-destructive actions via [mcporter](https://github.com/mcporter/mcporter). Two scripts cover two transport modes:
+Live integration tests that exercise all non-destructive actions via [mcporter](https://github.com/mcporter/mcporter).
 
 ```bash
 # stdio — no running server needed (good for CI)
 ./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
-
-# HTTP — connects to a live server (most up-to-date coverage)
-./tests/mcporter/test-actions.sh [MCP_URL]   # default: http://localhost:6970/mcp
 ```
 
-Destructive actions are always skipped in both scripts. For safe testing strategies and exact mcporter commands per destructive action, see [`docs/DESTRUCTIVE_ACTIONS.md`](docs/DESTRUCTIVE_ACTIONS.md).
+Destructive actions are always skipped. For safe testing strategies and exact mcporter commands per destructive action, see [`docs/DESTRUCTIVE_ACTIONS.md`](docs/DESTRUCTIVE_ACTIONS.md).
 
 ### API Schema Docs Automation
 ```bash
@@ -443,24 +349,12 @@ uv run unraid-mcp-server
 # Or run via module directly
 uv run -m unraid_mcp.main
 
-# Hot-reload dev server (restarts on file changes)
-fastmcp run fastmcp.http.json --reload
-
 # Run via named config files
-fastmcp run fastmcp.http.json   # streamable-http on :6970
 fastmcp run fastmcp.stdio.json  # stdio transport
 ```
 
 ### Ad-hoc Tool Testing (fastmcp CLI)
 ```bash
-# Introspect the running server
-fastmcp list http://localhost:6970/mcp
-fastmcp list http://localhost:6970/mcp --input-schema
-
-# Call a tool directly (HTTP)
-fastmcp call http://localhost:6970/mcp unraid action=health subaction=check
-fastmcp call http://localhost:6970/mcp unraid action=docker subaction=list
-
 # Call without a running server (stdio config)
 fastmcp list fastmcp.stdio.json
 fastmcp call fastmcp.stdio.json unraid action=health subaction=check

@@ -1,6 +1,7 @@
 """Tests for key subactions of the consolidated unraid tool."""
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -15,7 +16,7 @@ def _mock_graphql() -> Generator[AsyncMock, None, None]:
         yield mock
 
 
-def _make_tool():
+def _make_tool() -> Callable[..., Any]:
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 

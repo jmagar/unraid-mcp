@@ -404,7 +404,8 @@ async def test_health_setup_declined_message_includes_manual_path() -> None:
     real_path_str = str(CREDENTIALS_ENV_PATH)
     mock_path = MagicMock()
     mock_path.exists.return_value = False
-    type(mock_path).__str__ = lambda self: real_path_str  # type: ignore[method-assign]
+    # Override __str__ on the instance's mock directly — avoids mutating the shared MagicMock class.
+    mock_path.__str__ = MagicMock(return_value=real_path_str)
 
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),

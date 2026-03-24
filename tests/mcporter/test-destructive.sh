@@ -149,8 +149,8 @@ test_notifications_delete() {
 
   # Create the notification
   local create_raw
-  create_raw="$(mcall unraid_notifications \
-    '{"action":"create","title":"mcp-test-delete","subject":"MCP destructive test","description":"Safe to delete","importance":"INFO"}')"
+  create_raw="$(mcall unraid \
+    '{"action":"notification","subaction":"create","title":"mcp-test-delete","subject":"MCP destructive test","description":"Safe to delete","importance":"INFO"}')"
   local create_ok
   create_ok="$(python3 -c "import json,sys; d=json.loads('''${create_raw}'''); print(d.get('success', False))" 2>/dev/null)"
   if [[ "${create_ok}" != "True" ]]; then
@@ -161,7 +161,7 @@ test_notifications_delete() {
   # The create response ID doesn't match the stored filename — list and find by title.
   # Use the LAST match so a stale notification with the same title is bypassed.
   local list_raw nid
-  list_raw="$(mcall unraid_notifications '{"action":"list","notification_type":"UNREAD"}')"
+  list_raw="$(mcall unraid '{"action":"notification","subaction":"list","notification_type":"UNREAD"}')"
   nid="$(python3 -c "
 import json,sys
 d = json.loads('''${list_raw}''')
@@ -177,8 +177,8 @@ print(matches[0] if matches else '')
   fi
 
   local del_raw
-  del_raw="$(mcall unraid_notifications \
-    "{\"action\":\"delete\",\"notification_id\":\"${nid}\",\"notification_type\":\"UNREAD\",\"confirm\":true}")"
+  del_raw="$(mcall unraid \
+    "{\"action\":\"notification\",\"subaction\":\"delete\",\"notification_id\":\"${nid}\",\"notification_type\":\"UNREAD\",\"confirm\":true}")"
   # success=true OR deleteNotification key present (raw GraphQL response) both indicate success
   local success
   success="$(python3 -c "
@@ -190,7 +190,7 @@ print(ok)
 
   if [[ "${success}" != "True" ]]; then
     # Leak: notification created but not deleted — archive it so it doesn't clutter the feed
-    mcall unraid_notifications "{\"action\":\"archive\",\"notification_id\":\"${nid}\"}" &>/dev/null || true
+    mcall unraid "{\"action\":\"notification\",\"subaction\":\"archive\",\"notification_id\":\"${nid}\"}" &>/dev/null || true
     fail_test "${label}" "delete did not return success=true: ${del_raw} (notification archived as fallback cleanup)"
     return
   fi
@@ -201,7 +201,7 @@ print(ok)
 if ${CONFIRM}; then
   test_notifications_delete
 else
-  dry_run "notifications: delete  [create notification → mcall unraid_notifications delete]"
+  dry_run "notifications: delete  [create notification → mcall unraid action=notification subaction=delete]"
 fi
 
 # ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ test_keys_delete() {
   # Guard: abort if test key already exists (don't delete a real key)
   # Note: API key names cannot contain hyphens — use "mcp test key"
   local existing_keys
-  existing_keys="$(mcall unraid_keys '{"action":"list"}')"
+  existing_keys="$(mcall unraid '{"action":"key","subaction":"list"}')"
   if python3 -c "
 import json,sys
 d = json.loads('''${existing_keys}''')
@@ -241,8 +241,8 @@ sys.exit(1 if any(k.get('name') == 'mcp test key' for k in keys) else 0)
   fi
 
   local create_raw
-  create_raw="$(mcall unraid_keys \
-    '{"action":"create","name":"mcp test key","roles":["VIEWER"]}')"
+  create_raw="$(mcall unraid \
+    '{"action":"key","subaction":"create","name":"mcp test key","roles":["VIEWER"]}')"
   local kid
   kid="$(python3 -c "import json,sys; d=json.loads('''${create_raw}'''); print(d.get('key',{}).get('id',''))" 2>/dev/null)"
 
@@ -252,20 +252,20 @@ sys.exit(1 if any(k.get('name') == 'mcp test key' for k in keys) else 0)
   fi
 
   local del_raw
-  del_raw="$(mcall unraid_keys "{\"action\":\"delete\",\"key_id\":\"${kid}\",\"confirm\":true}")"
+  del_raw="$(mcall unraid "{\"action\":\"key\",\"subaction\":\"delete\",\"key_id\":\"${kid}\",\"confirm\":true}")"
   local success
   success="$(python3 -c "import json,sys; d=json.loads('''${del_raw}'''); print(d.get('success', False))" 2>/dev/null)"
 
   if [[ "${success}" != "True" ]]; then
     # Cleanup: attempt to delete the leaked key so future runs are not blocked
-    mcall unraid_keys "{\"action\":\"delete\",\"key_id\":\"${kid}\",\"confirm\":true}" &>/dev/null || true
+    mcall unraid "{\"action\":\"key\",\"subaction\":\"delete\",\"key_id\":\"${kid}\",\"confirm\":true}" &>/dev/null || true
     fail_test "${label}" "delete did not return success=true: ${del_raw} (key delete re-attempted as fallback cleanup)"
     return
   fi
 
   # Verify gone
   local list_raw
-  list_raw="$(mcall unraid_keys '{"action":"list"}')"
+  list_raw="$(mcall unraid '{"action":"key","subaction":"list"}')"
   if python3 -c "
 import json,sys
 d = json.loads('''${list_raw}''')
@@ -281,7 +281,7 @@ sys.exit(0 if not any(k.get('id') == '${kid}' for k in keys) else 1)
 if ${CONFIRM}; then
   test_keys_delete
 else
-  dry_run "keys: delete  [create test key → mcall unraid_keys delete]"
+  dry_run "keys: delete  [create test key → mcall unraid action=key subaction=delete]"
 fi
 
 # ---------------------------------------------------------------------------

@@ -52,13 +52,16 @@ async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bo
             response_type=bool,
         )
     except NotImplementedError:
-        # Client doesn't support elicitation — treat as "proceed with reset" so
-        # non-interactive clients (stdio, CI) are not permanently blocked from
-        # reconfiguring credentials.
+        # Client doesn't support elicitation — return False (decline the reset).
+        # Auto-approving a destructive credential reset on non-interactive clients
+        # could silently overwrite working credentials; callers must use a client
+        # that supports elicitation or configure credentials directly in the .env file.
         logger.warning(
-            "MCP client does not support elicitation for reset confirmation — proceeding with reset."
+            "MCP client does not support elicitation for reset confirmation — declining reset. "
+            "To reconfigure credentials, edit %s directly.",
+            CREDENTIALS_ENV_PATH,
         )
-        return True
+        return False
 
     if result.action != "accept":
         logger.info("Credential reset declined by user (%s).", result.action)

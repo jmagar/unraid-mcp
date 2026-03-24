@@ -215,6 +215,7 @@ except Exception as e:
 mcporter_call() {
   local args_json="${1:?args_json required}"
 
+  # Redirect stderr to the log file so startup warnings/logs don't pollute the JSON stdout.
   mcporter call \
     --stdio "uv run unraid-mcp-server" \
     --cwd "${PROJECT_DIR}" \
@@ -223,7 +224,7 @@ mcporter_call() {
     --args "${args_json}" \
     --timeout "${CALL_TIMEOUT_MS}" \
     --output json \
-    2>&1
+    2>>"${LOG_FILE}"
 }
 
 # ---------------------------------------------------------------------------
@@ -239,7 +240,7 @@ run_test() {
   t0="$(date +%s%N)"
 
   local output
-  output="$(mcporter_call "${args}" 2>&1)" || true
+  output="$(mcporter_call "${args}")" || true
 
   local elapsed_ms
   elapsed_ms="$(( ( $(date +%s%N) - t0 ) / 1000000 ))"
@@ -659,7 +660,7 @@ suite_live() {
   run_test "live: memory"                '{"action":"live","subaction":"memory"}'
   run_test "live: cpu_telemetry"         '{"action":"live","subaction":"cpu_telemetry"}'
   run_test "live: notifications_overview" '{"action":"live","subaction":"notifications_overview"}'
-  run_test "live: log_tail"              '{"action":"live","subaction":"log_tail"}'
+  run_test "live: log_tail"              '{"action":"live","subaction":"log_tail","path":"/var/log/syslog"}'
 }
 
 # ---------------------------------------------------------------------------

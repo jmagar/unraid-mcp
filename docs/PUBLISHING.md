@@ -2,6 +2,26 @@
 
 This guide covers how to publish `unraid-mcp` to PyPI so it can be installed via `uvx` or `pip` from anywhere.
 
+## Package Overview
+
+**PyPI package name:** `unraid-mcp`
+**Entry point binary:** `unraid-mcp-server` (also aliased as `unraid-mcp`)
+**Current version:** `1.1.2`
+
+The package ships a FastMCP server exposing **3 MCP tools**:
+- `unraid` — primary tool with `action` + `subaction` routing (~107 subactions, 15 domains)
+- `diagnose_subscriptions` — WebSocket subscription diagnostics
+- `test_subscription_query` — test individual GraphQL subscription queries
+
+Tool call convention: `unraid(action="docker", subaction="list")`
+
+### Version Sync Requirement
+
+When bumping the version, **all three files must be updated together**:
+- `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
+- `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
+- `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
+
 ## Prerequisites
 
 1. **PyPI Account**: Create accounts on both:
@@ -40,7 +60,7 @@ Before publishing, update the version in `pyproject.toml`:
 
 ```toml
 [project]
-version = "1.0.0"  # Follow semantic versioning: MAJOR.MINOR.PATCH
+version = "1.1.2"  # Follow semantic versioning: MAJOR.MINOR.PATCH
 ```
 
 **Semantic Versioning Guide:**
@@ -82,8 +102,8 @@ uv run python -m build
 ```
 
 This creates:
-- `dist/unraid_mcp-VERSION-py3-none-any.whl` (wheel)
-- `dist/unraid_mcp-VERSION.tar.gz` (source distribution)
+- `dist/unraid_mcp-1.1.2-py3-none-any.whl` (wheel)
+- `dist/unraid_mcp-1.1.2.tar.gz` (source distribution)
 
 ### 4. Validate the Package
 
@@ -156,7 +176,7 @@ UNRAID_API_URL=https://your-server uvx unraid-mcp-server
 **Benefits of uvx:**
 - No installation required
 - Automatic virtual environment management
-- Always uses the latest version (or specify version: `uvx unraid-mcp-server@1.0.0`)
+- Always uses the latest version (or specify version: `uvx unraid-mcp-server@1.1.2`)
 - Clean execution environment
 
 ## Automation with GitHub Actions (Future)

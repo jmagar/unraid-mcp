@@ -1,14 +1,14 @@
 # Destructive Actions
 
-**Last Updated:** 2026-03-16
+**Last Updated:** 2026-03-24
 **Total destructive actions:** 12 across 8 domains (single `unraid` tool)
 
 All destructive actions require `confirm=True` at the call site. There is no additional environment variable gate — `confirm` is the sole guard.
 
-> **mcporter commands below** use `$MCP_URL` (default: `http://localhost:6970/mcp`). Run `test-actions.sh` for automated non-destructive coverage; destructive actions are always skipped there and tested manually per the strategies below.
+> **mcporter commands below** use stdio transport. Run `test-tools.sh` for automated non-destructive coverage; destructive actions are always skipped there and tested manually per the strategies below.
 >
 > **Calling convention (v1.0.0+):** All operations use the single `unraid` tool with `action` (domain) + `subaction` (operation). For example:
-> `mcporter call --http-url "$MCP_URL" --tool unraid --args '{"action":"docker","subaction":"list"}'`
+> `mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid --args '{"action":"docker","subaction":"list"}'`
 
 ---
 
@@ -26,7 +26,7 @@ Stopping the array unmounts all shares and can interrupt running containers and 
 ```bash
 # Prerequisite: array must already be stopped; use a disk you intend to remove
 
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"array","subaction":"remove_disk","disk_id":"<DISK_ID>","confirm":true}' --output json
 ```
 
@@ -36,11 +36,11 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 
 ```bash
 # Discover disk IDs
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"disk","subaction":"disks"}' --output json
 
 # Clear stats for a specific disk
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"array","subaction":"clear_disk_stats","disk_id":"<DISK_ID>","confirm":true}' --output json
 ```
 
@@ -54,15 +54,15 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 # Prerequisite: create a minimal Alpine test VM in Unraid VM manager
 # (Alpine ISO, 512MB RAM, no persistent disk, name contains "mcp-test")
 
-VID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+VID=$(mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"vm","subaction":"list"}' --output json \
   | python3 -c "import json,sys; vms=json.load(sys.stdin).get('vms',[]); print(next(v.get('uuid',v.get('id','')) for v in vms if 'mcp-test' in v.get('name','')))")
 
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"vm\",\"subaction\":\"force_stop\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
 
 # Verify: VM state should return to stopped
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"vm\",\"subaction\":\"details\",\"vm_id\":\"$VID\"}" --output json
 ```
 
@@ -72,11 +72,11 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 
 ```bash
 # Same minimal Alpine test VM as above
-VID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+VID=$(mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"vm","subaction":"list"}' --output json \
   | python3 -c "import json,sys; vms=json.load(sys.stdin).get('vms',[]); print(next(v.get('uuid',v.get('id','')) for v in vms if 'mcp-test' in v.get('name','')))")
 
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"vm\",\"subaction\":\"reset\",\"vm_id\":\"$VID\",\"confirm\":true}" --output json
 ```
 
@@ -89,9 +89,9 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 ```bash
 # 1. Create a test notification, then list to get the real stored ID (create response
 #    ID is ULID-based; stored filename uses a unix timestamp, so IDs differ)
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"create","title":"mcp-test-delete","subject":"safe to delete","description":"MCP destructive action test","importance":"INFO"}' --output json
-NID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+NID=$(mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"list","notification_type":"UNREAD"}' --output json \
   | python3 -c "
 import json,sys
@@ -100,11 +100,11 @@ matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-delete']
 print(matches[0] if matches else '')")
 
 # 2. Delete it (notification_type required)
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"notification\",\"subaction\":\"delete\",\"notification_id\":\"$NID\",\"notification_type\":\"UNREAD\",\"confirm\":true}" --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"list"}' --output json | python3 -c \
   "import json,sys; ns=[n for n in json.load(sys.stdin).get('notifications',[]) if 'mcp-test' in n.get('title','')]; print('clean' if not ns else ns)"
 ```
@@ -115,21 +115,21 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 
 ```bash
 # 1. Create and archive a test notification
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"create","title":"mcp-test-archive-wipe","subject":"archive me","description":"safe to delete","importance":"INFO"}' --output json
-AID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+AID=$(mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"list","notification_type":"UNREAD"}' --output json \
   | python3 -c "
 import json,sys
 notifs=json.load(sys.stdin).get('notifications',[])
 matches=[n['id'] for n in reversed(notifs) if n.get('title')=='mcp-test-archive-wipe']
 print(matches[0] if matches else '')")
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"notification\",\"subaction\":\"archive\",\"notification_id\":\"$AID\"}" --output json
 
 # 2. Wipe all archived
 # NOTE: this deletes ALL archived notifications, not just the test one
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"notification","subaction":"delete_archived","confirm":true}' --output json
 ```
 
@@ -144,15 +144,15 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 ```bash
 # 1. Create a throwaway local remote (points to /tmp — no real data)
 #    Parameters: name (str), provider_type (str), config_data (dict)
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"rclone","subaction":"create_remote","name":"mcp-test-remote","provider_type":"local","config_data":{"root":"/tmp"}}' --output json
 
 # 2. Delete it
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"rclone","subaction":"delete_remote","name":"mcp-test-remote","confirm":true}' --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"rclone","subaction":"list_remotes"}' --output json | python3 -c \
   "import json,sys; remotes=json.load(sys.stdin).get('remotes',[]); print('clean' if 'mcp-test-remote' not in remotes else 'FOUND — cleanup failed')"
 ```
@@ -167,16 +167,16 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 
 ```bash
 # 1. Create a test key (names cannot contain hyphens; ID is at key.id)
-KID=$(mcporter call --http-url "$MCP_URL" --tool unraid \
+KID=$(mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"key","subaction":"create","name":"mcp test key","roles":["VIEWER"]}' --output json \
   | python3 -c "import json,sys; print(json.load(sys.stdin).get('key',{}).get('id',''))")
 
 # 2. Delete it
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args "{\"action\":\"key\",\"subaction\":\"delete\",\"key_id\":\"$KID\",\"confirm\":true}" --output json
 
 # 3. Verify
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"key","subaction":"list"}' --output json | python3 -c \
   "import json,sys; ks=json.load(sys.stdin).get('keys',[]); print('clean' if not any('mcp test key' in k.get('name','') for k in ks) else 'FOUND — cleanup failed')"
 ```
@@ -191,7 +191,7 @@ mcporter call --http-url "$MCP_URL" --tool unraid \
 # Prerequisite: create a dedicated test remote pointing away from real backup destination
 # (use rclone create_remote first, or configure mcp-test-remote manually)
 
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"disk","subaction":"flash_backup","remote_name":"mcp-test-remote","source_path":"/boot","destination_path":"/flash-backup-test","confirm":true}' --output json
 ```
 
@@ -217,7 +217,7 @@ Removing a plugin cannot be undone without a full re-install. Test via `tests/sa
 
 ```bash
 # If live testing is necessary (intentional removal only):
-mcporter call --http-url "$MCP_URL" --tool unraid \
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
   --args '{"action":"plugin","subaction":"remove","names":["<plugin-name>"],"confirm":true}' --output json
 ```
 

@@ -792,15 +792,22 @@ def _find_container(
     if strict:
         return None
     id_lower = identifier.lower()
-    for c in containers:
-        for name in c.get("names", []):
-            if name.lower().startswith(id_lower):
-                return c
-    for c in containers:
-        for name in c.get("names", []):
-            if id_lower in name.lower():
-                return c
-    return None
+    # Collect prefix matches first, then fall back to substring matches.
+    prefix_matches = [
+        c for c in containers if any(n.lower().startswith(id_lower) for n in c.get("names", []))
+    ]
+    candidates = prefix_matches or [
+        c for c in containers if any(id_lower in n.lower() for n in c.get("names", []))
+    ]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    names = [n for c in candidates for n in c.get("names", [])]
+    raise ToolError(
+        f"Container identifier '{identifier}' is ambiguous — matches: {', '.join(names[:10])}. "
+        "Use a more specific name or the full container ID."
+    )
 
 
 async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
@@ -1258,6 +1265,8 @@ async def _handle_key(
                 input_data["name"] = name
             if roles is not None:
                 input_data["roles"] = roles
+            if permissions is not None:
+                input_data["permissions"] = permissions
             data = await make_graphql_request(_KEY_MUTATIONS["update"], {"input": input_data})
             updated_key = (data.get("apiKey") or {}).get("update")
             if not updated_key:
@@ -1277,7 +1286,7 @@ async def _handle_key(
         if subaction in ("add_role", "remove_role"):
             if not key_id:
                 raise ToolError(f"key_id is required for key/{subaction}")
-            if not roles or len(roles) == 0:
+            if not roles:
                 raise ToolError(
                     f"roles is required for key/{subaction} (pass as roles=['ROLE_NAME'])"
                 )

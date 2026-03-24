@@ -5,6 +5,7 @@ and provides all configuration constants used throughout the application.
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,13 +52,9 @@ def _parse_port(env_var: str, default: int) -> int:
     try:
         port = int(raw)
     except ValueError:
-        import sys
-
         print(f"FATAL: {env_var}={raw!r} is not a valid integer port number", file=sys.stderr)
         sys.exit(1)
     if not (1 <= port <= 65535):
-        import sys
-
         print(f"FATAL: {env_var}={port} outside valid port range 1-65535", file=sys.stderr)
         sys.exit(1)
     return port
@@ -65,7 +62,7 @@ def _parse_port(env_var: str, default: int) -> int:
 
 UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
 UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
-UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
+UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "stdio").lower()
 
 # SSL Configuration
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
@@ -75,41 +72,6 @@ elif raw_verify_ssl in ["true", "1", "yes"]:
     UNRAID_VERIFY_SSL = True
 else:  # Path to CA bundle
     UNRAID_VERIFY_SSL = raw_verify_ssl
-
-# Google OAuth Configuration (Optional)
-# -------------------------------------
-# When set, the MCP HTTP server requires Google login before tool calls.
-# UNRAID_MCP_BASE_URL must match the public URL clients use to reach this server.
-# Google Cloud Console → Credentials → Authorized redirect URIs:
-#   Add: <UNRAID_MCP_BASE_URL>/auth/callback
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
-UNRAID_MCP_BASE_URL = os.getenv("UNRAID_MCP_BASE_URL", "")
-
-# JWT signing key for FastMCP OAuth tokens.
-# MUST be set to a stable secret so tokens survive server restarts.
-# Generate once: python3 -c "import secrets; print(secrets.token_hex(32))"
-# Never change this value — all existing tokens will be invalidated.
-UNRAID_MCP_JWT_SIGNING_KEY = os.getenv("UNRAID_MCP_JWT_SIGNING_KEY", "")
-
-
-def is_google_auth_configured() -> bool:
-    """Return True when all required Google OAuth vars are present."""
-    return bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and UNRAID_MCP_BASE_URL)
-
-
-# API Key Authentication (Optional)
-# ----------------------------------
-# A static bearer token clients can use instead of (or alongside) Google OAuth.
-# Can be set to the same value as UNRAID_API_KEY for simplicity, or a separate
-# dedicated secret for MCP access.
-UNRAID_MCP_API_KEY = os.getenv("UNRAID_MCP_API_KEY", "")
-
-
-def is_api_key_auth_configured() -> bool:
-    """Return True when UNRAID_MCP_API_KEY is set."""
-    return bool(UNRAID_MCP_API_KEY)
-
 
 # Logging Configuration
 LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
@@ -190,10 +152,6 @@ def get_config_summary() -> dict[str, Any]:
         "log_file": str(LOG_FILE_PATH),
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
-        "google_auth_enabled": is_google_auth_configured(),
-        "google_auth_base_url": UNRAID_MCP_BASE_URL if is_google_auth_configured() else None,
-        "jwt_signing_key_configured": bool(UNRAID_MCP_JWT_SIGNING_KEY),
-        "api_key_auth_enabled": is_api_key_auth_configured(),
     }
 
 
