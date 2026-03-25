@@ -76,9 +76,9 @@ See the Destructive Actions table in `SKILL.md` for the full list.
 
 **Explanation:** The persistent WebSocket subscription has not yet received its first event. Retry in a moment.
 
-**Known issue:** `live/array_state` uses `arraySubscription` which has a known Unraid API bug (returns null for a non-nullable field). This subscription will always show "connecting."
+**Known issue:** `live/array_state` uses `arraySubscription` which has a known Unraid API bug (returns null for a non-nullable field). This subscription may show "connecting" indefinitely.
 
-**Event-driven subscriptions** (`live/notifications_overview`, `live/owner`, `live/server_status`, `live/ups_status`) only populate when the server emits a change event. If the server is idle, these may never populate during a session.
+**Event-driven subscriptions** (`live/parity_progress`, `live/notifications_overview`, `live/owner`, `live/server_status`, `live/ups_status`) only populate when the server emits a change event. If the server is idle, these may never populate during a session.
 
 **Workaround for array state:** Use `unraid(action="system", subaction="array")` for a synchronous snapshot instead.
 

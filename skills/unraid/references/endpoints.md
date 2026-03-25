@@ -1,6 +1,6 @@
-> **⚠️ DEVELOPER REFERENCE ONLY** — This file documents raw GraphQL endpoints for development purposes. For MCP tool usage, use `unraid(action=..., subaction=...)` calls as documented in `SKILL.md`.
-
 # Unraid API Endpoints Reference
+
+> **⚠️ DEVELOPER REFERENCE ONLY** — This file documents raw GraphQL endpoints for development purposes. For MCP tool usage, use `unraid(action=..., subaction=...)` calls as documented in `SKILL.md`.
 
 Complete list of available GraphQL read-only endpoints in Unraid 7.2+.
 

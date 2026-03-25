@@ -93,7 +93,7 @@ unraid(action="live",    subaction="cpu")
 | `disks` | All physical disks with health and temperatures |
 | `disk_details` | Detailed info for a specific disk (requires `disk_id`) |
 | `log_files` | List available log files |
-| `logs` | Read log content (requires `path`; optional `lines`) |
+| `logs` | Read log content (requires `log_path`; optional `tail_lines`) |
 | `flash_backup` | ⚠️ Trigger a flash backup (requires `confirm=True`) |
 
 ### `docker` — Containers
@@ -143,11 +143,11 @@ unraid(action="live",    subaction="cpu")
 |-----------|-------------|
 | `list` | All API keys |
 | `get` | Single key details (requires `key_id`) |
-| `create` | Create a new key (requires `name`, `roles`) |
+| `create` | Create a new key (requires `name`; optional `roles`, `permissions`) |
 | `update` | Update a key (requires `key_id`) |
 | `delete` | ⚠️ Delete a key (requires `key_id`, `confirm=True`) |
-| `add_role` | Add a role to a key (requires `key_id`, `role`) |
-| `remove_role` | Remove a role from a key (requires `key_id`, `role`) |
+| `add_role` | Add a role to a key (requires `key_id`, `roles`) |
+| `remove_role` | Remove a role from a key (requires `key_id`, `roles`) |
 
 ### `plugin` — Plugins
 | Subaction | Description |
@@ -161,13 +161,13 @@ unraid(action="live",    subaction="cpu")
 |-----------|-------------|
 | `list_remotes` | List configured rclone remotes |
 | `config_form` | Get configuration form for a remote type |
-| `create_remote` | Create a new remote (requires `name`, `type`, `fields`) |
+| `create_remote` | Create a new remote (requires `name`, `provider_type`, `config_data`) |
 | `delete_remote` | ⚠️ Delete a remote (requires `name`, `confirm=True`) |
 
 ### `setting` — System Settings
 | Subaction | Description |
 |-----------|-------------|
-| `update` | Update system settings (requires `settings` object) |
+| `update` | Update system settings (requires `settings_input` object) |
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
 
 ### `customization` — Theme & Appearance
@@ -186,7 +186,7 @@ unraid(action="live",    subaction="cpu")
 | `provider` | Single provider details (requires `provider_id`) |
 | `configuration` | OIDC configuration |
 | `public_providers` | Public-facing provider list |
-| `validate_session` | Validate current SSO session |
+| `validate_session` | Validate current SSO session (requires `token`) |
 
 ### `user` — Current User
 | Subaction | Description |
@@ -264,7 +264,7 @@ unraid(action="system", subaction="array")
 ### Read logs
 ```
 unraid(action="disk", subaction="log_files")
-unraid(action="disk", subaction="logs", path="syslog", lines=50)
+unraid(action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=50)
 ```
 
 ### Live monitoring

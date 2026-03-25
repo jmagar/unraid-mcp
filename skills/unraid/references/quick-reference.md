@@ -22,7 +22,7 @@ unraid(action="system",  subaction="array")             # Array status overview
 unraid(action="disk",    subaction="disks")             # All disks with temps & health
 unraid(action="array",   subaction="parity_status")     # Current parity check
 unraid(action="array",   subaction="parity_history")    # Past parity results
-unraid(action="array",   subaction="parity_start")      # Start parity check
+unraid(action="array",   subaction="parity_start", correct=False)  # Start parity check
 unraid(action="array",   subaction="stop_array",  confirm=True)   # ⚠️ Stop array
 ```
 

@@ -252,7 +252,7 @@ The server exposes two classes of MCP resources backed by persistent WebSocket c
 
 > **Note**: Resources return cached data from persistent WebSocket subscriptions. A `{"status": "connecting"}` placeholder is returned while the subscription initializes — retry in a moment.
 >
-> **`log_tail` and `notification_feed`** are accessible as tool subactions (`unraid(action="live", subaction="log_tail")`) but are not registered as MCP resources — they use transient one-shot subscriptions and require parameters.
+> **`log_tail`** is accessible as a tool subaction (`unraid(action="live", subaction="log_tail", path="/var/log/syslog")`) and requires a `path`; **`notification_feed`** is also available as a tool subaction but uses a transient one-shot subscription and accepts optional parameters. Neither is registered as an MCP resource.
 
 > **Security note**: The `disk/logs` and `live/log_tail` subactions allow reading files under `/var/log/` and `/boot/logs/` on the Unraid server. Authenticated MCP clients can stream any log file within these directories.
 
