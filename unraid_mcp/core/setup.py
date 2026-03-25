@@ -30,11 +30,11 @@ class _UnraidCredentials:
 
 
 async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bool:
-    """Ask the user whether to overwrite already-working credentials.
+    """Ask the user whether to overwrite existing credentials.
 
     Args:
         ctx: The MCP context for elicitation. If None, returns False immediately.
-        current_url: The currently configured URL (displayed for context).
+        current_url: The currently configured URL and status (displayed for context).
 
     Returns:
         True if the user confirmed the reset, False otherwise.
@@ -45,14 +45,22 @@ async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bo
     try:
         result = await ctx.elicit(
             message=(
-                "Credentials are already configured and working.\n\n"
+                "Credentials are already configured.\n\n"
                 f"**Current URL:** `{current_url}`\n\n"
                 "Do you want to reset your API URL and key?"
             ),
             response_type=bool,
         )
     except NotImplementedError:
-        logger.warning("MCP client does not support elicitation for reset confirmation.")
+        # Client doesn't support elicitation — return False (decline the reset).
+        # Auto-approving a destructive credential reset on non-interactive clients
+        # could silently overwrite working credentials; callers must use a client
+        # that supports elicitation or configure credentials directly in the .env file.
+        logger.warning(
+            "MCP client does not support elicitation for reset confirmation — declining reset. "
+            "To reconfigure credentials, edit %s directly.",
+            CREDENTIALS_ENV_PATH,
+        )
         return False
 
     if result.action != "accept":
@@ -80,7 +88,7 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
     if ctx is None:
         logger.warning(
             "Cannot elicit credentials: no MCP context available. "
-            "Run unraid_health action=setup to configure credentials."
+            "Run unraid(action=health, subaction=setup) to configure credentials."
         )
         return False
 
@@ -97,7 +105,7 @@ async def elicit_and_configure(ctx: Context | None) -> bool:
     except NotImplementedError:
         logger.warning(
             "MCP client does not support elicitation. "
-            "Use unraid_health action=setup or create %s manually.",
+            "Use unraid(action=health, subaction=setup) or create %s manually.",
             CREDENTIALS_ENV_PATH,
         )
         return False

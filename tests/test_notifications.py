@@ -1,67 +1,54 @@
-"""Tests for unraid_notifications tool."""
+"""Tests for notification subactions of the consolidated unraid tool."""
 
 from collections.abc import Generator
-from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.notifications import NOTIFICATION_ACTIONS
-
-
-def test_warnings_action_removed() -> None:
-    assert "warnings" not in get_args(NOTIFICATION_ACTIONS), (
-        "warnings action references warningsAndAlerts which is not in live API"
-    )
-
-
-def test_create_unique_action_removed() -> None:
-    assert "create_unique" not in get_args(NOTIFICATION_ACTIONS), (
-        "create_unique references notifyIfUnique which is not in live API"
-    )
 
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch(
-        "unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock
-    ) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 def _make_tool():
-    return make_tool_fn(
-        "unraid_mcp.tools.notifications", "register_notifications_tool", "unraid_notifications"
-    )
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 class TestNotificationsValidation:
     async def test_delete_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool_fn(action="delete", notification_id="n:1", notification_type="UNREAD")
+            await tool_fn(
+                action="notification",
+                subaction="delete",
+                notification_id="n:1",
+                notification_type="UNREAD",
+            )
 
     async def test_delete_archived_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="not confirmed"):
-            await tool_fn(action="delete_archived")
+            await tool_fn(action="notification", subaction="delete_archived")
 
     async def test_create_requires_fields(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="requires title"):
-            await tool_fn(action="create")
+            await tool_fn(action="notification", subaction="create")
 
     async def test_archive_requires_id(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="notification_id"):
-            await tool_fn(action="archive")
+            await tool_fn(action="notification", subaction="archive")
 
     async def test_delete_requires_id_and_type(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="requires notification_id"):
-            await tool_fn(action="delete", confirm=True)
+            await tool_fn(action="notification", subaction="delete", confirm=True)
 
 
 class TestNotificationsActions:
@@ -75,7 +62,7 @@ class TestNotificationsActions:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="overview")
+        result = await tool_fn(action="notification", subaction="overview")
         assert result["unread"]["total"] == 7
 
     async def test_list(self, _mock_graphql: AsyncMock) -> None:
@@ -83,7 +70,7 @@ class TestNotificationsActions:
             "notifications": {"list": [{"id": "n:1", "title": "Test", "importance": "INFO"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="list")
+        result = await tool_fn(action="notification", subaction="list")
         assert len(result["notifications"]) == 1
 
     async def test_create(self, _mock_graphql: AsyncMock) -> None:
@@ -92,7 +79,8 @@ class TestNotificationsActions:
         }
         tool_fn = _make_tool()
         result = await tool_fn(
-            action="create",
+            action="notification",
+            subaction="create",
             title="Test",
             subject="Test Subject",
             description="Test Desc",
@@ -103,7 +91,7 @@ class TestNotificationsActions:
     async def test_archive_notification(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"archiveNotification": {"id": "n:1"}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="archive", notification_id="n:1")
+        result = await tool_fn(action="notification", subaction="archive", notification_id="n:1")
         assert result["success"] is True
 
     async def test_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
@@ -115,7 +103,8 @@ class TestNotificationsActions:
         }
         tool_fn = _make_tool()
         result = await tool_fn(
-            action="delete",
+            action="notification",
+            subaction="delete",
             notification_id="n:1",
             notification_type="unread",
             confirm=True,
@@ -130,22 +119,26 @@ class TestNotificationsActions:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="archive_all")
+        result = await tool_fn(action="notification", subaction="archive_all")
         assert result["success"] is True
 
-    async def test_unread_notification(self, _mock_graphql: AsyncMock) -> None:
+    async def test_mark_unread_notification(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"unreadNotification": {"id": "n:1"}}
         tool_fn = _make_tool()
-        result = await tool_fn(action="unread", notification_id="n:1")
+        result = await tool_fn(
+            action="notification", subaction="mark_unread", notification_id="n:1"
+        )
         assert result["success"] is True
-        assert result["action"] == "unread"
+        assert result["subaction"] == "mark_unread"
 
     async def test_list_with_importance_filter(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "notifications": {"list": [{"id": "n:1", "title": "Alert", "importance": "WARNING"}]}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="list", importance="warning", limit=10, offset=5)
+        result = await tool_fn(
+            action="notification", subaction="list", importance="warning", limit=10, offset=5
+        )
         assert len(result["notifications"]) == 1
         call_args = _mock_graphql.call_args
         filter_var = call_args[0][1]["filter"]
@@ -161,15 +154,15 @@ class TestNotificationsActions:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="delete_archived", confirm=True)
+        result = await tool_fn(action="notification", subaction="delete_archived", confirm=True)
         assert result["success"] is True
-        assert result["action"] == "delete_archived"
+        assert result["subaction"] == "delete_archived"
 
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("boom")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Failed to execute notifications/overview"):
-            await tool_fn(action="overview")
+        with pytest.raises(ToolError, match="Failed to execute notification/overview"):
+            await tool_fn(action="notification", subaction="overview")
 
 
 class TestNotificationsCreateValidation:
@@ -179,7 +172,8 @@ class TestNotificationsCreateValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid importance"):
             await tool_fn(
-                action="create",
+                action="notification",
+                subaction="create",
                 title="T",
                 subject="S",
                 description="D",
@@ -191,7 +185,8 @@ class TestNotificationsCreateValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid importance"):
             await tool_fn(
-                action="create",
+                action="notification",
+                subaction="create",
                 title="T",
                 subject="S",
                 description="D",
@@ -202,7 +197,12 @@ class TestNotificationsCreateValidation:
         _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "ALERT"}}
         tool_fn = _make_tool()
         result = await tool_fn(
-            action="create", title="T", subject="S", description="D", importance="alert"
+            action="notification",
+            subaction="create",
+            title="T",
+            subject="S",
+            description="D",
+            importance="alert",
         )
         assert result["success"] is True
 
@@ -210,7 +210,8 @@ class TestNotificationsCreateValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="title must be at most 200"):
             await tool_fn(
-                action="create",
+                action="notification",
+                subaction="create",
                 title="x" * 201,
                 subject="S",
                 description="D",
@@ -221,7 +222,8 @@ class TestNotificationsCreateValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="subject must be at most 500"):
             await tool_fn(
-                action="create",
+                action="notification",
+                subaction="create",
                 title="T",
                 subject="x" * 501,
                 description="D",
@@ -232,7 +234,8 @@ class TestNotificationsCreateValidation:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="description must be at most 2000"):
             await tool_fn(
-                action="create",
+                action="notification",
+                subaction="create",
                 title="T",
                 subject="S",
                 description="x" * 2001,
@@ -243,7 +246,8 @@ class TestNotificationsCreateValidation:
         _mock_graphql.return_value = {"createNotification": {"id": "n:1", "importance": "INFO"}}
         tool_fn = _make_tool()
         result = await tool_fn(
-            action="create",
+            action="notification",
+            subaction="create",
             title="x" * 200,
             subject="S",
             description="D",
@@ -261,7 +265,9 @@ class TestNewNotificationMutations:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="archive_many", notification_ids=["n:1", "n:2"])
+        result = await tool_fn(
+            action="notification", subaction="archive_many", notification_ids=["n:1", "n:2"]
+        )
         assert result["success"] is True
         call_args = _mock_graphql.call_args
         assert call_args[0][1] == {"ids": ["n:1", "n:2"]}
@@ -269,7 +275,7 @@ class TestNewNotificationMutations:
     async def test_archive_many_requires_ids(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="notification_ids"):
-            await tool_fn(action="archive_many")
+            await tool_fn(action="notification", subaction="archive_many")
 
     async def test_unarchive_many_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -279,13 +285,15 @@ class TestNewNotificationMutations:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="unarchive_many", notification_ids=["n:1", "n:2"])
+        result = await tool_fn(
+            action="notification", subaction="unarchive_many", notification_ids=["n:1", "n:2"]
+        )
         assert result["success"] is True
 
     async def test_unarchive_many_requires_ids(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="notification_ids"):
-            await tool_fn(action="unarchive_many")
+            await tool_fn(action="notification", subaction="unarchive_many")
 
     async def test_unarchive_all_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -295,7 +303,7 @@ class TestNewNotificationMutations:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="unarchive_all")
+        result = await tool_fn(action="notification", subaction="unarchive_all")
         assert result["success"] is True
 
     async def test_unarchive_all_with_importance(self, _mock_graphql: AsyncMock) -> None:
@@ -304,7 +312,7 @@ class TestNewNotificationMutations:
             "unarchiveAll": {"unread": {"total": 1}, "archive": {"total": 0}}
         }
         tool_fn = _make_tool()
-        await tool_fn(action="unarchive_all", importance="warning")
+        await tool_fn(action="notification", subaction="unarchive_all", importance="warning")
         call_args = _mock_graphql.call_args
         assert call_args[0][1] == {"importance": "WARNING"}
 
@@ -316,5 +324,5 @@ class TestNewNotificationMutations:
             }
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="recalculate")
+        result = await tool_fn(action="notification", subaction="recalculate")
         assert result["success"] is True

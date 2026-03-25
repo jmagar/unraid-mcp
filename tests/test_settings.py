@@ -1,38 +1,32 @@
-"""Tests for the unraid_settings tool."""
+"""Tests for the setting subactions of the consolidated unraid tool."""
 
 from collections.abc import Generator
-from typing import get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastmcp import FastMCP
+from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.tools.settings import SETTINGS_ACTIONS, register_settings_tool
 
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.settings.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
-def _make_tool() -> AsyncMock:
-    test_mcp = FastMCP("test")
-    register_settings_tool(test_mcp)
-    # FastMCP 3.x stores tools in providers[0]._components keyed as "tool:{name}@"
-    local_provider = test_mcp.providers[0]
-    tool = local_provider._components["tool:unraid_settings@"]  # ty: ignore[unresolved-attribute]
-    return tool.fn
+def _make_tool():
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 # ---------------------------------------------------------------------------
-# Regression: removed actions must not appear in SETTINGS_ACTIONS
+# Regression: removed subactions must raise Invalid subaction
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "action",
+    "subaction",
     [
         "update_temperature",
         "update_time",
@@ -44,10 +38,10 @@ def _make_tool() -> AsyncMock:
         "update_ssh",
     ],
 )
-def test_removed_settings_actions_are_gone(action: str) -> None:
-    assert action not in get_args(SETTINGS_ACTIONS), (
-        f"{action} references a non-existent mutation and must not be in SETTINGS_ACTIONS"
-    )
+async def test_removed_settings_subactions_are_invalid(subaction: str) -> None:
+    tool_fn = _make_tool()
+    with pytest.raises(ToolError, match="Invalid subaction"):
+        await tool_fn(action="setting", subaction=subaction)
 
 
 # ---------------------------------------------------------------------------
@@ -56,19 +50,19 @@ def test_removed_settings_actions_are_gone(action: str) -> None:
 
 
 class TestSettingsValidation:
-    """Tests for action validation and destructive guard."""
+    """Tests for subaction validation and destructive guard."""
 
-    async def test_invalid_action(self, _mock_graphql: AsyncMock) -> None:
+    async def test_invalid_subaction(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Invalid action"):
-            await tool_fn(action="nonexistent_action")
+        with pytest.raises(ToolError, match="Invalid subaction"):
+            await tool_fn(action="setting", subaction="nonexistent_action")
 
     async def test_destructive_configure_ups_requires_confirm(
         self, _mock_graphql: AsyncMock
     ) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="confirm=True"):
-            await tool_fn(action="configure_ups", ups_config={"mode": "slave"})
+            await tool_fn(action="setting", subaction="configure_ups", ups_config={"mode": "slave"})
 
 
 # ---------------------------------------------------------------------------
@@ -77,21 +71,23 @@ class TestSettingsValidation:
 
 
 class TestSettingsUpdate:
-    """Tests for update action."""
+    """Tests for update subaction."""
 
     async def test_update_requires_settings_input(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="settings_input is required"):
-            await tool_fn(action="update")
+            await tool_fn(action="setting", subaction="update")
 
     async def test_update_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "updateSettings": {"restartRequired": False, "values": {}, "warnings": []}
         }
         tool_fn = _make_tool()
-        result = await tool_fn(action="update", settings_input={"shareCount": 5})
+        result = await tool_fn(
+            action="setting", subaction="update", settings_input={"shareCount": 5}
+        )
         assert result["success"] is True
-        assert result["action"] == "update"
+        assert result["subaction"] == "update"
 
 
 # ---------------------------------------------------------------------------
@@ -100,18 +96,21 @@ class TestSettingsUpdate:
 
 
 class TestUpsConfig:
-    """Tests for configure_ups action."""
+    """Tests for configure_ups subaction."""
 
     async def test_configure_ups_requires_ups_config(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="ups_config is required"):
-            await tool_fn(action="configure_ups", confirm=True)
+            await tool_fn(action="setting", subaction="configure_ups", confirm=True)
 
     async def test_configure_ups_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"configureUps": True}
         tool_fn = _make_tool()
         result = await tool_fn(
-            action="configure_ups", confirm=True, ups_config={"mode": "master", "cable": "usb"}
+            action="setting",
+            subaction="configure_ups",
+            confirm=True,
+            ups_config={"mode": "master", "cable": "usb"},
         )
         assert result["success"] is True
-        assert result["action"] == "configure_ups"
+        assert result["subaction"] == "configure_ups"

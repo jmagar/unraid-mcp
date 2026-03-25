@@ -10,7 +10,7 @@ build-backend = "hatchling.build"
 # ============================================================================
 [project]
 name = "unraid-mcp"
-version = "0.6.0"
+version = "1.1.3"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -71,7 +71,7 @@ classifiers = [
 # ============================================================================
 dependencies = [
     "python-dotenv>=1.1.1",
-    "fastmcp>=2.14.5",
+    "fastmcp>=3.0.0",
     "httpx>=0.28.1",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
@@ -258,6 +258,7 @@ omit = [
 ]
 
 [tool.coverage.report]
+fail_under = 80
 precision = 2
 show_missing = true
 skip_covered = false

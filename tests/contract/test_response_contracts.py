@@ -70,7 +70,7 @@ class DockerMutationResult(BaseModel):
     """Shape returned by docker start/stop/pause/unpause mutations."""
 
     success: bool
-    action: str
+    subaction: str
     container: Any = None
 
 
@@ -287,48 +287,42 @@ class NotificationCreateResult(BaseModel):
 
 @pytest.fixture
 def _docker_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.docker.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _info_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.info.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _storage_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.storage.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _notifications_mock() -> Generator[AsyncMock, None, None]:
-    with patch(
-        "unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock
-    ) as mock:
+    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 def _docker_tool():
-    return make_tool_fn("unraid_mcp.tools.docker", "register_docker_tool", "unraid_docker")
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 def _info_tool():
-    return make_tool_fn("unraid_mcp.tools.info", "register_info_tool", "unraid_info")
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 def _storage_tool():
-    return make_tool_fn("unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage")
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 def _notifications_tool():
-    return make_tool_fn(
-        "unraid_mcp.tools.notifications",
-        "register_notifications_tool",
-        "unraid_notifications",
-    )
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +335,7 @@ class TestDockerListContract:
 
     async def test_list_result_has_containers_key(self, _docker_mock: AsyncMock) -> None:
         _docker_mock.return_value = {"docker": {"containers": []}}
-        result = await _docker_tool()(action="list")
+        result = await _docker_tool()(action="docker", subaction="list")
         DockerListResult(**result)
 
     async def test_list_containers_conform_to_shape(self, _docker_mock: AsyncMock) -> None:
@@ -353,14 +347,14 @@ class TestDockerListContract:
                 ]
             }
         }
-        result = await _docker_tool()(action="list")
+        result = await _docker_tool()(action="docker", subaction="list")
         validated = DockerListResult(**result)
         for container in validated.containers:
             DockerContainer(**container)
 
     async def test_list_empty_containers_is_valid(self, _docker_mock: AsyncMock) -> None:
         _docker_mock.return_value = {"docker": {"containers": []}}
-        result = await _docker_tool()(action="list")
+        result = await _docker_tool()(action="docker", subaction="list")
         validated = DockerListResult(**result)
         assert validated.containers == []
 
@@ -369,7 +363,7 @@ class TestDockerListContract:
         _docker_mock.return_value = {
             "docker": {"containers": [{"id": "abc123", "names": ["plex"], "state": "running"}]}
         }
-        result = await _docker_tool()(action="list")
+        result = await _docker_tool()(action="docker", subaction="list")
         container_raw = result["containers"][0]
         DockerContainer(**container_raw)
 
@@ -378,7 +372,7 @@ class TestDockerListContract:
         _docker_mock.return_value = {
             "docker": {"containers": [{"id": "abc123", "state": "running"}]}
         }
-        result = await _docker_tool()(action="list")
+        result = await _docker_tool()(action="docker", subaction="list")
         with pytest.raises(ValidationError):
             DockerContainer(**result["containers"][0])
 
@@ -403,7 +397,7 @@ class TestDockerDetailsContract:
                 ]
             }
         }
-        result = await _docker_tool()(action="details", container_id=cid)
+        result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
         DockerContainerDetails(**result)
 
     async def test_details_has_required_fields(self, _docker_mock: AsyncMock) -> None:
@@ -411,7 +405,7 @@ class TestDockerDetailsContract:
         _docker_mock.return_value = {
             "docker": {"containers": [{"id": cid, "names": ["sonarr"], "state": "exited"}]}
         }
-        result = await _docker_tool()(action="details", container_id=cid)
+        result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
         assert "id" in result
         assert "names" in result
         assert "state" in result
@@ -424,7 +418,7 @@ class TestDockerNetworksContract:
         _docker_mock.return_value = {
             "docker": {"networks": [{"id": "net:1", "name": "bridge", "driver": "bridge"}]}
         }
-        result = await _docker_tool()(action="networks")
+        result = await _docker_tool()(action="docker", subaction="networks")
         DockerNetworkListResult(**result)
 
     async def test_network_entries_conform_to_shape(self, _docker_mock: AsyncMock) -> None:
@@ -436,13 +430,13 @@ class TestDockerNetworksContract:
                 ]
             }
         }
-        result = await _docker_tool()(action="networks")
+        result = await _docker_tool()(action="docker", subaction="networks")
         for net in result["networks"]:
             DockerNetwork(**net)
 
     async def test_empty_networks_is_valid(self, _docker_mock: AsyncMock) -> None:
         _docker_mock.return_value = {"docker": {"networks": []}}
-        result = await _docker_tool()(action="networks")
+        result = await _docker_tool()(action="docker", subaction="networks")
         validated = DockerNetworkListResult(**result)
         assert validated.networks == []
 
@@ -456,10 +450,10 @@ class TestDockerMutationContract:
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
             {"docker": {"start": {"id": cid, "names": ["plex"], "state": "running"}}},
         ]
-        result = await _docker_tool()(action="start", container_id=cid)
+        result = await _docker_tool()(action="docker", subaction="start", container_id=cid)
         validated = DockerMutationResult(**result)
         assert validated.success is True
-        assert validated.action == "start"
+        assert validated.subaction == "start"
 
     async def test_stop_mutation_result_shape(self, _docker_mock: AsyncMock) -> None:
         cid = "d" * 64 + ":local"
@@ -467,10 +461,10 @@ class TestDockerMutationContract:
             {"docker": {"containers": [{"id": cid, "names": ["nginx"]}]}},
             {"docker": {"stop": {"id": cid, "names": ["nginx"], "state": "exited"}}},
         ]
-        result = await _docker_tool()(action="stop", container_id=cid)
+        result = await _docker_tool()(action="docker", subaction="stop", container_id=cid)
         validated = DockerMutationResult(**result)
         assert validated.success is True
-        assert validated.action == "stop"
+        assert validated.subaction == "stop"
 
 
 # ---------------------------------------------------------------------------
@@ -501,7 +495,7 @@ class TestInfoOverviewContract:
                 "memory": {"layout": []},
             }
         }
-        result = await _info_tool()(action="overview")
+        result = await _info_tool()(action="system", subaction="overview")
         validated = InfoOverviewResult(**result)
         assert isinstance(validated.summary, dict)
         assert isinstance(validated.details, dict)
@@ -521,7 +515,7 @@ class TestInfoOverviewContract:
                 "memory": {"layout": []},
             }
         }
-        result = await _info_tool()(action="overview")
+        result = await _info_tool()(action="system", subaction="overview")
         InfoOverviewSummary(**result["summary"])
         assert result["summary"]["hostname"] == "myserver"
 
@@ -538,7 +532,7 @@ class TestInfoOverviewContract:
             "memory": {"layout": []},
         }
         _info_mock.return_value = {"info": raw_info}
-        result = await _info_tool()(action="overview")
+        result = await _info_tool()(action="system", subaction="overview")
         assert result["details"] == raw_info
 
 
@@ -557,7 +551,7 @@ class TestInfoArrayContract:
                 "boot": None,
             }
         }
-        result = await _info_tool()(action="array")
+        result = await _info_tool()(action="system", subaction="array")
         validated = InfoArrayResult(**result)
         assert isinstance(validated.summary, dict)
         assert isinstance(validated.details, dict)
@@ -572,7 +566,7 @@ class TestInfoArrayContract:
                 "caches": [],
             }
         }
-        result = await _info_tool()(action="array")
+        result = await _info_tool()(action="system", subaction="array")
         ArraySummary(**result["summary"])
 
     async def test_array_health_overall_healthy(self, _info_mock: AsyncMock) -> None:
@@ -585,7 +579,7 @@ class TestInfoArrayContract:
                 "caches": [],
             }
         }
-        result = await _info_tool()(action="array")
+        result = await _info_tool()(action="system", subaction="array")
         assert result["summary"]["overall_health"] == "HEALTHY"
 
     async def test_array_health_critical_with_failed_disk(self, _info_mock: AsyncMock) -> None:
@@ -598,7 +592,7 @@ class TestInfoArrayContract:
                 "caches": [],
             }
         }
-        result = await _info_tool()(action="array")
+        result = await _info_tool()(action="system", subaction="array")
         assert result["summary"]["overall_health"] == "CRITICAL"
 
 
@@ -619,7 +613,7 @@ class TestInfoMetricsContract:
                 },
             }
         }
-        result = await _info_tool()(action="metrics")
+        result = await _info_tool()(action="system", subaction="metrics")
         validated = InfoMetricsResult(**result)
         assert validated.cpu is not None
         assert validated.memory is not None
@@ -628,7 +622,7 @@ class TestInfoMetricsContract:
         _info_mock.return_value = {
             "metrics": {"cpu": {"percentTotal": 75.3}, "memory": {"percentTotal": 60.0}}
         }
-        result = await _info_tool()(action="metrics")
+        result = await _info_tool()(action="system", subaction="metrics")
         cpu_pct = result["cpu"]["percentTotal"]
         assert 0.0 <= cpu_pct <= 100.0
 
@@ -643,14 +637,14 @@ class TestInfoServicesContract:
                 {"name": "docker", "online": True, "version": "24.0"},
             ]
         }
-        result = await _info_tool()(action="services")
+        result = await _info_tool()(action="system", subaction="services")
         validated = InfoServicesResult(**result)
         for svc in validated.services:
             ServiceEntry(**svc)
 
     async def test_services_empty_list_is_valid(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {"services": []}
-        result = await _info_tool()(action="services")
+        result = await _info_tool()(action="system", subaction="services")
         InfoServicesResult(**result)
         assert result["services"] == []
 
@@ -660,13 +654,13 @@ class TestInfoOnlineContract:
 
     async def test_online_true_shape(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {"online": True}
-        result = await _info_tool()(action="online")
+        result = await _info_tool()(action="system", subaction="online")
         validated = InfoOnlineResult(**result)
         assert validated.online is True
 
     async def test_online_false_shape(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {"online": False}
-        result = await _info_tool()(action="online")
+        result = await _info_tool()(action="system", subaction="online")
         validated = InfoOnlineResult(**result)
         assert validated.online is False
 
@@ -687,7 +681,7 @@ class TestInfoNetworkContract:
             ],
             "vars": {"port": 80, "portssl": 443, "localTld": "local", "useSsl": "no"},
         }
-        result = await _info_tool()(action="network")
+        result = await _info_tool()(action="system", subaction="network")
         validated = InfoNetworkResult(**result)
         assert isinstance(validated.accessUrls, list)
 
@@ -696,7 +690,7 @@ class TestInfoNetworkContract:
             "servers": [],
             "vars": {"port": 80, "portssl": 443, "localTld": "local", "useSsl": "no"},
         }
-        result = await _info_tool()(action="network")
+        result = await _info_tool()(action="system", subaction="network")
         validated = InfoNetworkResult(**result)
         assert validated.accessUrls == []
 
@@ -716,21 +710,21 @@ class TestStorageSharesContract:
                 {"id": "share:2", "name": "appdata", "free": 200000, "used": 50000, "size": 250000},
             ]
         }
-        result = await _storage_tool()(action="shares")
+        result = await _storage_tool()(action="disk", subaction="shares")
         validated = StorageSharesResult(**result)
         for share in validated.shares:
             ShareEntry(**share)
 
     async def test_shares_empty_list_is_valid(self, _storage_mock: AsyncMock) -> None:
         _storage_mock.return_value = {"shares": []}
-        result = await _storage_tool()(action="shares")
+        result = await _storage_tool()(action="disk", subaction="shares")
         StorageSharesResult(**result)
         assert result["shares"] == []
 
     async def test_shares_missing_name_fails_contract(self, _storage_mock: AsyncMock) -> None:
         """A share without required 'name' must fail contract validation."""
         _storage_mock.return_value = {"shares": [{"id": "share:1", "free": 100}]}
-        result = await _storage_tool()(action="shares")
+        result = await _storage_tool()(action="disk", subaction="shares")
         with pytest.raises(ValidationError):
             ShareEntry(**result["shares"][0])
 
@@ -745,14 +739,14 @@ class TestStorageDisksContract:
                 {"id": "disk:2", "device": "sdb", "name": "Seagate_8TB"},
             ]
         }
-        result = await _storage_tool()(action="disks")
+        result = await _storage_tool()(action="disk", subaction="disks")
         validated = StorageDisksResult(**result)
         for disk in validated.disks:
             DiskEntry(**disk)
 
     async def test_disks_empty_list_is_valid(self, _storage_mock: AsyncMock) -> None:
         _storage_mock.return_value = {"disks": []}
-        result = await _storage_tool()(action="disks")
+        result = await _storage_tool()(action="disk", subaction="disks")
         StorageDisksResult(**result)
         assert result["disks"] == []
 
@@ -771,7 +765,7 @@ class TestStorageDiskDetailsContract:
                 "temperature": 35,
             }
         }
-        result = await _storage_tool()(action="disk_details", disk_id="disk:1")
+        result = await _storage_tool()(action="disk", subaction="disk_details", disk_id="disk:1")
         validated = StorageDiskDetailsResult(**result)
         assert isinstance(validated.summary, dict)
         assert isinstance(validated.details, dict)
@@ -787,7 +781,7 @@ class TestStorageDiskDetailsContract:
                 "temperature": 40,
             }
         }
-        result = await _storage_tool()(action="disk_details", disk_id="disk:2")
+        result = await _storage_tool()(action="disk", subaction="disk_details", disk_id="disk:2")
         DiskDetailsSummary(**result["summary"])
 
     async def test_disk_details_temperature_formatted(self, _storage_mock: AsyncMock) -> None:
@@ -801,7 +795,7 @@ class TestStorageDiskDetailsContract:
                 "temperature": 38,
             }
         }
-        result = await _storage_tool()(action="disk_details", disk_id="disk:3")
+        result = await _storage_tool()(action="disk", subaction="disk_details", disk_id="disk:3")
         assert "°C" in result["summary"]["temperature"]
 
     async def test_disk_details_no_temperature_shows_na(self, _storage_mock: AsyncMock) -> None:
@@ -815,7 +809,7 @@ class TestStorageDiskDetailsContract:
                 "temperature": None,
             }
         }
-        result = await _storage_tool()(action="disk_details", disk_id="disk:4")
+        result = await _storage_tool()(action="disk", subaction="disk_details", disk_id="disk:4")
         assert result["summary"]["temperature"] == "N/A"
 
 
@@ -839,14 +833,14 @@ class TestStorageLogFilesContract:
                 },
             ]
         }
-        result = await _storage_tool()(action="log_files")
+        result = await _storage_tool()(action="disk", subaction="log_files")
         validated = StorageLogFilesResult(**result)
         for log_file in validated.log_files:
             LogFileEntry(**log_file)
 
     async def test_log_files_empty_list_is_valid(self, _storage_mock: AsyncMock) -> None:
         _storage_mock.return_value = {"logFiles": []}
-        result = await _storage_tool()(action="log_files")
+        result = await _storage_tool()(action="disk", subaction="log_files")
         StorageLogFilesResult(**result)
         assert result["log_files"] == []
 
@@ -868,7 +862,7 @@ class TestNotificationsOverviewContract:
                 }
             }
         }
-        result = await _notifications_tool()(action="overview")
+        result = await _notifications_tool()(action="notification", subaction="overview")
         validated = NotificationOverviewResult(**result)
         assert validated.unread is not None
         assert validated.archive is not None
@@ -882,7 +876,7 @@ class TestNotificationsOverviewContract:
                 }
             }
         }
-        result = await _notifications_tool()(action="overview")
+        result = await _notifications_tool()(action="notification", subaction="overview")
         NotificationCountBucket(**result["unread"])
         NotificationCountBucket(**result["archive"])
 
@@ -895,7 +889,7 @@ class TestNotificationsOverviewContract:
                 }
             }
         }
-        result = await _notifications_tool()(action="overview")
+        result = await _notifications_tool()(action="notification", subaction="overview")
         NotificationOverviewResult(**result)
 
 
@@ -920,14 +914,14 @@ class TestNotificationsListContract:
                 ]
             }
         }
-        result = await _notifications_tool()(action="list")
+        result = await _notifications_tool()(action="notification", subaction="list")
         validated = NotificationListResult(**result)
         for notif in validated.notifications:
             NotificationEntry(**notif)
 
     async def test_list_empty_notifications_valid(self, _notifications_mock: AsyncMock) -> None:
         _notifications_mock.return_value = {"notifications": {"list": []}}
-        result = await _notifications_tool()(action="list")
+        result = await _notifications_tool()(action="notification", subaction="list")
         NotificationListResult(**result)
         assert result["notifications"] == []
 
@@ -938,7 +932,7 @@ class TestNotificationsListContract:
         _notifications_mock.return_value = {
             "notifications": {"list": [{"title": "No ID here", "importance": "INFO"}]}
         }
-        result = await _notifications_tool()(action="list")
+        result = await _notifications_tool()(action="notification", subaction="list")
         with pytest.raises(ValidationError):
             NotificationEntry(**result["notifications"][0])
 
@@ -955,7 +949,8 @@ class TestNotificationsCreateContract:
             }
         }
         result = await _notifications_tool()(
-            action="create",
+            action="notification",
+            subaction="create",
             title="Test notification",
             subject="Test subject",
             description="This is a test",
@@ -970,7 +965,8 @@ class TestNotificationsCreateContract:
             "createNotification": {"id": "notif:42", "title": "Alert!", "importance": "ALERT"}
         }
         result = await _notifications_tool()(
-            action="create",
+            action="notification",
+            subaction="create",
             title="Alert!",
             subject="Critical issue",
             description="Something went wrong",

@@ -15,11 +15,11 @@ from typing import Any
 import websockets
 from websockets.typing import Subprotocol
 
+from ..config import settings as _settings
 from ..config.logging import logger
-from ..config.settings import UNRAID_API_KEY
 from ..core.client import redact_sensitive
 from ..core.types import SubscriptionData
-from .utils import build_ws_ssl_context, build_ws_url
+from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 
 
 # Resource data size limits to prevent unbounded memory growth
@@ -100,9 +100,19 @@ class SubscriptionManager:
         self._connection_start_times: dict[str, float] = {}  # Track when connections started
 
         # Define subscription configurations
-        self.subscription_configs = {
-            "logFileSubscription": {
-                "query": """
+        from .queries import SNAPSHOT_ACTIONS
+
+        self.subscription_configs: dict[str, dict] = {
+            action: {
+                "query": query,
+                "resource": f"unraid://live/{action}",
+                "description": f"Real-time {action.replace('_', ' ')} data",
+                "auto_start": True,
+            }
+            for action, query in SNAPSHOT_ACTIONS.items()
+        }
+        self.subscription_configs["logFileSubscription"] = {
+            "query": """
                 subscription LogFileSubscription($path: String!) {
                     logFile(path: $path) {
                         path
@@ -111,10 +121,9 @@ class SubscriptionManager:
                     }
                 }
                 """,
-                "resource": "unraid://logs/stream",
-                "description": "Real-time log file streaming",
-                "auto_start": False,  # Started manually with path parameter
-            }
+            "resource": "unraid://logs/stream",
+            "description": "Real-time log file streaming",
+            "auto_start": False,  # Started manually with path parameter
         }
 
         logger.info(
@@ -241,7 +250,7 @@ class SubscriptionManager:
                 ws_url = build_ws_url()
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
                 logger.debug(
-                    f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if UNRAID_API_KEY else 'No'}"
+                    f"[WEBSOCKET:{subscription_name}] API Key present: {'Yes' if _settings.UNRAID_API_KEY else 'No'}"
                 )
 
                 ssl_context = build_ws_ssl_context(ws_url)
@@ -275,13 +284,9 @@ class SubscriptionManager:
                     logger.debug(
                         f"[PROTOCOL:{subscription_name}] Initializing GraphQL-WS protocol..."
                     )
-                    init_type = "connection_init"
-                    init_payload: dict[str, Any] = {"type": init_type}
-
-                    if UNRAID_API_KEY:
+                    init_payload = build_connection_init()
+                    if "payload" in init_payload:
                         logger.debug(f"[AUTH:{subscription_name}] Adding authentication payload")
-                        # Use graphql-ws connectionParams format (direct key, not nested headers)
-                        init_payload["payload"] = {"x-api-key": UNRAID_API_KEY}
                     else:
                         logger.warning(
                             f"[AUTH:{subscription_name}] No API key available for authentication"

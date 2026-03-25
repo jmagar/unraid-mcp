@@ -1,6 +1,6 @@
 """Safety audit tests for destructive action confirmation guards.
 
-Verifies that all destructive operations across every tool require
+Verifies that all destructive operations across every domain require
 explicit `confirm=True` before execution, and that the DESTRUCTIVE_ACTIONS
 registries are complete and consistent.
 """
@@ -9,97 +9,75 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
-# conftest.py is the shared test-helper module for this project.
-# pytest automatically adds tests/ to sys.path, making it importable here
-# without a package __init__.py. Do NOT add tests/__init__.py — it breaks
-# conftest.py's fixture auto-discovery.
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
 
-# Import DESTRUCTIVE_ACTIONS sets from every tool module that defines one
-from unraid_mcp.tools.array import DESTRUCTIVE_ACTIONS as ARRAY_DESTRUCTIVE
-from unraid_mcp.tools.array import MUTATIONS as ARRAY_MUTATIONS
-from unraid_mcp.tools.keys import DESTRUCTIVE_ACTIONS as KEYS_DESTRUCTIVE
-from unraid_mcp.tools.keys import MUTATIONS as KEYS_MUTATIONS
-from unraid_mcp.tools.notifications import DESTRUCTIVE_ACTIONS as NOTIF_DESTRUCTIVE
-from unraid_mcp.tools.notifications import MUTATIONS as NOTIF_MUTATIONS
-from unraid_mcp.tools.plugins import DESTRUCTIVE_ACTIONS as PLUGINS_DESTRUCTIVE
-from unraid_mcp.tools.plugins import MUTATIONS as PLUGINS_MUTATIONS
-from unraid_mcp.tools.rclone import DESTRUCTIVE_ACTIONS as RCLONE_DESTRUCTIVE
-from unraid_mcp.tools.rclone import MUTATIONS as RCLONE_MUTATIONS
-from unraid_mcp.tools.settings import DESTRUCTIVE_ACTIONS as SETTINGS_DESTRUCTIVE
-from unraid_mcp.tools.settings import MUTATIONS as SETTINGS_MUTATIONS
-from unraid_mcp.tools.storage import DESTRUCTIVE_ACTIONS as STORAGE_DESTRUCTIVE
-from unraid_mcp.tools.storage import MUTATIONS as STORAGE_MUTATIONS
-from unraid_mcp.tools.virtualization import DESTRUCTIVE_ACTIONS as VM_DESTRUCTIVE
-from unraid_mcp.tools.virtualization import MUTATIONS as VM_MUTATIONS
+# Import DESTRUCTIVE_ACTIONS and MUTATIONS sets from the consolidated unraid module
+from unraid_mcp.tools.unraid import (
+    _ARRAY_DESTRUCTIVE,
+    _ARRAY_MUTATIONS,
+    _DISK_DESTRUCTIVE,
+    _DISK_MUTATIONS,
+    _KEY_DESTRUCTIVE,
+    _KEY_MUTATIONS,
+    _NOTIFICATION_DESTRUCTIVE,
+    _NOTIFICATION_MUTATIONS,
+    _PLUGIN_DESTRUCTIVE,
+    _PLUGIN_MUTATIONS,
+    _RCLONE_DESTRUCTIVE,
+    _RCLONE_MUTATIONS,
+    _SETTING_DESTRUCTIVE,
+    _SETTING_MUTATIONS,
+    _VM_DESTRUCTIVE,
+    _VM_MUTATIONS,
+)
 
 
 # ---------------------------------------------------------------------------
 # Known destructive actions registry (ground truth for this audit)
 # ---------------------------------------------------------------------------
 
-# Every destructive action in the codebase, keyed by (tool_module, tool_name)
-KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
+KNOWN_DESTRUCTIVE: dict[str, dict] = {
     "array": {
-        "module": "unraid_mcp.tools.array",
-        "register_fn": "register_array_tool",
-        "tool_name": "unraid_array",
         "actions": {"remove_disk", "clear_disk_stats", "stop_array"},
-        "runtime_set": ARRAY_DESTRUCTIVE,
+        "runtime_set": _ARRAY_DESTRUCTIVE,
+        "mutations": _ARRAY_MUTATIONS,
     },
     "vm": {
-        "module": "unraid_mcp.tools.virtualization",
-        "register_fn": "register_vm_tool",
-        "tool_name": "unraid_vm",
         "actions": {"force_stop", "reset"},
-        "runtime_set": VM_DESTRUCTIVE,
+        "runtime_set": _VM_DESTRUCTIVE,
+        "mutations": _VM_MUTATIONS,
     },
-    "notifications": {
-        "module": "unraid_mcp.tools.notifications",
-        "register_fn": "register_notifications_tool",
-        "tool_name": "unraid_notifications",
+    "notification": {
         "actions": {"delete", "delete_archived"},
-        "runtime_set": NOTIF_DESTRUCTIVE,
+        "runtime_set": _NOTIFICATION_DESTRUCTIVE,
+        "mutations": _NOTIFICATION_MUTATIONS,
     },
     "rclone": {
-        "module": "unraid_mcp.tools.rclone",
-        "register_fn": "register_rclone_tool",
-        "tool_name": "unraid_rclone",
         "actions": {"delete_remote"},
-        "runtime_set": RCLONE_DESTRUCTIVE,
+        "runtime_set": _RCLONE_DESTRUCTIVE,
+        "mutations": _RCLONE_MUTATIONS,
     },
-    "keys": {
-        "module": "unraid_mcp.tools.keys",
-        "register_fn": "register_keys_tool",
-        "tool_name": "unraid_keys",
+    "key": {
         "actions": {"delete"},
-        "runtime_set": KEYS_DESTRUCTIVE,
+        "runtime_set": _KEY_DESTRUCTIVE,
+        "mutations": _KEY_MUTATIONS,
     },
-    "storage": {
-        "module": "unraid_mcp.tools.storage",
-        "register_fn": "register_storage_tool",
-        "tool_name": "unraid_storage",
+    "disk": {
         "actions": {"flash_backup"},
-        "runtime_set": STORAGE_DESTRUCTIVE,
+        "runtime_set": _DISK_DESTRUCTIVE,
+        "mutations": _DISK_MUTATIONS,
     },
-    "settings": {
-        "module": "unraid_mcp.tools.settings",
-        "register_fn": "register_settings_tool",
-        "tool_name": "unraid_settings",
-        "actions": {
-            "configure_ups",
-        },
-        "runtime_set": SETTINGS_DESTRUCTIVE,
+    "setting": {
+        "actions": {"configure_ups"},
+        "runtime_set": _SETTING_DESTRUCTIVE,
+        "mutations": _SETTING_MUTATIONS,
     },
-    "plugins": {
-        "module": "unraid_mcp.tools.plugins",
-        "register_fn": "register_plugins_tool",
-        "tool_name": "unraid_plugins",
+    "plugin": {
         "actions": {"remove"},
-        "runtime_set": PLUGINS_DESTRUCTIVE,
+        "runtime_set": _PLUGIN_DESTRUCTIVE,
+        "mutations": _PLUGIN_MUTATIONS,
     },
 }
 
@@ -112,90 +90,53 @@ KNOWN_DESTRUCTIVE: dict[str, dict[str, set[str] | str]] = {
 class TestDestructiveActionRegistries:
     """Verify that DESTRUCTIVE_ACTIONS sets in source code match the audit."""
 
-    @pytest.mark.parametrize("tool_key", list(KNOWN_DESTRUCTIVE.keys()))
-    def test_destructive_set_matches_audit(self, tool_key: str) -> None:
-        """Each tool's DESTRUCTIVE_ACTIONS must exactly match the audited set."""
-        info = KNOWN_DESTRUCTIVE[tool_key]
+    @pytest.mark.parametrize("domain", list(KNOWN_DESTRUCTIVE.keys()))
+    def test_destructive_set_matches_audit(self, domain: str) -> None:
+        info = KNOWN_DESTRUCTIVE[domain]
         assert info["runtime_set"] == info["actions"], (
-            f"{tool_key}: DESTRUCTIVE_ACTIONS is {info['runtime_set']}, expected {info['actions']}"
+            f"{domain}: DESTRUCTIVE_ACTIONS is {info['runtime_set']}, expected {info['actions']}"
         )
 
-    @pytest.mark.parametrize("tool_key", list(KNOWN_DESTRUCTIVE.keys()))
-    def test_destructive_actions_are_valid_mutations(self, tool_key: str) -> None:
-        """Every destructive action must correspond to an actual mutation."""
-        info = KNOWN_DESTRUCTIVE[tool_key]
-        mutations_map = {
-            "array": ARRAY_MUTATIONS,
-            "vm": VM_MUTATIONS,
-            "notifications": NOTIF_MUTATIONS,
-            "rclone": RCLONE_MUTATIONS,
-            "keys": KEYS_MUTATIONS,
-            "storage": STORAGE_MUTATIONS,
-            "settings": SETTINGS_MUTATIONS,
-            "plugins": PLUGINS_MUTATIONS,
-        }
-        mutations = mutations_map[tool_key]
+    @pytest.mark.parametrize("domain", list(KNOWN_DESTRUCTIVE.keys()))
+    def test_destructive_actions_are_valid_mutations(self, domain: str) -> None:
+        info = KNOWN_DESTRUCTIVE[domain]
         for action in info["actions"]:
-            assert action in mutations, (
-                f"{tool_key}: destructive action '{action}' is not in MUTATIONS"
+            assert action in info["mutations"], (
+                f"{domain}: destructive action '{action}' is not in MUTATIONS"
             )
 
     def test_no_delete_or_remove_mutations_missing_from_destructive(self) -> None:
         """Any mutation with 'delete' or 'remove' in its name should be destructive.
 
         Exceptions (documented, intentional):
-          keys/remove_role — fully reversible; the role can always be re-added via add_role.
-            No data is lost and there is no irreversible side-effect.
+          key/remove_role — fully reversible; the role can always be re-added via add_role.
         """
-        # Mutations explicitly exempted from the delete/remove heuristic with justification.
-        # Add entries here only when the action is demonstrably reversible and non-destructive.
         _HEURISTIC_EXCEPTIONS: frozenset[str] = frozenset(
             {
-                "keys/remove_role",  # reversible — role can be re-added via add_role
+                "key/remove_role",  # reversible — role can be re-added via add_role
             }
         )
 
-        all_mutations = {
-            "array": ARRAY_MUTATIONS,
-            "vm": VM_MUTATIONS,
-            "notifications": NOTIF_MUTATIONS,
-            "rclone": RCLONE_MUTATIONS,
-            "keys": KEYS_MUTATIONS,
-            "storage": STORAGE_MUTATIONS,
-            "settings": SETTINGS_MUTATIONS,
-            "plugins": PLUGINS_MUTATIONS,
-        }
-        all_destructive = {
-            "array": ARRAY_DESTRUCTIVE,
-            "vm": VM_DESTRUCTIVE,
-            "notifications": NOTIF_DESTRUCTIVE,
-            "rclone": RCLONE_DESTRUCTIVE,
-            "keys": KEYS_DESTRUCTIVE,
-            "storage": STORAGE_DESTRUCTIVE,
-            "settings": SETTINGS_DESTRUCTIVE,
-            "plugins": PLUGINS_DESTRUCTIVE,
-        }
         missing: list[str] = []
-        for tool_key, mutations in all_mutations.items():
-            destructive = all_destructive[tool_key]
-            missing.extend(
-                f"{tool_key}/{action_name}"
-                for action_name in mutations
-                if ("delete" in action_name or "remove" in action_name)
-                and action_name not in destructive
-                and f"{tool_key}/{action_name}" not in _HEURISTIC_EXCEPTIONS
-            )
+        for domain, info in KNOWN_DESTRUCTIVE.items():
+            destructive = info["runtime_set"]
+            for action_name in info["mutations"]:
+                if (
+                    ("delete" in action_name or "remove" in action_name)
+                    and action_name not in destructive
+                    and f"{domain}/{action_name}" not in _HEURISTIC_EXCEPTIONS
+                ):
+                    missing.append(f"{domain}/{action_name}")
         assert not missing, (
             f"Mutations with 'delete'/'remove' not in DESTRUCTIVE_ACTIONS: {missing}"
         )
 
 
 # ---------------------------------------------------------------------------
-# Confirmation guard tests: calling without confirm=True raises ToolError
+# Confirmation guard tests
 # ---------------------------------------------------------------------------
 
-# Build parametrized test cases: (tool_key, action, kwargs_without_confirm)
-# Each destructive action needs the minimum required params (minus confirm)
+# (action, subaction, extra_kwargs)
 _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Array
     ("array", "remove_disk", {"disk_id": "abc123:local"}),
@@ -205,161 +146,112 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     ("vm", "force_stop", {"vm_id": "test-vm-uuid"}),
     ("vm", "reset", {"vm_id": "test-vm-uuid"}),
     # Notifications
-    ("notifications", "delete", {"notification_id": "notif-1", "notification_type": "UNREAD"}),
-    ("notifications", "delete_archived", {}),
+    ("notification", "delete", {"notification_id": "notif-1", "notification_type": "UNREAD"}),
+    ("notification", "delete_archived", {}),
     # RClone
     ("rclone", "delete_remote", {"name": "my-remote"}),
     # Keys
-    ("keys", "delete", {"key_id": "key-123"}),
-    # Storage
+    ("key", "delete", {"key_id": "key-123"}),
+    # Disk (flash_backup)
     (
-        "storage",
+        "disk",
         "flash_backup",
         {"remote_name": "r", "source_path": "/boot", "destination_path": "r:b"},
     ),
     # Settings
-    ("settings", "configure_ups", {"ups_config": {"mode": "slave"}}),
+    ("setting", "configure_ups", {"ups_config": {"mode": "slave"}}),
     # Plugins
-    ("plugins", "remove", {"names": ["my-plugin"]}),
+    ("plugin", "remove", {"names": ["my-plugin"]}),
 ]
-
 
 _CASE_IDS = [f"{c[0]}/{c[1]}" for c in _DESTRUCTIVE_TEST_CASES]
 
-
-@pytest.fixture
-def _mock_array_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.array.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
+_MODULE = "unraid_mcp.tools.unraid"
+_REGISTER_FN = "register_unraid_tool"
+_TOOL_NAME = "unraid"
 
 
 @pytest.fixture
-def _mock_vm_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.virtualization.make_graphql_request", new_callable=AsyncMock) as m:
+def _mock_graphql() -> Generator[AsyncMock, None, None]:
+    with patch(f"{_MODULE}.make_graphql_request", new_callable=AsyncMock) as m:
         yield m
-
-
-@pytest.fixture
-def _mock_notif_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.notifications.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-@pytest.fixture
-def _mock_rclone_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.rclone.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-@pytest.fixture
-def _mock_keys_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.keys.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-@pytest.fixture
-def _mock_storage_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.storage.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-@pytest.fixture
-def _mock_settings_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.settings.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-@pytest.fixture
-def _mock_plugins_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.plugins.make_graphql_request", new_callable=AsyncMock) as m:
-        yield m
-
-
-# Map tool_key -> (module path, register fn, tool name)
-_TOOL_REGISTRY = {
-    "array": ("unraid_mcp.tools.array", "register_array_tool", "unraid_array"),
-    "vm": ("unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm"),
-    "notifications": (
-        "unraid_mcp.tools.notifications",
-        "register_notifications_tool",
-        "unraid_notifications",
-    ),
-    "rclone": ("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone"),
-    "keys": ("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys"),
-    "storage": ("unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage"),
-    "settings": ("unraid_mcp.tools.settings", "register_settings_tool", "unraid_settings"),
-    "plugins": ("unraid_mcp.tools.plugins", "register_plugins_tool", "unraid_plugins"),
-}
 
 
 class TestConfirmationGuards:
     """Every destructive action must reject calls without confirm=True."""
 
-    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    @pytest.mark.parametrize("action,subaction,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
     async def test_rejects_without_confirm(
         self,
-        tool_key: str,
         action: str,
+        subaction: str,
         kwargs: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
+        _mock_graphql: AsyncMock,
     ) -> None:
-        """Calling a destructive action without confirm=True must raise ToolError."""
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
-
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
         with pytest.raises(ToolError, match="confirm=True"):
-            await tool_fn(action=action, **kwargs)
+            await tool_fn(action=action, subaction=subaction, **kwargs)
 
-    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    @pytest.mark.parametrize("action,subaction,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
     async def test_rejects_with_confirm_false(
         self,
-        tool_key: str,
         action: str,
+        subaction: str,
         kwargs: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
+        _mock_graphql: AsyncMock,
     ) -> None:
-        """Explicitly passing confirm=False must still raise ToolError."""
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
-
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
         with pytest.raises(ToolError, match="confirm=True"):
-            await tool_fn(action=action, confirm=False, **kwargs)
+            await tool_fn(action=action, subaction=subaction, confirm=False, **kwargs)
 
-    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
-    async def test_error_message_includes_action_name(
+    @pytest.mark.parametrize("action,subaction,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    async def test_error_message_includes_subaction_name(
         self,
-        tool_key: str,
         action: str,
+        subaction: str,
         kwargs: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
+        _mock_graphql: AsyncMock,
     ) -> None:
-        """The error message should include the action name for clarity."""
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        with pytest.raises(ToolError, match=subaction):
+            await tool_fn(action=action, subaction=subaction, **kwargs)
 
-        with pytest.raises(ToolError, match=action):
-            await tool_fn(action=action, **kwargs)
+
+# ---------------------------------------------------------------------------
+# Strict guard tests: no network calls escape when unconfirmed
+# ---------------------------------------------------------------------------
+
+
+class TestNoGraphQLCallsWhenUnconfirmed:
+    """The most critical safety property: when confirm is missing/False,
+    NO GraphQL request must ever reach the network layer.
+    """
+
+    @pytest.mark.parametrize("action,subaction,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    async def test_no_graphql_call_without_confirm(
+        self,
+        action: str,
+        subaction: str,
+        kwargs: dict,
+        _mock_graphql: AsyncMock,
+    ) -> None:
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        with pytest.raises(ToolError):
+            await tool_fn(action=action, subaction=subaction, **kwargs)
+        _mock_graphql.assert_not_called()
+
+    @pytest.mark.parametrize("action,subaction,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
+    async def test_no_graphql_call_with_confirm_false(
+        self,
+        action: str,
+        subaction: str,
+        kwargs: dict,
+        _mock_graphql: AsyncMock,
+    ) -> None:
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        with pytest.raises(ToolError):
+            await tool_fn(action=action, subaction=subaction, confirm=False, **kwargs)
+        _mock_graphql.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -370,30 +262,29 @@ class TestConfirmationGuards:
 class TestConfirmAllowsExecution:
     """Destructive actions with confirm=True should reach the GraphQL layer."""
 
-    async def test_vm_force_stop_with_confirm(self, _mock_vm_graphql: AsyncMock) -> None:
-        _mock_vm_graphql.return_value = {"vm": {"forceStop": True}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm")
-        result = await tool_fn(action="force_stop", vm_id="test-uuid", confirm=True)
+    async def test_vm_force_stop_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"forceStop": True}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action="vm", subaction="force_stop", vm_id="test-uuid", confirm=True)
         assert result["success"] is True
 
-    async def test_vm_reset_with_confirm(self, _mock_vm_graphql: AsyncMock) -> None:
-        _mock_vm_graphql.return_value = {"vm": {"reset": True}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.virtualization", "register_vm_tool", "unraid_vm")
-        result = await tool_fn(action="reset", vm_id="test-uuid", confirm=True)
+    async def test_vm_reset_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"reset": True}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action="vm", subaction="reset", vm_id="test-uuid", confirm=True)
         assert result["success"] is True
 
-    async def test_notifications_delete_with_confirm(self, _mock_notif_graphql: AsyncMock) -> None:
-        _mock_notif_graphql.return_value = {
+    async def test_notifications_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
             "deleteNotification": {
                 "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
                 "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
             }
         }
-        tool_fn = make_tool_fn(
-            "unraid_mcp.tools.notifications", "register_notifications_tool", "unraid_notifications"
-        )
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
         result = await tool_fn(
-            action="delete",
+            action="notification",
+            subaction="delete",
             notification_id="notif-1",
             notification_type="UNREAD",
             confirm=True,
@@ -401,43 +292,38 @@ class TestConfirmAllowsExecution:
         assert result["success"] is True
 
     async def test_notifications_delete_archived_with_confirm(
-        self, _mock_notif_graphql: AsyncMock
+        self, _mock_graphql: AsyncMock
     ) -> None:
-        _mock_notif_graphql.return_value = {
+        _mock_graphql.return_value = {
             "deleteArchivedNotifications": {
                 "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
                 "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
             }
         }
-        tool_fn = make_tool_fn(
-            "unraid_mcp.tools.notifications", "register_notifications_tool", "unraid_notifications"
-        )
-        result = await tool_fn(action="delete_archived", confirm=True)
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action="notification", subaction="delete_archived", confirm=True)
         assert result["success"] is True
 
-    async def test_rclone_delete_remote_with_confirm(self, _mock_rclone_graphql: AsyncMock) -> None:
-        _mock_rclone_graphql.return_value = {"rclone": {"deleteRCloneRemote": True}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.rclone", "register_rclone_tool", "unraid_rclone")
-        result = await tool_fn(action="delete_remote", name="my-remote", confirm=True)
-        assert result["success"] is True
-
-    async def test_keys_delete_with_confirm(self, _mock_keys_graphql: AsyncMock) -> None:
-        _mock_keys_graphql.return_value = {"apiKey": {"delete": True}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.keys", "register_keys_tool", "unraid_keys")
-        result = await tool_fn(action="delete", key_id="key-123", confirm=True)
-        assert result["success"] is True
-
-    async def test_storage_flash_backup_with_confirm(
-        self, _mock_storage_graphql: AsyncMock
-    ) -> None:
-        _mock_storage_graphql.return_value = {
-            "initiateFlashBackup": {"status": "started", "jobId": "j:1"}
-        }
-        tool_fn = make_tool_fn(
-            "unraid_mcp.tools.storage", "register_storage_tool", "unraid_storage"
-        )
+    async def test_rclone_delete_remote_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"rclone": {"deleteRCloneRemote": True}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
         result = await tool_fn(
-            action="flash_backup",
+            action="rclone", subaction="delete_remote", name="my-remote", confirm=True
+        )
+        assert result["success"] is True
+
+    async def test_keys_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"apiKey": {"delete": True}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action="key", subaction="delete", key_id="key-123", confirm=True)
+        assert result["success"] is True
+
+    async def test_disk_flash_backup_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"initiateFlashBackup": {"status": "started", "jobId": "j:1"}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(
+            action="disk",
+            subaction="flash_backup",
             confirm=True,
             remote_name="r",
             source_path="/boot",
@@ -445,125 +331,46 @@ class TestConfirmAllowsExecution:
         )
         assert result["success"] is True
 
-    async def test_settings_configure_ups_with_confirm(
-        self, _mock_settings_graphql: AsyncMock
-    ) -> None:
-        _mock_settings_graphql.return_value = {"configureUps": True}
-        tool_fn = make_tool_fn(
-            "unraid_mcp.tools.settings", "register_settings_tool", "unraid_settings"
-        )
+    async def test_settings_configure_ups_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"configureUps": True}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
         result = await tool_fn(
-            action="configure_ups", confirm=True, ups_config={"mode": "master", "cable": "usb"}
+            action="setting",
+            subaction="configure_ups",
+            confirm=True,
+            ups_config={"mode": "master", "cable": "usb"},
         )
         assert result["success"] is True
 
-    async def test_array_remove_disk_with_confirm(self, _mock_array_graphql: AsyncMock) -> None:
-        _mock_array_graphql.return_value = {"array": {"removeDiskFromArray": {"state": "STOPPED"}}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
-        result = await tool_fn(action="remove_disk", disk_id="abc:local", confirm=True)
-        assert result["success"] is True
-
-    async def test_array_clear_disk_stats_with_confirm(
-        self, _mock_array_graphql: AsyncMock
-    ) -> None:
-        _mock_array_graphql.return_value = {"array": {"clearArrayDiskStatistics": True}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
-        result = await tool_fn(action="clear_disk_stats", disk_id="abc:local", confirm=True)
-        assert result["success"] is True
-
-    async def test_array_stop_array_with_confirm(self, _mock_array_graphql: AsyncMock) -> None:
-        _mock_array_graphql.return_value = {"array": {"setState": {"state": "STOPPED"}}}
-        tool_fn = make_tool_fn("unraid_mcp.tools.array", "register_array_tool", "unraid_array")
-        result = await tool_fn(action="stop_array", confirm=True)
-        assert result["success"] is True
-
-    async def test_plugins_remove_with_confirm(self, _mock_plugins_graphql: AsyncMock) -> None:
-        _mock_plugins_graphql.return_value = {"removePlugin": True}
-        tool_fn = make_tool_fn(
-            "unraid_mcp.tools.plugins", "register_plugins_tool", "unraid_plugins"
+    async def test_array_remove_disk_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"array": {"removeDiskFromArray": {"state": "STOPPED"}}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(
+            action="array", subaction="remove_disk", disk_id="abc:local", confirm=True
         )
-        result = await tool_fn(action="remove", names=["my-plugin"], confirm=True)
         assert result["success"] is True
 
+    async def test_array_clear_disk_stats_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"array": {"clearArrayDiskStatistics": True}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(
+            action="array", subaction="clear_disk_stats", disk_id="abc:local", confirm=True
+        )
+        assert result["success"] is True
 
-# ---------------------------------------------------------------------------
-# Strict guard tests: no network calls escape when unconfirmed
-# ---------------------------------------------------------------------------
+    async def test_array_stop_array_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"array": {"setState": {"state": "STOPPED"}}}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action="array", subaction="stop_array", confirm=True)
+        assert result["success"] is True
 
-
-class TestNoGraphQLCallsWhenUnconfirmed:
-    """The most critical safety property: when confirm is missing/False,
-    NO GraphQL request must ever reach the network layer. This verifies that
-    the guard fires before any I/O, not just that a ToolError is raised.
-    """
-
-    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
-    async def test_no_graphql_call_without_confirm(
-        self,
-        tool_key: str,
-        action: str,
-        kwargs: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
-    ) -> None:
-        """make_graphql_request must NOT be called when confirm is absent."""
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
-        mock_map = {
-            "array": _mock_array_graphql,
-            "vm": _mock_vm_graphql,
-            "notifications": _mock_notif_graphql,
-            "rclone": _mock_rclone_graphql,
-            "keys": _mock_keys_graphql,
-            "storage": _mock_storage_graphql,
-            "settings": _mock_settings_graphql,
-            "plugins": _mock_plugins_graphql,
-        }
-
-        with pytest.raises(ToolError):
-            await tool_fn(action=action, **kwargs)
-
-        mock_map[tool_key].assert_not_called()
-
-    @pytest.mark.parametrize("tool_key,action,kwargs", _DESTRUCTIVE_TEST_CASES, ids=_CASE_IDS)
-    async def test_no_graphql_call_with_confirm_false(
-        self,
-        tool_key: str,
-        action: str,
-        kwargs: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
-    ) -> None:
-        """make_graphql_request must NOT be called when confirm=False."""
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
-        mock_map = {
-            "array": _mock_array_graphql,
-            "vm": _mock_vm_graphql,
-            "notifications": _mock_notif_graphql,
-            "rclone": _mock_rclone_graphql,
-            "keys": _mock_keys_graphql,
-            "storage": _mock_storage_graphql,
-            "settings": _mock_settings_graphql,
-            "plugins": _mock_plugins_graphql,
-        }
-
-        with pytest.raises(ToolError):
-            await tool_fn(action=action, confirm=False, **kwargs)
-
-        mock_map[tool_key].assert_not_called()
+    async def test_plugins_remove_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"removePlugin": True}
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(
+            action="plugin", subaction="remove", names=["my-plugin"], confirm=True
+        )
+        assert result["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -572,57 +379,35 @@ class TestNoGraphQLCallsWhenUnconfirmed:
 
 
 class TestNonDestructiveActionsNeverRequireConfirm:
-    """Guard regression test: non-destructive mutations must work without confirm.
-
-    If a non-destructive action starts requiring confirm=True (over-guarding),
-    it would break normal use cases. This test class prevents that regression.
-    """
+    """Guard regression: non-destructive ops must work without confirm."""
 
     @pytest.mark.parametrize(
-        "tool_key,action,kwargs,mock_return",
+        "action,subaction,kwargs,mock_return",
         [
             ("array", "parity_cancel", {}, {"parityCheck": {"cancel": True}}),
             ("vm", "start", {"vm_id": "test-uuid"}, {"vm": {"start": True}}),
-            ("notifications", "archive_all", {}, {"archiveAll": {"info": 0, "total": 0}}),
+            ("notification", "archive_all", {}, {"archiveAll": {"info": 0, "total": 0}}),
             ("rclone", "list_remotes", {}, {"rclone": {"remotes": []}}),
-            ("keys", "list", {}, {"apiKeys": []}),
+            ("key", "list", {}, {"apiKeys": []}),
         ],
         ids=[
             "array/parity_cancel",
             "vm/start",
-            "notifications/archive_all",
+            "notification/archive_all",
             "rclone/list_remotes",
-            "keys/list",
+            "key/list",
         ],
     )
     async def test_non_destructive_action_works_without_confirm(
         self,
-        tool_key: str,
         action: str,
+        subaction: str,
         kwargs: dict,
         mock_return: dict,
-        _mock_array_graphql: AsyncMock,
-        _mock_vm_graphql: AsyncMock,
-        _mock_notif_graphql: AsyncMock,
-        _mock_rclone_graphql: AsyncMock,
-        _mock_keys_graphql: AsyncMock,
-        _mock_storage_graphql: AsyncMock,
-        _mock_settings_graphql: AsyncMock,
-        _mock_plugins_graphql: AsyncMock,
+        _mock_graphql: AsyncMock,
     ) -> None:
-        """Non-destructive actions must not raise ToolError for missing confirm."""
-        mock_map = {
-            "array": _mock_array_graphql,
-            "vm": _mock_vm_graphql,
-            "notifications": _mock_notif_graphql,
-            "rclone": _mock_rclone_graphql,
-            "keys": _mock_keys_graphql,
-        }
-        mock_map[tool_key].return_value = mock_return
-
-        module_path, register_fn, tool_name = _TOOL_REGISTRY[tool_key]
-        tool_fn = make_tool_fn(module_path, register_fn, tool_name)
-        # Just verify no ToolError is raised for missing confirm — return shape varies by action
-        result = await tool_fn(action=action, **kwargs)
+        _mock_graphql.return_value = mock_return
+        tool_fn = make_tool_fn(_MODULE, _REGISTER_FN, _TOOL_NAME)
+        result = await tool_fn(action=action, subaction=subaction, **kwargs)
         assert result is not None
-        mock_map[tool_key].assert_called_once()
+        _mock_graphql.assert_called_once()

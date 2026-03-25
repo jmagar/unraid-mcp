@@ -7,7 +7,8 @@ and the MCP protocol, providing fallback queries when subscription data is unava
 import asyncio
 import json
 import os
-from typing import Final
+from collections.abc import Callable, Coroutine
+from typing import Any, Final
 
 import anyio
 from fastmcp import FastMCP
@@ -21,6 +22,8 @@ from .snapshot import subscribe_once
 # Global flag to track subscription startup
 _subscriptions_started = False
 _startup_lock: Final[asyncio.Lock] = asyncio.Lock()
+
+_terminal_states = frozenset({"failed", "auth_failed", "max_retries_exceeded"})
 
 
 async def ensure_subscriptions_started() -> None:
@@ -95,7 +98,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         """Real-time log stream data from subscription."""
         await ensure_subscriptions_started()
         data = await subscription_manager.get_resource_data("logFileSubscription")
-        if data:
+        if data is not None:
             return json.dumps(data, indent=2)
         return json.dumps(
             {
@@ -104,14 +107,39 @@ def register_subscription_resources(mcp: FastMCP) -> None:
             }
         )
 
-    def _make_resource_fn(action: str, query: str):
+    def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
-            try:
-                data = await subscribe_once(query)
+            data = await subscription_manager.get_resource_data(action)
+            if data is not None:
                 return json.dumps(data, indent=2)
-            except Exception as exc:
-                return json.dumps({"error": str(exc), "action": action})
+            # Surface permanent errors only when the connection is in a terminal failure
+            # state — if the subscription has since reconnected, ignore the stale error.
+            last_error = subscription_manager.last_error.get(action)
+            conn_state = subscription_manager.connection_states.get(action, "")
+            if last_error and conn_state in _terminal_states:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"Subscription '{action}' failed: {last_error}",
+                    }
+                )
+            # When auto-start is disabled, fall back to a one-shot fetch so the
+            # resource returns real data instead of a perpetual "connecting" placeholder.
+            if not subscription_manager.auto_start_enabled:
+                try:
+                    query_info = SNAPSHOT_ACTIONS.get(action)
+                    if query_info is not None:
+                        fallback_data = await subscribe_once(query_info)
+                        return json.dumps(fallback_data, indent=2)
+                except Exception as e:
+                    logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
+            return json.dumps(
+                {
+                    "status": "connecting",
+                    "message": f"Subscription '{action}' is starting. Retry in a moment.",
+                }
+            )
 
         _live_resource.__name__ = f"{action}_resource"
         _live_resource.__doc__ = (
@@ -119,7 +147,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         )
         return _live_resource
 
-    for _action, _query in SNAPSHOT_ACTIONS.items():
-        mcp.resource(f"unraid://live/{_action}")(_make_resource_fn(_action, _query))
+    for _action in SNAPSHOT_ACTIONS:
+        mcp.resource(f"unraid://live/{_action}")(_make_resource_fn(_action))
 
     logger.info("Subscription resources registered successfully")

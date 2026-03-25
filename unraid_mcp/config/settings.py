@@ -5,6 +5,7 @@ and provides all configuration constants used throughout the application.
 """
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,13 +52,9 @@ def _parse_port(env_var: str, default: int) -> int:
     try:
         port = int(raw)
     except ValueError:
-        import sys
-
         print(f"FATAL: {env_var}={raw!r} is not a valid integer port number", file=sys.stderr)
         sys.exit(1)
     if not (1 <= port <= 65535):
-        import sys
-
         print(f"FATAL: {env_var}={port} outside valid port range 1-65535", file=sys.stderr)
         sys.exit(1)
     return port
@@ -65,7 +62,7 @@ def _parse_port(env_var: str, default: int) -> int:
 
 UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
 UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
-UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
+UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "stdio").lower()
 
 # SSL Configuration
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()

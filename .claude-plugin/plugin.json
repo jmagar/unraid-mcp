@@ -1,7 +1,7 @@
 {
   "name": "unraid",
-  "description": "Query and monitor Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
-  "version": "0.6.0",
+  "description": "Query, monitor, and manage Unraid servers via GraphQL API - array status, disk health, containers, VMs, system monitoring",
+  "version": "1.1.3",
   "author": {
     "name": "jmagar",
     "email": "jmagar@users.noreply.github.com"

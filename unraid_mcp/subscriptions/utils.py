@@ -3,11 +3,11 @@
 import ssl as _ssl
 from typing import Any
 
-from ..config.settings import UNRAID_API_URL, UNRAID_VERIFY_SSL
+from ..config import settings as _settings
 
 
 def build_ws_url() -> str:
-    """Build a WebSocket URL from the configured UNRAID_API_URL.
+    """Build a WebSocket URL from the configured UNRAID_API_URL setting.
 
     Converts http(s) scheme to ws(s) and ensures /graphql path suffix.
 
@@ -17,19 +17,19 @@ def build_ws_url() -> str:
     Raises:
         ValueError: If UNRAID_API_URL is not configured or has an unrecognised scheme.
     """
-    if not UNRAID_API_URL:
+    if not _settings.UNRAID_API_URL:
         raise ValueError("UNRAID_API_URL is not configured")
 
-    if UNRAID_API_URL.startswith("https://"):
-        ws_url = "wss://" + UNRAID_API_URL[len("https://") :]
-    elif UNRAID_API_URL.startswith("http://"):
-        ws_url = "ws://" + UNRAID_API_URL[len("http://") :]
-    elif UNRAID_API_URL.startswith(("ws://", "wss://")):
-        ws_url = UNRAID_API_URL  # Already a WebSocket URL
+    if _settings.UNRAID_API_URL.startswith("https://"):
+        ws_url = "wss://" + _settings.UNRAID_API_URL[len("https://") :]
+    elif _settings.UNRAID_API_URL.startswith("http://"):
+        ws_url = "ws://" + _settings.UNRAID_API_URL[len("http://") :]
+    elif _settings.UNRAID_API_URL.startswith(("ws://", "wss://")):
+        ws_url = _settings.UNRAID_API_URL  # Already a WebSocket URL
     else:
         raise ValueError(
             f"UNRAID_API_URL must start with http://, https://, ws://, or wss://. "
-            f"Got: {UNRAID_API_URL[:20]}..."
+            f"Got: {_settings.UNRAID_API_URL[:20]}..."
         )
 
     if not ws_url.endswith("/graphql"):
@@ -49,15 +49,27 @@ def build_ws_ssl_context(ws_url: str) -> _ssl.SSLContext | None:
     """
     if not ws_url.startswith("wss://"):
         return None
-    if isinstance(UNRAID_VERIFY_SSL, str):
-        return _ssl.create_default_context(cafile=UNRAID_VERIFY_SSL)
-    if UNRAID_VERIFY_SSL:
+    if isinstance(_settings.UNRAID_VERIFY_SSL, str):
+        return _ssl.create_default_context(cafile=_settings.UNRAID_VERIFY_SSL)
+    if _settings.UNRAID_VERIFY_SSL:
         return _ssl.create_default_context()
     # Explicitly disable verification (equivalent to verify=False)
     ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = _ssl.CERT_NONE
     return ctx
+
+
+def build_connection_init() -> dict[str, Any]:
+    """Build the graphql-ws connection_init message.
+
+    Omits the payload key entirely when no API key is configured —
+    sending {"x-api-key": None} and omitting the key differ for some servers.
+    """
+    msg: dict[str, Any] = {"type": "connection_init"}
+    if _settings.UNRAID_API_KEY:
+        msg["payload"] = {"x-api-key": _settings.UNRAID_API_KEY}
+    return msg
 
 
 def _analyze_subscription_status(

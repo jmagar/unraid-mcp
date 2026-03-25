@@ -17,20 +17,26 @@ class TestGateDestructiveAction:
     @pytest.mark.asyncio
     async def test_non_destructive_action_passes_through(self) -> None:
         """Non-destructive actions are never blocked."""
-        await gate_destructive_action(None, "list", DESTRUCTIVE, False, "irrelevant")
+        await gate_destructive_action(
+            None, "list", DESTRUCTIVE, confirm=False, description="irrelevant"
+        )
 
     @pytest.mark.asyncio
     async def test_confirm_true_bypasses_elicitation(self) -> None:
         """confirm=True skips elicitation entirely."""
         with patch("unraid_mcp.core.guards.elicit_destructive_confirmation") as mock_elicit:
-            await gate_destructive_action(None, "delete", DESTRUCTIVE, True, "desc")
+            await gate_destructive_action(
+                None, "delete", DESTRUCTIVE, confirm=True, description="desc"
+            )
         mock_elicit.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_no_ctx_raises_tool_error(self) -> None:
         """ctx=None means elicitation returns False → ToolError."""
         with pytest.raises(ToolError, match="not confirmed"):
-            await gate_destructive_action(None, "delete", DESTRUCTIVE, False, "desc")
+            await gate_destructive_action(
+                None, "delete", DESTRUCTIVE, confirm=False, description="desc"
+            )
 
     @pytest.mark.asyncio
     async def test_elicitation_accepted_does_not_raise(self) -> None:
@@ -40,7 +46,9 @@ class TestGateDestructiveAction:
             new_callable=AsyncMock,
             return_value=True,
         ):
-            await gate_destructive_action(object(), "delete", DESTRUCTIVE, False, "desc")
+            await gate_destructive_action(
+                object(), "delete", DESTRUCTIVE, confirm=False, description="desc"
+            )
 
     @pytest.mark.asyncio
     async def test_elicitation_declined_raises_tool_error(self) -> None:
@@ -53,7 +61,9 @@ class TestGateDestructiveAction:
             ) as mock_elicit,
             pytest.raises(ToolError, match="confirm=True"),
         ):
-            await gate_destructive_action(object(), "delete", DESTRUCTIVE, False, "desc")
+            await gate_destructive_action(
+                object(), "delete", DESTRUCTIVE, confirm=False, description="desc"
+            )
         mock_elicit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -65,7 +75,7 @@ class TestGateDestructiveAction:
             return_value=True,
         ) as mock_elicit:
             await gate_destructive_action(
-                object(), "delete", DESTRUCTIVE, False, "Delete everything."
+                object(), "delete", DESTRUCTIVE, confirm=False, description="Delete everything."
             )
         _, _, desc = mock_elicit.call_args.args
         assert desc == "Delete everything."
@@ -79,7 +89,9 @@ class TestGateDestructiveAction:
             new_callable=AsyncMock,
             return_value=True,
         ) as mock_elicit:
-            await gate_destructive_action(object(), "wipe", DESTRUCTIVE, False, descs)
+            await gate_destructive_action(
+                object(), "wipe", DESTRUCTIVE, confirm=False, description=descs
+            )
         _, _, desc = mock_elicit.call_args.args
         assert desc == "Wipe desc."
 
@@ -87,4 +99,6 @@ class TestGateDestructiveAction:
     async def test_error_message_contains_action_name(self) -> None:
         """ToolError message includes the action name."""
         with pytest.raises(ToolError, match="'delete'"):
-            await gate_destructive_action(None, "delete", DESTRUCTIVE, False, "desc")
+            await gate_destructive_action(
+                None, "delete", DESTRUCTIVE, confirm=False, description="desc"
+            )

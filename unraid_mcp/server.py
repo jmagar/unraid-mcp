@@ -7,9 +7,15 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import sys
 
 from fastmcp import FastMCP
+from fastmcp.server.middleware.caching import CallToolSettings, ResponseCachingMiddleware
+from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
+from fastmcp.server.middleware.logging import LoggingMiddleware
+from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
+from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 
-from .config.logging import logger
+from .config.logging import log_configuration_status, logger
 from .config.settings import (
+    LOG_LEVEL_STR,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
     UNRAID_MCP_TRANSPORT,
@@ -19,32 +25,83 @@ from .config.settings import (
 )
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
-from .tools.array import register_array_tool
-from .tools.customization import register_customization_tool
-from .tools.docker import register_docker_tool
-from .tools.health import register_health_tool
-from .tools.info import register_info_tool
-from .tools.keys import register_keys_tool
-from .tools.live import register_live_tool
-from .tools.notifications import register_notifications_tool
-from .tools.oidc import register_oidc_tool
-from .tools.plugins import register_plugins_tool
-from .tools.rclone import register_rclone_tool
-from .tools.settings import register_settings_tool
-from .tools.storage import register_storage_tool
-from .tools.users import register_users_tool
-from .tools.virtualization import register_vm_tool
+from .tools.unraid import register_unraid_tool
 
 
-# Initialize FastMCP instance
+# Middleware chain order matters — each layer wraps everything inside it:
+#   logging → error_handling → rate_limiter → response_limiter → cache → tool
+
+# 1. Log every tools/call and resources/read: method, duration, errors.
+#    Outermost so it captures errors after they've been converted by error_handling.
+_logging_middleware = LoggingMiddleware(
+    logger=logger,
+    methods=["tools/call", "resources/read"],
+)
+
+# 2. Catch any unhandled exceptions and convert to proper MCP errors.
+#    Tracks error_counts per (exception_type:method) for health diagnose.
+_error_middleware = ErrorHandlingMiddleware(
+    logger=logger,
+    include_traceback=LOG_LEVEL_STR == "DEBUG",
+)
+
+# 3. Rate limiting: 540 requests per 60-second sliding window.
+#    SlidingWindowRateLimitingMiddleware only supports window_minutes (int), so the
+#    upstream Unraid "100 req/10 s" burst limit cannot be enforced exactly here.
+#    540 req/min is a conservative 1-minute equivalent that prevents sustained
+#    overload while staying well under the 600 req/min ceiling.
+#    Note: this does NOT cap bursts within a 10 s window; a client can still send
+#    up to 540 requests in the first 10 s of a window. Add a sub-minute rate limiter
+#    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
+_rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
+
+# 4. Cap tool responses at 512 KB to protect the client context window.
+#    Oversized responses are truncated with a clear suffix rather than erroring.
+_response_limiter = ResponseLimitingMiddleware(max_size=512_000)
+
+# 5. Cache middleware — all call_tool caching is disabled for the `unraid` tool.
+#    CallToolSettings supports excluded_tools/included_tools by tool name only; there
+#    is no per-argument or per-subaction exclusion mechanism.  The cache key is
+#    "{tool_name}:{arguments_str}", so a cached stop("nginx") result would be served
+#    back on a retry within the TTL window even though the container is already stopped.
+#    Mutation subactions (start, stop, restart, reboot, etc.) must never be cached.
+#    Because the consolidated `unraid` tool mixes reads and mutations under one name,
+#    the only safe option is to disable caching for the entire tool.
+_cache_middleware = ResponseCachingMiddleware(
+    call_tool_settings=CallToolSettings(
+        enabled=False,
+    ),
+    # Disable caching for list/resource/prompt — those are cheap.
+    list_tools_settings={"enabled": False},
+    list_resources_settings={"enabled": False},
+    list_prompts_settings={"enabled": False},
+    read_resource_settings={"enabled": False},
+    get_prompt_settings={"enabled": False},
+)
+
+
+# Initialize FastMCP instance — no built-in auth.
+# Authentication is delegated to an external OAuth gateway (nginx, Caddy,
+# Authelia, Authentik, etc.) placed in front of this server.
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
+    middleware=[
+        _logging_middleware,
+        _error_middleware,
+        _rate_limiter,
+        _response_limiter,
+        _cache_middleware,
+    ],
 )
 
 # Note: SubscriptionManager singleton is defined in subscriptions/manager.py
 # and imported by resources.py - no duplicate instance needed here
+
+# Register all modules at import time so `fastmcp run server.py --reload` can
+# discover the fully-configured `mcp` object without going through run_server().
+# run_server() no longer calls this — tools are registered exactly once here.
 
 
 def register_all_modules() -> None:
@@ -55,32 +112,16 @@ def register_all_modules() -> None:
         register_diagnostic_tools(mcp)
         logger.info("Subscription resources and diagnostic tools registered")
 
-        # Register all consolidated tools
-        registrars = [
-            register_info_tool,
-            register_array_tool,
-            register_storage_tool,
-            register_docker_tool,
-            register_vm_tool,
-            register_notifications_tool,
-            register_plugins_tool,
-            register_rclone_tool,
-            register_users_tool,
-            register_keys_tool,
-            register_health_tool,
-            register_settings_tool,
-            register_live_tool,
-            register_customization_tool,
-            register_oidc_tool,
-        ]
-        for registrar in registrars:
-            registrar(mcp)
-
-        logger.info(f"All {len(registrars)} tools registered successfully - Server ready!")
+        # Register the consolidated unraid tool
+        register_unraid_tool(mcp)
+        logger.info("unraid tool registered successfully - Server ready!")
 
     except Exception as e:
         logger.error(f"Failed to register modules: {e}", exc_info=True)
         raise
+
+
+register_all_modules()
 
 
 def run_server() -> None:
@@ -93,9 +134,6 @@ def run_server() -> None:
             "Server will prompt for credentials on first tool call via elicitation."
         )
 
-    # Log configuration (delegated to shared function)
-    from .config.logging import log_configuration_status
-
     log_configuration_status(logger)
 
     if UNRAID_VERIFY_SSL is False:
@@ -105,21 +143,29 @@ def run_server() -> None:
             "Only use this in trusted networks or for development."
         )
 
-    # Register all modules
-    register_all_modules()
+    if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
+        logger.warning(
+            "⚠️  NO AUTHENTICATION — HTTP server is open to all clients on the network. "
+            "Protect this server with an external OAuth gateway (nginx, Caddy, Authelia, Authentik) "
+            "or restrict access at the network layer (firewall, VPN, Tailscale)."
+        )
 
     logger.info(
         f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport..."
     )
 
     try:
-        if UNRAID_MCP_TRANSPORT == "streamable-http":
+        if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
+            if UNRAID_MCP_TRANSPORT == "sse":
+                logger.warning(
+                    "SSE transport is deprecated. Consider switching to 'streamable-http'."
+                )
             mcp.run(
-                transport="streamable-http", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp"
+                transport=UNRAID_MCP_TRANSPORT,
+                host=UNRAID_MCP_HOST,
+                port=UNRAID_MCP_PORT,
+                path="/mcp",
             )
-        elif UNRAID_MCP_TRANSPORT == "sse":
-            logger.warning("SSE transport is deprecated. Consider switching to 'streamable-http'.")
-            mcp.run(transport="sse", host=UNRAID_MCP_HOST, port=UNRAID_MCP_PORT, path="/mcp")
         elif UNRAID_MCP_TRANSPORT == "stdio":
             mcp.run()
         else:

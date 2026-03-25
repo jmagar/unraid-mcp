@@ -1,5 +1,7 @@
 # Unraid API - Complete Reference Guide
 
+> **⚠️ DEVELOPER REFERENCE ONLY** — This file documents the raw GraphQL API schema for development and maintenance purposes (adding new queries/mutations). Do NOT use these curl/GraphQL examples for MCP tool usage. Use `unraid(action=..., subaction=...)` calls instead. See [`SKILL.md`](../SKILL.md) for the correct calling convention.
+
 **Tested on:** Unraid 7.2 x86_64  
 **Date:** 2026-01-21  
 **API Type:** GraphQL  

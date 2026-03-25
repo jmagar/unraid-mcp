@@ -38,28 +38,26 @@ uv run ty check unraid_mcp/
 uv run pytest
 ```
 
-### Docker Development
-```bash
-# Build the Docker image
-docker build -t unraid-mcp-server .
-
-# Run with Docker Compose
-docker compose up -d
-
-# View logs
-docker compose logs -f unraid-mcp
-
-# Stop service
-docker compose down
-```
-
 ### Environment Setup
-- Copy `.env.example` to `.env` and configure:
-  - `UNRAID_API_URL`: Unraid GraphQL endpoint (required)
-  - `UNRAID_API_KEY`: Unraid API key (required)
-  - `UNRAID_MCP_TRANSPORT`: Transport type (default: streamable-http)
-  - `UNRAID_MCP_PORT`: Server port (default: 6970)
-  - `UNRAID_MCP_HOST`: Server host (default: 0.0.0.0)
+Copy `.env.example` to `.env` and configure:
+
+**Required:**
+- `UNRAID_API_URL`: Unraid GraphQL endpoint
+- `UNRAID_API_KEY`: Unraid API key
+
+**Server:**
+- `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
+- `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
+
+**SSL/TLS:**
+- `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
+
+**Subscriptions:**
+- `UNRAID_AUTO_START_SUBSCRIPTIONS`: Auto-start live subscriptions on startup (default: true)
+- `UNRAID_MAX_RECONNECT_ATTEMPTS`: WebSocket reconnect limit (default: 10)
+
+**Credentials override:**
+- `UNRAID_CREDENTIALS_DIR`: Override the `~/.unraid-mcp/` credentials directory path
 
 ## Architecture
 
@@ -68,10 +66,13 @@ docker compose down
 - **Entry Point**: `unraid_mcp/main.py` - Application entry point and startup logic
 - **Configuration**: `unraid_mcp/config/` - Settings management and logging configuration
 - **Core Infrastructure**: `unraid_mcp/core/` - GraphQL client, exceptions, and shared types
+  - `guards.py` — destructive action gating via MCP elicitation
+  - `utils.py` — shared helpers (`safe_get`, `safe_display_url`, path validation)
+  - `setup.py` — elicitation-based credential setup flow
 - **Subscriptions**: `unraid_mcp/subscriptions/` - Real-time WebSocket subscriptions and diagnostics
 - **Tools**: `unraid_mcp/tools/` - Domain-specific tool implementations
 - **GraphQL Client**: Uses httpx for async HTTP requests to Unraid API
-- **Transport Layer**: Supports streamable-http (recommended), SSE (deprecated), and stdio
+- **Version Helper**: `unraid_mcp/version.py` - Reads version from package metadata via importlib
 
 ### Key Design Patterns
 - **Consolidated Action Pattern**: Each tool uses `action: Literal[...]` parameter to expose multiple operations via a single MCP tool, reducing context window usage
@@ -83,53 +84,70 @@ docker compose down
 - **Data Processing**: Tools return both human-readable summaries and detailed raw data
 - **Health Monitoring**: Comprehensive health check tool for system monitoring
 - **Real-time Subscriptions**: WebSocket-based live data streaming
+- **Persistent Subscription Manager**: `live` action subactions use a shared `SubscriptionManager`
+  that maintains persistent WebSocket connections. Resources serve cached data via
+  `subscription_manager.get_resource_data(action)`. A "connecting" placeholder is returned
+  while the subscription starts — callers should retry in a moment. When
+  `UNRAID_AUTO_START_SUBSCRIPTIONS=false`, resources fall back to on-demand `subscribe_once`.
 
-### Tool Categories (15 Tools, ~103 Actions)
-1. **`unraid_info`** (18 actions): overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config
-2. **`unraid_array`** (13 actions): parity_start, parity_pause, parity_resume, parity_cancel, parity_status, parity_history, start_array, stop_array, add_disk, remove_disk, mount_disk, unmount_disk, clear_disk_stats
-3. **`unraid_storage`** (6 actions): shares, disks, disk_details, log_files, logs, flash_backup
-4. **`unraid_docker`** (7 actions): list, details, start, stop, restart, networks, network_details
-5. **`unraid_vm`** (9 actions): list, details, start, stop, pause, resume, force_stop, reboot, reset
-6. **`unraid_notifications`** (12 actions): overview, list, create, archive, unread, delete, delete_archived, archive_all, archive_many, unarchive_many, unarchive_all, recalculate
-7. **`unraid_rclone`** (4 actions): list_remotes, config_form, create_remote, delete_remote
-8. **`unraid_users`** (1 action): me
-9. **`unraid_keys`** (7 actions): list, get, create, update, delete, add_role, remove_role
-10. **`unraid_health`** (4 actions): check, test_connection, diagnose, setup
-11. **`unraid_settings`** (2 actions): update, configure_ups
-12. **`unraid_customization`** (5 actions): theme, public_theme, is_initial_setup, sso_enabled, set_theme
-13. **`unraid_plugins`** (3 actions): list, add, remove
-14. **`unraid_oidc`** (5 actions): providers, provider, configuration, public_providers, validate_session
-15. **`unraid_live`** (11 actions): cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status
+### Tool Categories (3 Tools: 1 Primary + 2 Diagnostic)
+
+The server registers **3 MCP tools**:
+- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 107 subactions. Call it as `unraid(action="docker", subaction="list")`.
+- **`diagnose_subscriptions`** — inspect subscription connection states, errors, and WebSocket URLs.
+- **`test_subscription_query`** — test a specific GraphQL subscription query (allowlisted fields only).
+
+| action | subactions |
+|--------|-----------|
+| **system** (18) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **health** (4) | check, test_connection, diagnose, setup |
+| **array** (13) | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
+| **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
+| **docker** (7) | list, details, start, stop, restart, networks, network_details |
+| **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
+| **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
+| **key** (7) | list, get, create, update, delete*, add_role, remove_role |
+| **plugin** (3) | list, add, remove* |
+| **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
+| **setting** (2) | update, configure_ups* |
+| **customization** (5) | theme, public_theme, is_initial_setup, sso_enabled, set_theme |
+| **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
+| **user** (1) | me |
+| **live** (11) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status |
+
+`*` = destructive, requires `confirm=True`
 
 ### Destructive Actions (require `confirm=True`)
-- **array**: remove_disk, clear_disk_stats
+- **array**: stop_array, remove_disk, clear_disk_stats
 - **vm**: force_stop, reset
-- **notifications**: delete, delete_archived
+- **notification**: delete, delete_archived
 - **rclone**: delete_remote
-- **keys**: delete
-- **storage**: flash_backup
-- **settings**: configure_ups
-- **plugins**: remove
+- **key**: delete
+- **disk**: flash_backup
+- **setting**: configure_ups
+- **plugin**: remove
 
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:
 1. `~/.unraid-mcp/.env` (primary — canonical credentials dir, all runtimes)
 2. `~/.unraid-mcp/.env.local` (local overrides, only used if primary is absent)
-3. `/app/.env.local` (Docker container mount)
-4. `../.env.local` (project root local overrides)
-5. `../.env` (project root fallback)
-6. `unraid_mcp/.env` (last resort)
-
-### Transport Configuration
-- **streamable-http** (recommended): HTTP-based transport on `/mcp` endpoint
-- **sse** (deprecated): Server-Sent Events transport
-- **stdio**: Standard input/output for direct integration
+3. `../.env.local` (project root local overrides)
+4. `../.env` (project root fallback)
+5. `unraid_mcp/.env` (last resort)
 
 ### Error Handling Strategy
 - GraphQL errors are converted to ToolError with descriptive messages
 - HTTP errors include status codes and response details
 - Network errors are caught and wrapped with connection context
 - All errors are logged with full context for debugging
+
+### Middleware Chain
+`server.py` wraps all tools in a 5-layer stack (order matters — outermost first):
+1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
+2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
+3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
+4. **ResponseLimitingMiddleware** — truncates responses > 512 KB with a clear suffix
+5. **ResponseCachingMiddleware** — caching disabled entirely for `unraid` tool (mutations and reads share one tool name, so no per-subaction exclusion is possible)
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
@@ -140,10 +158,10 @@ The server loads environment variables from multiple locations in order:
 ## Critical Gotchas
 
 ### Mutation Handler Ordering
-**Mutation handlers MUST return before the `QUERIES[action]` lookup.** Mutations are not in the `QUERIES` dict — reaching that line for a mutation action causes a `KeyError`. Always add early-return `if action == "mutation_name": ... return` blocks BEFORE the `QUERIES` lookup.
+**Mutation handlers MUST return before the domain query dict lookup.** Mutations are not in the domain `_*_QUERIES` dicts (e.g., `_DOCKER_QUERIES`, `_ARRAY_QUERIES`) — reaching that line for a mutation subaction causes a `KeyError`. Always add early-return `if subaction == "mutation_name": ... return` blocks BEFORE the queries lookup.
 
 ### Test Patching
-- Patch at the **tool module level**: `unraid_mcp.tools.info.make_graphql_request` (not core)
+- Patch at the **tool module level**: `unraid_mcp.tools.unraid.make_graphql_request` (not core)
 - `conftest.py`'s `mock_graphql_request` patches the core module — wrong for tool-level tests
 - Use `conftest.py`'s `make_tool_fn()` helper or local `_make_tool()` pattern
 
@@ -155,7 +173,9 @@ tests/
 ├── http_layer/           # httpx-level request/response tests (respx)
 ├── integration/          # WebSocket subscription lifecycle tests (slow)
 ├── safety/               # Destructive action guard tests
-└── schema/               # GraphQL query validation (99 tests, all passing)
+├── schema/               # GraphQL query validation (119 tests)
+├── contract/             # Response shape contract tests
+└── property/             # Input validation property-based tests
 ```
 
 ### Running Targeted Tests
@@ -169,17 +189,22 @@ uv run pytest -x                     # Fail fast on first error
 
 ### Scripts
 ```bash
-# HTTP smoke-test against a live server (11 tools, all non-destructive actions)
+# HTTP smoke-test against a live server (non-destructive actions, all domains)
 ./tests/mcporter/test-actions.sh [MCP_URL]  # default: http://localhost:6970/mcp
 
 # stdio smoke-test, no running server needed (good for CI)
 ./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
+
+# Destructive action smoke-test (confirms guard blocks without confirm=True)
+./tests/mcporter/test-destructive.sh [MCP_URL]
 ```
 See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_ACTIONS.md` for exact destructive-action test commands.
 
 ### API Reference Docs
 - `docs/UNRAID_API_COMPLETE_REFERENCE.md` — Full GraphQL schema reference
 - `docs/UNRAID_API_OPERATIONS.md` — All supported operations with examples
+- `docs/MARKETPLACE.md` — Plugin marketplace listing and publishing guide
+- `docs/PUBLISHING.md` — Step-by-step instructions for publishing to Claude plugin registry
 
 Use these when adding new queries/mutations.
 
@@ -189,10 +214,11 @@ When bumping the version, **always update both files** — they must stay in syn
 - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
 
 ### Credential Storage (`~/.unraid-mcp/.env`)
-All runtimes (plugin, direct, Docker) load credentials from `~/.unraid-mcp/.env`.
-- **Plugin/direct:** `unraid_health action=setup` writes this file automatically via elicitation,
+All runtimes (plugin, direct `uv run`) load credentials from `~/.unraid-mcp/.env`.
+- **Plugin/direct:** `unraid action=health subaction=setup` writes this file automatically via elicitation,
+  **Safe to re-run**: always prompts for confirmation before overwriting existing credentials,
+  whether the connection is working or not (failed probe may be a transient outage, not bad creds).
   or manual: `mkdir -p ~/.unraid-mcp && cp .env.example ~/.unraid-mcp/.env` then edit.
-- **Docker:** `docker-compose.yml` loads it via `env_file` before container start.
 - **No symlinks needed.** Version bumps do not affect this path.
 - **Permissions:** dir=700, file=600 (set automatically by elicitation; set manually if
   using `cp`: `chmod 700 ~/.unraid-mcp && chmod 600 ~/.unraid-mcp/.env`).

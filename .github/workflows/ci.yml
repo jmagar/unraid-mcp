@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "feat/**", "fix/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.25"
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Ruff check
+        run: uv run ruff check unraid_mcp/ tests/
+      - name: Ruff format
+        run: uv run ruff format --check unraid_mcp/ tests/
+
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.25"
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: ty check
+        run: uv run ty check unraid_mcp/
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.25"
+      - name: Install dependencies
+        run: uv sync --group dev
+      - name: Run tests with coverage (excluding integration/slow)
+        run: uv run pytest -m "not slow and not integration" --cov=unraid_mcp --cov-report=term-missing --tb=short -q
+
+  version-sync:
+    name: Version Sync Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check pyproject.toml and plugin.json versions match
+        run: |
+          TOML_VER=$(grep '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
+          PLUGIN_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          echo "pyproject.toml: $TOML_VER"
+          echo "plugin.json:    $PLUGIN_VER"
+          if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
+            echo "ERROR: Version mismatch! Update .claude-plugin/plugin.json to match pyproject.toml"
+            exit 1
+          fi
+          echo "Versions in sync: $TOML_VER"
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.25"
+      - name: Dependency audit
+        run: uv audit
