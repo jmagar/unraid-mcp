@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.4] - 2026-03-25
+
+### Changed
+- **Plugin branding**: `displayName` set to `unRAID` in `plugin.json` and `marketplace.json`
+- **Plugin description**: Expanded to list all 3 tools and all 15 action domains with full subaction inventory (107 subactions, destructive actions marked with `*`)
+
 ## [1.1.3] - 2026-03-24
 
 ### Fixed
