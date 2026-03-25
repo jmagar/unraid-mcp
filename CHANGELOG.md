@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.3] - 2026-03-24
+
+### Fixed
+- **Docs accuracy**: `disk/logs` docs corrected to use `log_path`/`tail_lines` parameters (were `path`/`lines`)
+- **Docs accuracy**: `rclone/create_remote` docs corrected to `provider_type`/`config_data` (were `type`/`fields`)
+- **Docs accuracy**: `setting/update` docs corrected to `settings_input` parameter (was `settings`)
+- **Docs accuracy**: `key/create` now documents `roles` as optional; `add_role`/`remove_role` corrected to `roles` (plural)
+- **Docs accuracy**: `oidc/validate_session` now documents required `token` parameter
+- **Docs accuracy**: `parity_start` quick-reference example now includes required `correct=False`
+- **Docs accuracy**: `log_tail` README example now includes required `path="/var/log/syslog"`
+- **Docs accuracy**: `live/parity_progress` added to event-driven subscriptions list in troubleshooting guide
+- **Docs accuracy**: `live/array_state` wording softened — "may show connecting indefinitely" vs "will always show"
+- **Markdown**: `endpoints.md` top-level heading moved before blockquote disclaimer (MD041)
+- **Tests**: `test_resources.py` now uses `_get_resource()` helper instead of raw `mcp.providers[0]._components[...]` access; isolates FastMCP internals to one location
+
+---
+
 ## [1.1.2] - 2026-03-23
 
 ### Security
