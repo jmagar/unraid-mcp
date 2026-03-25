@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Comprehensive Unraid server management and monitoring via a single consolidated MCP tool (~108 actions across 15 domains)",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "homepage": "https://github.com/jmagar/unraid-mcp",
     "repository": "https://github.com/jmagar/unraid-mcp"
   },
@@ -15,7 +15,7 @@
       "name": "unraid",
       "source": "./",
       "description": "Query, monitor, and manage Unraid servers via GraphQL API — single `unraid` tool with action+subaction routing for array, disk, docker, VM, notifications, live metrics, and more",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "tags": ["unraid", "monitoring", "homelab", "graphql", "docker", "virtualization"],
       "category": "infrastructure"
     }
