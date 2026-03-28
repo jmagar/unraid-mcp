@@ -2,7 +2,7 @@
   "name": "unraid",
   "displayName": "unRAID",
   "description": "Query, monitor, and manage Unraid servers via GraphQL API.\n\nTools: `unraid` (primary), `diagnose_subscriptions`, `test_subscription_query`\n\nActions + subactions:\n• system: overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config\n• health: check, test_connection, diagnose, setup\n• array: parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats*\n• disk: shares, disks, disk_details, log_files, logs, flash_backup*\n• docker: list, details, start, stop, restart, networks, network_details\n• vm: list, details, start, stop, pause, resume, force_stop*, reboot, reset*\n• notification: overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived*\n• key: list, get, create, update, delete*, add_role, remove_role\n• plugin: list, add, remove*\n• rclone: list_remotes, config_form, create_remote, delete_remote*\n• setting: update, configure_ups*\n• customization: theme, public_theme, is_initial_setup, sso_enabled, set_theme\n• oidc: providers, provider, configuration, public_providers, validate_session\n• user: me\n• live: cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status\n\n* = destructive, requires confirm=True",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "author": {
     "name": "jmagar",
     "email": "jmagar@users.noreply.github.com"

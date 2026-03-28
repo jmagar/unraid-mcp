@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.5] - 2026-03-27
+
+### Added
+- **Beads issue tracking**: `bd init` — Dolt-backed issue tracker with prefix `unraid-mcp-<hash>`, hooks, and AGENTS.md integration
+- **Lavra project config**: `.lavra/config/project-setup.md` — stack `python`, review agents (kieran-python-reviewer, code-simplicity-reviewer, security-sentinel, performance-oracle)
+- **Codebase profile**: `.lavra/config/codebase-profile.md` — auto-generated stack/architecture/conventions reference for planning and review commands
+
+### Changed
+- **`.gitignore`**: Added lavra session-state exclusion (`.lavra/memory/session-state.md`) and beads-related entries
+- **`CLAUDE.md`**: Added beads workflow integration block with mandatory `bd` usage rules and session completion protocol
+
 ## [1.1.4] - 2026-03-25
 
 ### Changed

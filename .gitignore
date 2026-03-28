@@ -77,3 +77,6 @@ web-ui/backend/.venv-backend/
 .dolt/
 *.db
 .beads-credential-key
+
+# Lavra
+.lavra/memory/session-state.md
