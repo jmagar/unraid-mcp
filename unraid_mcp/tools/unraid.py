@@ -30,7 +30,8 @@ from typing import Any, Literal, get_args
 from fastmcp import Context, FastMCP
 
 from ..config.logging import logger
-from ..core.client import DISK_TIMEOUT, make_graphql_request
+from ..core import client as _client
+from ..core.client import DISK_TIMEOUT
 from ..core.exceptions import CredentialsNotConfiguredError, ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.setup import elicit_and_configure, elicit_reset_confirmation
@@ -157,7 +158,7 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
 
     with tool_error_handler("system", subaction, logger):
         logger.info(f"Executing unraid action=system subaction={subaction}")
-        data = await make_graphql_request(query, variables)
+        data = await _client.make_graphql_request(query, variables)
 
         if subaction == "overview":
             raw = data.get("info") or {}
@@ -313,7 +314,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
     if subaction == "setup":
         if CREDENTIALS_ENV_PATH.exists():
             try:
-                await make_graphql_request(_SYSTEM_QUERIES["online"])
+                await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
                 connection_ok = True
             except Exception:
                 connection_ok = False
@@ -347,7 +348,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
 
         if subaction == "test_connection":
             start = time.time()
-            data = await make_graphql_request(_SYSTEM_QUERIES["online"])
+            data = await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
             latency = round((time.time() - start) * 1000, 2)
             return {"status": "connected", "online": data.get("online"), "latency_ms": latency}
 
@@ -413,7 +414,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
         health_severity = max(health_severity, _SEVERITY.get(level, 0))
 
     try:
-        data = await make_graphql_request(_HEALTH_QUERIES["comprehensive_health"])
+        data = await _client.make_graphql_request(_HEALTH_QUERIES["comprehensive_health"])
         api_latency = round((time.time() - start_time) * 1000, 2)
 
         health_info: dict[str, Any] = {
@@ -571,13 +572,15 @@ async def _handle_array(
         logger.info(f"Executing unraid action=array subaction={subaction}")
 
         if subaction in _ARRAY_QUERIES:
-            data = await make_graphql_request(_ARRAY_QUERIES[subaction])
+            data = await _client.make_graphql_request(_ARRAY_QUERIES[subaction])
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "parity_start":
             if correct is None:
                 raise ToolError("correct is required for array/parity_start")
-            data = await make_graphql_request(_ARRAY_MUTATIONS[subaction], {"correct": correct})
+            data = await _client.make_graphql_request(
+                _ARRAY_MUTATIONS[subaction], {"correct": correct}
+            )
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction in (
@@ -587,7 +590,7 @@ async def _handle_array(
             "start_array",
             "stop_array",
         ):
-            data = await make_graphql_request(_ARRAY_MUTATIONS[subaction])
+            data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction])
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "add_disk":
@@ -596,13 +599,13 @@ async def _handle_array(
             variables: dict[str, Any] = {"id": disk_id}
             if slot is not None:
                 variables["slot"] = slot
-            data = await make_graphql_request(_ARRAY_MUTATIONS[subaction], variables)
+            data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction], variables)
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction in ("remove_disk", "mount_disk", "unmount_disk", "clear_disk_stats"):
             if not disk_id:
                 raise ToolError(f"disk_id is required for array/{subaction}")
-            data = await make_graphql_request(_ARRAY_MUTATIONS[subaction], {"id": disk_id})
+            data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction], {"id": disk_id})
             return {"success": True, "subaction": subaction, "data": data}
 
         raise ToolError(f"Unhandled array subaction '{subaction}' — this is a bug")
@@ -706,7 +709,7 @@ async def _handle_disk(
         if backup_options is not None:
             input_data["options"] = backup_options
         with tool_error_handler("disk", subaction, logger):
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _DISK_MUTATIONS["flash_backup"], {"input": input_data}
             )
             backup = data.get("initiateFlashBackup")
@@ -723,7 +726,7 @@ async def _handle_disk(
 
     with tool_error_handler("disk", subaction, logger):
         logger.info(f"Executing unraid action=disk subaction={subaction}")
-        data = await make_graphql_request(
+        data = await _client.make_graphql_request(
             _DISK_QUERIES[subaction], variables, custom_timeout=custom_timeout
         )
 
@@ -813,7 +816,7 @@ def _find_container(
 async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
-    data = await make_graphql_request(_DOCKER_RESOLVE_QUERY)
+    data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
     containers = safe_get(data, "docker", "containers", default=[])
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
@@ -858,23 +861,23 @@ async def _handle_docker(
         logger.info(f"Executing unraid action=docker subaction={subaction}")
 
         if subaction == "list":
-            data = await make_graphql_request(_DOCKER_QUERIES["list"])
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["list"])
             return {"containers": safe_get(data, "docker", "containers", default=[])}
 
         if subaction == "details":
             actual_id = await _resolve_container_id(container_id or "")
-            data = await make_graphql_request(_DOCKER_QUERIES["details"])
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["details"])
             for c in safe_get(data, "docker", "containers", default=[]):
                 if c.get("id") == actual_id:
                     return c
             raise ToolError(f"Container '{container_id}' not found in details response.")
 
         if subaction == "networks":
-            data = await make_graphql_request(_DOCKER_QUERIES["networks"])
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["networks"])
             return {"networks": safe_get(data, "docker", "networks", default=[])}
 
         if subaction == "network_details":
-            data = await make_graphql_request(_DOCKER_QUERIES["network_details"])
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["network_details"])
             for net in safe_get(data, "docker", "networks", default=[]):
                 if net.get("id") == network_id or net.get("name") == network_id:
                     return dict(net)
@@ -882,13 +885,13 @@ async def _handle_docker(
 
         if subaction == "restart":
             actual_id = await _resolve_container_id(container_id or "", strict=True)
-            stop_data = await make_graphql_request(
+            stop_data = await _client.make_graphql_request(
                 _DOCKER_MUTATIONS["stop"],
                 {"id": actual_id},
                 operation_context={"operation": "stop"},
             )
             stop_was_idempotent = stop_data.get("idempotent_success", False)
-            start_data = await make_graphql_request(
+            start_data = await _client.make_graphql_request(
                 _DOCKER_MUTATIONS["start"],
                 {"id": actual_id},
                 operation_context={"operation": "start"},
@@ -908,7 +911,7 @@ async def _handle_docker(
             return response
 
         actual_id = await _resolve_container_id(container_id or "", strict=True)
-        data = await make_graphql_request(
+        data = await _client.make_graphql_request(
             _DOCKER_MUTATIONS[subaction],
             {"id": actual_id},
             operation_context={"operation": subaction},
@@ -976,7 +979,7 @@ async def _handle_vm(
         logger.info(f"Executing unraid action=vm subaction={subaction}")
 
         if subaction == "list":
-            data = await make_graphql_request(_VM_QUERIES["list"])
+            data = await _client.make_graphql_request(_VM_QUERIES["list"])
             if data.get("vms"):
                 vms = data["vms"].get("domains") or data["vms"].get("domain") or []
                 if isinstance(vms, dict):
@@ -985,7 +988,7 @@ async def _handle_vm(
             return {"vms": []}
 
         if subaction == "details":
-            data = await make_graphql_request(_VM_QUERIES["details"])
+            data = await _client.make_graphql_request(_VM_QUERIES["details"])
             if not data.get("vms"):
                 raise ToolError("No VM data returned from server")
             vms = data["vms"].get("domains") or data["vms"].get("domain") or []
@@ -997,7 +1000,7 @@ async def _handle_vm(
             available = [f"{v.get('name')} (UUID: {v.get('uuid')})" for v in vms]
             raise ToolError(f"VM '{vm_id}' not found. Available: {', '.join(available)}")
 
-        data = await make_graphql_request(_VM_MUTATIONS[subaction], {"id": vm_id})
+        data = await _client.make_graphql_request(_VM_MUTATIONS[subaction], {"id": vm_id})
         field = _VM_MUTATION_FIELDS.get(subaction, subaction)
         if data.get("vm") and field in data["vm"]:
             return {"success": data["vm"][field], "subaction": subaction, "vm_id": vm_id}
@@ -1081,7 +1084,7 @@ async def _handle_notification(
         logger.info(f"Executing unraid action=notification subaction={subaction}")
 
         if subaction == "overview":
-            data = await make_graphql_request(_NOTIFICATION_QUERIES["overview"])
+            data = await _client.make_graphql_request(_NOTIFICATION_QUERIES["overview"])
             return dict((data.get("notifications") or {}).get("overview") or {})
 
         if subaction == "list":
@@ -1092,7 +1095,7 @@ async def _handle_notification(
             }
             if importance:
                 filter_vars["importance"] = importance.upper()
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_QUERIES["list"], {"filter": filter_vars}
             )
             return {"notifications": (data.get("notifications", {}) or {}).get("list", [])}
@@ -1112,7 +1115,7 @@ async def _handle_notification(
                 raise ToolError(
                     f"description must be at most 2000 characters (got {len(description)})"
                 )
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["create"],
                 {
                     "input": {
@@ -1131,7 +1134,7 @@ async def _handle_notification(
         if subaction in ("archive", "mark_unread"):
             if not notification_id:
                 raise ToolError(f"notification_id is required for notification/{subaction}")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS[subaction], {"id": notification_id}
             )
             return {"success": True, "subaction": subaction, "data": data}
@@ -1139,27 +1142,29 @@ async def _handle_notification(
         if subaction == "delete":
             if not notification_id or not notification_type:
                 raise ToolError("delete requires notification_id and notification_type")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["delete"],
                 {"id": notification_id, "type": notification_type.upper()},
             )
             return {"success": True, "subaction": "delete", "data": data}
 
         if subaction == "delete_archived":
-            data = await make_graphql_request(_NOTIFICATION_MUTATIONS["delete_archived"])
+            data = await _client.make_graphql_request(_NOTIFICATION_MUTATIONS["delete_archived"])
             return {"success": True, "subaction": "delete_archived", "data": data}
 
         if subaction == "archive_all":
             variables: dict[str, Any] | None = (
                 {"importance": importance.upper()} if importance else None
             )
-            data = await make_graphql_request(_NOTIFICATION_MUTATIONS["archive_all"], variables)
+            data = await _client.make_graphql_request(
+                _NOTIFICATION_MUTATIONS["archive_all"], variables
+            )
             return {"success": True, "subaction": "archive_all", "data": data}
 
         if subaction == "archive_many":
             if not notification_ids:
                 raise ToolError("notification_ids is required for notification/archive_many")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["archive_many"], {"ids": notification_ids}
             )
             return {"success": True, "subaction": "archive_many", "data": data}
@@ -1167,7 +1172,7 @@ async def _handle_notification(
         if subaction == "unarchive_many":
             if not notification_ids:
                 raise ToolError("notification_ids is required for notification/unarchive_many")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["unarchive_many"], {"ids": notification_ids}
             )
             return {"success": True, "subaction": "unarchive_many", "data": data}
@@ -1176,11 +1181,13 @@ async def _handle_notification(
             vars_: dict[str, Any] | None = (
                 {"importance": importance.upper()} if importance else None
             )
-            data = await make_graphql_request(_NOTIFICATION_MUTATIONS["unarchive_all"], vars_)
+            data = await _client.make_graphql_request(
+                _NOTIFICATION_MUTATIONS["unarchive_all"], vars_
+            )
             return {"success": True, "subaction": "unarchive_all", "data": data}
 
         if subaction == "recalculate":
-            data = await make_graphql_request(_NOTIFICATION_MUTATIONS["recalculate"])
+            data = await _client.make_graphql_request(_NOTIFICATION_MUTATIONS["recalculate"])
             return {"success": True, "subaction": "recalculate", "data": data}
 
         raise ToolError(f"Unhandled notification subaction '{subaction}' — this is a bug")
@@ -1233,14 +1240,14 @@ async def _handle_key(
         logger.info(f"Executing unraid action=key subaction={subaction}")
 
         if subaction == "list":
-            data = await make_graphql_request(_KEY_QUERIES["list"])
+            data = await _client.make_graphql_request(_KEY_QUERIES["list"])
             keys = data.get("apiKeys", [])
             return {"keys": list(keys) if isinstance(keys, list) else []}
 
         if subaction == "get":
             if not key_id:
                 raise ToolError("key_id is required for key/get")
-            data = await make_graphql_request(_KEY_QUERIES["get"], {"id": key_id})
+            data = await _client.make_graphql_request(_KEY_QUERIES["get"], {"id": key_id})
             return dict(data.get("apiKey") or {})
 
         if subaction == "create":
@@ -1251,7 +1258,9 @@ async def _handle_key(
                 input_data["roles"] = roles
             if permissions is not None:
                 input_data["permissions"] = permissions
-            data = await make_graphql_request(_KEY_MUTATIONS["create"], {"input": input_data})
+            data = await _client.make_graphql_request(
+                _KEY_MUTATIONS["create"], {"input": input_data}
+            )
             created_key = (data.get("apiKey") or {}).get("create")
             if not created_key:
                 raise ToolError("Failed to create API key: no data returned from server")
@@ -1267,7 +1276,9 @@ async def _handle_key(
                 input_data["roles"] = roles
             if permissions is not None:
                 input_data["permissions"] = permissions
-            data = await make_graphql_request(_KEY_MUTATIONS["update"], {"input": input_data})
+            data = await _client.make_graphql_request(
+                _KEY_MUTATIONS["update"], {"input": input_data}
+            )
             updated_key = (data.get("apiKey") or {}).get("update")
             if not updated_key:
                 raise ToolError("Failed to update API key: no data returned from server")
@@ -1276,7 +1287,7 @@ async def _handle_key(
         if subaction == "delete":
             if not key_id:
                 raise ToolError("key_id is required for key/delete")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _KEY_MUTATIONS["delete"], {"input": {"ids": [key_id]}}
             )
             if not (data.get("apiKey") or {}).get("delete"):
@@ -1290,7 +1301,7 @@ async def _handle_key(
                 raise ToolError(
                     f"roles is required for key/{subaction} (pass as roles=['ROLE_NAME'])"
                 )
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _KEY_MUTATIONS[subaction], {"input": {"apiKeyId": key_id, "role": roles[0]}}
             )
             verb = "added to" if subaction == "add_role" else "removed from"
@@ -1341,13 +1352,13 @@ async def _handle_plugin(
         logger.info(f"Executing unraid action=plugin subaction={subaction}")
 
         if subaction == "list":
-            data = await make_graphql_request(_PLUGIN_QUERIES["list"])
+            data = await _client.make_graphql_request(_PLUGIN_QUERIES["list"])
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction in ("add", "remove"):
             if not names:
                 raise ToolError(f"names is required for plugin/{subaction}")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _PLUGIN_MUTATIONS[subaction],
                 {"input": {"names": names, "bundled": bundled, "restart": restart}},
             )
@@ -1430,7 +1441,7 @@ async def _handle_rclone(
         logger.info(f"Executing unraid action=rclone subaction={subaction}")
 
         if subaction == "list_remotes":
-            data = await make_graphql_request(_RCLONE_QUERIES["list_remotes"])
+            data = await _client.make_graphql_request(_RCLONE_QUERIES["list_remotes"])
             remotes = data.get("rclone", {}).get("remotes", [])
             return {"remotes": list(remotes) if isinstance(remotes, list) else []}
 
@@ -1438,7 +1449,9 @@ async def _handle_rclone(
             variables: dict[str, Any] = {}
             if provider_type:
                 variables["formOptions"] = {"providerType": provider_type}
-            data = await make_graphql_request(_RCLONE_QUERIES["config_form"], variables or None)
+            data = await _client.make_graphql_request(
+                _RCLONE_QUERIES["config_form"], variables or None
+            )
             form = (data.get("rclone") or {}).get("configForm", {})
             if not form:
                 raise ToolError("No RClone config form data received")
@@ -1448,7 +1461,7 @@ async def _handle_rclone(
             if name is None or provider_type is None or config_data is None:
                 raise ToolError("create_remote requires name, provider_type, and config_data")
             validated = _validate_rclone_config(config_data)
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _RCLONE_MUTATIONS["create_remote"],
                 {"input": {"name": name, "type": provider_type, "parameters": validated}},
             )
@@ -1464,7 +1477,7 @@ async def _handle_rclone(
         if subaction == "delete_remote":
             if not name:
                 raise ToolError("name is required for rclone/delete_remote")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _RCLONE_MUTATIONS["delete_remote"], {"input": {"name": name}}
             )
             if not (data.get("rclone") or {}).get("deleteRCloneRemote", False):
@@ -1513,7 +1526,7 @@ async def _handle_setting(
         if subaction == "update":
             if settings_input is None:
                 raise ToolError("settings_input is required for setting/update")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _SETTING_MUTATIONS["update"], {"input": settings_input}
             )
             return {"success": True, "subaction": "update", "data": data.get("updateSettings")}
@@ -1521,7 +1534,7 @@ async def _handle_setting(
         if subaction == "configure_ups":
             if ups_config is None:
                 raise ToolError("ups_config is required for setting/configure_ups")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _SETTING_MUTATIONS["configure_ups"], {"config": ups_config}
             )
             return {
@@ -1561,7 +1574,7 @@ async def _handle_customization(subaction: str, theme_name: str | None) -> dict[
         logger.info(f"Executing unraid action=customization subaction={subaction}")
 
         if subaction in _CUSTOMIZATION_QUERIES:
-            data = await make_graphql_request(_CUSTOMIZATION_QUERIES[subaction])
+            data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES[subaction])
             if subaction == "is_initial_setup":
                 return {"isInitialSetup": data.get("isInitialSetup")}
             if subaction == "sso_enabled":
@@ -1571,7 +1584,7 @@ async def _handle_customization(subaction: str, theme_name: str | None) -> dict[
         if subaction == "set_theme":
             if not theme_name:
                 raise ToolError("theme_name is required for customization/set_theme")
-            data = await make_graphql_request(
+            data = await _client.make_graphql_request(
                 _CUSTOMIZATION_MUTATIONS["set_theme"], {"theme": theme_name}
             )
             return {
@@ -1619,7 +1632,7 @@ async def _handle_oidc(
 
     with tool_error_handler("oidc", subaction, logger):
         logger.info(f"Executing unraid action=oidc subaction={subaction}")
-        data = await make_graphql_request(_OIDC_QUERIES[subaction], variables)
+        data = await _client.make_graphql_request(_OIDC_QUERIES[subaction], variables)
 
         if subaction == "providers":
             return {"providers": data.get("oidcProviders", [])}
@@ -1654,7 +1667,7 @@ async def _handle_user(subaction: str) -> dict[str, Any]:
 
     with tool_error_handler("user", subaction, logger):
         logger.info("Executing unraid action=user subaction=me")
-        data = await make_graphql_request(_USER_QUERIES["me"])
+        data = await _client.make_graphql_request(_USER_QUERIES["me"])
         return data.get("me") or {}
 
 

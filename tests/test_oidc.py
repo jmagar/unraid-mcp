@@ -11,7 +11,7 @@ from conftest import make_tool_fn
 
 @pytest.fixture
 def _mock_graphql():
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as m:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as m:
         yield m
 
 

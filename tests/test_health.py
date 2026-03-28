@@ -12,7 +12,7 @@ from unraid_mcp.core.utils import safe_display_url
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
@@ -273,7 +273,7 @@ async def test_health_setup_already_configured_and_working_no_reset() -> None:
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(return_value={"online": True}),
         ),
         patch(
@@ -300,7 +300,7 @@ async def test_health_setup_already_configured_user_confirms_reset() -> None:
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(return_value={"online": True}),
         ),
         patch(
@@ -328,7 +328,7 @@ async def test_health_setup_credentials_exist_but_connection_fails_user_confirms
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(side_effect=Exception("connection refused")),
         ),
         patch(
@@ -356,7 +356,7 @@ async def test_health_setup_credentials_exist_connection_fails_user_declines() -
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(side_effect=Exception("connection refused")),
         ),
         patch(
@@ -382,7 +382,7 @@ async def test_health_setup_ctx_none_already_configured_returns_no_changes() -> 
     with (
         patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(return_value={"online": True}),
         ),
         patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,

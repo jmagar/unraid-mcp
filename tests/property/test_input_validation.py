@@ -85,7 +85,7 @@ class TestDockerContainerIdFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
@@ -102,7 +102,7 @@ class TestDockerContainerIdFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
@@ -118,7 +118,7 @@ class TestDockerContainerIdFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 with contextlib.suppress(ToolError):
@@ -134,7 +134,7 @@ class TestDockerContainerIdFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 # stop then start both need container list + mutation responses
                 mock.return_value = {"docker": {"containers": []}}
@@ -174,7 +174,7 @@ class TestDockerInvalidActions:
 
         async def _run_test() -> None:
             tool_fn = _make_tool()
-            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
+            with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock):
                 try:
                     await tool_fn(action="docker", subaction=subaction)
                 except ToolError:
@@ -212,7 +212,7 @@ class TestNotificationsEnumFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -245,7 +245,7 @@ class TestNotificationsEnumFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"notifications": {"list": []}}
@@ -276,7 +276,7 @@ class TestNotificationsEnumFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -311,7 +311,7 @@ class TestNotificationsEnumFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"deleteNotification": {}}
@@ -356,7 +356,7 @@ class TestNotificationsEnumFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ):
                 try:
@@ -392,7 +392,7 @@ class TestKeysInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": None}
                 try:
@@ -412,7 +412,7 @@ class TestKeysInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {
                     "apiKey": {"create": {"id": "1", "name": name, "key": "k", "roles": []}}
@@ -434,7 +434,7 @@ class TestKeysInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": {"addRole": True}}
                 try:
@@ -458,7 +458,7 @@ class TestKeysInputFuzzing:
 
         async def _run_test() -> None:
             tool_fn = _make_tool()
-            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
+            with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock):
                 try:
                     await tool_fn(action="key", subaction=subaction)
                 except ToolError:
@@ -492,7 +492,7 @@ class TestVMInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"vm": {"start": True}}
@@ -513,7 +513,7 @@ class TestVMInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {"vm": {"stop": True}}
@@ -534,7 +534,7 @@ class TestVMInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 # Return an empty VM list so the lookup gracefully fails
@@ -569,7 +569,7 @@ class TestVMInputFuzzing:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ):
                 try:
@@ -619,7 +619,7 @@ class TestBoundaryValues:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"docker": {"containers": []}}
                 try:
@@ -652,7 +652,7 @@ class TestBoundaryValues:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request",
+                "unraid_mcp.core.client.make_graphql_request",
                 new_callable=AsyncMock,
             ) as mock:
                 mock.return_value = {
@@ -690,7 +690,7 @@ class TestBoundaryValues:
         async def _run_test() -> None:
             tool_fn = _make_tool()
             with patch(
-                "unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock
+                "unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock
             ) as mock:
                 mock.return_value = {"apiKey": None}
                 try:
@@ -741,7 +741,7 @@ class TestInfoActionGuard:
 
         async def _run_test() -> None:
             tool_fn = _make_tool()
-            with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock):
+            with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock):
                 try:
                     await tool_fn(action=action, subaction="list")
                 except ToolError:

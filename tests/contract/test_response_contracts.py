@@ -287,25 +287,25 @@ class NotificationCreateResult(BaseModel):
 
 @pytest.fixture
 def _docker_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _info_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _storage_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
 @pytest.fixture
 def _notifications_mock() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 

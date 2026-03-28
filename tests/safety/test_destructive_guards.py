@@ -167,13 +167,14 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
 _CASE_IDS = [f"{c[0]}/{c[1]}" for c in _DESTRUCTIVE_TEST_CASES]
 
 _MODULE = "unraid_mcp.tools.unraid"
+_PATCH_TARGET = "unraid_mcp.core.client"
 _REGISTER_FN = "register_unraid_tool"
 _TOOL_NAME = "unraid"
 
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch(f"{_MODULE}.make_graphql_request", new_callable=AsyncMock) as m:
+    with patch(f"{_PATCH_TARGET}.make_graphql_request", new_callable=AsyncMock) as m:
         yield m
 
 

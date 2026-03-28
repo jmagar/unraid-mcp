@@ -501,7 +501,7 @@ async def test_credentials_not_configured_surfaces_as_tool_error_with_path():
 
     with (
         patch(
-            "unraid_mcp.tools.unraid.make_graphql_request",
+            "unraid_mcp.core.client.make_graphql_request",
             new=AsyncMock(side_effect=CredentialsNotConfiguredError()),
         ),
         pytest.raises(ToolError) as exc_info,

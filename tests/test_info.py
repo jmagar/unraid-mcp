@@ -58,7 +58,7 @@ class TestAnalyzeDiskHealth:
 
 @pytest.fixture
 def _mock_graphql() -> Generator[AsyncMock, None, None]:
-    with patch("unraid_mcp.tools.unraid.make_graphql_request", new_callable=AsyncMock) as mock:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
 
 
