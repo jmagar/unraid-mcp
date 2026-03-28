@@ -72,3 +72,8 @@ client_secret_*.apps.googleusercontent.com.json
 web-ui/frontend/node_modules
 web-ui/backend/.venv-backend/
 .pnpm-store/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
