@@ -76,6 +76,9 @@ def safe_display_url(url: str | None) -> str | None:
 def format_kb(k: Any) -> str:
     """Format kilobyte values into human-readable sizes.
 
+    Delegates to :func:`format_bytes` after converting kilobytes to bytes,
+    ensuring consistent formatting and full scale coverage (B through EB).
+
     Args:
         k: Number of kilobytes, or None.
 
@@ -85,13 +88,7 @@ def format_kb(k: Any) -> str:
     if k is None:
         return "N/A"
     try:
-        k = int(k)
+        kb = int(k)
     except (ValueError, TypeError):
         return "N/A"
-    if k >= 1024 * 1024 * 1024:
-        return f"{k / (1024 * 1024 * 1024):.2f} TB"
-    if k >= 1024 * 1024:
-        return f"{k / (1024 * 1024):.2f} GB"
-    if k >= 1024:
-        return f"{k / 1024:.2f} MB"
-    return f"{k:.2f} KB"
+    return format_bytes(kb * 1024)

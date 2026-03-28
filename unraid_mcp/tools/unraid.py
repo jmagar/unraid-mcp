@@ -1033,7 +1033,6 @@ _NOTIFICATION_SUBACTIONS: set[str] = set(_NOTIFICATION_QUERIES) | set(_NOTIFICAT
 _NOTIFICATION_DESTRUCTIVE: set[str] = {"delete", "delete_archived"}
 _VALID_IMPORTANCE = frozenset({"ALERT", "WARNING", "INFO"})
 _VALID_LIST_TYPES = frozenset({"UNREAD", "ARCHIVE"})
-_VALID_NOTIF_TYPES = frozenset({"UNREAD", "ARCHIVE"})
 
 
 async def _handle_notification(
@@ -1075,9 +1074,9 @@ async def _handle_notification(
         raise ToolError(
             f"Invalid importance '{importance}'. Must be one of: {sorted(_VALID_IMPORTANCE)}"
         )
-    if notification_type is not None and notification_type.upper() not in _VALID_NOTIF_TYPES:
+    if notification_type is not None and notification_type.upper() not in _VALID_LIST_TYPES:
         raise ToolError(
-            f"Invalid notification_type '{notification_type}'. Must be one of: {sorted(_VALID_NOTIF_TYPES)}"
+            f"Invalid notification_type '{notification_type}'. Must be one of: {sorted(_VALID_LIST_TYPES)}"
         )
 
     with tool_error_handler("notification", subaction, logger):
@@ -1103,10 +1102,6 @@ async def _handle_notification(
         if subaction == "create":
             if title is None or subject is None or description is None or importance is None:
                 raise ToolError("create requires title, subject, description, and importance")
-            if importance.upper() not in _VALID_IMPORTANCE:
-                raise ToolError(
-                    f"importance must be one of: {', '.join(sorted(_VALID_IMPORTANCE))}"
-                )
             if len(title) > 200:
                 raise ToolError(f"title must be at most 200 characters (got {len(title)})")
             if len(subject) > 500:
