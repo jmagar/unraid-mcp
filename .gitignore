@@ -80,3 +80,4 @@ web-ui/backend/.venv-backend/
 
 # Lavra
 .lavra/memory/session-state.md
+.worktrees
