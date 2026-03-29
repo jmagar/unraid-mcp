@@ -114,6 +114,9 @@ async def _handle_disk(
         if backup_options is not None:
             input_data["options"] = backup_options
         with tool_error_handler("disk", subaction, logger):
+            logger.info(
+                f"Executing unraid action=disk subaction={subaction} remote={remote_name!r} source={source_path!r}"
+            )
             data = await _client.make_graphql_request(
                 _DISK_MUTATIONS["flash_backup"], {"input": input_data}
             )
