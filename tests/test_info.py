@@ -194,6 +194,20 @@ class TestUnraidInfoTool:
         assert len(result["ups_devices"]) == 1
         assert result["ups_devices"][0]["model"] == "APC"
 
+    async def test_array_empty_response_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        """Empty/null array response should raise ToolError."""
+        _mock_graphql.return_value = {"array": None}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="No array information returned"):
+            await tool_fn(action="system", subaction="array")
+
+    async def test_array_missing_key_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        """Response with no 'array' key at all should raise ToolError."""
+        _mock_graphql.return_value = {}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="No array information returned"):
+            await tool_fn(action="system", subaction="array")
+
 
 class TestInfoNetworkErrors:
     """Tests for network-level failures in info operations."""

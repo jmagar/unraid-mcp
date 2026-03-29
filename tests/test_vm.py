@@ -130,6 +130,14 @@ class TestVmActions:
         assert result["success"] is True
         assert result["subaction"] == "resume"
 
+    async def test_reboot_vm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"vm": {"reboot": True}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="vm", subaction="reboot", vm_id="uuid-1")
+        assert result["success"] is True
+        assert result["subaction"] == "reboot"
+        assert result["vm_id"] == "uuid-1"
+
     async def test_mutation_unexpected_response(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"vm": {}}
         tool_fn = _make_tool()

@@ -58,3 +58,17 @@ async def test_set_theme_success(_mock_graphql):
     }
     result = await _make_tool()(action="customization", subaction="set_theme", theme_name="azure")
     assert result["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_sso_enabled_returns_true(_mock_graphql):
+    _mock_graphql.return_value = {"isSSOEnabled": True}
+    result = await _make_tool()(action="customization", subaction="sso_enabled")
+    assert result["isSSOEnabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_sso_enabled_returns_false(_mock_graphql):
+    _mock_graphql.return_value = {"isSSOEnabled": False}
+    result = await _make_tool()(action="customization", subaction="sso_enabled")
+    assert result["isSSOEnabled"] is False
