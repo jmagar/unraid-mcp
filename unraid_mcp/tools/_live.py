@@ -15,6 +15,12 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 # LIVE (subscriptions)
 # ===========================================================================
 
+# Tracks which COLLECT_ACTIONS keys have explicit handlers in _handle_live below.
+# IMPORTANT: Every key in COLLECT_ACTIONS must appear here AND have a matching
+# if-branch in _handle_live. Adding to COLLECT_ACTIONS without updating both
+# this set and the function body causes a ToolError("this is a bug") at runtime.
+_HANDLED_COLLECT_SUBACTIONS: frozenset[str] = frozenset({"log_tail", "notification_feed"})
+
 
 async def _handle_live(
     subaction: str,
@@ -25,6 +31,8 @@ async def _handle_live(
     from ..subscriptions.queries import COLLECT_ACTIONS, EVENT_DRIVEN_ACTIONS, SNAPSHOT_ACTIONS
     from ..subscriptions.snapshot import subscribe_collect, subscribe_once
 
+    # IMPORTANT: Every key in COLLECT_ACTIONS must have an explicit handler in _handle_live below.
+    # Adding to COLLECT_ACTIONS without updating this function causes a ToolError at runtime.
     all_live = set(SNAPSHOT_ACTIONS) | set(COLLECT_ACTIONS)
     if subaction not in all_live:
         raise ToolError(

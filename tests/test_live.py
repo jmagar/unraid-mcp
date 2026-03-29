@@ -129,3 +129,22 @@ async def test_snapshot_wraps_bare_exception(_mock_subscribe_once):
     _mock_subscribe_once.side_effect = RuntimeError("WebSocket connection refused")
     with pytest.raises(ToolError):
         await _make_tool()(action="live", subaction="cpu")
+
+
+def test_collect_actions_all_handled():
+    """Every COLLECT_ACTIONS key must have an explicit handler in _handle_live.
+
+    If this test fails, a new key was added to COLLECT_ACTIONS in
+    subscriptions/queries.py without adding a corresponding if-branch in
+    tools/_live.py — which would cause a ToolError('this is a bug') at runtime.
+    Fix: add an if-branch in _handle_live AND add the key to
+    _HANDLED_COLLECT_SUBACTIONS.
+    """
+    from unraid_mcp.subscriptions.queries import COLLECT_ACTIONS
+    from unraid_mcp.tools._live import _HANDLED_COLLECT_SUBACTIONS
+
+    unhandled = set(COLLECT_ACTIONS) - _HANDLED_COLLECT_SUBACTIONS
+    assert not unhandled, (
+        f"COLLECT_ACTIONS keys without handlers in _handle_live: {unhandled}. "
+        "Add an if-branch in unraid_mcp/tools/_live.py and update _HANDLED_COLLECT_SUBACTIONS."
+    )
