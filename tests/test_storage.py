@@ -232,11 +232,11 @@ class TestStorageActions:
         assert result["summary"]["temperature"] == "N/A"
 
     async def test_logs_null_log_file(self, _mock_graphql: AsyncMock) -> None:
-        """logFile being null should return an empty dict."""
+        """logFile being null should raise ToolError, not return an empty dict."""
         _mock_graphql.return_value = {"logFile": None}
         tool_fn = _make_tool()
-        result = await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
-        assert result == {}
+        with pytest.raises(ToolError, match="Log file not found or inaccessible"):
+            await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
 
     async def test_disk_details_not_found(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"disk": None}

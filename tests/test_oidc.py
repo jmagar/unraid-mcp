@@ -62,3 +62,32 @@ async def test_configuration(_mock_graphql):
     result = await _make_tool()(action="oidc", subaction="configuration")
     assert result["providers"] == []
     assert result["defaultAllowedOrigins"] == []
+
+
+@pytest.mark.asyncio
+async def test_provider_null_raises_tool_error(_mock_graphql):
+    """oidcProvider null response should raise ToolError, not return {}."""
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_graphql.return_value = {"oidcProvider": None}
+    with pytest.raises(ToolError, match="not found"):
+        await _make_tool()(action="oidc", subaction="provider", provider_id="p:missing")
+
+
+@pytest.mark.asyncio
+async def test_validate_session_null_raises_tool_error(_mock_graphql):
+    """validateOidcSession null response should raise ToolError, not return {}."""
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_graphql.return_value = {"validateOidcSession": None}
+    with pytest.raises(ToolError, match="Session validation returned no data"):
+        await _make_tool()(action="oidc", subaction="validate_session", token="bad-token")
+
+
+@pytest.mark.asyncio
+async def test_validate_session_valid(_mock_graphql):
+    """Successful validate_session should return the validation result dict."""
+    _mock_graphql.return_value = {"validateOidcSession": {"valid": True, "username": "alice"}}
+    result = await _make_tool()(action="oidc", subaction="validate_session", token="good-token")
+    assert result["valid"] is True
+    assert result["username"] == "alice"

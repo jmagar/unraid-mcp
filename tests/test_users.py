@@ -58,11 +58,18 @@ class TestUsersActions:
 
 
 class TestUsersNoneHandling:
-    """Verify subactions return empty dict (not TypeError) when API returns None."""
+    """Verify subactions raise ToolError (not silently return {}) when API returns None."""
 
     async def test_me_returns_none(self, _mock_graphql: AsyncMock) -> None:
-        """Test that me returns empty dict when API returns None."""
+        """Test that me raises ToolError when API returns None for user data."""
         _mock_graphql.return_value = {"me": None}
         tool_fn = _make_tool()
-        result = await tool_fn(action="user", subaction="me")
-        assert result == {}
+        with pytest.raises(ToolError, match="No user data returned"):
+            await tool_fn(action="user", subaction="me")
+
+    async def test_me_returns_empty_dict(self, _mock_graphql: AsyncMock) -> None:
+        """Test that me raises ToolError when API returns an empty dict for user data."""
+        _mock_graphql.return_value = {"me": {}}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="No user data returned"):
+            await tool_fn(action="user", subaction="me")

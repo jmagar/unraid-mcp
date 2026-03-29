@@ -51,12 +51,20 @@ async def _handle_oidc(
         if subaction == "providers":
             return {"providers": data.get("oidcProviders", [])}
         if subaction == "provider":
-            return dict(data.get("oidcProvider") or {})
+            result = data.get("oidcProvider")
+            if result is None:
+                raise ToolError(f"OIDC provider '{provider_id}' not found")
+            return dict(result)
         if subaction == "configuration":
             return dict(data.get("oidcConfiguration") or {})
         if subaction == "public_providers":
             return {"providers": data.get("publicOidcProviders", [])}
         if subaction == "validate_session":
-            return dict(data.get("validateOidcSession") or {})
+            result = data.get("validateOidcSession")
+            if result is None:
+                raise ToolError(
+                    "Session validation returned no data — the OIDC endpoint may be unavailable"
+                )
+            return dict(result)
 
         raise ToolError(f"Unhandled oidc subaction '{subaction}' — this is a bug")

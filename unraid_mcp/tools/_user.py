@@ -30,4 +30,9 @@ async def _handle_user(subaction: str) -> dict[str, Any]:
     with tool_error_handler("user", subaction, logger):
         logger.info("Executing unraid action=user subaction=me")
         data = await _client.make_graphql_request(_USER_QUERIES["me"])
-        return data.get("me") or {}
+        result = data.get("me")
+        if not result:
+            raise ToolError(
+                "No user data returned — the API key may lack user context or the session is invalid"
+            )
+        return result
