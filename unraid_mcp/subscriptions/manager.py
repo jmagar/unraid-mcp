@@ -176,6 +176,13 @@ class SubscriptionManager:
         logger.info(
             f"[SUBSCRIPTION_MANAGER] Auto-start completed. Started {started}/{len(auto_start_configs)} subscriptions"
         )
+        if start_errors:
+            failed_names = ", ".join(n for n, _ in start_errors)
+            logger.warning(
+                f"[SUBSCRIPTION_MANAGER] {len(start_errors)} subscription(s) failed to auto-start: {failed_names}"
+            )
+            for name, exc in start_errors:
+                logger.warning(f"[SUBSCRIPTION_MANAGER] Auto-start failure detail — {name}: {exc}")
 
     async def start_subscription(
         self, subscription_name: str, query: str, variables: dict[str, Any] | None = None
@@ -216,23 +223,32 @@ class SubscriptionManager:
                 raise
 
     async def stop_subscription(self, subscription_name: str) -> None:
-        """Stop a specific subscription."""
+        """Stop a specific subscription.
+
+        Snapshots the task inside _task_lock, then releases the lock BEFORE
+        awaiting cancellation. Holding _task_lock across 'await task' would
+        deadlock if _subscription_loop's cleanup path also needs _task_lock
+        (it does, at loop exit). Pattern: lock → snapshot → release → await.
+        """
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Stopping subscription...")
 
         async with self._task_lock:
-            if subscription_name in self.active_subscriptions:
-                task = self.active_subscriptions[subscription_name]
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
-                del self.active_subscriptions[subscription_name]
-                self.connection_states[subscription_name] = "stopped"
-                self._connection_start_times.pop(subscription_name, None)
-                logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
-            else:
+            task = self.active_subscriptions.pop(subscription_name, None)
+            if task is None:
                 logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
+                return
+            self.connection_states[subscription_name] = "stopped"
+            self._connection_start_times.pop(subscription_name, None)
+
+        # Await cancellation OUTSIDE the lock — _subscription_loop cleanup path
+        # acquires _task_lock at loop exit; holding it here while waiting for the
+        # task to finish would deadlock.
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
+        logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
 
     async def stop_all(self) -> None:
         """Stop all active subscriptions (called during server shutdown)."""
@@ -592,13 +608,32 @@ class SubscriptionManager:
         logger.debug(f"[SUBSCRIPTION_MANAGER] Active subscriptions: {active}")
         return active
 
+    async def get_error_state(self, name: str) -> tuple[str | None, str]:
+        """Return (last_error, connection_state) for a subscription under _task_lock.
+
+        Public accessor so external callers (e.g. resources.py) never touch
+        private lock attributes directly. Both fields are written by
+        _subscription_loop tasks, so they must be read as a consistent pair.
+        """
+        async with self._task_lock:
+            return (
+                self.last_error.get(name),
+                self.connection_states.get(name, ""),
+            )
+
     async def get_subscription_status(self) -> dict[str, dict[str, Any]]:
         """Get detailed status of all subscriptions for diagnostics.
 
-        Acquires _task_lock and _data_lock separately to avoid a deadlock with
-        _subscription_loop, which holds _data_lock across await points (pong send).
-        Holding both locks simultaneously from outside the loop creates a cycle.
-        Instead, take snapshots under each lock independently.
+        Acquires _task_lock and _data_lock separately (sequential, not simultaneous)
+        to prevent an ABBA deadlock:
+
+        - This method would hold _task_lock → then acquire _data_lock.
+        - _subscription_loop holds _data_lock (during resource_data write) and at
+          loop exit acquires _task_lock (to remove itself from active_subscriptions).
+
+        Holding both locks simultaneously from here creates the classic ABBA cycle.
+        Instead, snapshot state under each lock independently, then release before
+        acquiring the other.
         """
         # Snapshot task-related state under _task_lock
         async with self._task_lock:

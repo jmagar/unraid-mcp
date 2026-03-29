@@ -57,7 +57,8 @@ class TestLiveResourcesUseManagerCache:
     ) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
-            mock_mgr.last_error = {}
+            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
@@ -69,8 +70,9 @@ class TestLiveResourcesUseManagerCache:
     async def test_resource_returns_error_status_on_permanent_failure(self, action: str) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
-            mock_mgr.last_error = {action: "WebSocket auth failed"}
-            mock_mgr.connection_states = {action: "auth_failed"}
+            mock_mgr.get_error_state = AsyncMock(
+                return_value=("WebSocket auth failed", "auth_failed")
+            )
             mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
@@ -138,7 +140,7 @@ class TestAutoStartDisabledFallback:
             ),
         ):
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
-            mock_mgr.last_error = {}
+            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
@@ -157,7 +159,7 @@ class TestAutoStartDisabledFallback:
             ),
         ):
             mock_mgr.get_resource_data = AsyncMock(return_value=None)
-            mock_mgr.last_error = {}
+            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")

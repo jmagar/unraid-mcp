@@ -3,7 +3,6 @@
 Covers: list_remotes, config_form, create_remote, delete_remote* (4 subactions).
 """
 
-import re
 from typing import Any
 
 from fastmcp import Context
@@ -12,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.validation import DANGEROUS_KEY_PATTERN, MAX_VALUE_LENGTH
 
 
 # ===========================================================================
@@ -31,8 +31,6 @@ _RCLONE_MUTATIONS: dict[str, str] = {
 _RCLONE_SUBACTIONS: set[str] = set(_RCLONE_QUERIES) | set(_RCLONE_MUTATIONS)
 _RCLONE_DESTRUCTIVE: set[str] = {"delete_remote"}
 _MAX_CONFIG_KEYS = 50
-_DANGEROUS_KEY_PATTERN = re.compile(r"\.\.|[/\\;|`$(){}]")
-_MAX_VALUE_LENGTH = 4096
 
 
 def _validate_rclone_config(config_data: dict[str, Any]) -> dict[str, str]:
@@ -44,14 +42,14 @@ def _validate_rclone_config(config_data: dict[str, Any]) -> dict[str, str]:
             raise ToolError(
                 f"config_data keys must be non-empty strings, got: {type(key).__name__}"
             )
-        if _DANGEROUS_KEY_PATTERN.search(key):
+        if DANGEROUS_KEY_PATTERN.search(key):
             raise ToolError(f"config_data key '{key}' contains disallowed characters")
         if not isinstance(value, (str, int, float, bool)):
             raise ToolError(f"config_data['{key}'] must be a string, number, or boolean")
         str_value = str(value)
-        if len(str_value) > _MAX_VALUE_LENGTH:
+        if len(str_value) > MAX_VALUE_LENGTH:
             raise ToolError(
-                f"config_data['{key}'] value exceeds max length ({len(str_value)} > {_MAX_VALUE_LENGTH})"
+                f"config_data['{key}'] value exceeds max length ({len(str_value)} > {MAX_VALUE_LENGTH})"
             )
         validated[key] = str_value
     return validated

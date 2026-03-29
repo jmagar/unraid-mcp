@@ -15,9 +15,15 @@ Usage:
     stats = error_middleware.get_error_stats() if error_middleware else {}
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 
 
 # Populated by server.py before any tool is called.
 # None until server startup completes.
-error_middleware: Any = None
+error_middleware: ErrorHandlingMiddleware | None = None

@@ -115,11 +115,9 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                 return json.dumps(data, indent=2)
             # Surface permanent errors only when the connection is in a terminal failure
             # state — if the subscription has since reconnected, ignore the stale error.
-            # Guard reads under _task_lock so last_error and connection_states are
-            # read as a consistent pair (both are updated by _subscription_loop tasks).
-            async with subscription_manager._task_lock:
-                last_error = subscription_manager.last_error.get(action)
-                conn_state = subscription_manager.connection_states.get(action, "")
+            # Use the public get_error_state() accessor so we never touch private
+            # lock attributes from outside the manager.
+            last_error, conn_state = await subscription_manager.get_error_state(action)
             if last_error and conn_state in _terminal_states:
                 return json.dumps(
                     {

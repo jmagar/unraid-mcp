@@ -54,7 +54,9 @@ def _validate_path(path: str, allowed_prefixes: tuple[str, ...], label: str) -> 
     # (e.g. 'foo/bar/../..') are resolved first. Checking the raw string
     # before normpath is bypassable via encoded or indirect sequences.
     normalized = os.path.normpath(path)
-    if ".." in normalized.split(os.sep):
+    # Always split on '/' — paths are remote Linux paths, not local OS paths.
+    # os.sep would be '\\' on Windows, silently breaking the traversal check.
+    if ".." in normalized.split("/"):
         raise ToolError(f"{label} must not contain path traversal sequences (../)")
     if not any(normalized.startswith(p) for p in allowed_prefixes):
         raise ToolError(f"{label} must start with one of: {', '.join(allowed_prefixes)}")
@@ -110,8 +112,12 @@ async def _handle_disk(
         if not (normalized == "/boot" or normalized.startswith("/boot/")):
             raise ToolError("source_path must start with /boot/ (flash drive only)")
         source_path = normalized
-        if ".." in destination_path:
+        if "\x00" in destination_path:
+            raise ToolError("destination_path must not contain null bytes")
+        normalized_dest = os.path.normpath(destination_path)  # noqa: ASYNC240 — pure string, no I/O
+        if ".." in normalized_dest.split("/"):
             raise ToolError("destination_path must not contain path traversal sequences (../)")
+        destination_path = normalized_dest
         input_data: dict[str, Any] = {
             "remoteName": remote_name,
             "sourcePath": source_path,

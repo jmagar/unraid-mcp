@@ -3,7 +3,6 @@
 Covers: update, configure_ups* (2 subactions).
 """
 
-import re
 from typing import Any
 
 from fastmcp import Context
@@ -12,16 +11,14 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.validation import DANGEROUS_KEY_PATTERN, MAX_VALUE_LENGTH
 
 
 # ===========================================================================
 # SETTING
 # ===========================================================================
 
-# Input validation constants for settings_input (modeled on _validate_rclone_config)
 _MAX_SETTINGS_KEYS = 100
-_DANGEROUS_KEY_PATTERN = re.compile(r"\.\.|[/\\;|`$(){}]")
-_MAX_VALUE_LENGTH = 4096
 
 
 def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
@@ -30,6 +27,11 @@ def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
     Enforces a key count cap and rejects dangerous key names and oversized values
     to prevent unvalidated bulk input from reaching the API. Modeled on
     _validate_rclone_config in _rclone.py.
+
+    Only scalar values (str, int, float, bool) are accepted — dict/list values
+    cannot be accurately size-checked without JSON serialisation and may carry
+    nested injection payloads. Callers needing complex values should use the
+    raw GraphQL API instead.
     """
     if len(settings_input) > _MAX_SETTINGS_KEYS:
         raise ToolError(f"settings_input has {len(settings_input)} keys (max {_MAX_SETTINGS_KEYS})")
@@ -39,12 +41,16 @@ def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
             raise ToolError(
                 f"settings_input keys must be non-empty strings, got: {type(key).__name__}"
             )
-        if _DANGEROUS_KEY_PATTERN.search(key):
+        if DANGEROUS_KEY_PATTERN.search(key):
             raise ToolError(f"settings_input key '{key}' contains disallowed characters")
-        str_value = str(value) if not isinstance(value, (dict, list)) else repr(value)
-        if len(str_value) > _MAX_VALUE_LENGTH:
+        if not isinstance(value, (str, int, float, bool)):
             raise ToolError(
-                f"settings_input['{key}'] value exceeds max length ({len(str_value)} > {_MAX_VALUE_LENGTH})"
+                f"settings_input['{key}'] must be a string, number, or boolean, got: {type(value).__name__}"
+            )
+        str_value = str(value)
+        if len(str_value) > MAX_VALUE_LENGTH:
+            raise ToolError(
+                f"settings_input['{key}'] value exceeds max length ({len(str_value)} > {MAX_VALUE_LENGTH})"
             )
         validated[key] = value
     return validated
