@@ -96,12 +96,22 @@ class TestHealthActions:
         result = await tool_fn(action="health", subaction="check")
         assert result["status"] == "unhealthy"
 
-    async def test_check_api_error(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.side_effect = Exception("Connection refused")
+    async def test_check_api_error_connection(self, _mock_graphql: AsyncMock) -> None:
+        """httpx connection errors return {status: unhealthy} — they are expected failure modes."""
+        import httpx
+
+        _mock_graphql.side_effect = httpx.ConnectError("Connection refused")
         tool_fn = _make_tool()
         result = await tool_fn(action="health", subaction="check")
         assert result["status"] == "unhealthy"
         assert "Connection refused" in result["error"]
+
+    async def test_check_api_error_logic_bug_propagates(self, _mock_graphql: AsyncMock) -> None:
+        """Non-connection exceptions (logic bugs, import errors) must propagate to tool_error_handler."""
+        _mock_graphql.side_effect = AttributeError("'NoneType' object has no attribute 'get'")
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError):
+            await tool_fn(action="health", subaction="check")
 
     async def test_check_severity_never_downgrades(self, _mock_graphql: AsyncMock) -> None:
         """Degraded from missing info should not be overwritten by warning from alerts."""

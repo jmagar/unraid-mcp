@@ -9,6 +9,8 @@ import datetime
 import time
 from typing import Any
 
+import httpx
+
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import CredentialsNotConfiguredError
@@ -147,7 +149,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
 
     except CredentialsNotConfiguredError:
         raise  # Let tool_error_handler convert to setup instructions
-    except Exception as e:
+    except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         return {
             "status": "unhealthy",
