@@ -80,8 +80,8 @@ SAMPLE_QUERY = "subscription { test { value } }"
 
 # Shared patch targets
 _WS_CONNECT = "unraid_mcp.subscriptions.manager.websockets.connect"
-_API_URL = "unraid_mcp.subscriptions.utils.UNRAID_API_URL"
-_API_KEY = "unraid_mcp.subscriptions.manager.UNRAID_API_KEY"
+_API_URL = "unraid_mcp.config.settings.UNRAID_API_URL"
+_API_KEY = "unraid_mcp.config.settings.UNRAID_API_KEY"
 _SSL_CTX = "unraid_mcp.subscriptions.manager.build_ws_ssl_context"
 _SLEEP = "unraid_mcp.subscriptions.manager.asyncio.sleep"
 
@@ -875,7 +875,7 @@ class TestSSLContext:
 
         from unraid_mcp.subscriptions.utils import build_ws_ssl_context
 
-        with patch("unraid_mcp.subscriptions.utils.UNRAID_VERIFY_SSL", True):
+        with patch("unraid_mcp.config.settings.UNRAID_VERIFY_SSL", True):
             ctx = build_ws_ssl_context("wss://test.local/graphql")
             assert isinstance(ctx, ssl.SSLContext)
             assert ctx.check_hostname is True
@@ -885,7 +885,7 @@ class TestSSLContext:
 
         from unraid_mcp.subscriptions.utils import build_ws_ssl_context
 
-        with patch("unraid_mcp.subscriptions.utils.UNRAID_VERIFY_SSL", False):
+        with patch("unraid_mcp.config.settings.UNRAID_VERIFY_SSL", False):
             ctx = build_ws_ssl_context("wss://test.local/graphql")
             assert isinstance(ctx, ssl.SSLContext)
             assert ctx.check_hostname is False
@@ -895,7 +895,7 @@ class TestSSLContext:
         from unraid_mcp.subscriptions.utils import build_ws_ssl_context
 
         with (
-            patch("unraid_mcp.subscriptions.utils.UNRAID_VERIFY_SSL", "/path/to/ca-bundle.crt"),
+            patch("unraid_mcp.config.settings.UNRAID_VERIFY_SSL", "/path/to/ca-bundle.crt"),
             patch("ssl.create_default_context") as mock_ctx,
         ):
             build_ws_ssl_context("wss://test.local/graphql")
