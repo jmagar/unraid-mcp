@@ -105,16 +105,20 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
 
     if subaction == "setup":
         if CREDENTIALS_ENV_PATH.exists():
+            connection_error_type: str | None = None
             try:
                 await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
                 connection_ok = True
-            except Exception:
+            except Exception as e:
                 connection_ok = False
-            status_note = (
-                "and working"
-                if connection_ok
-                else "but the connection test failed — may be a transient outage"
-            )
+                connection_error_type = type(e).__name__
+                logger.debug(f"health/setup connection probe failed: {connection_error_type}: {e}")
+            if connection_ok:
+                status_note = "and working"
+            elif connection_error_type:
+                status_note = f"but the connection test failed ({connection_error_type}) — may be a transient outage or misconfiguration"
+            else:
+                status_note = "but the connection test failed — may be a transient outage"
             reset = await elicit_reset_confirmation(
                 ctx,
                 f"{safe_display_url(UNRAID_API_URL) or ''} ({status_note})",
