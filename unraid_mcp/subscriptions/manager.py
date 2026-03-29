@@ -134,30 +134,47 @@ class SubscriptionManager:
         )
 
     async def auto_start_all_subscriptions(self) -> None:
-        """Auto-start all subscriptions marked for auto-start."""
+        """Auto-start all subscriptions marked for auto-start.
+
+        All auto-start subscriptions are launched in parallel via asyncio.TaskGroup
+        to avoid blocking the first MCP request on a sequential startup delay.
+        """
         if not self.auto_start_enabled:
             logger.info("[SUBSCRIPTION_MANAGER] Auto-start disabled")
             return
 
-        logger.info("[SUBSCRIPTION_MANAGER] Starting auto-start process...")
-        auto_start_count = 0
+        auto_start_configs = [
+            (name, config)
+            for name, config in self.subscription_configs.items()
+            if config.get("auto_start", False)
+        ]
 
-        for subscription_name, config in self.subscription_configs.items():
-            if config.get("auto_start", False):
-                try:
-                    logger.info(
-                        f"[SUBSCRIPTION_MANAGER] Auto-starting subscription: {subscription_name}"
-                    )
-                    await self.start_subscription(subscription_name, str(config["query"]))
-                    auto_start_count += 1
-                except Exception as e:
-                    logger.error(
-                        f"[SUBSCRIPTION_MANAGER] Failed to auto-start {subscription_name}: {e}"
-                    )
-                    self.last_error[subscription_name] = str(e)
+        if not auto_start_configs:
+            logger.info("[SUBSCRIPTION_MANAGER] No subscriptions marked for auto-start")
+            return
 
         logger.info(
-            f"[SUBSCRIPTION_MANAGER] Auto-start completed. Started {auto_start_count} subscriptions"
+            f"[SUBSCRIPTION_MANAGER] Starting auto-start process for {len(auto_start_configs)} subscriptions in parallel..."
+        )
+
+        start_errors: list[tuple[str, Exception]] = []
+
+        async def _start_one(name: str, config: dict) -> None:
+            try:
+                logger.info(f"[SUBSCRIPTION_MANAGER] Auto-starting subscription: {name}")
+                await self.start_subscription(name, str(config["query"]))
+            except Exception as e:
+                logger.error(f"[SUBSCRIPTION_MANAGER] Failed to auto-start {name}: {e}")
+                self.last_error[name] = str(e)
+                start_errors.append((name, e))
+
+        async with asyncio.TaskGroup() as tg:
+            for name, config in auto_start_configs:
+                tg.create_task(_start_one(name, config))
+
+        started = len(auto_start_configs) - len(start_errors)
+        logger.info(
+            f"[SUBSCRIPTION_MANAGER] Auto-start completed. Started {started}/{len(auto_start_configs)} subscriptions"
         )
 
     async def start_subscription(
@@ -166,18 +183,21 @@ class SubscriptionManager:
         """Start a GraphQL subscription and maintain it as a resource."""
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Starting subscription...")
 
-        if subscription_name in self.active_subscriptions:
-            logger.warning(
-                f"[SUBSCRIPTION:{subscription_name}] Subscription already active, skipping"
-            )
-            return
-
-        # Reset connection tracking
-        self.reconnect_attempts[subscription_name] = 0
-        self.connection_states[subscription_name] = "starting"
-        self._connection_start_times.pop(subscription_name, None)
-
+        # Guard must be inside the lock to prevent a TOCTOU race where two
+        # concurrent callers both pass the check before either creates the task.
         async with self._task_lock:
+            if subscription_name in self.active_subscriptions:
+                logger.warning(
+                    f"[SUBSCRIPTION:{subscription_name}] Subscription already active, skipping"
+                )
+                return
+
+            # Reset connection tracking inside the lock so state is consistent
+            # with the task creation that follows immediately.
+            self.reconnect_attempts[subscription_name] = 0
+            self.connection_states[subscription_name] = "starting"
+            self._connection_start_times.pop(subscription_name, None)
+
             try:
                 task = asyncio.create_task(
                     self._subscription_loop(subscription_name, query, variables or {})
@@ -314,7 +334,10 @@ class SubscriptionManager:
                             f"[PROTOCOL:{subscription_name}] Failed to decode init response: {init_preview}..."
                         )
                         self.last_error[subscription_name] = f"Invalid JSON in init response: {e}"
-                        break
+                        # Transient handshake error — close this connection and retry.
+                        # break here would exit the outer while-True retry loop entirely,
+                        # killing all reconnect attempts permanently.
+                        continue
 
                     # Handle connection acknowledgment
                     if init_data.get("type") == "connection_ack":
@@ -570,38 +593,53 @@ class SubscriptionManager:
         return active
 
     async def get_subscription_status(self) -> dict[str, dict[str, Any]]:
-        """Get detailed status of all subscriptions for diagnostics."""
-        status = {}
+        """Get detailed status of all subscriptions for diagnostics.
 
-        async with self._task_lock, self._data_lock:
-            for sub_name, config in self.subscription_configs.items():
-                sub_status = {
-                    "config": {
-                        "resource": config["resource"],
-                        "description": config["description"],
-                        "auto_start": config.get("auto_start", False),
-                    },
-                    "runtime": {
-                        "active": sub_name in self.active_subscriptions,
-                        "connection_state": self.connection_states.get(sub_name, "not_started"),
-                        "reconnect_attempts": self.reconnect_attempts.get(sub_name, 0),
-                        "last_error": self.last_error.get(sub_name, None),
-                    },
+        Acquires _task_lock and _data_lock separately to avoid a deadlock with
+        _subscription_loop, which holds _data_lock across await points (pong send).
+        Holding both locks simultaneously from outside the loop creates a cycle.
+        Instead, take snapshots under each lock independently.
+        """
+        # Snapshot task-related state under _task_lock
+        async with self._task_lock:
+            active_snapshot = set(self.active_subscriptions)
+            state_snapshot = dict(self.connection_states)
+            reconnect_snapshot = dict(self.reconnect_attempts)
+            error_snapshot = dict(self.last_error)
+
+        # Snapshot resource data under _data_lock (acquired separately)
+        async with self._data_lock:
+            resource_snapshot = dict(self.resource_data)
+
+        status: dict[str, dict[str, Any]] = {}
+        for sub_name, config in self.subscription_configs.items():
+            sub_status: dict[str, Any] = {
+                "config": {
+                    "resource": config["resource"],
+                    "description": config["description"],
+                    "auto_start": config.get("auto_start", False),
+                },
+                "runtime": {
+                    "active": sub_name in active_snapshot,
+                    "connection_state": state_snapshot.get(sub_name, "not_started"),
+                    "reconnect_attempts": reconnect_snapshot.get(sub_name, 0),
+                    "last_error": error_snapshot.get(sub_name),
+                },
+            }
+
+            # Add data info if available
+            if sub_name in resource_snapshot:
+                data_info = resource_snapshot[sub_name]
+                age_seconds = (datetime.now(UTC) - data_info.last_updated).total_seconds()
+                sub_status["data"] = {
+                    "available": True,
+                    "last_updated": data_info.last_updated.isoformat(),
+                    "age_seconds": age_seconds,
                 }
+            else:
+                sub_status["data"] = {"available": False}
 
-                # Add data info if available
-                if sub_name in self.resource_data:
-                    data_info = self.resource_data[sub_name]
-                    age_seconds = (datetime.now(UTC) - data_info.last_updated).total_seconds()
-                    sub_status["data"] = {
-                        "available": True,
-                        "last_updated": data_info.last_updated.isoformat(),
-                        "age_seconds": age_seconds,
-                    }
-                else:
-                    sub_status["data"] = {"available": False}
-
-                status[sub_name] = sub_status
+            status[sub_name] = sub_status
 
         logger.debug(f"[SUBSCRIPTION_MANAGER] Generated status for {len(status)} subscriptions")
         return status

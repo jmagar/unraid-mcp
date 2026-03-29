@@ -146,10 +146,15 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
                         "Subscription test failed: WebSocket connection was not acknowledged."
                     )
 
+                # Use the negotiated subprotocol to pick the correct message type.
+                # graphql-transport-ws uses "subscribe"; legacy graphql-ws uses "start".
+                selected_proto = websocket.subprotocol or ""
+                start_type = "subscribe" if selected_proto == "graphql-transport-ws" else "start"
+
                 # Send subscription
                 await websocket.send(
                     json.dumps(
-                        {"id": "test", "type": "start", "payload": {"query": subscription_query}}
+                        {"id": "test", "type": start_type, "payload": {"query": subscription_query}}
                     )
                 )
 
@@ -199,11 +204,12 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
             # Gates connection_issues on current failure state (Bug 5 fix).
             error_count, connection_issues = _analyze_subscription_status(status)
 
-            # Calculate WebSocket URL
+            # Calculate WebSocket URL — apply safe_display_url to avoid leaking
+            # credentials (user:pass@host) or the raw API key embedded in the URL.
             ws_url_display: str | None = None
             if _settings.UNRAID_API_URL:
                 try:
-                    ws_url_display = build_ws_url()
+                    ws_url_display = safe_display_url(build_ws_url())
                 except ValueError:
                     ws_url_display = None
 

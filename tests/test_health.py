@@ -139,8 +139,6 @@ class TestHealthActions:
         mock_manager.active_subscriptions = {}
         mock_manager.resource_data = {}
 
-        mock_cache = MagicMock()
-        mock_cache.statistics.return_value = MagicMock(call_tool=None)
         mock_error = MagicMock()
         mock_error.get_error_stats.return_value = {}
 
@@ -151,13 +149,12 @@ class TestHealthActions:
                 "unraid_mcp.subscriptions.utils._analyze_subscription_status",
                 return_value=(0, []),
             ),
-            patch("unraid_mcp.server._cache_middleware", mock_cache),
             patch("unraid_mcp.server._error_middleware", mock_error),
         ):
             result = await tool_fn(action="health", subaction="diagnose")
         assert "subscriptions" in result
         assert "summary" in result
-        assert "cache" in result
+        assert "cache" in result  # still present, now a static note dict
         assert "errors" in result
 
     async def test_diagnose_wraps_exception(self, _mock_graphql: AsyncMock) -> None:

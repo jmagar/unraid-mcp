@@ -7,7 +7,6 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import sys
 
 from fastmcp import FastMCP
-from fastmcp.server.middleware.caching import CallToolSettings, ResponseCachingMiddleware
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
@@ -29,7 +28,7 @@ from .tools.unraid import register_unraid_tool
 
 
 # Middleware chain order matters — each layer wraps everything inside it:
-#   logging → error_handling → rate_limiter → response_limiter → cache → tool
+#   logging → error_handling → rate_limiter → response_limiter → tool
 
 # 1. Log every tools/call and resources/read: method, duration, errors.
 #    Outermost so it captures errors after they've been converted by error_handling.
@@ -59,25 +58,11 @@ _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_min
 #    Oversized responses are truncated with a clear suffix rather than erroring.
 _response_limiter = ResponseLimitingMiddleware(max_size=512_000)
 
-# 5. Cache middleware — all call_tool caching is disabled for the `unraid` tool.
-#    CallToolSettings supports excluded_tools/included_tools by tool name only; there
-#    is no per-argument or per-subaction exclusion mechanism.  The cache key is
-#    "{tool_name}:{arguments_str}", so a cached stop("nginx") result would be served
-#    back on a retry within the TTL window even though the container is already stopped.
-#    Mutation subactions (start, stop, restart, reboot, etc.) must never be cached.
-#    Because the consolidated `unraid` tool mixes reads and mutations under one name,
-#    the only safe option is to disable caching for the entire tool.
-_cache_middleware = ResponseCachingMiddleware(
-    call_tool_settings=CallToolSettings(
-        enabled=False,
-    ),
-    # Disable caching for list/resource/prompt — those are cheap.
-    list_tools_settings={"enabled": False},
-    list_resources_settings={"enabled": False},
-    list_prompts_settings={"enabled": False},
-    read_resource_settings={"enabled": False},
-    get_prompt_settings={"enabled": False},
-)
+# Note: ResponseCachingMiddleware was removed because all caching was disabled for
+# the `unraid` tool. The consolidated tool mixes reads and mutations under one name,
+# making per-subaction cache exclusion impossible. A fully disabled middleware
+# adds overhead with no benefit. Caching can be re-added if/when the tool is split
+# into separate read/write tools.
 
 
 # Initialize FastMCP instance — no built-in auth.
@@ -92,7 +77,6 @@ mcp = FastMCP(
         _error_middleware,
         _rate_limiter,
         _response_limiter,
-        _cache_middleware,
     ],
 )
 

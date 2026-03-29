@@ -47,9 +47,15 @@ def _validate_path(path: str, allowed_prefixes: tuple[str, ...], label: str) -> 
 
     Returns the normalized path. Raises ToolError on any violation.
     """
-    if ".." in path:
-        raise ToolError(f"{label} must not contain path traversal sequences (../)")
+    # Reject null bytes — they can truncate strings at the OS layer.
+    if "\x00" in path:
+        raise ToolError(f"{label} must not contain null bytes")
+    # Normalize BEFORE checking for '..' so encoded traversal sequences
+    # (e.g. 'foo/bar/../..') are resolved first. Checking the raw string
+    # before normpath is bypassable via encoded or indirect sequences.
     normalized = os.path.normpath(path)
+    if ".." in normalized.split(os.sep):
+        raise ToolError(f"{label} must not contain path traversal sequences (../)")
     if not any(normalized.startswith(p) for p in allowed_prefixes):
         raise ToolError(f"{label} must start with one of: {', '.join(allowed_prefixes)}")
     return normalized

@@ -60,25 +60,6 @@ def redact_sensitive(obj: Any) -> Any:
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
 DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG["disk_operations"], connect=5.0)
 
-# Named timeout profiles
-_TIMEOUT_PROFILES: dict[str, httpx.Timeout] = {
-    "default": DEFAULT_TIMEOUT,
-    "disk_operations": DISK_TIMEOUT,
-}
-
-
-def get_timeout_for_operation(profile: str) -> httpx.Timeout:
-    """Get a timeout configuration by profile name.
-
-    Args:
-        profile: Timeout profile name (e.g., "default", "disk_operations")
-
-    Returns:
-        The matching httpx.Timeout, falling back to DEFAULT_TIMEOUT for unknown profiles
-    """
-    return _TIMEOUT_PROFILES.get(profile, DEFAULT_TIMEOUT)
-
-
 # Global connection pool (module-level singleton)
 # Python 3.12+ asyncio.Lock() is safe at module level — no running event loop required
 _http_client: httpx.AsyncClient | None = None

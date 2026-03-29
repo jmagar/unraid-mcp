@@ -152,7 +152,6 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
             return await _comprehensive_health_check()
 
         if subaction == "diagnose":
-            from ..server import _cache_middleware as cache_middleware
             from ..server import _error_middleware as error_middleware
             from ..subscriptions.manager import subscription_manager
             from ..subscriptions.resources import ensure_subscriptions_started
@@ -160,7 +159,6 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
             await ensure_subscriptions_started()
             status = await subscription_manager.get_subscription_status()
             error_count, connection_issues = _analyze_subscription_status(status)
-            cache_stats = cache_middleware.statistics()
             return {
                 "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
                 "environment": {
@@ -176,15 +174,10 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                     "in_error_state": error_count,
                     "connection_issues": connection_issues,
                 },
-                "cache": {
-                    "call_tool": {
-                        "hits": cache_stats.call_tool.get.hit,
-                        "misses": cache_stats.call_tool.get.miss,
-                        "puts": cache_stats.call_tool.put.count,
-                    }
-                    if cache_stats.call_tool
-                    else {"hits": 0, "misses": 0, "puts": 0},
-                },
+                # cache section removed: ResponseCachingMiddleware was removed because
+                # all caching was disabled (the consolidated `unraid` tool mixes reads
+                # and mutations, making safe per-subaction exclusion impossible).
+                "cache": {"note": "caching disabled — tool mixes reads and mutations"},
                 "errors": error_middleware.get_error_stats(),
             }
 
