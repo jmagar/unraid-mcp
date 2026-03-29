@@ -22,6 +22,7 @@ from .config.settings import (
     VERSION,
     validate_required_config,
 )
+from .core import middleware_refs as _middleware_refs
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
@@ -43,6 +44,10 @@ _error_middleware = ErrorHandlingMiddleware(
     logger=logger,
     include_traceback=LOG_LEVEL_STR == "DEBUG",
 )
+# Expose via neutral module to break the circular import between server.py
+# (which imports tools/unraid.py) and health/diagnose (which needs error stats).
+# tools/unraid.py imports middleware_refs, not server, avoiding the cycle.
+_middleware_refs.error_middleware = _error_middleware
 
 # 3. Rate limiting: 540 requests per 60-second sliding window.
 #    SlidingWindowRateLimitingMiddleware only supports window_minutes (int), so the

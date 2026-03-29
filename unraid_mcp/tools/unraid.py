@@ -152,7 +152,9 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
             return await _comprehensive_health_check()
 
         if subaction == "diagnose":
-            from ..server import _error_middleware as error_middleware
+            # Import from middleware_refs (not server) to avoid the circular
+            # dependency: server.py imports tools/unraid.py at module level.
+            from ..core.middleware_refs import error_middleware
             from ..subscriptions.manager import subscription_manager
             from ..subscriptions.resources import ensure_subscriptions_started
 
