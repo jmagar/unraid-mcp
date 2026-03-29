@@ -225,6 +225,61 @@ class TestInfoNetworkErrors:
 
 
 # ---------------------------------------------------------------------------
+# Null-response handling for simple_dict subactions
+# ---------------------------------------------------------------------------
+
+
+class TestSimpleDictNullHandling:
+    """Null API responses must raise ToolError (registration, ups_device) or
+    silently return {} with a warning (all others)."""
+
+    async def test_ups_device_null_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        """ups_device returning null should raise ToolError with device_id in message."""
+        _mock_graphql.return_value = {"upsDeviceById": None}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="UPS device 'ups-99' not found"):
+            await tool_fn(action="system", subaction="ups_device", device_id="ups-99")
+
+    async def test_ups_device_found_returns_dict(self, _mock_graphql: AsyncMock) -> None:
+        """ups_device with a real response returns its fields."""
+        _mock_graphql.return_value = {
+            "upsDeviceById": {"id": "ups:1", "name": "APC Smart", "status": "online"}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="ups_device", device_id="ups:1")
+        assert result["name"] == "APC Smart"
+
+    async def test_registration_null_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        """Null registration response should raise ToolError with informative message."""
+        _mock_graphql.return_value = {"registration": None}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="No registration data returned"):
+            await tool_fn(action="system", subaction="registration")
+
+    @pytest.mark.parametrize(
+        "subaction,response_key",
+        [
+            ("variables", "vars"),
+            ("metrics", "metrics"),
+            ("config", "config"),
+            ("owner", "owner"),
+            ("ups_config", "upsConfiguration"),
+        ],
+    )
+    async def test_null_simple_dict_returns_empty_dict(
+        self,
+        _mock_graphql: AsyncMock,
+        subaction: str,
+        response_key: str,
+    ) -> None:
+        """Non-critical simple_dict subactions return {} on null without raising."""
+        _mock_graphql.return_value = {response_key: None}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction=subaction)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
 # Regression: removed actions must not be valid subactions
 # ---------------------------------------------------------------------------
 

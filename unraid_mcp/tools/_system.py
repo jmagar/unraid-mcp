@@ -229,6 +229,12 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
                 "useSsl": vars_data.get("useSsl"),
             }
 
+        if subaction == "ups_device":
+            result = data.get("upsDeviceById")
+            if result is None:
+                raise ToolError(f"UPS device '{device_id}' not found")
+            return dict(result)
+
         simple_dict = {
             "registration": "registration",
             "variables": "vars",
@@ -236,11 +242,18 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             "config": "config",
             "owner": "owner",
             "flash": "flash",
-            "ups_device": "upsDeviceById",
             "ups_config": "upsConfiguration",
         }
         if subaction in simple_dict:
-            return dict(data.get(simple_dict[subaction]) or {})
+            result = data.get(simple_dict[subaction])
+            if result is None:
+                if subaction == "registration":
+                    raise ToolError(
+                        "No registration data returned — server may be unlicensed or API unavailable"
+                    )
+                logger.warning("system/%s returned null from API", subaction)
+                return {}
+            return dict(result)
 
         list_actions = {
             "services": ("services", "services"),
