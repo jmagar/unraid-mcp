@@ -105,10 +105,18 @@ async def _handle_disk(
             raise ToolError("source_path is required for disk/flash_backup")
         if not destination_path:
             raise ToolError("destination_path is required for disk/flash_backup")
-        # Validate paths — flash backup source must come from /boot/ only
-        if ".." in source_path:
-            raise ToolError("source_path must not contain path traversal sequences (../)")
+        # Validate paths — flash backup source must come from /boot/ only.
+        # NOTE: _validate_path is not reused here because its prefix check uses
+        # startswith(), which would allow '/bootleg/...' to pass '/boot' prefix.
+        # The correct check is (normalized == "/boot" or startswith("/boot/")),
+        # which requires an inline implementation.
+        if "\x00" in source_path:
+            raise ToolError("source_path must not contain null bytes")
+        # Normalize BEFORE checking '..' — raw-string check is bypassable via
+        # encoded sequences like 'foo/bar/../..'.
         normalized = posixpath.normpath(source_path)
+        if ".." in normalized.split("/"):
+            raise ToolError("source_path must not contain path traversal sequences (../)")
         if not (normalized == "/boot" or normalized.startswith("/boot/")):
             raise ToolError("source_path must start with /boot/ (flash drive only)")
         source_path = normalized
