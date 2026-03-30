@@ -106,6 +106,26 @@ class TestHealthActions:
         assert result["status"] == "unhealthy"
         assert "Connection refused" in result["error"]
 
+    async def test_check_api_error_wrapped_tool_error(self, _mock_graphql: AsyncMock) -> None:
+        """ToolError wrapping an httpx network error returns {status: unhealthy}.
+
+        make_graphql_request raises ToolError (not raw httpx) for network failures.
+        _comprehensive_health_check must inspect e.__cause__ to detect this.
+        Dependency: make_graphql_request uses 'raise ToolError(...) from original_exc'.
+        """
+        import httpx
+
+        from unraid_mcp.core.exceptions import ToolError as _ToolError
+
+        cause = httpx.ConnectError("Connection refused")
+        wrapped = _ToolError("API request failed")
+        wrapped.__cause__ = cause
+        _mock_graphql.side_effect = wrapped
+        tool_fn = _make_tool()
+        result = await tool_fn(action="health", subaction="check")
+        assert result["status"] == "unhealthy"
+        assert "Connection refused" in result["error"]
+
     async def test_check_api_error_logic_bug_propagates(self, _mock_graphql: AsyncMock) -> None:
         """Non-connection exceptions (logic bugs, import errors) must propagate to tool_error_handler."""
         _mock_graphql.side_effect = AttributeError("'NoneType' object has no attribute 'get'")
