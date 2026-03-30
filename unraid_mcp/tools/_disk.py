@@ -3,7 +3,7 @@
 Covers: shares, disks, disk_details, log_files, logs, flash_backup* (6 subactions).
 """
 
-import os
+import posixpath
 from typing import Any
 
 from fastmcp import Context
@@ -53,7 +53,7 @@ def _validate_path(path: str, allowed_prefixes: tuple[str, ...], label: str) -> 
     # Normalize BEFORE checking for '..' so encoded traversal sequences
     # (e.g. 'foo/bar/../..') are resolved first. Checking the raw string
     # before normpath is bypassable via encoded or indirect sequences.
-    normalized = os.path.normpath(path)
+    normalized = posixpath.normpath(path)
     # Always split on '/' — paths are remote Linux paths, not local OS paths.
     # os.sep would be '\\' on Windows, silently breaking the traversal check.
     if ".." in normalized.split("/"):
@@ -108,13 +108,13 @@ async def _handle_disk(
         # Validate paths — flash backup source must come from /boot/ only
         if ".." in source_path:
             raise ToolError("source_path must not contain path traversal sequences (../)")
-        normalized = os.path.normpath(source_path)  # noqa: ASYNC240 — pure string, no I/O
+        normalized = posixpath.normpath(source_path)
         if not (normalized == "/boot" or normalized.startswith("/boot/")):
             raise ToolError("source_path must start with /boot/ (flash drive only)")
         source_path = normalized
         if "\x00" in destination_path:
             raise ToolError("destination_path must not contain null bytes")
-        normalized_dest = os.path.normpath(destination_path)  # noqa: ASYNC240 — pure string, no I/O
+        normalized_dest = posixpath.normpath(destination_path)
         if ".." in normalized_dest.split("/"):
             raise ToolError("destination_path must not contain path traversal sequences (../)")
         destination_path = normalized_dest
@@ -127,7 +127,7 @@ async def _handle_disk(
             input_data["options"] = backup_options
         with tool_error_handler("disk", subaction, logger):
             logger.info(
-                f"Executing unraid action=disk subaction={subaction} remote={remote_name!r} source={source_path!r}"
+                f"Executing unraid action=disk subaction={subaction} remote={remote_name!r} source={source_path!r} dest={destination_path!r}"
             )
             data = await _client.make_graphql_request(
                 _DISK_MUTATIONS["flash_backup"], {"input": input_data}

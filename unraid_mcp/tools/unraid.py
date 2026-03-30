@@ -180,7 +180,9 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                 # all caching was disabled (the consolidated `unraid` tool mixes reads
                 # and mutations, making safe per-subaction exclusion impossible).
                 "cache": {"note": "caching disabled — tool mixes reads and mutations"},
-                "errors": error_middleware.get_error_stats(),
+                "errors": error_middleware.get_error_stats()
+                if error_middleware is not None
+                else {},
             }
 
         raise ToolError(f"Unhandled health subaction '{subaction}' — this is a bug")

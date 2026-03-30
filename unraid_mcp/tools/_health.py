@@ -156,3 +156,16 @@ async def _comprehensive_health_check() -> dict[str, Any]:
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "error": str(e),
         }
+    except Exception as e:
+        # make_graphql_request wraps httpx network errors in ToolError; catch them
+        # here so health/check returns {"status": "unhealthy"} on real outages
+        # rather than propagating an unhandled ToolError to the caller.
+        cause = e.__cause__
+        if isinstance(cause, (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError)):
+            logger.error(f"Health check failed (wrapped): {cause}", exc_info=True)
+            return {
+                "status": "unhealthy",
+                "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+                "error": str(cause),
+            }
+        raise

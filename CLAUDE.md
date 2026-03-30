@@ -142,12 +142,13 @@ The server loads environment variables from multiple locations in order:
 - All errors are logged with full context for debugging
 
 ### Middleware Chain
-`server.py` wraps all tools in a 5-layer stack (order matters — outermost first):
+`server.py` wraps all tools in a 4-layer stack (order matters — outermost first):
 1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
 2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
 3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
 4. **ResponseLimitingMiddleware** — truncates responses > 512 KB with a clear suffix
-5. **ResponseCachingMiddleware** — caching disabled entirely for `unraid` tool (mutations and reads share one tool name, so no per-subaction exclusion is possible)
+
+Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool mixes reads and mutations under one name, making per-subaction cache exclusion impossible.
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)

@@ -163,6 +163,8 @@ class SubscriptionManager:
             try:
                 logger.info(f"[SUBSCRIPTION_MANAGER] Auto-starting subscription: {name}")
                 await self.start_subscription(name, str(config["query"]))
+            except asyncio.CancelledError:
+                raise  # Never swallow cancellation — propagate for clean shutdown
             except Exception as e:
                 logger.error(f"[SUBSCRIPTION_MANAGER] Failed to auto-start {name}: {e}")
                 self.last_error[name] = str(e)
@@ -349,11 +351,12 @@ class SubscriptionManager:
                         logger.error(
                             f"[PROTOCOL:{subscription_name}] Failed to decode init response: {init_preview}..."
                         )
-                        self.last_error[subscription_name] = f"Invalid JSON in init response: {e}"
-                        # Transient handshake error — close this connection and retry.
-                        # break here would exit the outer while-True retry loop entirely,
-                        # killing all reconnect attempts permanently.
-                        continue
+                        # Raise rather than continue — continue skips the reconnect
+                        # backoff at the bottom of the while loop, causing tight retry
+                        # loops on malformed handshake responses (e.g. misconfigured
+                        # proxies). The outer except Exception handler catches this,
+                        # sets last_error, and the normal sleep/backoff runs.
+                        raise RuntimeError(f"Invalid JSON in init handshake response: {e}") from e
 
                     # Handle connection acknowledgment
                     if init_data.get("type") == "connection_ack":
