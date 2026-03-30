@@ -62,7 +62,15 @@ def _parse_port(env_var: str, default: int) -> int:
 
 UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
 UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
-UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "stdio").lower()
+UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
+
+# HTTP Authentication
+# Bearer token for HTTP transport (streamable-http / sse).
+# Auto-generated on first HTTP startup if absent; written to CREDENTIALS_ENV_PATH.
+# Set UNRAID_MCP_DISABLE_HTTP_AUTH=true only when an upstream gateway handles auth.
+UNRAID_MCP_BEARER_TOKEN: str | None = os.getenv("UNRAID_MCP_BEARER_TOKEN") or None
+_raw_disable_auth = os.getenv("UNRAID_MCP_DISABLE_HTTP_AUTH", "false").lower()
+UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _raw_disable_auth in ("true", "1", "yes")
 
 # SSL Configuration
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
@@ -130,6 +138,18 @@ def apply_runtime_config(api_url: str, api_key: str) -> None:
     os.environ["UNRAID_API_KEY"] = api_key
 
 
+def apply_bearer_token(token: str) -> None:
+    """Store the generated bearer token in the module global.
+
+    Called by ``ensure_token_exists()`` in server.py after writing the token
+    to disk.  We do NOT set os.environ here — the caller is responsible for
+    calling ``os.environ.pop("UNRAID_MCP_BEARER_TOKEN", None)`` immediately
+    after, so the token is no longer accessible via os.environ.
+    """
+    global UNRAID_MCP_BEARER_TOKEN
+    UNRAID_MCP_BEARER_TOKEN = token
+
+
 def get_config_summary() -> dict[str, Any]:
     """Get a summary of current configuration (safe for logging).
 
@@ -140,6 +160,7 @@ def get_config_summary() -> dict[str, Any]:
 
     from ..core.utils import safe_display_url
 
+    is_http = UNRAID_MCP_TRANSPORT in ("streamable-http", "sse")
     return {
         "api_url_configured": bool(UNRAID_API_URL),
         "api_url_preview": safe_display_url(UNRAID_API_URL) if UNRAID_API_URL else None,
@@ -152,6 +173,9 @@ def get_config_summary() -> dict[str, Any]:
         "log_file": str(LOG_FILE_PATH),
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
+        # Auth fields only meaningful in HTTP mode
+        "http_auth_enabled": is_http and not UNRAID_MCP_DISABLE_HTTP_AUTH,
+        "http_auth_token_set": bool(UNRAID_MCP_BEARER_TOKEN) if is_http else None,
     }
 
 

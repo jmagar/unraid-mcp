@@ -4,25 +4,34 @@ This is the main server implementation using the modular architecture with
 separate modules for configuration, core functionality, subscriptions, and tools.
 """
 
+import os
+import secrets
 import sys
+from typing import Literal
 
+from dotenv import set_key
 from fastmcp import FastMCP
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
 from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
+from starlette.middleware import Middleware as ASGIMiddleware
 
+from .config import settings as _settings
 from .config.logging import log_configuration_status, logger
 from .config.settings import (
+    CREDENTIALS_DIR,
+    CREDENTIALS_ENV_PATH,
     LOG_LEVEL_STR,
     UNRAID_MCP_HOST,
     UNRAID_MCP_PORT,
-    UNRAID_MCP_TRANSPORT,
     UNRAID_VERIFY_SSL,
     VERSION,
+    apply_bearer_token,
     validate_required_config,
 )
 from .core import middleware_refs as _middleware_refs
+from .core.auth import BearerAuthMiddleware
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
@@ -70,9 +79,8 @@ _response_limiter = ResponseLimitingMiddleware(max_size=512_000)
 # into separate read/write tools.
 
 
-# Initialize FastMCP instance — no built-in auth.
-# Authentication is delegated to an external OAuth gateway (nginx, Caddy,
-# Authelia, Authentik, etc.) placed in front of this server.
+# Initialize FastMCP instance — ASGI-level bearer auth added at run time via
+# mcp.run(middleware=[...]) so it fires before any MCP protocol processing.
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
@@ -113,9 +121,77 @@ def register_all_modules() -> None:
 register_all_modules()
 
 
+def ensure_token_exists() -> None:
+    """Auto-generate a bearer token on first HTTP startup if none is configured.
+
+    Writes the token to ``~/.unraid-mcp/.env`` via ``dotenv.set_key`` (in-place,
+    preserves existing comments and key order), then applies it to the module
+    global via ``apply_bearer_token()`` and removes it from ``os.environ`` so it
+    is no longer readable by subprocess spawns.
+
+    No-op when:
+    - ``UNRAID_MCP_BEARER_TOKEN`` is already set (token was loaded at startup).
+    - ``UNRAID_MCP_DISABLE_HTTP_AUTH=true`` (gateway-delegated auth).
+    """
+    if _settings.UNRAID_MCP_BEARER_TOKEN or _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+        return
+
+    token = secrets.token_urlsafe(32)
+
+    # Ensure credentials dir exists with restricted permissions
+    CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_DIR.chmod(0o700)
+
+    # Touch the file first so set_key has a target (no-op if already exists)
+    if not CREDENTIALS_ENV_PATH.exists():
+        CREDENTIALS_ENV_PATH.touch()
+        CREDENTIALS_ENV_PATH.chmod(0o600)
+
+    # In-place .env write — preserves comments and existing keys
+    set_key(str(CREDENTIALS_ENV_PATH), "UNRAID_MCP_BEARER_TOKEN", token, quote_mode="auto")
+    CREDENTIALS_ENV_PATH.chmod(0o600)
+
+    # Print once to STDERR so the user can copy it into their MCP client config
+    print(
+        f"\n[unraid-mcp] Generated HTTP bearer token (saved to {CREDENTIALS_ENV_PATH}):\n"
+        f"  UNRAID_MCP_BEARER_TOKEN={token}\n"
+        "  Add this to your MCP client's Authorization header: Bearer <token>\n",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Store in module global; pop from os.environ so subprocesses cannot inherit it
+    apply_bearer_token(token)
+    os.environ.pop("UNRAID_MCP_BEARER_TOKEN", None)
+
+    logger.info("Bearer token generated and written to %s", CREDENTIALS_ENV_PATH)
+
+
 def run_server() -> None:
     """Run the MCP server with the configured transport."""
-    # Validate required configuration before anything else
+    is_http = _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse")
+
+    # Auto-generate token before the startup guard so a fresh install
+    # can start without manual intervention.
+    if is_http:
+        ensure_token_exists()
+
+    # Hard stop: HTTP mode with no token and auth not explicitly disabled.
+    # We deliberately do NOT mention DISABLE_HTTP_AUTH in the error message to
+    # avoid inadvertently guiding users toward disabling auth.
+    if (
+        is_http
+        and not _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
+        and not _settings.UNRAID_MCP_BEARER_TOKEN
+    ):
+        print(
+            "FATAL: HTTP transport requires a bearer token. "
+            "Set UNRAID_MCP_BEARER_TOKEN in ~/.unraid-mcp/.env or restart to auto-generate.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Validate Unraid API credentials
     is_valid, missing = validate_required_config()
     if not is_valid:
         logger.warning(
@@ -132,34 +208,50 @@ def run_server() -> None:
             "Only use this in trusted networks or for development."
         )
 
-    if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
-        logger.warning(
-            "⚠️  NO AUTHENTICATION — HTTP server is open to all clients on the network. "
-            "Protect this server with an external OAuth gateway (nginx, Caddy, Authelia, Authentik) "
-            "or restrict access at the network layer (firewall, VPN, Tailscale)."
-        )
+    if is_http:
+        if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+            logger.warning(
+                "HTTP auth disabled (UNRAID_MCP_DISABLE_HTTP_AUTH=true). "
+                "Ensure an upstream gateway enforces authentication."
+            )
+        else:
+            logger.info("HTTP bearer token authentication enabled.")
 
     logger.info(
-        f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} using {UNRAID_MCP_TRANSPORT} transport..."
+        f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} "
+        f"using {_settings.UNRAID_MCP_TRANSPORT} transport..."
     )
 
     try:
-        if UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
-            if UNRAID_MCP_TRANSPORT == "sse":
+        if is_http:
+            if _settings.UNRAID_MCP_TRANSPORT == "sse":
                 logger.warning(
                     "SSE transport is deprecated. Consider switching to 'streamable-http'."
                 )
+            # ASGI-level bearer auth wraps the entire HTTP stack — fires before any
+            # MCP protocol processing and before the MCP-level middleware chain.
+            transport_literal: Literal["stdio", "http", "sse", "streamable-http"] = (
+                _settings.UNRAID_MCP_TRANSPORT  # type: ignore[assignment]
+            )
             mcp.run(
-                transport=UNRAID_MCP_TRANSPORT,
+                transport=transport_literal,
                 host=UNRAID_MCP_HOST,
                 port=UNRAID_MCP_PORT,
                 path="/mcp",
+                middleware=[
+                    ASGIMiddleware(
+                        BearerAuthMiddleware,
+                        token=_settings.UNRAID_MCP_BEARER_TOKEN or "",
+                        disabled=_settings.UNRAID_MCP_DISABLE_HTTP_AUTH,
+                    )
+                ],
             )
-        elif UNRAID_MCP_TRANSPORT == "stdio":
+        elif _settings.UNRAID_MCP_TRANSPORT == "stdio":
             mcp.run()
         else:
             logger.error(
-                f"Unsupported MCP_TRANSPORT: {UNRAID_MCP_TRANSPORT}. Choose 'streamable-http', 'sse', or 'stdio'."
+                f"Unsupported MCP_TRANSPORT: {_settings.UNRAID_MCP_TRANSPORT}. "
+                "Choose 'streamable-http', 'sse', or 'stdio'."
             )
             sys.exit(1)
     except Exception as e:
