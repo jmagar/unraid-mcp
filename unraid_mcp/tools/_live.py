@@ -22,6 +22,26 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 _HANDLED_COLLECT_SUBACTIONS: frozenset[str] = frozenset({"log_tail", "notification_feed"})
 
 
+def _assert_collect_subactions_complete() -> None:
+    """Raise AssertionError at import time if COLLECT_ACTIONS has an unhandled key.
+
+    Every key in COLLECT_ACTIONS must appear in _HANDLED_COLLECT_SUBACTIONS AND
+    have a matching if-branch in _handle_live. This assertion catches the former
+    at import time so the omission is caught before reaching the runtime ToolError.
+    """
+    from ..subscriptions.queries import COLLECT_ACTIONS
+
+    missing = set(COLLECT_ACTIONS) - _HANDLED_COLLECT_SUBACTIONS
+    if missing:
+        raise RuntimeError(
+            f"_HANDLED_COLLECT_SUBACTIONS is missing keys from COLLECT_ACTIONS: {missing}. "
+            "Add a handler branch in _handle_live and update _HANDLED_COLLECT_SUBACTIONS."
+        )
+
+
+_assert_collect_subactions_complete()
+
+
 async def _handle_live(
     subaction: str,
     path: str | None,

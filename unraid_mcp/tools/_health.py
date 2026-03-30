@@ -35,6 +35,8 @@ _HEALTH_QUERIES: dict[str, str] = {
     ),
 }
 _SEVERITY = {"healthy": 0, "warning": 1, "degraded": 2, "unhealthy": 3}
+# Reverse mapping computed once at module load — _SEVERITY is a constant.
+_STATUS_FROM_SEVERITY: dict[int, str] = {v: k for k, v in _SEVERITY.items()}
 
 
 async def _comprehensive_health_check() -> dict[str, Any]:
@@ -137,8 +139,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
             _escalate("warning")
             issues.append(f"High API latency: {api_latency}ms")
 
-        severity_to_status = {v: k for k, v in _SEVERITY.items()}
-        health_info["status"] = severity_to_status.get(health_severity, "healthy")
+        health_info["status"] = _STATUS_FROM_SEVERITY.get(health_severity, "healthy")
         if issues:
             health_info["issues"] = issues
         health_info["performance"] = {

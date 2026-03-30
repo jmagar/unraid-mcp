@@ -8,6 +8,7 @@ error handling, reconnection logic, and authentication.
 import asyncio
 import json
 import os
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -175,7 +176,7 @@ class SubscriptionManager:
 
         start_errors: list[tuple[str, Exception]] = []
 
-        async def _start_one(name: str, config: dict) -> None:
+        async def _start_one(name: str, config: dict[str, Any]) -> None:
             try:
                 logger.info(f"[SUBSCRIPTION_MANAGER] Auto-starting subscription: {name}")
                 await self.start_subscription(name, str(config["query"]))
@@ -200,13 +201,15 @@ class SubscriptionManager:
             logger.warning(
                 f"[SUBSCRIPTION_MANAGER] {len(start_errors)} subscription(s) failed to auto-start: {failed_names}"
             )
-            for name, exc in start_errors:
-                logger.warning(f"[SUBSCRIPTION_MANAGER] Auto-start failure detail — {name}: {exc}")
 
     async def start_subscription(
         self, subscription_name: str, query: str, variables: dict[str, Any] | None = None
     ) -> None:
         """Start a GraphQL subscription and maintain it as a resource."""
+        if not re.match(r"^[a-zA-Z0-9_]+$", subscription_name):
+            raise ValueError(
+                f"subscription_name must contain only [a-zA-Z0-9_], got: {subscription_name!r}"
+            )
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Starting subscription...")
 
         # Guard must be inside the lock to prevent a TOCTOU race where two
@@ -621,11 +624,18 @@ class SubscriptionManager:
         return active
 
     async def get_error_state(self, name: str) -> tuple[str | None, str]:
-        """Return (last_error, connection_state) for a subscription under _task_lock.
+        """Return (last_error, connection_state) for a subscription.
 
         Public accessor so external callers (e.g. resources.py) never touch
-        private lock attributes directly. Both fields are written by
-        _subscription_loop tasks, so they must be read as a consistent pair.
+        private lock attributes directly.
+
+        Consistency note: _subscription_loop writes connection_states and
+        last_error without holding _task_lock (it runs as an asyncio Task with
+        no await between the two writes). The pair is consistent because asyncio
+        cooperative scheduling prevents interleaving at non-await points — not
+        because of the lock. _task_lock here prevents two *readers* from racing
+        each other, not writers. If an await is ever introduced between the two
+        write sites in _subscription_loop, this guarantee breaks.
         """
         async with self._task_lock:
             return (

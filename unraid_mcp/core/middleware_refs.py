@@ -17,11 +17,9 @@ Usage:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
+from fastmcp.server.middleware.error_handling import (
+    ErrorHandlingMiddleware,  # noqa: TC002 — runtime import needed for isinstance() checks
+)
 
 
 # Populated by server.py before any tool is called.
