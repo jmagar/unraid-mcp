@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [1.2.0] - 2026-03-30
+
+### Added
+- **HTTP bearer token auth**: ASGI-level `BearerAuthMiddleware` (pure `__call__` pattern, no BaseHTTPMiddleware overhead) enforces `Authorization: Bearer <token>` on all HTTP requests. RFC 6750 compliant — missing header returns `WWW-Authenticate: Bearer realm="unraid-mcp"`, invalid token adds `error="invalid_token"`.
+- **Auto token generation**: On first HTTP startup with no token configured, a `secrets.token_urlsafe(32)` token is generated, written to `~/.unraid-mcp/.env` (mode 600), printed once to STDERR, and removed from `os.environ` so subprocesses cannot inherit it.
+- **Per-IP rate limiting**: 60 failed auth attempts per 60 seconds → 429 with `Retry-After: 60` header.
+- **Gateway escape hatch**: `UNRAID_MCP_DISABLE_HTTP_AUTH=true` bypasses bearer auth for users who handle authentication at a reverse proxy / gateway layer.
+- **Startup guard**: Server refuses to start in HTTP mode (`streamable-http`/`sse`) if no token is set and `DISABLE_HTTP_AUTH` is not explicitly enabled.
+- **Tests**: 23 new tests in `tests/test_auth.py` covering pass-through scopes, 401/429 responses, RFC 6750 header differentiation, per-IP rate limiting, window expiry, token generation, and startup guard.
+
+### Changed
+- **Default transport**: `stdio` → `streamable-http`. Users running directly (not via Claude Desktop plugin) will now get an HTTP server by default. To keep stdio behaviour, set `UNRAID_MCP_TRANSPORT=stdio`. The Claude Desktop plugin (`plugin.json`) is unaffected — it hardcodes `stdio`.
+- **`.env.example`**: Updated to document new auth variables (`UNRAID_MCP_BEARER_TOKEN`, `UNRAID_MCP_DISABLE_HTTP_AUTH`) and updated default transport comment.
+
+### Breaking Changes
+- **Default transport is now `streamable-http`**. Any script or service that relied on the default being `stdio` must explicitly set `UNRAID_MCP_TRANSPORT=stdio`.
+
 ## [1.1.6] - 2026-03-30
 
 ### Security
