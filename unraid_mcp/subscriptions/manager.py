@@ -29,6 +29,22 @@ _MAX_RESOURCE_DATA_LINES = 5_000
 _STABLE_CONNECTION_SECONDS = 30
 
 
+def _preview(message: str | bytes, n: int = 200) -> str:
+    """Return the first *n* characters of *message* as a UTF-8 string.
+
+    Safe for both str and bytes payloads; replaces unmappable bytes rather
+    than raising. Used to log a safe, bounded snippet before/after errors.
+    """
+    if isinstance(message, str):
+        return message[:n]
+    return message[:n].decode("utf-8", errors="replace")
+
+
+# Subscription names that carry log content and therefore need _cap_log_content.
+# All other subscriptions never have a 'content' field — skip the cap call for them.
+_LOG_SUBSCRIPTION_NAMES: frozenset[str] = frozenset({"log_tail", "logFileSubscription"})
+
+
 def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
     """Cap log content in subscription data to prevent unbounded memory growth.
 
@@ -167,7 +183,8 @@ class SubscriptionManager:
                 raise  # Never swallow cancellation — propagate for clean shutdown
             except Exception as e:
                 logger.error(f"[SUBSCRIPTION_MANAGER] Failed to auto-start {name}: {e}")
-                self.last_error[name] = str(e)
+                async with self._task_lock:
+                    self.last_error[name] = str(e)
                 start_errors.append((name, e))
 
         async with asyncio.TaskGroup() as tg:
@@ -254,7 +271,8 @@ class SubscriptionManager:
 
     async def stop_all(self) -> None:
         """Stop all active subscriptions (called during server shutdown)."""
-        subscription_names = list(self.active_subscriptions.keys())
+        async with self._task_lock:
+            subscription_names = list(self.active_subscriptions.keys())
         for name in subscription_names:
             try:
                 await self.stop_subscription(name)
@@ -438,6 +456,7 @@ class SubscriptionManager:
                                     capped_data = (
                                         _cap_log_content(payload["data"])
                                         if isinstance(payload["data"], dict)
+                                        and subscription_name in _LOG_SUBSCRIPTION_NAMES
                                         else payload["data"]
                                     )
                                     new_entry = SubscriptionData(
@@ -485,7 +504,7 @@ class SubscriptionManager:
                                 self.connection_states[subscription_name] = "completed"
                                 break
 
-                            elif data.get("type") in ["ka", "ping", "pong"]:
+                            elif data.get("type") in ["ka", "pong"]:
                                 logger.debug(
                                     f"[PROTOCOL:{subscription_name}] Keepalive message: {message_type}"
                                 )
@@ -496,13 +515,8 @@ class SubscriptionManager:
                                 )
 
                         except json.JSONDecodeError as e:
-                            msg_preview = (
-                                message[:200]
-                                if isinstance(message, str)
-                                else message[:200].decode("utf-8", errors="replace")
-                            )
                             logger.error(
-                                f"[PROTOCOL:{subscription_name}] Failed to decode message: {msg_preview}..."
+                                f"[PROTOCOL:{subscription_name}] Failed to decode message: {_preview(message)}..."
                             )
                             logger.error(f"[PROTOCOL:{subscription_name}] JSON decode error: {e}")
                         except Exception as e:
@@ -510,13 +524,8 @@ class SubscriptionManager:
                                 f"[DATA:{subscription_name}] Error processing message: {e}",
                                 exc_info=True,
                             )
-                            msg_preview = (
-                                message[:200]
-                                if isinstance(message, str)
-                                else message[:200].decode("utf-8", errors="replace")
-                            )
                             logger.debug(
-                                f"[DATA:{subscription_name}] Raw message: {msg_preview}..."
+                                f"[DATA:{subscription_name}] Raw message: {_preview(message)}..."
                             )
 
             except TimeoutError:

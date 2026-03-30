@@ -52,6 +52,10 @@ def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
             raise ToolError(
                 f"settings_input['{key}'] value exceeds max length ({len(str_value)} > {MAX_VALUE_LENGTH})"
             )
+        # Store the original typed value, not str_value — callers (GraphQL mutations)
+        # expect int/float/bool to arrive as their native types, not stringified.
+        # _rclone.py differs: it always stringifies because rclone config values are
+        # strings on the wire; settings mutations accept JSON scalars directly.
         validated[key] = value
     return validated
 
@@ -100,8 +104,12 @@ async def _handle_setting(
         if subaction == "configure_ups":
             if ups_config is None:
                 raise ToolError("ups_config is required for setting/configure_ups")
+            # Validate ups_config with the same rules as settings_input — key count
+            # cap, scalar-only values, MAX_VALUE_LENGTH — to prevent unvalidated bulk
+            # input from reaching the GraphQL mutation.
+            validated_ups = _validate_settings_input(ups_config)
             data = await _client.make_graphql_request(
-                _SETTING_MUTATIONS["configure_ups"], {"config": ups_config}
+                _SETTING_MUTATIONS["configure_ups"], {"config": validated_ups}
             )
             return {
                 "success": True,
