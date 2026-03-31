@@ -1,0 +1,10 @@
+{
+  "name": "unraid-mcp",
+  "version": "1.0.0",
+  "description": "Unraid server management via MCP",
+  "interface": {
+    "type": "mcp",
+    "transport": "http",
+    "url": "http://localhost:3000/mcp"
+  }
+}
