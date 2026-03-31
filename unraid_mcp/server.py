@@ -37,6 +37,14 @@ from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
 
+def _chmod_safe(path: object, mode: int) -> None:
+    """Chmod with graceful fallback for volume mounts owned by root."""
+    try:
+        path.chmod(mode)  # type: ignore[union-attr]
+    except PermissionError:
+        logger.debug("Could not chmod %s (volume mount?) — skipping", path)
+
+
 # Middleware chain order matters — each layer wraps everything inside it:
 #   logging → error_handling → rate_limiter → response_limiter → tool
 
@@ -138,13 +146,6 @@ def ensure_token_exists() -> None:
 
     token = secrets.token_urlsafe(32)
 
-    def _chmod_safe(path: object, mode: int) -> None:
-        """Chmod with graceful fallback for volume mounts owned by root."""
-        try:
-            path.chmod(mode)
-        except PermissionError:
-            logger.debug("Could not chmod %s (volume mount?) — skipping", path)
-
     # Ensure credentials dir exists with restricted permissions.
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
     _chmod_safe(CREDENTIALS_DIR, 0o700)
@@ -201,8 +202,9 @@ def run_server() -> None:
     is_valid, missing = validate_required_config()
     if not is_valid:
         logger.warning(
-            f"Missing configuration: {', '.join(missing)}. "
-            "Server will prompt for credentials on first tool call via elicitation."
+            "Missing configuration: %s. "
+            "Server will prompt for credentials on first tool call via elicitation.",
+            ", ".join(missing),
         )
 
     log_configuration_status(logger)
@@ -225,8 +227,10 @@ def run_server() -> None:
 
     if is_http:
         logger.info(
-            f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} "
-            f"using {_settings.UNRAID_MCP_TRANSPORT} transport..."
+            "Starting Unraid MCP Server on %s:%s using %s transport...",
+            UNRAID_MCP_HOST,
+            UNRAID_MCP_PORT,
+            _settings.UNRAID_MCP_TRANSPORT,
         )
     else:
         logger.info("Starting Unraid MCP Server using stdio transport...")

@@ -10,9 +10,13 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
+      - unraid-mcp-credentials:/home/mcp/.unraid-mcp
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6970/health')"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+
+volumes:
+  unraid-mcp-credentials:

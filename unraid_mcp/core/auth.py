@@ -220,10 +220,8 @@ class HealthMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # scope["path"] is always present in ASGI HTTP scopes (required field).
-        if scope["type"] == "http" and scope["path"] == "/health" and scope.get("method") == "GET":
-            await send(
-                {"type": "http.response.start", "status": 200, "headers": list(self._HEADERS)}
-            )
+        if scope["type"] == "http" and scope["path"] == "/health" and scope["method"] == "GET":
+            await send({"type": "http.response.start", "status": 200, "headers": self._HEADERS})
             await send({"type": "http.response.body", "body": self._BODY, "more_body": False})
             return
         await self.app(scope, receive, send)

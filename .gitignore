@@ -1,19 +1,61 @@
-# Python-generated files
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime / hook artifacts ─────────────────────────────────────────────────
+backups/*
+!backups/.gitkeep
+logs/*
+!logs/.gitkeep
+*.log
+*.bak
+*.bak-*
+
+# ── Claude Code / AI tooling ────────────────────────────────────────────────
+.claude/settings.local.json
+.claude/worktrees/
+.omc/
+.lavra/memory/session-state.md
+.beads/
+.dolt/
+*.db
+.beads-credential-key
+.serena/
+.worktrees
+.full-review/
+.full-review-archive-*
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode/
+.cursor/
+.windsurf/
+.1code/
+.bivvy
+.emdash.json
+
+# ── Caches ───────────────────────────────────────────────────────────────────
+.cache/
+
+# ── Documentation artifacts ─────────────────────────────────────────────────
+.docs/
+docs/plans/
+docs/sessions/
+docs/reports/
+docs/research/
+docs/superpowers/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+.venv/
+.venv-backend/
 __pycache__/
 *.py[oc]
+*.egg-info
+*.egg
 build/
 dist/
 wheels/
-*.egg-info
-*.egg
-
-# Tool artifacts (pytest, ruff, ty, coverage all write here)
-.cache/
-
-# Hypothesis example database (machine-local, auto-regenerated)
 .hypothesis/
-
-# Legacy artifact locations (in case tools run outside pyproject config)
 .pytest_cache/
 .ruff_cache/
 .ty_cache/
@@ -21,66 +63,6 @@ htmlcov/
 .coverage
 coverage.xml
 
-# Virtual environments
-.venv
-.venv-backend
-
-# Environment files (only .env.example is tracked)
-.env
-.env.*
-!.env.example
-
-# Logs
-*.log
-logs/*
-!logs/.gitkeep
-
-# IDE/Editor
-.bivvy
-.cursor
-.windsurf/
-.1code/
-.emdash.json
-
-# Backup files
-*.bak
-*.bak-*
-backups/*
-!backups/.gitkeep
-
-# Claude Code user settings (gitignore local settings)
-.claude/settings.local.json
-
-# Serena IDE configuration
-.serena/
-
-# Claude Code worktrees (temporary agent isolation dirs)
-.claude/worktrees/
-
-# Documentation and session artifacts
-.docs/
-.full-review/
-/docs/plans/
-/docs/sessions/
-/docs/reports/
-/docs/research/
-/docs/superpowers/
-
-# Test planning documents
+# ── Repo-specific ────────────────────────────────────────────────────────────
 /DESTRUCTIVE_ACTIONS.md
-
-# Google OAuth client secrets
 client_secret_*.apps.googleusercontent.com.json
-
-web-ui/frontend/node_modules
-web-ui/backend/.venv-backend/
-.pnpm-store/
-
-# Beads / Dolt files (added by bd init)
-.dolt/
-*.db
-.beads-credential-key
-
-# Lavra
-.lavra/memory/session-state.md
-.worktrees

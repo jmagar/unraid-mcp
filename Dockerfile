@@ -33,9 +33,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Create directories with correct ownership
-RUN mkdir -p /app/logs /app/backups && \
-    chown -R mcp:mcp /app/logs /app/backups
+# Create directories with correct ownership.
+# /home/mcp/.unraid-mcp is pre-created so Docker named volume mounts inherit mcp ownership.
+RUN mkdir -p /app/logs /app/backups /home/mcp/.unraid-mcp && \
+    chown -R mcp:mcp /app/logs /app/backups /home/mcp/.unraid-mcp && \
+    chmod 700 /home/mcp/.unraid-mcp
 
 # Default env — overridden by .env / docker-compose
 ENV UNRAID_MCP_TRANSPORT=streamable-http \

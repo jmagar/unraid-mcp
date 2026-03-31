@@ -1,20 +1,53 @@
+# ── Version control ──────────────────────────────────────────────────────────
 .git
 .github
-.venv
-.cache
-.beads
-.lavra
-.omc
-.claude
-.worktrees
-dist
-docs
-tests
-logs
-backups
-*.log
-*.pyc
-__pycache__
+
+# ── Secrets ──────────────────────────────────────────────────────────────────
 .env
 .env.*
 !.env.example
+
+# ── Claude Code / AI tooling ────────────────────────────────────────────────
+.claude
+.claude-plugin
+.omc
+.lavra
+.beads
+.serena
+.worktrees
+.full-review
+.full-review-archive-*
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode
+.cursor
+.windsurf
+.1code
+
+# ── Docs, tests, scripts (not needed at runtime) ────────────────────────────
+docs
+tests
+scripts
+*.md
+!README.md
+
+# ── Runtime artifacts ────────────────────────────────────────────────────────
+logs
+backups
+*.log
+.cache
+
+# ── Python ───────────────────────────────────────────────────────────────────
+.venv
+__pycache__/
+*.py[oc]
+*.egg-info
+dist/
+build/
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+htmlcov/
+.coverage
+coverage.xml
