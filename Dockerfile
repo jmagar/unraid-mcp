@@ -47,9 +47,15 @@ ENV UNRAID_MCP_TRANSPORT=streamable-http \
 
 EXPOSE 6970
 
+RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER mcp
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/health' % os.getenv('UNRAID_MCP_PORT', '6970'))" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget --quiet --tries=1 --spider \
+        "http://localhost:${UNRAID_MCP_PORT:-6970}/health" || exit 1
 
-ENTRYPOINT ["unraid-mcp-server"]
+ENTRYPOINT ["/entrypoint.sh"]

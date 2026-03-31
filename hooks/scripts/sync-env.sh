@@ -3,7 +3,12 @@ set -euo pipefail
 
 ENV_FILE="${CLAUDE_PLUGIN_ROOT}/.env"
 BACKUP_DIR="${CLAUDE_PLUGIN_ROOT}/backups"
+LOCK_FILE="/tmp/unraid-sync-env.lock"
 mkdir -p "$BACKUP_DIR"
+
+# Serialize concurrent sessions (two tabs starting at the same time)
+exec 9>"$LOCK_FILE"
+flock -w 10 9 || { echo "sync-env: failed to acquire lock after 10s" >&2; exit 1; }
 
 declare -A MANAGED=(
   [UNRAID_API_URL]="${CLAUDE_PLUGIN_OPTION_UNRAID_API_URL:-}"
@@ -14,10 +19,12 @@ declare -A MANAGED=(
 
 touch "$ENV_FILE"
 
+# Backup before writing (max 3 retained)
 if [ -s "$ENV_FILE" ]; then
   cp "$ENV_FILE" "${BACKUP_DIR}/.env.bak.$(date +%s)"
 fi
 
+# Write managed keys — awk handles arbitrary values safely (no delimiter injection)
 for key in "${!MANAGED[@]}"; do
   value="${MANAGED[$key]}"
   [ -z "$value" ] && continue
@@ -25,20 +32,22 @@ for key in "${!MANAGED[@]}"; do
     echo "sync-env: refusing ${key} with control characters" >&2
     exit 1
   fi
-  escaped_value=$(printf '%s\n' "$value" | sed 's/[&/\|]/\\&/g')
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
-    sed -i "s|^${key}=.*|${key}=${escaped_value}|" "$ENV_FILE"
+    awk -v k="$key" -v v="$value" '$0 ~ "^"k"=" { print k"="v; next } { print }' \
+      "$ENV_FILE" > "${ENV_FILE}.tmp" && mv "${ENV_FILE}.tmp" "$ENV_FILE"
   else
     echo "${key}=${value}" >> "$ENV_FILE"
   fi
 done
 
-# Auto-generate UNRAID_MCP_BEARER_TOKEN if not yet set
-if ! grep -Eq '^UNRAID_MCP_BEARER_TOKEN=.+$' "$ENV_FILE" 2>/dev/null; then
-  sed -i '/^UNRAID_MCP_BEARER_TOKEN=/d' "$ENV_FILE"
-  generated=$(openssl rand -hex 32)
-  echo "UNRAID_MCP_BEARER_TOKEN=${generated}" >> "$ENV_FILE"
-  echo "sync-env: generated UNRAID_MCP_BEARER_TOKEN (update plugin userConfig to match)" >&2
+# Fail if bearer token is not set — do NOT auto-generate.
+# Auto-generated tokens cause a mismatch: the server reads the generated token
+# but Claude Code sends the (empty) userConfig value. Every MCP call returns 401.
+if ! grep -q "^UNRAID_MCP_BEARER_TOKEN=.\+" "$ENV_FILE" 2>/dev/null; then
+  echo "sync-env: ERROR — UNRAID_MCP_BEARER_TOKEN is not set." >&2
+  echo "  Generate one:  openssl rand -hex 32" >&2
+  echo "  Then paste it into the plugin's userConfig MCP token field." >&2
+  exit 1
 fi
 
 chmod 600 "$ENV_FILE"
