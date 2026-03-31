@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+# ── Stage 1: Build ──────────────────────────────────────────────────────────────
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
+
+# Copy source and install project
+COPY unraid_mcp/ unraid_mcp/
+COPY README.md LICENSE ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+# ── Stage 2: Runtime ────────────────────────────────────────────────────────────
+FROM python:3.12-slim-bookworm AS runtime
+
+RUN groupadd --gid 1000 mcp && \
+    useradd --uid 1000 --gid mcp --create-home mcp
+
+WORKDIR /app
+
+# Copy the virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/unraid_mcp /app/unraid_mcp
+COPY --from=builder /app/README.md /app/LICENSE /app/
+
+# Ensure .venv/bin is on PATH
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Create directories with correct ownership
+RUN mkdir -p /app/logs /app/backups && \
+    chown -R mcp:mcp /app/logs /app/backups
+
+# Default env — overridden by .env / docker-compose
+ENV UNRAID_MCP_TRANSPORT=streamable-http \
+    UNRAID_MCP_HOST=0.0.0.0 \
+    UNRAID_MCP_PORT=6970 \
+    UNRAID_MCP_LOG_LEVEL=INFO
+
+EXPOSE 6970
+
+USER mcp
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:6970/health')" || exit 1
+
+ENTRYPOINT ["unraid-mcp-server"]

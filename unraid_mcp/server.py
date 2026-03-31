@@ -31,7 +31,7 @@ from .config.settings import (
     validate_required_config,
 )
 from .core import middleware_refs as _middleware_refs
-from .core.auth import BearerAuthMiddleware
+from .core.auth import BearerAuthMiddleware, HealthMiddleware
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
@@ -138,18 +138,24 @@ def ensure_token_exists() -> None:
 
     token = secrets.token_urlsafe(32)
 
-    # Ensure credentials dir exists with restricted permissions
+    def _chmod_safe(path: object, mode: int) -> None:
+        """Chmod with graceful fallback for volume mounts owned by root."""
+        try:
+            path.chmod(mode)
+        except PermissionError:
+            logger.debug("Could not chmod %s (volume mount?) — skipping", path)
+
+    # Ensure credentials dir exists with restricted permissions.
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
-    CREDENTIALS_DIR.chmod(0o700)
+    _chmod_safe(CREDENTIALS_DIR, 0o700)
 
     # Touch the file first so set_key has a target (no-op if already exists)
     if not CREDENTIALS_ENV_PATH.exists():
         CREDENTIALS_ENV_PATH.touch()
-        CREDENTIALS_ENV_PATH.chmod(0o600)
 
     # In-place .env write — preserves comments and existing keys
     set_key(str(CREDENTIALS_ENV_PATH), "UNRAID_MCP_BEARER_TOKEN", token, quote_mode="auto")
-    CREDENTIALS_ENV_PATH.chmod(0o600)
+    _chmod_safe(CREDENTIALS_ENV_PATH, 0o600)
 
     # Print once to STDERR so the user can copy it into their MCP client config
     print(
@@ -217,10 +223,13 @@ def run_server() -> None:
         else:
             logger.info("HTTP bearer token authentication enabled.")
 
-    logger.info(
-        f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} "
-        f"using {_settings.UNRAID_MCP_TRANSPORT} transport..."
-    )
+    if is_http:
+        logger.info(
+            f"Starting Unraid MCP Server on {UNRAID_MCP_HOST}:{UNRAID_MCP_PORT} "
+            f"using {_settings.UNRAID_MCP_TRANSPORT} transport..."
+        )
+    else:
+        logger.info("Starting Unraid MCP Server using stdio transport...")
 
     try:
         if is_http:
@@ -239,11 +248,14 @@ def run_server() -> None:
                 port=UNRAID_MCP_PORT,
                 path="/mcp",
                 middleware=[
+                    # HealthMiddleware is outermost: catches GET /health before auth.
+                    # BearerAuthMiddleware requires no /health bypass.
+                    ASGIMiddleware(HealthMiddleware),
                     ASGIMiddleware(
                         BearerAuthMiddleware,
                         token=_settings.UNRAID_MCP_BEARER_TOKEN or "",
                         disabled=_settings.UNRAID_MCP_DISABLE_HTTP_AUTH,
-                    )
+                    ),
                 ],
             )
         elif _settings.UNRAID_MCP_TRANSPORT == "stdio":
@@ -255,8 +267,10 @@ def run_server() -> None:
             )
             sys.exit(1)
     except Exception as e:
-        logger.critical(f"Failed to start Unraid MCP server: {e}", exc_info=True)
+        logger.critical("Unraid MCP server crashed: %s", e, exc_info=True)
         sys.exit(1)
+    finally:
+        logger.info("Unraid MCP server stopped")
 
 
 if __name__ == "__main__":

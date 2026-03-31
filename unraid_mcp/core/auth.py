@@ -7,6 +7,9 @@ RFC 6750 compliance:
   - Missing header  → 401 WWW-Authenticate: Bearer realm="unraid-mcp"
   - Invalid token   → 401 WWW-Authenticate: Bearer realm="unraid-mcp", error="invalid_token"
   - Rate exceeded   → 429 Retry-After: 60
+
+Also exports ``HealthMiddleware`` — responds 200 to ``GET /health`` without
+auth so Docker healthchecks work regardless of bearer token configuration.
 """
 
 from __future__ import annotations
@@ -194,3 +197,33 @@ class BearerAuthMiddleware:
 
         await send({"type": "http.response.start", "status": status, "headers": headers})
         await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+class HealthMiddleware:
+    """ASGI middleware that responds 200 to GET /health without authentication.
+
+    Place this OUTSIDE BearerAuthMiddleware (first in the middleware list) so it
+    intercepts GET /health before auth — no bypass needed in BearerAuthMiddleware.
+    Only GET is handled; other methods fall through to the auth layer.
+    """
+
+    _BODY: bytes = b'{"status":"ok"}'
+    # Tuple-of-tuples: immutable, safe to share across requests.
+    # content-length is computed from _BODY so they stay in sync.
+    _HEADERS: tuple[tuple[bytes, bytes], ...] = (
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(_BODY)).encode()),
+    )
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # scope["path"] is always present in ASGI HTTP scopes (required field).
+        if scope["type"] == "http" and scope["path"] == "/health" and scope.get("method") == "GET":
+            await send(
+                {"type": "http.response.start", "status": 200, "headers": list(self._HEADERS)}
+            )
+            await send({"type": "http.response.body", "body": self._BODY, "more_body": False})
+            return
+        await self.app(scope, receive, send)

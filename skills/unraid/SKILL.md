@@ -5,6 +5,19 @@ description: "This skill should be used when the user mentions Unraid, asks to c
 
 # Unraid MCP Skill
 
+## Mode Detection
+
+**MCP mode** (preferred): Use when `mcp__unraid-mcp__unraid` tool is available.
+
+**HTTP fallback**: Use when MCP tools are unavailable. Credentials are in Bash subprocesses
+as `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL` and `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`.
+Do NOT attempt `${user_config.unraid_api_key}` in curl — sensitive values only work
+as `$CLAUDE_PLUGIN_OPTION_*` in Bash subprocesses.
+
+**MCP URL**: `${user_config.unraid_mcp_url}`
+
+---
+
 Use the single `unraid` MCP tool with `action` (domain) + `subaction` (operation) for all Unraid operations.
 
 ## Setup
@@ -290,3 +303,30 @@ unraid(action="vm", subaction="force_stop", vm_id="<id>", confirm=True)
 - **Container logs:** Docker container stdout/stderr are NOT accessible via API — use SSH + `docker logs`
 - **`arraySubscription`:** Known Unraid API bug — `live/array_state` may show "connecting" indefinitely
 - **Event-driven subs** (`notifications_overview`, `owner`, `server_status`, `ups_status`): Only populate cache on first real server event
+
+---
+
+## HTTP Fallback Mode
+
+When MCP tools are unavailable, use direct GraphQL queries via curl. Credentials are
+available as `$CLAUDE_PLUGIN_OPTION_*` environment variables in Bash subprocesses.
+
+```bash
+# System overview
+curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
+  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ info { os { hostname uptime } } }"}'
+
+# List Docker containers
+curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
+  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ docker { containers { names state status } } }"}'
+
+# Array status
+curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
+  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"{ array { state capacity { disks { name status temp } } } }"}'
+```

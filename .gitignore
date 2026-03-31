@@ -32,7 +32,8 @@ coverage.xml
 
 # Logs
 *.log
-logs/
+logs/*
+!logs/.gitkeep
 
 # IDE/Editor
 .bivvy
@@ -44,6 +45,8 @@ logs/
 # Backup files
 *.bak
 *.bak-*
+backups/*
+!backups/.gitkeep
 
 # Claude Code user settings (gitignore local settings)
 .claude/settings.local.json

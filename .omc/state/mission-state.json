@@ -1,0 +1,131 @@
+{
+  "updatedAt": "2026-03-30T20:52:09.682Z",
+  "missions": [
+    {
+      "id": "session:f092133d-0b5d-4d09-af8b-48eb39fc6501:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-03-30T03:50:55.008Z",
+      "updatedAt": "2026-03-30T04:04:03.920Z",
+      "status": "done",
+      "workerCount": 4,
+      "taskCounts": {
+        "total": 4,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 0,
+        "completed": 4,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "lavra:review:kieran-python-reviewer:a67c6dd",
+          "role": "lavra:review:kieran-python-reviewer",
+          "ownership": "a67c6dd285fa908ba",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-03-30T04:04:03.920Z"
+        },
+        {
+          "name": "lavra:review:security-sentinel:aa14136",
+          "role": "lavra:review:security-sentinel",
+          "ownership": "aa14136eef62cbd56",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-03-30T03:52:48.626Z"
+        },
+        {
+          "name": "lavra:review:performance-oracle:a5c4ff0",
+          "role": "lavra:review:performance-oracle",
+          "ownership": "a5c4ff0e9444fabe9",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-03-30T03:53:24.323Z"
+        },
+        {
+          "name": "lavra:review:code-simplicity-reviewer:ae8f91c",
+          "role": "lavra:review:code-simplicity-reviewer",
+          "ownership": "ae8f91cb520a66c76",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-03-30T03:52:21.772Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-start:aa14136eef62cbd56:2026-03-30T03:51:00.714Z",
+          "at": "2026-03-30T03:51:00.714Z",
+          "kind": "update",
+          "agent": "lavra:review:security-sentinel:aa14136",
+          "detail": "started lavra:review:security-sentinel:aa14136",
+          "sourceKey": "session-start:aa14136eef62cbd56"
+        },
+        {
+          "id": "session-start:a5c4ff0e9444fabe9:2026-03-30T03:51:04.874Z",
+          "at": "2026-03-30T03:51:04.874Z",
+          "kind": "update",
+          "agent": "lavra:review:performance-oracle:a5c4ff0",
+          "detail": "started lavra:review:performance-oracle:a5c4ff0",
+          "sourceKey": "session-start:a5c4ff0e9444fabe9"
+        },
+        {
+          "id": "session-start:ae8f91cb520a66c76:2026-03-30T03:51:08.033Z",
+          "at": "2026-03-30T03:51:08.033Z",
+          "kind": "update",
+          "agent": "lavra:review:code-simplicity-reviewer:ae8f91c",
+          "detail": "started lavra:review:code-simplicity-reviewer:ae8f91c",
+          "sourceKey": "session-start:ae8f91cb520a66c76"
+        },
+        {
+          "id": "session-stop:ae8f91cb520a66c76:2026-03-30T03:52:21.772Z",
+          "at": "2026-03-30T03:52:21.772Z",
+          "kind": "completion",
+          "agent": "lavra:review:code-simplicity-reviewer:ae8f91c",
+          "detail": "completed",
+          "sourceKey": "session-stop:ae8f91cb520a66c76"
+        },
+        {
+          "id": "session-stop:aa14136eef62cbd56:2026-03-30T03:52:48.626Z",
+          "at": "2026-03-30T03:52:48.626Z",
+          "kind": "completion",
+          "agent": "lavra:review:security-sentinel:aa14136",
+          "detail": "completed",
+          "sourceKey": "session-stop:aa14136eef62cbd56"
+        },
+        {
+          "id": "session-stop:a67c6dd285fa908ba:2026-03-30T03:52:50.925Z",
+          "at": "2026-03-30T03:52:50.925Z",
+          "kind": "completion",
+          "agent": "lavra:review:kieran-python-reviewer:a67c6dd",
+          "detail": "completed",
+          "sourceKey": "session-stop:a67c6dd285fa908ba"
+        },
+        {
+          "id": "session-stop:a5c4ff0e9444fabe9:2026-03-30T03:53:24.323Z",
+          "at": "2026-03-30T03:53:24.323Z",
+          "kind": "completion",
+          "agent": "lavra:review:performance-oracle:a5c4ff0",
+          "detail": "completed",
+          "sourceKey": "session-stop:a5c4ff0e9444fabe9"
+        },
+        {
+          "id": "session-stop:aa5c061873a3b2ad3:2026-03-30T04:04:03.920Z",
+          "at": "2026-03-30T04:04:03.920Z",
+          "kind": "completion",
+          "agent": "lavra:review:kieran-python-reviewer:a67c6dd",
+          "detail": "completed",
+          "sourceKey": "session-stop:aa5c061873a3b2ad3"
+        }
+      ]
+    }
+  ]
+}

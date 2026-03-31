@@ -1,0 +1,18 @@
+services:
+  unraid-mcp:
+    build: .
+    container_name: unraid-mcp
+    restart: unless-stopped
+    ports:
+      - "${UNRAID_MCP_PORT:-6970}:6970"
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./backups:/app/backups
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6970/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

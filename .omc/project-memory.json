@@ -1,0 +1,448 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1774837789157,
+  "projectRoot": "/home/jmagar/workspace/unraid-mcp",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastapi",
+        "version": null,
+        "category": "backend"
+      },
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 2,
+      "lastAccessed": 1774837789152,
+      "keyFiles": [
+        "unraid_mcp-0.2.0-py3-none-any.whl",
+        "unraid_mcp-0.2.0.tar.gz"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 9,
+      "lastAccessed": 1774837789154,
+      "keyFiles": [
+        "DESTRUCTIVE_ACTIONS.md",
+        "MARKETPLACE.md",
+        "PUBLISHING.md",
+        "UNRAID_API_COMPLETE_REFERENCE.md",
+        "UNRAID_API_OPERATIONS.md"
+      ]
+    },
+    "logs": {
+      "path": "logs",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1774837789154,
+      "keyFiles": [
+        "unraid-mcp.log"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 2,
+      "lastAccessed": 1774837789154,
+      "keyFiles": [
+        "generate_unraid_api_reference.py",
+        "validate-marketplace.sh"
+      ]
+    },
+    "skills": {
+      "path": "skills",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1774837789155,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 23,
+      "lastAccessed": 1774837789155,
+      "keyFiles": [
+        "conftest.py",
+        "test_array.py",
+        "test_client.py",
+        "test_customization.py",
+        "test_docker.py"
+      ]
+    },
+    "unraid_mcp": {
+      "path": "unraid_mcp",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1774837789155,
+      "keyFiles": [
+        "__init__.py",
+        "main.py",
+        "server.py",
+        "version.py"
+      ]
+    },
+    "unraid_mcp/config": {
+      "path": "unraid_mcp/config",
+      "purpose": "Configuration files",
+      "fileCount": 3,
+      "lastAccessed": 1774837789156,
+      "keyFiles": [
+        "__init__.py",
+        "logging.py",
+        "settings.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "unraid_mcp/subscriptions/manager.py",
+      "accessCount": 41,
+      "lastAccessed": 1774845977258,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/server.py",
+      "accessCount": 18,
+      "lastAccessed": 1774878632805,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/_disk.py",
+      "accessCount": 16,
+      "lastAccessed": 1774843330173,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 14,
+      "lastAccessed": 1774856294445,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/config/settings.py",
+      "accessCount": 13,
+      "lastAccessed": 1774878816258,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/_health.py",
+      "accessCount": 10,
+      "lastAccessed": 1774845878013,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/validation.py",
+      "accessCount": 9,
+      "lastAccessed": 1774845919898,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/unraid.py",
+      "accessCount": 8,
+      "lastAccessed": 1774842702589,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/middleware_refs.py",
+      "accessCount": 8,
+      "lastAccessed": 1774845962849,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/_setting.py",
+      "accessCount": 7,
+      "lastAccessed": 1774843559275,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/main.py",
+      "accessCount": 7,
+      "lastAccessed": 1774856294454,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/client.py",
+      "accessCount": 7,
+      "lastAccessed": 1774878668094,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp",
+      "accessCount": 6,
+      "lastAccessed": 1774845854774,
+      "type": "directory"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/http.py",
+      "accessCount": 6,
+      "lastAccessed": 1774856359846,
+      "type": "file"
+    },
+    {
+      "path": "pyproject.toml",
+      "accessCount": 6,
+      "lastAccessed": 1774878970027,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp",
+      "accessCount": 5,
+      "lastAccessed": 1774856328256,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/tools/_system.py",
+      "accessCount": 4,
+      "lastAccessed": 1774842710356,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/server.py",
+      "accessCount": 4,
+      "lastAccessed": 1774856307878,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/setup.py",
+      "accessCount": 4,
+      "lastAccessed": 1774878441204,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 4,
+      "lastAccessed": 1774878834585,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 3,
+      "lastAccessed": 1774842148967,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/tools/_rclone.py",
+      "accessCount": 3,
+      "lastAccessed": 1774842685732,
+      "type": "directory"
+    },
+    {
+      "path": "tests/test_health.py",
+      "accessCount": 3,
+      "lastAccessed": 1774843454129,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/auth/providers/jwt.py",
+      "accessCount": 3,
+      "lastAccessed": 1774843501690,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/_live.py",
+      "accessCount": 3,
+      "lastAccessed": 1774845964624,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/mixins/transport.py",
+      "accessCount": 3,
+      "lastAccessed": 1774856344975,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/config/logging.py",
+      "accessCount": 2,
+      "lastAccessed": 1774843409481,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/utils.py",
+      "accessCount": 2,
+      "lastAccessed": 1774856288420,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server",
+      "accessCount": 2,
+      "lastAccessed": 1774856319222,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/config/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1774838086318,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/subscriptions/diagnostics.py",
+      "accessCount": 1,
+      "lastAccessed": 1774842673465,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/tools/_oidc.py",
+      "accessCount": 1,
+      "lastAccessed": 1774842697645,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/tools",
+      "accessCount": 1,
+      "lastAccessed": 1774842698584,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/subscriptions/resources.py",
+      "accessCount": 1,
+      "lastAccessed": 1774842729284,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/starlette/middleware/base.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843419519,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastapi/.agents/skills/fastapi/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1774843423005,
+      "type": "file"
+    },
+    {
+      "path": "skills/unraid/SKILL.md",
+      "accessCount": 1,
+      "lastAccessed": 1774843423885,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/auth/middleware.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843425281,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/mcp/server/auth/middleware/bearer_auth.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843428675,
+      "type": "file"
+    },
+    {
+      "path": ".venv",
+      "accessCount": 1,
+      "lastAccessed": 1774843442686,
+      "type": "directory"
+    },
+    {
+      "path": "unraid_mcp/core/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843448965,
+      "type": "file"
+    },
+    {
+      "path": "unraid_mcp/core/guards.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843452611,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/auth/auth.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843489361,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/fastmcp/server/auth/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1774843489377,
+      "type": "file"
+    },
+    {
+      "path": "tests",
+      "accessCount": 1,
+      "lastAccessed": 1774845930243,
+      "type": "directory"
+    },
+    {
+      "path": "tests/test_rclone.py",
+      "accessCount": 1,
+      "lastAccessed": 1774845935161,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_validation.py",
+      "accessCount": 1,
+      "lastAccessed": 1774845947070,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib",
+      "accessCount": 1,
+      "lastAccessed": 1774856281184,
+      "type": "directory"
+    },
+    {
+      "path": "tests/http_layer/test_request_construction.py",
+      "accessCount": 1,
+      "lastAccessed": 1774856282233,
+      "type": "file"
+    },
+    {
+      "path": ".venv/lib/python3.12/site-packages/mcp",
+      "accessCount": 1,
+      "lastAccessed": 1774856295532,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}
