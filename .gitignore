@@ -16,10 +16,12 @@ logs/*
 .claude/settings.local.json
 .claude/worktrees/
 .omc/
-.lavra/memory/session-state.md
+.lavra/
 .beads/
 .dolt/
 *.db
+*.db-shm
+*.db-wal
 .beads-credential-key
 .serena/
 .worktrees
