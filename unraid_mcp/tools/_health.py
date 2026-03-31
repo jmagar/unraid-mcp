@@ -157,7 +157,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
             "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
             "error": str(e),
         }
-    except Exception as e:
+    except _client.ToolError as e:
         # make_graphql_request wraps httpx network errors in ToolError; catch them
         # here so health/check returns {"status": "unhealthy"} on real outages
         # rather than propagating an unhandled ToolError to the caller.

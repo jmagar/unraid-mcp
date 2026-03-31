@@ -6,10 +6,10 @@ All notable changes to this project are documented here.
 
 ### Added
 - **HTTP bearer token auth**: ASGI-level `BearerAuthMiddleware` (pure `__call__` pattern, no BaseHTTPMiddleware overhead) enforces `Authorization: Bearer <token>` on all HTTP requests. RFC 6750 compliant — missing header returns `WWW-Authenticate: Bearer realm="unraid-mcp"`, invalid token adds `error="invalid_token"`.
-- **Auto token generation**: On first HTTP startup with no token configured, a `secrets.token_urlsafe(32)` token is generated, written to `~/.unraid-mcp/.env` (mode 600), printed once to STDERR, and removed from `os.environ` so subprocesses cannot inherit it.
+- **Auto token generation**: On first HTTP startup with no token configured, a `secrets.token_urlsafe(32)` token is generated, written to `~/.unraid-mcp/.env` (mode 600), announced once on STDERR without printing the secret, and removed from `os.environ` so subprocesses cannot inherit it.
 - **Per-IP rate limiting**: 60 failed auth attempts per 60 seconds → 429 with `Retry-After: 60` header.
 - **Gateway escape hatch**: `UNRAID_MCP_DISABLE_HTTP_AUTH=true` bypasses bearer auth for users who handle authentication at a reverse proxy / gateway layer.
-- **Startup guard**: Server refuses to start in HTTP mode (`streamable-http`/`sse`) if no token is set and `DISABLE_HTTP_AUTH` is not explicitly enabled.
+- **Startup guard**: Server refuses to start in HTTP mode (`streamable-http`/`sse`) if no token is set and `UNRAID_MCP_DISABLE_HTTP_AUTH` is not explicitly enabled.
 - **Tests**: 23 new tests in `tests/test_auth.py` covering pass-through scopes, 401/429 responses, RFC 6750 header differentiation, per-IP rate limiting, window expiry, token generation, and startup guard.
 
 ### Changed
@@ -22,10 +22,12 @@ All notable changes to this project are documented here.
 ## [1.1.6] - 2026-03-30
 
 ### Security
+
 - **Path traversal**: `flash_backup` source path now validated after `posixpath.normpath` (not before) — raw-string `..` check was bypassable via encoded sequences like `foo/bar/../..`; null byte guard added
 - **Key validation**: `DANGEROUS_KEY_PATTERN` now blocks space (0x20) and DEL (0x7f) in addition to existing shell metacharacters; applies to both rclone and settings key validation
 
 ### Fixed
+
 - **Settings validation**: `configure_ups` input now validated via `_validate_settings_input` before mutation — was previously passing unvalidated dict directly to GraphQL
 - **Subscription locks**: `_start_one` `last_error` write and `stop_all()` keys snapshot both now take `_task_lock` to prevent concurrent write/read races
 - **Keepalive handling**: Removed `"ping"` from keepalive `elif` — ping messages require a pong response, not silent discard; only `"ka"` and `"pong"` are silently dropped
@@ -33,11 +35,13 @@ All notable changes to this project are documented here.
 - **Health reverse map**: `_STATUS_FROM_SEVERITY` dict hoisted to module level — was being rebuilt on every `_comprehensive_health_check` call
 
 ### Changed
+
 - **Log content cap**: `_cap_log_content` now skipped for non-log subscriptions (only `log_tail`/`logFileSubscription` have `content` fields) — reduces unnecessary dict key lookups on every WebSocket message
 - **Live assertion**: `_handle_live` now raises `RuntimeError` at import time if `COLLECT_ACTIONS` contains keys not in `_HANDLED_COLLECT_SUBACTIONS` — catches handler omissions before runtime
 - **Subscription name guard**: `start_subscription` validates name matches `^[a-zA-Z0-9_]+$` before use as WebSocket message ID
 
 ### Added
+
 - **Tests**: 27 parametrized tests for `DANGEROUS_KEY_PATTERN` covering all documented dangerous characters and safe key examples (`tests/test_validation.py`)
 - **Tests**: `test_check_api_error_wrapped_tool_error` — verifies health check returns `{status: unhealthy}` when `make_graphql_request` raises `ToolError` wrapping `httpx.ConnectError`
 

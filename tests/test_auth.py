@@ -131,7 +131,7 @@ class TestUnauthorized:
         return asyncio.get_event_loop().run_until_complete(_collect_response(self.mw, scope))
 
     def test_missing_header_returns_401(self):
-        status, headers, body = self._run()
+        status, _, _ = self._run()
         assert status == 401
         assert not self.called["value"]
 
@@ -142,6 +142,10 @@ class TestUnauthorized:
     def test_missing_header_body_is_json_unauthorized(self):
         _, _, body = self._run()
         assert b'"error":"unauthorized"' in body
+
+    def test_missing_header_counts_toward_rate_limit(self):
+        self._run(ip="10.10.10.10")
+        assert len(self.mw._ip_failures["10.10.10.10"]) == 1
 
     def test_wrong_token_returns_401(self):
         status, _, _ = self._run(headers=[(b"authorization", b"Bearer wrong-token")])
@@ -254,6 +258,16 @@ class TestRateLimiting:
         scope = _make_http_scope(headers=[(b"authorization", b"Bearer wrong")], client_ip=ip)
         status, _, _ = asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
         assert status == 401
+        assert len(mw._ip_failures[ip]) == 1
+
+    def test_stale_warning_timestamps_are_evicted(self):
+        app, _ = _app_called_flag()
+        mw = BearerAuthMiddleware(app, token="secret")
+        ip = "172.16.0.2"
+        mw._ip_last_warn[ip] = time.monotonic() - (_RATE_WINDOW_SECS + 1)
+        scope = _make_http_scope(headers=[(b"authorization", b"Bearer wrong")], client_ip=ip)
+        asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        assert ip in mw._ip_last_warn
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +360,31 @@ class TestEnsureTokenExists:
             s.UNRAID_MCP_BEARER_TOKEN = orig_token
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
             os.environ.pop("UNRAID_MCP_BEARER_TOKEN", None)
+
+    def test_generated_token_is_not_printed_to_stderr(self, tmp_path, capsys):
+        import unraid_mcp.config.settings as s
+
+        orig_token = s.UNRAID_MCP_BEARER_TOKEN
+        orig_disabled = s.UNRAID_MCP_DISABLE_HTTP_AUTH
+        try:
+            s.UNRAID_MCP_BEARER_TOKEN = None
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = False
+
+            env_path = tmp_path / ".env"
+            with (
+                patch("unraid_mcp.server.CREDENTIALS_DIR", tmp_path),
+                patch("unraid_mcp.server.CREDENTIALS_ENV_PATH", env_path),
+            ):
+                from unraid_mcp.server import ensure_token_exists
+
+                ensure_token_exists()
+
+            captured = capsys.readouterr()
+            assert "UNRAID_MCP_BEARER_TOKEN=" not in captured.err
+            assert s.UNRAID_MCP_BEARER_TOKEN not in captured.err
+        finally:
+            s.UNRAID_MCP_BEARER_TOKEN = orig_token
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
 
 
 class TestStartupGuard:

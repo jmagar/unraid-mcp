@@ -89,6 +89,21 @@ class TestSettingsUpdate:
         assert result["success"] is True
         assert result["subaction"] == "update"
 
+    async def test_update_allows_nested_json_values(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "updateSettings": {"restartRequired": False, "values": {}, "warnings": []}
+        }
+        tool_fn = _make_tool()
+        payload = {
+            "themeOverrides": {"sidebar": None, "panels": ["cpu", "memory"]},
+            "advanced": [1, True, {"nested": "ok"}],
+        }
+        result = await tool_fn(action="setting", subaction="update", settings_input=payload)
+        assert result["success"] is True
+        _mock_graphql.assert_awaited_once()
+        sent_payload = _mock_graphql.await_args.args[1]["input"]
+        assert sent_payload == payload
+
 
 # ---------------------------------------------------------------------------
 # configure_ups
@@ -114,3 +129,13 @@ class TestUpsConfig:
         )
         assert result["success"] is True
         assert result["subaction"] == "configure_ups"
+
+    async def test_configure_ups_rejects_nested_values(self, _mock_graphql: AsyncMock) -> None:
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="must be a string, number, or boolean"):
+            await tool_fn(
+                action="setting",
+                subaction="configure_ups",
+                confirm=True,
+                ups_config={"mode": {"nested": "invalid"}},
+            )

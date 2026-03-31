@@ -132,6 +132,11 @@ class TestSubscriptionManagerInit:
 
 
 class TestConnectionLifecycle:
+    async def test_start_subscription_rejects_trailing_newline_in_name(self) -> None:
+        mgr = SubscriptionManager()
+        with pytest.raises(ValueError, match="only \\[a-zA-Z0-9_\\]"):
+            await mgr.start_subscription("test_sub\n", SAMPLE_QUERY)
+
     async def test_start_subscription_creates_task(self) -> None:
         mgr = SubscriptionManager()
         ws = FakeWebSocket([{"type": "connection_ack"}])
@@ -185,6 +190,21 @@ class TestConnectionLifecycle:
     async def test_stop_nonexistent_subscription_is_safe(self) -> None:
         mgr = SubscriptionManager()
         await mgr.stop_subscription("nonexistent")
+
+    async def test_stop_subscription_reasserts_stopped_after_cancel(self) -> None:
+        mgr = SubscriptionManager()
+
+        async def _runner() -> None:
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                mgr.connection_states["test_sub"] = "reconnecting"
+                raise
+
+        task = asyncio.create_task(_runner())
+        mgr.active_subscriptions["test_sub"] = task
+        await mgr.stop_subscription("test_sub")
+        assert mgr.connection_states["test_sub"] == "stopped"
 
     async def test_connection_state_transitions(self) -> None:
         mgr = SubscriptionManager()

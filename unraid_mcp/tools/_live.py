@@ -23,7 +23,7 @@ _HANDLED_COLLECT_SUBACTIONS: frozenset[str] = frozenset({"log_tail", "notificati
 
 
 def _assert_collect_subactions_complete() -> None:
-    """Raise AssertionError at import time if COLLECT_ACTIONS has an unhandled key.
+    """Raise RuntimeError at import time if collect subactions drift.
 
     Every key in COLLECT_ACTIONS must appear in _HANDLED_COLLECT_SUBACTIONS AND
     have a matching if-branch in _handle_live. This assertion catches the former
@@ -32,10 +32,15 @@ def _assert_collect_subactions_complete() -> None:
     from ..subscriptions.queries import COLLECT_ACTIONS
 
     missing = set(COLLECT_ACTIONS) - _HANDLED_COLLECT_SUBACTIONS
+    stale = _HANDLED_COLLECT_SUBACTIONS - set(COLLECT_ACTIONS)
     if missing:
         raise RuntimeError(
             f"_HANDLED_COLLECT_SUBACTIONS is missing keys from COLLECT_ACTIONS: {missing}. "
             "Add a handler branch in _handle_live and update _HANDLED_COLLECT_SUBACTIONS."
+        )
+    if stale:
+        raise RuntimeError(
+            f"_HANDLED_COLLECT_SUBACTIONS contains stale keys not present in COLLECT_ACTIONS: {stale}."
         )
 
 

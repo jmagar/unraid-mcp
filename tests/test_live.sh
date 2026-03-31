@@ -11,9 +11,9 @@ PASS=0
 FAIL=0
 SKIP=0
 
-pass() { echo "  PASS: $1"; ((PASS++)); }
-fail() { echo "  FAIL: $1 — $2"; ((FAIL++)); }
-skip() { echo "  SKIP: $1 — $2"; ((SKIP++)); }
+pass() { echo "  PASS: $1"; ((++PASS)); }
+fail() { echo "  FAIL: $1 — $2"; ((++FAIL)); }
+skip() { echo "  SKIP: $1 — $2"; ((++SKIP)); }
 
 header() { echo; echo "=== $1 ==="; }
 
@@ -105,9 +105,16 @@ npx mcporter call "${SERVER_NAME}.unraid" \
 # ── Resources (server-level, no tool name needed) ────────────────────────────
 header "Resources"
 
-npx mcporter call "${SERVER_NAME}" --http-url "$MCP_URL" --header "$AUTH_HEADER" \
-  --list-resources > /dev/null 2>&1 \
-  && pass "resources/list" || skip "resources/list" "no resources defined"
+resources_output="$(
+  npx mcporter call "${SERVER_NAME}" --http-url "$MCP_URL" --header "$AUTH_HEADER" \
+    --list-resources 2>&1
+)" && pass "resources/list" || {
+  if printf '%s' "$resources_output" | grep -qi "no resources defined"; then
+    skip "resources/list" "no resources defined"
+  else
+    fail "resources/list" "$resources_output"
+  fi
+}
 
 # ── Bearer token enforcement ─────────────────────────────────────────────────
 header "Bearer token enforcement"

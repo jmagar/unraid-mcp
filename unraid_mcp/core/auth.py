@@ -93,6 +93,8 @@ class BearerAuthMiddleware:
 
         if auth_header is None:
             # No Authorization header at all — prompt client per RFC 6750
+            self._record_failure(client_ip)
+            self._maybe_warn(client_ip, "missing authorization header")
             await self._send_response(
                 send,
                 status=401,
@@ -156,15 +158,12 @@ class BearerAuthMiddleware:
         """Return True if this IP has hit the failure rate limit."""
         if ip not in self._ip_failures:
             return False
-        now = time.monotonic()
-        q = self._ip_failures[ip]
-        cutoff = now - _RATE_WINDOW_SECS
-        while q and q[0] < cutoff:
-            q.popleft()
-        return len(q) >= _RATE_MAX_FAILURES
+        self._prune_ip_state(ip)
+        return len(self._ip_failures.get(ip, ())) >= _RATE_MAX_FAILURES
 
     def _record_failure(self, ip: str) -> None:
         """Record one failed auth attempt for this IP."""
+        self._prune_ip_state(ip)
         if ip not in self._ip_failures:
             self._ip_failures[ip] = deque()
         self._ip_failures[ip].append(time.monotonic())
@@ -178,6 +177,21 @@ class BearerAuthMiddleware:
         if now - self._ip_last_warn.get(ip, 0.0) >= _LOG_THROTTLE_SECS:
             self._ip_last_warn[ip] = now
             logger.warning("Bearer auth rejected (%s) from %s", reason, ip)
+
+    def _prune_ip_state(self, ip: str) -> None:
+        """Drop stale failure and warning-tracking state for one IP."""
+        now = time.monotonic()
+        q = self._ip_failures.get(ip)
+        if q is not None:
+            cutoff = now - _RATE_WINDOW_SECS
+            while q and q[0] < cutoff:
+                q.popleft()
+            if not q:
+                self._ip_failures.pop(ip, None)
+
+        last_warn = self._ip_last_warn.get(ip)
+        if last_warn is not None and (now - last_warn) >= _RATE_WINDOW_SECS:
+            self._ip_last_warn.pop(ip, None)
 
     @staticmethod
     async def _send_response(

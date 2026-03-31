@@ -183,7 +183,7 @@ async def _handle_disk(
             return {"log_files": data.get("logFiles", [])}
         if subaction == "logs":
             result = data.get("logFile")
-            if result is None:
+            if not result:
                 raise ToolError(f"Log file not found or inaccessible: {log_path}")
             return dict(result)
 

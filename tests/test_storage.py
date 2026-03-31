@@ -238,6 +238,12 @@ class TestStorageActions:
         with pytest.raises(ToolError, match="Log file not found or inaccessible"):
             await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
 
+    async def test_logs_empty_log_file_payload_raises(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"logFile": {}}
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="Log file not found or inaccessible"):
+            await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
+
     async def test_disk_details_not_found(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"disk": None}
         tool_fn = _make_tool()

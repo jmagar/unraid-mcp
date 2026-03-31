@@ -21,8 +21,8 @@ from ..core.validation import DANGEROUS_KEY_PATTERN, MAX_VALUE_LENGTH
 _MAX_SETTINGS_KEYS = 100
 
 
-def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
-    """Validate settings_input before forwarding to the Unraid API.
+def _validate_settings_mapping(settings_input: dict[str, Any]) -> dict[str, Any]:
+    """Validate flat scalar settings data before forwarding to the Unraid API.
 
     Enforces a key count cap and rejects dangerous key names and oversized values
     to prevent unvalidated bulk input from reaching the API. Modeled on
@@ -56,6 +56,22 @@ def _validate_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
         # expect int/float/bool to arrive as their native types, not stringified.
         # _rclone.py differs: it always stringifies because rclone config values are
         # strings on the wire; settings mutations accept JSON scalars directly.
+        validated[key] = value
+    return validated
+
+
+def _validate_json_settings_input(settings_input: dict[str, Any]) -> dict[str, Any]:
+    """Validate JSON-typed settings input without narrowing valid JSON members."""
+    if len(settings_input) > _MAX_SETTINGS_KEYS:
+        raise ToolError(f"settings_input has {len(settings_input)} keys (max {_MAX_SETTINGS_KEYS})")
+    validated: dict[str, Any] = {}
+    for key, value in settings_input.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ToolError(
+                f"settings_input keys must be non-empty strings, got: {type(key).__name__}"
+            )
+        if DANGEROUS_KEY_PATTERN.search(key):
+            raise ToolError(f"settings_input key '{key}' contains disallowed characters")
         validated[key] = value
     return validated
 
@@ -95,7 +111,7 @@ async def _handle_setting(
         if subaction == "update":
             if settings_input is None:
                 raise ToolError("settings_input is required for setting/update")
-            validated_input = _validate_settings_input(settings_input)
+            validated_input = _validate_json_settings_input(settings_input)
             data = await _client.make_graphql_request(
                 _SETTING_MUTATIONS["update"], {"input": validated_input}
             )
@@ -107,7 +123,7 @@ async def _handle_setting(
             # Validate ups_config with the same rules as settings_input — key count
             # cap, scalar-only values, MAX_VALUE_LENGTH — to prevent unvalidated bulk
             # input from reaching the GraphQL mutation.
-            validated_ups = _validate_settings_input(ups_config)
+            validated_ups = _validate_settings_mapping(ups_config)
             data = await _client.make_graphql_request(
                 _SETTING_MUTATIONS["configure_ups"], {"config": validated_ups}
             )

@@ -35,6 +35,12 @@ _last_graphql_error: dict[str, str] = {}
 _graphql_error_count: dict[str, int] = {}
 
 
+def _clear_graphql_error_burst(subscription_name: str) -> None:
+    """Reset deduplicated GraphQL error tracking for one subscription."""
+    _last_graphql_error.pop(subscription_name, None)
+    _graphql_error_count.pop(subscription_name, None)
+
+
 def _preview(message: str | bytes, n: int = 200) -> str:
     """Return the first *n* characters of *message* as a UTF-8 string.
 
@@ -193,9 +199,21 @@ class SubscriptionManager:
                     self.last_error[name] = str(e)
                 start_errors.append((name, e))
 
-        async with asyncio.TaskGroup() as tg:
-            for name, config in auto_start_configs:
-                tg.create_task(_start_one(name, config))
+        started_names: list[str] = []
+
+        async def _tracked_start(name: str, config: dict[str, Any]) -> None:
+            await _start_one(name, config)
+            started_names.append(name)
+
+        try:
+            async with asyncio.TaskGroup() as tg:
+                for name, config in auto_start_configs:
+                    tg.create_task(_tracked_start(name, config))
+        except asyncio.CancelledError:
+            for name in started_names:
+                if name in self.active_subscriptions:
+                    await self.stop_subscription(name)
+            raise
 
         started = len(auto_start_configs) - len(start_errors)
         logger.info(
@@ -211,10 +229,11 @@ class SubscriptionManager:
         self, subscription_name: str, query: str, variables: dict[str, Any] | None = None
     ) -> None:
         """Start a GraphQL subscription and maintain it as a resource."""
-        if not re.match(r"^[a-zA-Z0-9_]+$", subscription_name):
+        if not re.fullmatch(r"[a-zA-Z0-9_]+", subscription_name):
             raise ValueError(
                 f"subscription_name must contain only [a-zA-Z0-9_], got: {subscription_name!r}"
             )
+        _clear_graphql_error_burst(subscription_name)
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Starting subscription...")
 
         # Guard must be inside the lock to prevent a TOCTOU race where two
@@ -275,6 +294,8 @@ class SubscriptionManager:
             await task
         except asyncio.CancelledError:
             logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
+        self.connection_states[subscription_name] = "stopped"
+        _clear_graphql_error_burst(subscription_name)
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
 
     async def stop_all(self) -> None:
@@ -461,6 +482,7 @@ class SubscriptionManager:
                                     logger.info(
                                         f"[DATA:{subscription_name}] Received subscription data update"
                                     )
+                                    _clear_graphql_error_burst(subscription_name)
                                     capped_data = (
                                         _cap_log_content(payload["data"])
                                         if isinstance(payload["data"], dict)

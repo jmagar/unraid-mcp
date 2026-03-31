@@ -21,6 +21,10 @@ fi
 for key in "${!MANAGED[@]}"; do
   value="${MANAGED[$key]}"
   [ -z "$value" ] && continue
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* || "$value" == *$'\t'* ]]; then
+    echo "sync-env: refusing ${key} with control characters" >&2
+    exit 1
+  fi
   escaped_value=$(printf '%s\n' "$value" | sed 's/[&/\|]/\\&/g')
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
     sed -i "s|^${key}=.*|${key}=${escaped_value}|" "$ENV_FILE"
@@ -30,7 +34,8 @@ for key in "${!MANAGED[@]}"; do
 done
 
 # Auto-generate UNRAID_MCP_BEARER_TOKEN if not yet set
-if ! grep -q "^UNRAID_MCP_BEARER_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+if ! grep -Eq '^UNRAID_MCP_BEARER_TOKEN=.+$' "$ENV_FILE" 2>/dev/null; then
+  sed -i '/^UNRAID_MCP_BEARER_TOKEN=/d' "$ENV_FILE"
   generated=$(openssl rand -hex 32)
   echo "UNRAID_MCP_BEARER_TOKEN=${generated}" >> "$ENV_FILE"
   echo "sync-env: generated UNRAID_MCP_BEARER_TOKEN (update plugin userConfig to match)" >&2

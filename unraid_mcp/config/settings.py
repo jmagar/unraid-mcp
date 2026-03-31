@@ -175,7 +175,7 @@ def get_config_summary() -> dict[str, Any]:
         "missing_config": missing if not is_valid else None,
         # Auth fields only meaningful in HTTP mode
         "http_auth_enabled": is_http and not UNRAID_MCP_DISABLE_HTTP_AUTH,
-        "http_auth_token_set": bool(UNRAID_MCP_BEARER_TOKEN) if is_http else None,
+        "http_auth_token_set": bool(UNRAID_MCP_BEARER_TOKEN) if is_http else False,
     }
 
 

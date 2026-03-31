@@ -148,3 +148,15 @@ def test_collect_actions_all_handled():
         f"COLLECT_ACTIONS keys without handlers in _handle_live: {unhandled}. "
         "Add an if-branch in unraid_mcp/tools/_live.py and update _HANDLED_COLLECT_SUBACTIONS."
     )
+
+
+def test_collect_actions_rejects_stale_handled_keys(monkeypatch):
+    import unraid_mcp.tools._live as live_module
+
+    monkeypatch.setattr(
+        live_module,
+        "_HANDLED_COLLECT_SUBACTIONS",
+        frozenset({"log_tail", "notification_feed", "stale_key"}),
+    )
+    with pytest.raises(RuntimeError, match="stale"):
+        live_module._assert_collect_subactions_complete()

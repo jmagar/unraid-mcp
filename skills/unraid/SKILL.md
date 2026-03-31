@@ -328,5 +328,5 @@ curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
 curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
   -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"query":"{ array { state capacity { disks { name status temp } } } }"}'
+  -d '{"query":"{ array { state capacity { kilobytes { free used total } } disks { name status temp } } }"}'
 ```

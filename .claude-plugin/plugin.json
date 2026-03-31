@@ -11,6 +11,21 @@
   "homepage": "https://github.com/jmagar/unraid-mcp",
   "license": "MIT",
   "keywords": ["unraid", "homelab", "mcp", "graphql", "docker", "nas", "monitoring"],
+  "mcpServers": {
+    "unraid": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}",
+        "unraid-mcp-server"
+      ],
+      "env": {
+        "UNRAID_MCP_TRANSPORT": "stdio"
+      }
+    }
+  },
   "userConfig": {
     "unraid_mcp_url": {
       "type": "string",
@@ -23,7 +38,7 @@
       "type": "string",
       "title": "MCP Server Bearer Token",
       "description": "Bearer token for authenticating with the MCP server. Must match UNRAID_MCP_BEARER_TOKEN in the server's .env. Generate with: openssl rand -hex 32",
-      "sensitive": false
+      "sensitive": true
     },
     "unraid_api_url": {
       "type": "string",

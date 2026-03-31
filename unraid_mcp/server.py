@@ -37,11 +37,13 @@ from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
 
-def _chmod_safe(path: object, mode: int) -> None:
-    """Chmod with graceful fallback for volume mounts owned by root."""
+def _chmod_safe(path: object, mode: int, *, strict: bool = False) -> None:
+    """Best-effort chmod, with optional fail-closed behavior for secrets."""
     try:
         path.chmod(mode)  # type: ignore[union-attr]
-    except PermissionError:
+    except PermissionError as exc:
+        if strict:
+            raise RuntimeError(f"Failed to secure permissions on {path}") from exc
         logger.debug("Could not chmod %s (volume mount?) — skipping", path)
 
 
@@ -148,7 +150,7 @@ def ensure_token_exists() -> None:
 
     # Ensure credentials dir exists with restricted permissions.
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
-    _chmod_safe(CREDENTIALS_DIR, 0o700)
+    _chmod_safe(CREDENTIALS_DIR, 0o700, strict=True)
 
     # Touch the file first so set_key has a target (no-op if already exists)
     if not CREDENTIALS_ENV_PATH.exists():
@@ -156,13 +158,11 @@ def ensure_token_exists() -> None:
 
     # In-place .env write — preserves comments and existing keys
     set_key(str(CREDENTIALS_ENV_PATH), "UNRAID_MCP_BEARER_TOKEN", token, quote_mode="auto")
-    _chmod_safe(CREDENTIALS_ENV_PATH, 0o600)
+    _chmod_safe(CREDENTIALS_ENV_PATH, 0o600, strict=True)
 
-    # Print once to STDERR so the user can copy it into their MCP client config
     print(
-        f"\n[unraid-mcp] Generated HTTP bearer token (saved to {CREDENTIALS_ENV_PATH}):\n"
-        f"  UNRAID_MCP_BEARER_TOKEN={token}\n"
-        "  Add this to your MCP client's Authorization header: Bearer <token>\n",
+        f"\n[unraid-mcp] Generated HTTP bearer token and saved it to {CREDENTIALS_ENV_PATH}.\n"
+        "Configure your MCP client to send Authorization: Bearer <token> using that stored value.\n",
         file=sys.stderr,
         flush=True,
     )
@@ -178,64 +178,58 @@ def run_server() -> None:
     """Run the MCP server with the configured transport."""
     is_http = _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse")
 
-    # Auto-generate token before the startup guard so a fresh install
-    # can start without manual intervention.
-    if is_http:
-        ensure_token_exists()
+    try:
+        if is_http:
+            ensure_token_exists()
 
-    # Hard stop: HTTP mode with no token and auth not explicitly disabled.
-    # We deliberately do NOT mention DISABLE_HTTP_AUTH in the error message to
-    # avoid inadvertently guiding users toward disabling auth.
-    if (
-        is_http
-        and not _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
-        and not _settings.UNRAID_MCP_BEARER_TOKEN
-    ):
-        print(
-            "FATAL: HTTP transport requires a bearer token. "
-            "Set UNRAID_MCP_BEARER_TOKEN in ~/.unraid-mcp/.env or restart to auto-generate.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+        if (
+            is_http
+            and not _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
+            and not _settings.UNRAID_MCP_BEARER_TOKEN
+        ):
+            print(
+                "FATAL: HTTP transport requires a bearer token. "
+                "Set UNRAID_MCP_BEARER_TOKEN in ~/.unraid-mcp/.env or restart to auto-generate.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
-    # Validate Unraid API credentials
-    is_valid, missing = validate_required_config()
-    if not is_valid:
-        logger.warning(
-            "Missing configuration: %s. "
-            "Server will prompt for credentials on first tool call via elicitation.",
-            ", ".join(missing),
-        )
-
-    log_configuration_status(logger)
-
-    if UNRAID_VERIFY_SSL is False:
-        logger.warning(
-            "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
-            "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
-            "Only use this in trusted networks or for development."
-        )
-
-    if is_http:
-        if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+        is_valid, missing = validate_required_config()
+        if not is_valid:
             logger.warning(
-                "HTTP auth disabled (UNRAID_MCP_DISABLE_HTTP_AUTH=true). "
-                "Ensure an upstream gateway enforces authentication."
+                "Missing configuration: %s. "
+                "Server will prompt for credentials on first tool call via elicitation.",
+                ", ".join(missing),
+            )
+
+        log_configuration_status(logger)
+
+        if UNRAID_VERIFY_SSL is False:
+            logger.warning(
+                "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
+                "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
+                "Only use this in trusted networks or for development."
+            )
+
+        if is_http:
+            if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+                logger.warning(
+                    "HTTP auth disabled (UNRAID_MCP_DISABLE_HTTP_AUTH=true). "
+                    "Ensure an upstream gateway enforces authentication."
+                )
+            else:
+                logger.info("HTTP bearer token authentication enabled.")
+
+        if is_http:
+            logger.info(
+                "Starting Unraid MCP Server on %s:%s using %s transport...",
+                UNRAID_MCP_HOST,
+                UNRAID_MCP_PORT,
+                _settings.UNRAID_MCP_TRANSPORT,
             )
         else:
-            logger.info("HTTP bearer token authentication enabled.")
+            logger.info("Starting Unraid MCP Server using stdio transport...")
 
-    if is_http:
-        logger.info(
-            "Starting Unraid MCP Server on %s:%s using %s transport...",
-            UNRAID_MCP_HOST,
-            UNRAID_MCP_PORT,
-            _settings.UNRAID_MCP_TRANSPORT,
-        )
-    else:
-        logger.info("Starting Unraid MCP Server using stdio transport...")
-
-    try:
         if is_http:
             if _settings.UNRAID_MCP_TRANSPORT == "sse":
                 logger.warning(
