@@ -29,6 +29,11 @@ _MAX_RESOURCE_DATA_LINES = 5_000
 # Minimum stable connection duration (seconds) before resetting reconnect counter
 _STABLE_CONNECTION_SECONDS = 30
 
+# Track last GraphQL error per subscription to deduplicate log spam.
+# Key: subscription name, Value: first error message seen in the current burst.
+_last_graphql_error: dict[str, str] = {}
+_graphql_error_count: dict[str, int] = {}
+
 
 def _preview(message: str | bytes, n: int = 200) -> str:
     """Return the first *n* characters of *message* as a UTF-8 string.
@@ -473,9 +478,33 @@ class SubscriptionManager:
                                         f"[RESOURCE:{subscription_name}] Resource data updated successfully"
                                     )
                                 elif payload.get("errors"):
-                                    logger.error(
-                                        f"[DATA:{subscription_name}] GraphQL errors in response: {payload['errors']}"
-                                    )
+                                    err_msg = str(payload["errors"])
+                                    prev = _last_graphql_error.get(subscription_name)
+                                    count = _graphql_error_count.get(subscription_name, 0) + 1
+                                    _graphql_error_count[subscription_name] = count
+                                    if prev != err_msg:
+                                        # First occurrence of this error — log as warning
+                                        _last_graphql_error[subscription_name] = err_msg
+                                        _graphql_error_count[subscription_name] = 1
+                                        logger.warning(
+                                            "[DATA:%s] GraphQL error (will suppress repeats): %s",
+                                            subscription_name,
+                                            err_msg,
+                                        )
+                                    elif count in (10, 100, 1000):
+                                        # Periodic reminder at powers of 10
+                                        logger.warning(
+                                            "[DATA:%s] GraphQL error repeated %d times: %s",
+                                            subscription_name,
+                                            count,
+                                            err_msg,
+                                        )
+                                    else:
+                                        logger.debug(
+                                            "[DATA:%s] GraphQL error (repeat #%d)",
+                                            subscription_name,
+                                            count,
+                                        )
                                     self.last_error[subscription_name] = (
                                         f"GraphQL errors: {payload['errors']}"
                                     )
