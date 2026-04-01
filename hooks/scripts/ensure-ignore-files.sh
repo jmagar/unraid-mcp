@@ -46,16 +46,12 @@ for pattern in "${REQUIRED[@]}"; do
 done
 
 GITIGNORE_TMP="${GITIGNORE}.tmp.$$"
-printf '%s\n' "$existing" | awk '
+# Join REQUIRED with RS separator (|) — none of the patterns contain |
+_pat_list="$(IFS='|'; printf '%s' "${REQUIRED[*]}")"
+printf '%s\n' "$existing" | awk -v pat_list="$_pat_list" '
   BEGIN {
-    want[".env"]=1
-    want[".env.*"]=1
-    want["!.env.example"]=1
-    want["backups/*"]=1
-    want["!backups/.gitkeep"]=1
-    want["logs/*"]=1
-    want["!logs/.gitkeep"]=1
-    want["__pycache__/"]=1
+    n_pat = split(pat_list, ordered, "|")
+    for (i = 1; i <= n_pat; i++) want[ordered[i]] = 1
   }
   { lines[++n]=$0 }
   END {
@@ -66,15 +62,7 @@ printf '%s\n' "$existing" | awk '
         emitted[lines[i]] = 1
       }
     }
-    ordered[1]=".env"
-    ordered[2]=".env.*"
-    ordered[3]="!.env.example"
-    ordered[4]="backups/*"
-    ordered[5]="!backups/.gitkeep"
-    ordered[6]="logs/*"
-    ordered[7]="!logs/.gitkeep"
-    ordered[8]="__pycache__/"
-    for (i = 1; i <= 8; i++) {
+    for (i = 1; i <= n_pat; i++) {
       if (!emitted[ordered[i]]) {
         print ordered[i]
         emitted[ordered[i]] = 1

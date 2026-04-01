@@ -44,7 +44,7 @@ done
 # Fail if bearer token is not set — do NOT auto-generate.
 # Auto-generated tokens cause a mismatch: the server reads the generated token
 # but Claude Code sends the (empty) userConfig value. Every MCP call returns 401.
-if ! grep -q "^UNRAID_MCP_BEARER_TOKEN=.\+" "$ENV_FILE" 2>/dev/null; then
+if ! grep -qE "^UNRAID_MCP_BEARER_TOKEN=.+" "$ENV_FILE" 2>/dev/null; then
   echo "sync-env: ERROR — UNRAID_MCP_BEARER_TOKEN is not set." >&2
   echo "  Generate one:  openssl rand -hex 32" >&2
   echo "  Then paste it into the plugin's userConfig MCP token field." >&2

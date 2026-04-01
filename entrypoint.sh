@@ -10,7 +10,7 @@ required_vars=(
 # UNRAID_MCP_BEARER_TOKEN is only required for HTTP-based transports with auth enabled
 _transport="${UNRAID_MCP_TRANSPORT:-streamable-http}"
 _disable_auth="${UNRAID_MCP_DISABLE_HTTP_AUTH:-false}"
-if [[ "$_transport" != "stdio" && "$_disable_auth" != "true" ]]; then
+if [[ "$_transport" != "stdio" && "$_disable_auth" != "true" && "$_disable_auth" != "1" && "$_disable_auth" != "yes" ]]; then
   required_vars+=(UNRAID_MCP_BEARER_TOKEN)
 fi
 

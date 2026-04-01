@@ -13,8 +13,7 @@ services:
       - ./backups:/app/backups
       - unraid-mcp-credentials:/home/mcp/.unraid-mcp
     networks:
-      - default
-      - unraid-mcp-external
+      - jakenet
     deploy:
       resources:
         limits:
@@ -37,7 +36,6 @@ volumes:
   unraid-mcp-credentials:
 
 networks:
-  default: {}
-  unraid-mcp-external:
+  jakenet:
+    name: ${DOCKER_NETWORK:-jakenet}
     external: true
-    name: ${DOCKER_NETWORK:-unraid-mcp-external}
