@@ -188,6 +188,78 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
         raise ToolError(f"Unhandled health subaction '{subaction}' — this is a bug")
 
 
+_HELP_TEXT = """# Unraid MCP Server
+
+Interact with an Unraid server's GraphQL API.
+
+## Tool: `unraid`
+
+Single entry point for all operations. Use `action` + `subaction` to select an operation.
+
+### Actions and Subactions
+
+| Action | Subactions | Notes |
+|--------|-----------|-------|
+| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config` | |
+| `health` | `check`, `test_connection`, `diagnose`, `setup` | |
+| `array` | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
+| `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
+| `docker` | `list`, `details`, `start`, `stop`, `restart`, `networks`, `network_details` | |
+| `vm` | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`*, `reboot`, `reset`* | |
+| `notification` | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`*, `delete_archived`* | |
+| `key` | `list`, `get`, `create`, `update`, `delete`*, `add_role`, `remove_role` | |
+| `plugin` | `list`, `add`, `remove`* | |
+| `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote`* | |
+| `setting` | `update`, `configure_ups`* | |
+| `customization` | `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` | |
+| `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
+| `user` | `me` | |
+| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`, `log_tail` (requires `path=`), `notification_feed` | |
+
+\\* Destructive — requires `confirm=True`
+
+### Key Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `action` | str | One of the actions above |
+| `subaction` | str | Operation within the action |
+| `confirm` | bool | Required for destructive operations (default: False) |
+| `container_id` | str | Docker container ID or name |
+| `vm_id` | str | VM identifier |
+| `disk_id` | str | Disk identifier |
+| `notification_id` | str | Single notification ID |
+| `notification_ids` | list[str] | Multiple notification IDs |
+| `key_id` | str | API key identifier |
+| `name` | str | Name for create/update operations |
+| `path` | str | Log file path (for live/log_tail) |
+| `collect_for` | float | WebSocket collection duration in seconds (default: 5.0) |
+| `limit` | int | Max items to return (default: 20) |
+| `offset` | int | Pagination offset (default: 0) |
+
+### Examples
+
+```
+unraid(action="system", subaction="overview")
+unraid(action="health", subaction="check")
+unraid(action="health", subaction="test_connection")
+unraid(action="docker", subaction="list")
+unraid(action="docker", subaction="start", container_id="my-container")
+unraid(action="vm", subaction="list")
+unraid(action="array", subaction="parity_status")
+unraid(action="notification", subaction="list", limit=10, list_type="UNREAD")
+unraid(action="disk", subaction="disks")
+unraid(action="live", subaction="cpu", collect_for=3.0)
+unraid(action="live", subaction="log_tail", path="/var/log/syslog", collect_for=5.0)
+unraid(action="array", subaction="stop_array", confirm=True)
+```
+
+## Tool: `unraid_help`
+
+Returns this help document.
+"""
+
+
 # ===========================================================================
 # TOOL REGISTRATION
 # ===========================================================================
@@ -398,5 +470,10 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         raise ToolError(
             f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"
         )
+
+    @mcp.tool()
+    async def unraid_help() -> str:
+        """Returns markdown help for all Unraid MCP actions and subactions."""
+        return _HELP_TEXT
 
     logger.info("Unraid tool registered successfully")
