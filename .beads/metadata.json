@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "server",
-  "dolt_database": "unraid_mcp",
-  "project_id": "5bb31674-18f6-4968-8fd9-71a7ceceaa48"
-}
