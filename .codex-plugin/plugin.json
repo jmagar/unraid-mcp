@@ -5,6 +5,7 @@
   "interface": {
     "type": "mcp",
     "transport": "http",
-    "url": "http://localhost:6970/mcp"
+    "url": "http://localhost:6970/mcp",
+    "displayName": "Unraid MCP"
   }
 }

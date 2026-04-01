@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENV_FILE="${CLAUDE_PLUGIN_ROOT}/.env"
 BACKUP_DIR="${CLAUDE_PLUGIN_ROOT}/backups"
-LOCK_FILE="/tmp/unraid-sync-env.lock"
+LOCK_FILE="${CLAUDE_PLUGIN_ROOT}/.sync-env.lock"
 mkdir -p "$BACKUP_DIR"
 
 # Serialize concurrent sessions (two tabs starting at the same time)
