@@ -7,7 +7,7 @@ services:
     ports:
       - "${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
     env_file:
-      - .env
+      - ~/.claude-homelab/.env
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
