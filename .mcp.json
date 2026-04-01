@@ -2,10 +2,7 @@
   "mcpServers": {
     "unraid-mcp": {
       "type": "http",
-      "url": "${user_config.unraid_mcp_url}/mcp",
-      "headers": {
-        "Authorization": "Bearer ${user_config.unraid_mcp_token}"
-      }
+      "url": "${env.UNRAID_MCP_URL}"
     }
   }
 }

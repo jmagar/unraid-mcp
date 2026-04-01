@@ -10,7 +10,15 @@
   "repository": "https://github.com/jmagar/unraid-mcp",
   "homepage": "https://github.com/jmagar/unraid-mcp",
   "license": "MIT",
-  "keywords": ["unraid", "homelab", "mcp", "graphql", "docker", "nas", "monitoring"],
+  "keywords": [
+    "unraid",
+    "homelab",
+    "mcp",
+    "graphql",
+    "docker",
+    "nas",
+    "monitoring"
+  ],
   "mcpServers": {
     "unraid": {
       "type": "stdio",
@@ -31,7 +39,7 @@
       "type": "string",
       "title": "Unraid MCP Server URL",
       "description": "URL of the MCP server. Default works if running locally via uv or docker compose.",
-      "default": "http://localhost:6970",
+      "default": "https://unraid.tootie.tv/mcp",
       "sensitive": false
     },
     "unraid_mcp_token": {
@@ -49,7 +57,7 @@
     "unraid_api_key": {
       "type": "string",
       "title": "Unraid API Key",
-      "description": "API key for your Unraid server. Found in Settings → Management Access → API Keys.",
+      "description": "API key for your Unraid server. Found in Settings \u2192 Management Access \u2192 API Keys.",
       "sensitive": true
     }
   }
