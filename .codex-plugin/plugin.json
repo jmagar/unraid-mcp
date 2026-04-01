@@ -5,6 +5,6 @@
   "interface": {
     "type": "mcp",
     "transport": "http",
-    "url": "http://localhost:3000/mcp"
+    "url": "http://localhost:6970/mcp"
   }
 }

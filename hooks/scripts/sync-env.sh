@@ -18,6 +18,7 @@ declare -A MANAGED=(
 )
 
 touch "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 
 # Backup before writing (max 3 retained)
 if [ -s "$ENV_FILE" ]; then

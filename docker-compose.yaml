@@ -14,15 +14,20 @@ services:
       - unraid-mcp-credentials:/home/mcp/.unraid-mcp
     networks:
       - default
-      - ${DOCKER_NETWORK:-unraid-mcp-external}
+      - unraid-mcp-external
     deploy:
       resources:
         limits:
           memory: 1024M
           cpus: "1.0"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
-             "http://localhost:${UNRAID_MCP_PORT:-6970}/health"]
+      test:
+        - "CMD-SHELL"
+        - |
+          if [ "${UNRAID_MCP_TRANSPORT:-streamable-http}" = "stdio" ]; then
+            exit 0
+          fi
+          wget --quiet --tries=1 --spider "http://localhost:${UNRAID_MCP_PORT:-6970}/health"
       interval: 30s
       timeout: 5s
       start_period: 30s

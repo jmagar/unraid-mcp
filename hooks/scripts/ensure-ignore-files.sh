@@ -45,6 +45,7 @@ for pattern in "${REQUIRED[@]}"; do
   fi
 done
 
+GITIGNORE_TMP="${GITIGNORE}.tmp.$$"
 printf '%s\n' "$existing" | awk '
   BEGIN {
     want[".env"]=1
@@ -80,4 +81,4 @@ printf '%s\n' "$existing" | awk '
       }
     }
   }
-' > "$GITIGNORE"
+' > "$GITIGNORE_TMP" && mv "$GITIGNORE_TMP" "$GITIGNORE"
