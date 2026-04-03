@@ -3,12 +3,11 @@
 .env.*
 !.env.example
 
-# ── Runtime / hook artifacts ─────────────────────────────────────────────────
-backups/*
-!backups/.gitkeep
-logs/*
-!logs/.gitkeep
+# ── Runtime artifacts ────────────────────────────────────────────────────────
+logs/
+backups/
 *.log
+*.pid
 *.bak
 *.bak-*
 
@@ -24,46 +23,67 @@ logs/*
 *.db-wal
 .beads-credential-key
 .serena/
-.worktrees
+.worktrees/
 .full-review/
 .full-review-archive-*
+.bivvy
 
 # ── IDE / editor ─────────────────────────────────────────────────────────────
 .vscode/
 .cursor/
 .windsurf/
 .1code/
-.bivvy
+.idea/
+.zed/
+*.iml
+*.swp
+*.swo
+*~
 .emdash.json
 
-# ── Caches ───────────────────────────────────────────────────────────────────
+# ── OS generated ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Caches (ALL tool caches go here) ─────────────────────────────────────────
 .cache/
 
-# ── Documentation artifacts ─────────────────────────────────────────────────
+# ── Documentation artifacts (session/plan docs, not reference) ───────────────
 .docs/
 docs/plans/
 docs/sessions/
 docs/reports/
 docs/research/
 docs/superpowers/
+specs/
 
 # ── Python ───────────────────────────────────────────────────────────────────
 .venv/
-.venv-backend/
 __pycache__/
 *.py[oc]
-*.egg-info
+*.egg-info/
 *.egg
 build/
 dist/
+sdist/
 wheels/
+pip-wheel-metadata/
+*.whl
 .hypothesis/
 .pytest_cache/
 .ruff_cache/
 .ty_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.pyright/
 htmlcov/
 .coverage
+.coverage.*
 coverage.xml
+.tox/
+.nox/
+pip-log.txt
 
 # ── Repo-specific ────────────────────────────────────────────────────────────
 /DESTRUCTIVE_ACTIONS.md
