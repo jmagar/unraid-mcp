@@ -1,54 +1,49 @@
-# ── Version control ──────────────────────────────────────────────────────────
 .git
 .github
-
-# ── Secrets ──────────────────────────────────────────────────────────────────
-.env
-.env.*
-!.env.example
-
-# ── Claude Code / AI tooling ────────────────────────────────────────────────
-.claude
 .claude-plugin
 .codex-plugin
+.agents
+.beads
+.dolt
 .omc
 .lavra
-.beads
 .serena
+.cache
 .worktrees
 .full-review
 .full-review-archive-*
-
-# ── IDE / editor ─────────────────────────────────────────────────────────────
 .vscode
 .cursor
 .windsurf
 .1code
-
-# ── Docs, tests, scripts (not needed at runtime) ────────────────────────────
-docs
-tests
-scripts
+.idea
+.env
+.env.*
+!.env.example
+*.log
+logs/
+backups/
+docs/
+specs/
 *.md
 !README.md
-
-# ── Runtime artifacts ────────────────────────────────────────────────────────
-logs
-backups
-*.log
-.cache
-
-# ── Python ───────────────────────────────────────────────────────────────────
-.venv
-__pycache__/
-*.py[oc]
-*.egg-info
-dist/
-build/
-.hypothesis/
-.pytest_cache/
-.ruff_cache/
-.ty_cache/
-htmlcov/
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
 .coverage
-coverage.xml
+htmlcov
+.hypothesis
+node_modules
+dist
+coverage
+*.tsbuildinfo
+target
+Justfile
+biome.json
+.pre-commit-config.yaml
+.prettierrc
+.prettierignore
+tests/
+
