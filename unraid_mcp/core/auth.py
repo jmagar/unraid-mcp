@@ -8,8 +8,15 @@ RFC 6750 compliance:
   - Invalid token   → 401 WWW-Authenticate: Bearer realm="unraid-mcp", error="invalid_token"
   - Rate exceeded   → 429 Retry-After: 60
 
-Also exports ``HealthMiddleware`` — responds 200 to ``GET /health`` without
-auth so Docker healthchecks work regardless of bearer token configuration.
+Also exports:
+  - ``HealthMiddleware`` — responds 200 to ``GET /health`` without auth
+    so Docker healthchecks work regardless of bearer token configuration.
+  - ``WellKnownMiddleware`` — serves RFC 9728 OAuth 2.0 Protected Resource
+    Metadata at ``GET /.well-known/oauth-protected-resource`` without auth.
+    MCP clients (e.g. Claude Code) probe this URL when they receive a 401 to
+    discover how to authenticate.  Returning a valid response stops the cascade
+    of 401s and tells the client: "use a pre-shared Bearer token — there is no
+    OAuth authorization server."
 """
 
 from __future__ import annotations
@@ -239,3 +246,70 @@ class HealthMiddleware:
             await send({"type": "http.response.body", "body": self._BODY, "more_body": False})
             return
         await self.app(scope, receive, send)
+
+
+class WellKnownMiddleware:
+    """ASGI middleware serving RFC 9728 OAuth Protected Resource Metadata.
+
+    MCP clients (e.g. Claude Code) probe ``GET /.well-known/oauth-protected-resource``
+    when they receive a 401 from the MCP endpoint — trying to discover an OAuth
+    authorization server.  Without a valid response here they cascade into a series
+    of failed discovery requests and surface a generic "unknown error" to the user.
+
+    This server does NOT implement OAuth.  Returning the resource metadata with an
+    empty ``authorization_servers`` list tells compliant clients: "Bearer auth is
+    required; you must configure the token yourself — there is no OAuth flow."
+
+    Place this OUTSIDE BearerAuthMiddleware (before it in the middleware list) so
+    the discovery endpoint is reachable without a token.  Only GET is handled for
+    the well-known paths; all other requests fall through to the auth layer.
+    """
+
+    # Paths defined by RFC 9728 §3.1 that MCP clients probe.
+    _WELL_KNOWN_PATHS: frozenset[str] = frozenset(
+        {
+            "/.well-known/oauth-protected-resource",
+            "/.well-known/oauth-protected-resource/mcp",
+        }
+    )
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path: str = scope.get("path", "")
+        method: str = scope.get("method", "").upper()
+
+        if method != "GET" or path not in self._WELL_KNOWN_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        # Derive the resource URI from the request Host header (RFC 9728 §2).
+        host = "localhost"
+        for key, val in scope.get("headers", []):
+            if key.lower() == b"host":
+                host = val.decode("latin-1")
+                break
+
+        scheme = scope.get("scheme", "http")
+        resource = f"{scheme}://{host}"
+
+        body: bytes = json.dumps(
+            {
+                "resource": resource,
+                # No authorization_servers → client must use a pre-configured token.
+                "bearer_methods_supported": ["header"],
+            },
+            separators=(",", ":"),
+        ).encode()
+
+        headers: list[tuple[bytes, bytes]] = [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ]
+        await send({"type": "http.response.start", "status": 200, "headers": headers})
+        await send({"type": "http.response.body", "body": body, "more_body": False})
