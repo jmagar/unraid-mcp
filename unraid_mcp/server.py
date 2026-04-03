@@ -31,7 +31,7 @@ from .config.settings import (
     validate_required_config,
 )
 from .core import middleware_refs as _middleware_refs
-from .core.auth import BearerAuthMiddleware, HealthMiddleware
+from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
@@ -246,9 +246,14 @@ def run_server() -> None:
                 port=UNRAID_MCP_PORT,
                 path="/mcp",
                 middleware=[
-                    # HealthMiddleware is outermost: catches GET /health before auth.
-                    # BearerAuthMiddleware requires no /health bypass.
+                    # Middleware order (outermost → innermost):
+                    # 1. HealthMiddleware   — GET /health → 200, no auth.
+                    # 2. WellKnownMiddleware — GET /.well-known/oauth-protected-resource → 200,
+                    #    no auth.  MCP clients probe this after a 401 to discover how to
+                    #    authenticate; responding correctly stops the 401 cascade.
+                    # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
                     ASGIMiddleware(HealthMiddleware),
+                    ASGIMiddleware(WellKnownMiddleware),
                     ASGIMiddleware(
                         BearerAuthMiddleware,
                         token=_settings.UNRAID_MCP_BEARER_TOKEN or "",

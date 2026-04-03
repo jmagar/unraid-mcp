@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [1.2.1] - 2026-04-03
+
+### Fixed
+- **OAuth discovery 401 cascade** (fixes [#17](https://github.com/jmagar/unraid-mcp/issues/17)): `BearerAuthMiddleware` was blocking `GET /.well-known/oauth-protected-resource`, causing MCP clients (e.g. Claude Code) to surface a generic "unknown error" after receiving a 401. Added `WellKnownMiddleware` (RFC 9728) placed before `BearerAuthMiddleware` that returns resource metadata with `bearer_methods_supported: ["header"]` and no `authorization_servers` — telling clients to use a pre-configured Bearer token rather than attempting an OAuth flow.
+
+### Added
+- **`docs/AUTHENTICATION.md`**: New setup guide covering token generation, server config, Claude Code client config (`"Authorization": "Bearer <token>"` header format), and troubleshooting for common 401 errors.
+- **README Authentication section**: Added the missing `## 🔐 Authentication` section (was linked in TOC but not present) with quick-start examples and a link to the full guide.
+
 ## [1.2.0] - 2026-03-30
 
 ### Added

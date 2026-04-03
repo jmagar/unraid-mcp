@@ -22,6 +22,7 @@ Also exports:
 from __future__ import annotations
 
 import hmac
+import json
 import re
 import time
 from collections import deque

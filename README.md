@@ -51,6 +51,45 @@ UNRAID_MCP_LOG_LEVEL="INFO"
 
 ---
 
+## 🔐 Authentication
+
+HTTP transports (`streamable-http`, `sse`) require a Bearer token.
+`stdio` (Claude Code plugin default) does **not** require a token.
+
+### Generate a token
+
+```bash
+openssl rand -hex 32
+```
+
+### Server config (`~/.unraid-mcp/.env`)
+
+```env
+UNRAID_MCP_BEARER_TOKEN=<your-token>
+```
+
+### Claude Code client config
+
+```json
+{
+  "mcpServers": {
+    "unraid": {
+      "type": "http",
+      "url": "http://your-server:6970/mcp",
+      "headers": {
+        "Authorization": "Bearer <your-token>"
+      }
+    }
+  }
+}
+```
+
+> The `Bearer ` prefix and space are required — omitting them causes a 401.
+
+See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for full details and troubleshooting.
+
+---
+
 ## 🛠️ Available Tools & Resources
 
 ### 🔧 Primary Tools
