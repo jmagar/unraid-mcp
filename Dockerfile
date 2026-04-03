@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy source and install project
 COPY unraid_mcp/ unraid_mcp/
-COPY README.md LICENSE ./
+RUN touch README.md LICENSE
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
@@ -26,7 +26,6 @@ WORKDIR /app
 # Copy the virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/unraid_mcp /app/unraid_mcp
-COPY --from=builder /app/README.md /app/LICENSE /app/
 
 # Ensure .venv/bin is on PATH
 ENV PATH="/app/.venv/bin:$PATH" \
