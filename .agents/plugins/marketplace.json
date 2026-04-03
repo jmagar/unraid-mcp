@@ -1,0 +1,20 @@
+{
+  "name": "unraid-mcp",
+  "interface": {
+    "displayName": "Unraid MCP"
+  },
+  "plugins": [
+    {
+      "name": "unraid-mcp",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Infrastructure"
+    }
+  ]
+}
