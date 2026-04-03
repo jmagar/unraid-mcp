@@ -294,5 +294,8 @@ Bump type is determined by the commit message prefix:
 - `.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `gemini-extension.json` — `"version": "X.Y.Z"`
+- `README.md` — version badge or header
+- `CHANGELOG.md` — new entry under the bumped version
 
 All files MUST have the same version. Never bump only one file.
+CHANGELOG.md must have an entry for every version bump.
