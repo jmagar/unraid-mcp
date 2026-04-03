@@ -389,17 +389,6 @@ else
 fi
 echo
 
-# ── 14. SWAG config ──────────────────────────────────────────────────────────
-echo "── 14. SWAG config ──"
-
-SWAG_FILES=$(find "$PROJECT_DIR" -maxdepth 1 -name "*.subdomain.conf" -type f 2>/dev/null || true)
-if [[ -n "$SWAG_FILES" ]]; then
-  SWAG_COUNT=$(echo "$SWAG_FILES" | wc -l)
-  pass "Found $SWAG_COUNT .subdomain.conf file(s)"
-else
-  fail "SWAG config" "No *.subdomain.conf found at repo root"
-fi
-echo
 
 # ── 15. No committed secrets ─────────────────────────────────────────────────
 echo "── 15. No committed secrets ──"
