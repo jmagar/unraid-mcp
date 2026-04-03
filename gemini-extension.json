@@ -1,0 +1,26 @@
+{
+  "name": "unraid-mcp",
+  "version": "1.2.0",
+  "description": "Query, monitor, and manage Unraid servers via GraphQL API through MCP tools. Supports system info, Docker, VMs, array/parity, notifications, plugins, and live telemetry.",
+  "mcpServers": {
+    "unraid-mcp": {
+      "command": "uv",
+      "args": ["run", "unraid-mcp-server"],
+      "cwd": "${extensionPath}"
+    }
+  },
+  "settings": [
+    {
+      "name": "Unraid API URL",
+      "description": "GraphQL API endpoint for your Unraid server (e.g., https://unraid.local/graphql)",
+      "envVar": "UNRAID_API_URL",
+      "sensitive": false
+    },
+    {
+      "name": "Unraid API Key",
+      "description": "API key for authenticating with the Unraid GraphQL API",
+      "envVar": "UNRAID_API_KEY",
+      "sensitive": true
+    }
+  ]
+}
