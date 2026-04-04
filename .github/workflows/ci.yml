@@ -73,55 +73,19 @@ jobs:
           fi
           echo "All versions in sync: $TOML_VER"
 
-  e2e:
-    name: E2E HTTP Auth
+  mcp-integration:
+    name: MCP Integration Tests
     runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build Docker image
-        run: docker build -t unraid-mcp-ci .
-
-      - name: Start server with bearer auth enabled
-        run: |
-          docker run -d \
-            --name unraid-mcp-ci \
-            -p 6970:6970 \
-            -e UNRAID_MCP_TRANSPORT=streamable-http \
-            -e UNRAID_MCP_BEARER_TOKEN=ci-test-token-e2e \
-            -e UNRAID_MCP_DISABLE_HTTP_AUTH=false \
-            -e UNRAID_API_URL=http://127.0.0.1:1 \
-            -e UNRAID_API_KEY=ci-fake-key \
-            unraid-mcp-ci
-
-      - name: Wait for server to be healthy
-        run: |
-          echo "Waiting for /health..."
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:6970/health > /dev/null 2>&1; then
-              echo "Server ready after ${i}s"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "Server did not become healthy in 30s"
-          docker logs unraid-mcp-ci
-          exit 1
-
-      - name: Run HTTP e2e tests (Phases 1-3, auth enabled)
-        run: |
-          bash tests/mcporter/test-http.sh \
-            --url http://localhost:6970/mcp \
-            --token ci-test-token-e2e \
-            --skip-tools
-
-      - name: Dump server logs on failure
-        if: failure()
-        run: docker logs unraid-mcp-ci
-
-      - name: Stop server
-        if: always()
-        run: docker rm -f unraid-mcp-ci || true
+      - uses: astral-sh/setup-uv@v5
+      - name: Run integration tests
+        env:
+          UNRAID_API_URL: ${{ secrets.UNRAID_API_URL }}
+          UNRAID_API_KEY: ${{ secrets.UNRAID_API_KEY }}
+        run: bash tests/test_live.sh
 
   audit:
     name: Security Audit
