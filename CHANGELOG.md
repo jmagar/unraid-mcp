@@ -1,6 +1,18 @@
 # Changelog
 
-All notable changes to this project are documented here.
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [1.2.2] - 2026-04-03
+
+### Changed
+- **README**: Restructured to a compact reference format — removed marketing prose, replaced with minimal tables and direct headings.
+- **CHANGELOG**: Adopted Keep a Changelog format.
+- **Version sync**: `.codex-plugin/plugin.json` and `gemini-extension.json` brought to 1.2.2 (were stale at 1.2.0).
 
 ## [1.2.1] - 2026-04-03
 

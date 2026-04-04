@@ -1,149 +1,144 @@
-# Unraid MCP Server
+# Unraid MCP
 
-> **Powerful, real-time management for Unraid servers via the Model Context Protocol.**
+GraphQL-backed MCP server for Unraid. This repo exposes a unified `unraid` tool for system inspection, management operations, live telemetry, and selected destructive actions guarded by explicit confirmation.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](CHANGELOG.md)
-[![Python Version](https://img.shields.io/badge/python-3.12+-green.svg)](https://www.python.org/downloads/)
-[![FastMCP](https://img.shields.io/badge/FastMCP-Enabled-brightgreen.svg)](https://github.com/jlowin/fastmcp)
-[![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
+## What this repository ships
 
----
+- `unraid_mcp/`: server, GraphQL client, subscriptions, config, and tool handlers
+- `skills/unraid/`: client-facing skill docs
+- `docs/`: authentication, destructive-action, and publishing references
+- `.claude-plugin/`, `.codex-plugin/`, `gemini-extension.json`: client manifests
+- `docker-compose.yaml`, `Dockerfile`, `entrypoint.sh`: container deployment
+- `tests/`: unit, safety, schema, HTTP-layer, and live coverage
 
-## ✨ Overview
-Unraid MCP provides a comprehensive GraphQL-backed interface for monitoring and managing Unraid servers. It enables AI assistants to control array states, manage Docker/VM lifecycles, and monitor system health in real-time.
+## MCP surface
 
-### 🎯 Key Features
-| Feature | Description |
-|---------|-------------|
-| **107 Subactions** | Granular control over array, disks, docker, VMs, and settings |
-| **Live Metrics** | Persistent WebSocket subscriptions for CPU, memory, and status |
-| **Safety Guards** | Mandatory `confirm=True` flag for all destructive operations |
-| **Interactive Setup** | Built-in credential elicitation and health validation |
+### Main tools
 
----
+| Tool | Purpose |
+| --- | --- |
+| `unraid` | Unified action/subaction router for nearly all operations |
+| `unraid_help` | Markdown help for actions and parameters |
+| `diagnose_subscriptions` | Inspect the subscription system and failure state |
+| `test_subscription_query` | Probe a GraphQL subscription directly for schema/debug work |
 
-## 🎯 Claude Code Integration
-The easiest way to use this plugin is through the Claude Code marketplace:
+### `unraid` action groups
+
+| Action | Representative subactions |
+| --- | --- |
+| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config` |
+| `health` | `check`, `test_connection`, `diagnose`, `setup` |
+| `array` | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`, `add_disk`, `remove_disk`, `mount_disk`, `unmount_disk`, `clear_disk_stats` |
+| `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup` |
+| `docker` | `list`, `details`, `start`, `stop`, `restart`, `networks`, `network_details` |
+| `vm` | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`, `reboot`, `reset` |
+| `notification` | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`, `delete_archived` |
+| `key` | `list`, `get`, `create`, `update`, `delete`, `add_role`, `remove_role` |
+| `plugin` | `list`, `add`, `remove` |
+| `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote` |
+| `setting` | `update`, `configure_ups` |
+| `customization` | `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` |
+| `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` |
+| `user` | `me` |
+| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`, `log_tail`, `notification_feed` |
+
+Destructive subactions require `confirm=true`.
+
+## Installation
+
+### Marketplace
 
 ```bash
-# Add the marketplace
 /plugin marketplace add jmagar/claude-homelab
-
-# Install the plugin
 /plugin install unraid-mcp @jmagar-claude-homelab
 ```
 
----
-
-## ⚙️ Configuration & Credentials
-Credentials follow the standardized `homelab-core` pattern.
-
-**Location:** `~/.unraid-mcp/.env` (also supports shared `~/.claude-homelab/.env`)
-
-### Required Variables
-```bash
-UNRAID_API_URL="https://10-1-0-2.xxx.myunraid.net:31337"
-UNRAID_API_KEY="your-api-key-from-unraid-settings"
-UNRAID_MCP_LOG_LEVEL="INFO"
-```
-
-> **Security Note:** Never commit `.env` files. Ensure permissions are set to `chmod 600`.
-
----
-
-## 🔐 Authentication
-
-HTTP transports (`streamable-http`, `sse`) require a Bearer token.
-`stdio` (Claude Code plugin default) does **not** require a token.
-
-### Generate a token
+### Local development
 
 ```bash
-openssl rand -hex 32
-```
-
-### Server config (`~/.unraid-mcp/.env`)
-
-```env
-UNRAID_MCP_BEARER_TOKEN=<your-token>
-```
-
-### Claude Code client config
-
-```json
-{
-  "mcpServers": {
-    "unraid": {
-      "type": "http",
-      "url": "http://your-server:6970/mcp",
-      "headers": {
-        "Authorization": "Bearer <your-token>"
-      }
-    }
-  }
-}
-```
-
-> The `Bearer ` prefix and space are required — omitting them causes a 401.
-
-See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for full details and troubleshooting.
-
----
-
-## 🛠️ Available Tools & Resources
-
-### 🔧 Primary Tools
-| Tool | Parameters | Description |
-|------|------------|-------------|
-| **`unraid`** | `action`, `subaction`, `confirm` | Unified tool for 107+ management actions |
-| **`diagnose_subscriptions`** | `none` | Status report for real-time WebSocket connections |
-| **`test_subscription_query`**| `subscription_query`| Debug tool for testing GraphQL subscriptions |
-
-### 📊 Resources (`unraid://`)
-| URI | Description | Output Format |
-|-----|-------------|---------------|
-| `unraid://live/cpu` | Real-time CPU utilization | Live Snapshot |
-| `unraid://live/array_state` | Array and parity progress | Status Update |
-| `unraid://logs/stream` | Streaming tail for `/var/log/syslog` | Raw Stream |
-
----
-
-## 🏗️ Architecture & Design
-Built on a modular, async-first Python architecture:
-- **GraphQL Engine:** Concurrent-safe client with optimized timeouts.
-- **Subscription Manager:** Persistent WebSocket manager for real-time resources.
-- **Destructive Guards:** Network-layer isolation and action-specific confirmation requirements.
-
----
-
-## 🔧 Development
-### Prerequisites
-- Python 3.12+
-- [uv](https://github.com/astral-sh/uv) package manager
-
-### Setup
-```bash
-uv sync
+uv sync --dev
 uv run unraid-mcp-server
 ```
 
-### Quality Assurance
+Equivalent entrypoints:
+
 ```bash
-uv run ruff check .        # Linting
-uv run ty check .          # Type Checking
-uv run pytest              # Comprehensive test suite
+uv run unraid-mcp
+uv run python -m unraid_mcp
 ```
 
----
+## Configuration
 
-## 🐛 Troubleshooting
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| **Connection Refused** | API Down / Wrong URL | Verify `UNRAID_API_URL` connectivity |
-| **Subscription Pending**| Initializing state | Wait 2-3 seconds for WebSocket startup |
-| **Permission Denied** | Key Invalidation | Regenerate API Key in Unraid settings |
+Create `.env` from `.env.example` and set, at minimum:
 
----
+```bash
+UNRAID_API_URL=https://tower.local/graphql
+UNRAID_API_KEY=your_api_key
+UNRAID_MCP_TRANSPORT=streamable-http
+UNRAID_MCP_HOST=0.0.0.0
+UNRAID_MCP_PORT=6970
+UNRAID_MCP_BEARER_TOKEN=...
+UNRAID_MCP_DISABLE_HTTP_AUTH=false
+UNRAID_MCP_ALLOW_DESTRUCTIVE=false
+UNRAID_MCP_ALLOW_YOLO=false
+```
 
-## 📄 License
-MIT © jmagar
+Authentication rules:
+
+- `stdio` does not need a Bearer token.
+- `streamable-http` and `sse` expect `UNRAID_MCP_BEARER_TOKEN` unless auth is explicitly disabled.
+- `streamable-http` is the current default transport.
+
+Credential locations:
+
+- repo-local: `.env`
+- supported shared location: `~/.unraid-mcp/.env`
+
+## Development commands
+
+```bash
+just dev
+just lint
+just fmt
+just typecheck
+just test
+just test-live
+just up
+just health
+```
+
+Notable recipes:
+
+- `just dev`: `uv run python -m unraid_mcp`
+- `just check-contract`: Docker/env/ignore-file checks
+- `just gen-token`: create a secure token
+
+## Verification
+
+Recommended:
+
+```bash
+just lint
+just typecheck
+just test
+```
+
+For a stdio MCP smoke test, start:
+
+```bash
+uv run unraid-mcp-server
+```
+
+Or use the bundled mcporter harness under `tests/mcporter/`.
+
+## Related files
+
+- `unraid_mcp/server.py`: server bootstrap and transport/auth handling
+- `unraid_mcp/main.py`: CLI entrypoint
+- `docs/AUTHENTICATION.md`: HTTP auth details
+- `docs/DESTRUCTIVE_ACTIONS.md`: manual verification strategy for dangerous operations
+- `skills/unraid/`: user-facing operational guidance
+
+## License
+
+MIT
