@@ -133,3 +133,15 @@ jobs:
           version: "0.9.25"
       - name: Dependency audit
         run: uv audit
+
+  docker-security:
+    name: Docker Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Dockerfile security
+        run: bash scripts/check-docker-security.sh Dockerfile
+      - name: Check no baked env vars
+        run: bash scripts/check-no-baked-env.sh .
+      - name: Check ignore files
+        run: bash scripts/ensure-ignore-files.sh --check .
