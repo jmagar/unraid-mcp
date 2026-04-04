@@ -105,7 +105,9 @@ _ACTIONS_REQUIRING_CONTAINER_ID = {
     "details",
     "logs",
 }
-ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart"}
+# "logs" has no GraphQL query (field removed in Unraid 7.2.x) but is still a
+# valid action — it reaches the ToolError handler that explains the alternative.
+ALL_ACTIONS = set(QUERIES) | set(MUTATIONS) | {"restart", "logs"}
 
 DOCKER_ACTIONS = Literal[
     "list",

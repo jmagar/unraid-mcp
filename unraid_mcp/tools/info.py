@@ -356,11 +356,15 @@ def register_info_tool(mcp: FastMCP) -> None:
 
         # Lookup tables for common response patterns
         # Simple dict actions: action -> GraphQL response key
+        # Note: "network", "connect", and "variables" all query the `vars` root
+        # field (Unraid 7.2.x merged these endpoints into a single vars object).
+        # GraphQL returns only the subfields requested per query, so the shared
+        # root causes no overlap — each action still fetches its own field set.
         dict_actions: dict[str, str] = {
-            "network": "vars",
+            "network": "vars",  # GetNetworkConfig — useSsl, port, portssl, localTld
             "registration": "registration",
-            "connect": "vars",
-            "variables": "vars",
+            "connect": "vars",  # GetConnectSettings — flashGuid, flashProduct, flashVendor
+            "variables": "vars",  # GetSelectiveUnraidVariables — full vars payload
             "metrics": "metrics",
             "config": "config",
             "owner": "owner",
