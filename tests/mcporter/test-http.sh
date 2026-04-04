@@ -35,6 +35,7 @@ set -uo pipefail
 MCP_URL="http://localhost:6970/mcp"
 TOKEN=""
 SKIP_AUTH=false
+SKIP_TOOLS=false
 VERBOSE=false
 
 # ---------------------------------------------------------------------------
@@ -58,10 +59,11 @@ declare -a FAILED=()
 # ---------------------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --url)        MCP_URL="${2:?--url requires a value}";   shift 2 ;;
-    --token)      TOKEN="${2:?--token requires a value}";   shift 2 ;;
-    --skip-auth)  SKIP_AUTH=true;                           shift ;;
-    --verbose)    VERBOSE=true;                             shift ;;
+    --url)         MCP_URL="${2:?--url requires a value}";   shift 2 ;;
+    --token)       TOKEN="${2:?--token requires a value}";   shift 2 ;;
+    --skip-auth)   SKIP_AUTH=true;                           shift ;;
+    --skip-tools)  SKIP_TOOLS=true;                          shift ;;
+    --verbose)     VERBOSE=true;                             shift ;;
     -h|--help)
       sed -n '3,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -326,6 +328,22 @@ fi
 # Phase 4 — Tool smoke-tests
 # =============================================================================
 section "Phase 4 · Tool smoke-tests (non-destructive)"
+
+if [[ "$SKIP_TOOLS" == true ]]; then
+  skip "Phase 4 tool calls" "--skip-tools (no live Unraid API)"
+  skip "Phase 4b guard bypass tests" "--skip-tools"
+  # Jump to summary
+  TOTAL=$(( PASS + FAIL + SKIP ))
+  printf '\n%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n' "$C$B" "$N"
+  printf 'Results: %s%d passed%s  %s%d failed%s  %s%d skipped%s  (%d total)\n' \
+    "$G" "$PASS" "$N" \
+    "$([[ $FAIL -gt 0 ]] && echo "$R" || echo "$D")" "$FAIL" "$N" \
+    "$D" "$SKIP" "$N" \
+    "$TOTAL"
+  printf '\n'
+  [[ $FAIL -eq 0 ]]
+  exit $?
+fi
 
 # Helper: call unraid tool and check for no error
 call_unraid() {
