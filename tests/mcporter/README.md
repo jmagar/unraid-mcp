@@ -1,6 +1,43 @@
 # mcporter Integration Tests
 
-Live integration smoke-tests for the unraid-mcp server, exercising real API calls via [mcporter](https://github.com/mcporter/mcporter).
+Live integration smoke-tests for the unraid-mcp server.
+
+---
+
+## `test-http.sh` — HTTP live test, requires a running server
+
+Full end-to-end smoke-test over the HTTP transport. No mcporter required — uses `curl` and `jq`.
+
+```bash
+# Local server, auth disabled (gateway handles auth)
+./tests/mcporter/test-http.sh --skip-auth
+
+# Local server with bearer token
+./tests/mcporter/test-http.sh --token <your-token>
+
+# Remote server via gateway
+./tests/mcporter/test-http.sh --url https://unraid.tootie.tv/mcp --skip-auth
+
+# With explicit token
+./tests/mcporter/test-http.sh --url http://localhost:6970/mcp --token <tok>
+
+# Verbose (print raw response bodies)
+./tests/mcporter/test-http.sh --skip-auth --verbose
+```
+
+Token is auto-read from `~/.unraid-mcp/.env` if not supplied via `--token`.
+
+### What it tests
+
+| Phase | Tests |
+|---|---|
+| **1 · Middleware** | `/health`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-protected-resource/mcp` (all without auth) |
+| **2 · Auth** | No-token → 401, bad-token → 401 `invalid_token`, good-token → passes (skipped with `--skip-auth`) |
+| **3 · MCP protocol** | `initialize`, `tools/list` (tool count + named tools), `ping` |
+| **4 · Tool smoke-tests** | 14 non-destructive subactions across all domains |
+| **4b · Guard bypass** | `confirm=True` bypasses destructive guard on `notification/delete` and `vm/force_stop` |
+
+Prerequisites: `curl`, `jq`.
 
 ---
 
