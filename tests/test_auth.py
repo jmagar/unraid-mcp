@@ -9,6 +9,7 @@ Covers:
   - Per-IP rate limiting: 60 failures → 429
   - os.environ.pop after ensure_token_exists (token not leaked to subprocesses)
   - Startup guard: sys.exit(1) when HTTP + no token + auth not disabled
+  - WellKnownMiddleware: RFC 9728 OAuth Protected Resource Metadata
 """
 
 import asyncio
@@ -18,7 +19,12 @@ from unittest.mock import patch
 
 import pytest
 
-from unraid_mcp.core.auth import _RATE_MAX_FAILURES, _RATE_WINDOW_SECS, BearerAuthMiddleware
+from unraid_mcp.core.auth import (
+    _RATE_MAX_FAILURES,
+    _RATE_WINDOW_SECS,
+    BearerAuthMiddleware,
+    WellKnownMiddleware,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -442,3 +448,163 @@ class TestStartupGuard:
             s.UNRAID_MCP_TRANSPORT = orig_transport
             s.UNRAID_MCP_BEARER_TOKEN = orig_token
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
+
+
+# ---------------------------------------------------------------------------
+# WellKnownMiddleware — RFC 9728 OAuth Protected Resource Metadata
+# ---------------------------------------------------------------------------
+
+
+def _make_get_scope(path: str, host: str = "localhost:6970") -> dict:
+    return {
+        "type": "http",
+        "method": "GET",
+        "path": path,
+        "scheme": "http",
+        "headers": [(b"host", host.encode())],
+        "client": ("127.0.0.1", 9999),
+    }
+
+
+async def _run_well_known(path: str, method: str = "GET", host: str = "localhost:6970"):
+    """Run WellKnownMiddleware and return (status, headers_dict, parsed_body)."""
+    app, called = _app_called_flag()
+    mw = WellKnownMiddleware(app)
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "scheme": "http",
+        "headers": [(b"host", host.encode())],
+        "client": ("127.0.0.1", 9999),
+    }
+    received: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg: dict):
+        received.append(msg)
+
+    await mw(scope, receive, send)
+
+    if not received:
+        # App was called (fell through) — return sentinel
+        return None, {}, None
+
+    start = next((m for m in received if m["type"] == "http.response.start"), None)
+    body_msg = next((m for m in received if m["type"] == "http.response.body"), None)
+    if start is None:
+        return None, {}, None
+
+    import json as _json
+
+    headers = {k.decode(): v.decode() for k, v in start["headers"]}
+    body = _json.loads(body_msg["body"]) if body_msg else {}
+    return start["status"], headers, body
+
+
+class TestWellKnownMiddleware:
+    def _run(self, path, method="GET", host="localhost:6970"):
+        return asyncio.get_event_loop().run_until_complete(
+            _run_well_known(path, method=method, host=host)
+        )
+
+    # ------------------------------------------------------------------
+    # Handled paths → 200
+    # ------------------------------------------------------------------
+
+    def test_well_known_root_returns_200(self):
+        status, _, _ = self._run("/.well-known/oauth-protected-resource")
+        assert status == 200
+
+    def test_well_known_mcp_subpath_returns_200(self):
+        status, _, _ = self._run("/.well-known/oauth-protected-resource/mcp")
+        assert status == 200
+
+    def test_response_content_type_is_json(self):
+        _, headers, _ = self._run("/.well-known/oauth-protected-resource")
+        assert headers.get("content-type") == "application/json"
+
+    def test_response_has_bearer_methods_supported(self):
+        _, _, body = self._run("/.well-known/oauth-protected-resource")
+        assert body.get("bearer_methods_supported") == ["header"]
+
+    def test_response_has_resource_field(self):
+        _, _, body = self._run("/.well-known/oauth-protected-resource")
+        assert "resource" in body
+        assert len(body["resource"]) > 0
+
+    def test_resource_derived_from_host_header(self):
+        _, _, body = self._run(
+            "/.well-known/oauth-protected-resource", host="myserver.example.com:6970"
+        )
+        assert "myserver.example.com:6970" in body["resource"]
+
+    def test_no_authorization_servers_field(self):
+        """Absence of authorization_servers tells clients: use a pre-configured token."""
+        _, _, body = self._run("/.well-known/oauth-protected-resource")
+        assert "authorization_servers" not in body
+
+    # ------------------------------------------------------------------
+    # Fall-through cases → app is called
+    # ------------------------------------------------------------------
+
+    def test_non_get_method_falls_through(self):
+        """POST /.well-known/... must not be intercepted — fall through to auth."""
+        app, called = _app_called_flag()
+        mw = WellKnownMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "POST",
+            "path": "/.well-known/oauth-protected-resource",
+            "scheme": "http",
+            "headers": [],
+            "client": ("127.0.0.1", 9999),
+        }
+        received: list[dict] = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(msg: dict):
+            received.append(msg)
+
+        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        assert called["value"]
+
+    def test_unrelated_path_falls_through(self):
+        app, called = _app_called_flag()
+        mw = WellKnownMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/mcp",
+            "scheme": "http",
+            "headers": [],
+            "client": ("127.0.0.1", 9999),
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(msg: dict):
+            received.append(msg)
+
+        received: list[dict] = []
+        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        assert called["value"]
+
+    def test_websocket_scope_falls_through(self):
+        app, called = _app_called_flag()
+        mw = WellKnownMiddleware(app)
+        scope = {"type": "websocket", "path": "/mcp", "headers": [], "client": ("127.0.0.1", 9)}
+
+        async def receive():
+            return {}
+
+        async def send(msg: dict):
+            pass
+
+        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        assert called["value"]
