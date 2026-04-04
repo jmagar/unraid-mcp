@@ -43,3 +43,21 @@ jobs:
             --title "Release $GITHUB_REF_NAME" \
             --generate-notes \
             dist/*
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Set version in server.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '
+            .version = $v |
+            .packages = [.packages[] | if .registryType == "pypi" then .version = $v else . end]
+          ' server.json > server.tmp && mv server.tmp server.json
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login dns --domain tootie.tv --private-key ${{ secrets.MCP_PRIVATE_KEY }}
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
