@@ -1,7 +1,7 @@
 {
   "name": "unraid-mcp",
   "displayName": "Unraid MCP",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Query, monitor, and manage Unraid servers via GraphQL API through MCP tools. Supports system info, Docker, VMs, array/parity, notifications, plugins, rclone, and live telemetry.",
   "author": {
     "name": "Jacob Magar",
@@ -57,7 +57,7 @@
     "unraid_api_key": {
       "type": "string",
       "title": "Unraid API Key",
-      "description": "API key for your Unraid server. Found in Settings → Management Access → API Keys.",
+      "description": "API key for your Unraid server. Found in Settings \u2192 Management Access \u2192 API Keys.",
       "sensitive": true
     }
   }

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-04-03
+
+### Changed
+- **hooks/hooks.json**: Removed `SessionStart` hook — `sync-env.sh` was exiting 1 on every session start when `UNRAID_MCP_BEARER_TOKEN` was not set via plugin userConfig, causing startup hook errors.
+
 ## [1.2.2] - 2026-04-03
 
 ### Changed
