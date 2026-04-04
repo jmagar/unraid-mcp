@@ -608,3 +608,100 @@ class TestWellKnownMiddleware:
 
         asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
         assert called["value"]
+
+
+# ---------------------------------------------------------------------------
+# Stacked middleware integration — ordering invariant (regression for #17)
+#
+# WellKnownMiddleware MUST sit outside (before) BearerAuthMiddleware so that
+# OAuth discovery endpoints are reachable without a token even when auth is
+# enabled.  If the order is swapped the well-known endpoint returns 401 and
+# MCP clients (e.g. Claude Code) surface an "unknown error".
+# ---------------------------------------------------------------------------
+
+
+async def _run_stack(path: str, method: str = "GET", auth_header: bytes | None = None) -> int:
+    """Run the production middleware stack and return the HTTP status code.
+
+    Stack (outermost to innermost): WellKnownMiddleware → BearerAuthMiddleware → app
+    """
+    app, _ = _app_called_flag()
+    authed_app = BearerAuthMiddleware(app, token="test-token", disabled=False)
+    stacked = WellKnownMiddleware(authed_app)
+
+    headers: list[tuple[bytes, bytes]] = [(b"host", b"localhost:6970")]
+    if auth_header is not None:
+        headers.append((b"authorization", auth_header))
+
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "scheme": "http",
+        "headers": headers,
+        "client": ("127.0.0.1", 9999),
+    }
+    received: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg: dict):
+        received.append(msg)
+
+    await stacked(scope, receive, send)
+    start = next((m for m in received if m["type"] == "http.response.start"), None)
+    return start["status"] if start else 200
+
+
+class TestMiddlewareOrdering:
+    """Regression tests for the WellKnown→BearerAuth ordering invariant."""
+
+    def _run(self, path, method="GET", auth_header=None):
+        return asyncio.get_event_loop().run_until_complete(
+            _run_stack(path, method=method, auth_header=auth_header)
+        )
+
+    def test_well_known_accessible_without_token(self):
+        """Core regression: discovery must be reachable even with auth enabled."""
+        assert self._run("/.well-known/oauth-protected-resource") == 200
+
+    def test_well_known_mcp_subpath_accessible_without_token(self):
+        assert self._run("/.well-known/oauth-protected-resource/mcp") == 200
+
+    def test_mcp_endpoint_blocked_without_token(self):
+        """Auth layer must still protect /mcp when no token is provided."""
+        assert self._run("/mcp") == 401
+
+    def test_mcp_endpoint_blocked_with_wrong_token(self):
+        assert self._run("/mcp", auth_header=b"Bearer wrong-token") == 401
+
+    def test_mcp_endpoint_passes_with_correct_token(self):
+        assert self._run("/mcp", auth_header=b"Bearer test-token") == 200
+
+    def test_swapped_order_would_block_well_known(self):
+        """Negative test: wrong middleware order produces 401 on well-known (issue #17)."""
+        app, _ = _app_called_flag()
+        # Wrong: BearerAuth wraps WellKnown — auth fires before discovery can respond
+        wrong_stack = BearerAuthMiddleware(
+            WellKnownMiddleware(app), token="test-token", disabled=False
+        )
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource",
+            "scheme": "http",
+            "headers": [(b"host", b"localhost:6970")],
+            "client": ("127.0.0.1", 9999),
+        }
+        received: list[dict] = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(msg: dict):
+            received.append(msg)
+
+        asyncio.get_event_loop().run_until_complete(wrong_stack(scope, receive, send))
+        start = next(m for m in received if m["type"] == "http.response.start")
+        assert start["status"] == 401, "Wrong order should produce 401 (the issue #17 regression)"

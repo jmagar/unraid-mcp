@@ -72,9 +72,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Derive base URL (strip /mcp suffix for non-tool endpoints)
-BASE_URL="${MCP_URL%/mcp}"
-[[ "$BASE_URL" == "$MCP_URL" ]] && BASE_URL="${MCP_URL%/}"
+# Derive base URL: strip trailing /mcp (with or without trailing slash).
+# Examples:
+#   http://localhost:6970/mcp  → http://localhost:6970
+#   https://host/api/mcp/      → https://host/api
+#   https://host/mcp           → https://host
+# If the URL doesn't end in /mcp[/], use it as-is (strip trailing slash only).
+_stripped="${MCP_URL%/}"          # remove optional trailing slash
+if [[ "$_stripped" == */mcp ]]; then
+  BASE_URL="${_stripped%/mcp}"
+else
+  BASE_URL="$_stripped"
+fi
+unset _stripped
 
 # ---------------------------------------------------------------------------
 # Auto-detect token from ~/.unraid-mcp/.env if not supplied
