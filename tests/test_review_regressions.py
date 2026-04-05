@@ -20,8 +20,12 @@ def test_plugin_manifest_restores_stdio_server_definition() -> None:
 
 def test_ci_gates_live_integration_job_on_unraid_secrets() -> None:
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    assert "secrets.UNRAID_API_URL != ''" in workflow
-    assert "secrets.UNRAID_API_KEY != ''" in workflow
+    # Secrets are mapped to env vars at job level; step if-condition checks env vars
+    # (GitHub Actions forbids secrets.* in if conditions — security policy)
+    assert "secrets.UNRAID_API_URL" in workflow
+    assert "secrets.UNRAID_API_KEY" in workflow
+    assert "env.UNRAID_API_URL != ''" in workflow
+    assert "env.UNRAID_API_KEY != ''" in workflow
 
 
 def test_container_configs_use_runtime_port_variable() -> None:
