@@ -63,10 +63,6 @@ else
 
   # ── Runtime / hook artifacts ──
   REQUIRED_GIT+=(
-    "backups/*"
-    "!backups/.gitkeep"
-    "logs/*"
-    "!logs/.gitkeep"
     "*.log"
   )
 
