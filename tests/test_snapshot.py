@@ -27,6 +27,22 @@ def _make_ws_recv_sequence(*messages: str):
     return _gen()
 
 
+@pytest.fixture(autouse=True)
+def mock_ws_url():
+    """Patch build_ws_url so tests don't need UNRAID_API_URL configured."""
+    with (
+        patch(
+            "unraid_mcp.subscriptions.snapshot.build_ws_url",
+            return_value="ws://localhost:2999/graphql",
+        ),
+        patch(
+            "unraid_mcp.subscriptions.snapshot.build_ws_ssl_context",
+            return_value=None,
+        ),
+    ):
+        yield
+
+
 @pytest.fixture
 def mock_ws():
     ws = MagicMock()
