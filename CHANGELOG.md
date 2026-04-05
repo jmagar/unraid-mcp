@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-04-05
+
+### Added
+- **`tests/test_bump_version.bats`**: 9 bats tests for `bin/bump-version.sh` covering explicit version, patch/minor/major keywords, all-files-in-sync, output format, and dirname fallback.
+
+### Changed
+- **`bin/bump-version.sh`**: Uses `CLAUDE_PLUGIN_ROOT` as repo root override (set automatically by plugin runtime in hook contexts); falls back to dirname detection for direct dev use.
+- **`bin/`**: Renamed from `scripts/` — moved all scripts to `bin/`.
+
+## [1.3.5] - 2026-04-05
+
+### Added
+- **`scripts/bump-version.sh`**: One-command version bump across all four version-bearing files. Supports explicit version or `major`/`minor`/`patch` keywords.
+
 ## [1.3.4] - 2026-04-05
 
 ### Changed
