@@ -6,7 +6,7 @@
 # Follows the same diff-copy-install-or-rollback pattern as the npm example
 # in the Claude Code plugin docs.
 #
-# Supported: uv (Python), npm, yarn, pnpm
+# Supported: uv (Python), cargo (Rust), npm/yarn/pnpm (TypeScript/JavaScript)
 
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 DATA_DIR="${CLAUDE_PLUGIN_DATA}"
@@ -42,4 +42,8 @@ elif [ -f "${PLUGIN_ROOT}/yarn.lock" ]; then
 elif [ -f "${PLUGIN_ROOT}/pnpm-lock.yaml" ]; then
     sync_if_changed "pnpm-lock.yaml" \
         "pnpm install --dir \"${PLUGIN_ROOT}\" --virtual-store-dir \"${DATA_DIR}/pnpm-store\""
+
+elif [ -f "${PLUGIN_ROOT}/Cargo.lock" ]; then
+    sync_if_changed "Cargo.lock" \
+        "cargo build --release --manifest-path \"${PLUGIN_ROOT}/Cargo.toml\" --target-dir \"${DATA_DIR}/target\""
 fi

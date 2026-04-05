@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-04-05
+
+### Changed
+- **`install-deps.sh`**: Added Rust/Cargo support (`Cargo.lock` → `cargo build --release` into `${CLAUDE_PLUGIN_DATA}/target`).
+
 ## [1.3.2] - 2026-04-05
 
 ### Changed
