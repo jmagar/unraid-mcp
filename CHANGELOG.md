@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.4] - 2026-04-05
+
+### Changed
+- **SessionStart hook**: Removed `install-deps.sh` script; hook command is inline again per Claude Code plugin docs pattern.
+
 ## [1.3.3] - 2026-04-05
 
 ### Changed

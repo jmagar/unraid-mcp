@@ -1,6 +1,6 @@
 {
   "name": "unraid-mcp",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Unraid server management via MCP.",
   "homepage": "https://github.com/jmagar/unraid-mcp",
   "repository": "https://github.com/jmagar/unraid-mcp",
