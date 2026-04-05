@@ -4,8 +4,6 @@
 !.env.example
 
 # ── Runtime artifacts ────────────────────────────────────────────────────────
-logs/
-backups/
 *.log
 *.pid
 *.bak
