@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-04-05
+
+### Changed
+- **SessionStart hook**: Extracted inline uv command into `.claude-plugin/install-deps.sh` — a language-agnostic script that detects the package manager from lock files (uv, npm, yarn, pnpm) and installs deps into `${CLAUDE_PLUGIN_DATA}`.
+
 ## [1.3.1] - 2026-04-05
 
 ### Changed
