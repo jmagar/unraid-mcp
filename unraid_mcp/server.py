@@ -7,7 +7,7 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import os
 import secrets
 import sys
-from typing import Literal
+from typing import Literal, cast
 
 from dotenv import set_key
 from fastmcp import FastMCP
@@ -239,8 +239,9 @@ def run_server() -> None:
                 )
             # ASGI-level bearer auth wraps the entire HTTP stack — fires before any
             # MCP protocol processing and before the MCP-level middleware chain.
-            transport_literal: Literal["stdio", "http", "sse", "streamable-http"] = (
-                _settings.UNRAID_MCP_TRANSPORT  # type: ignore[assignment]
+            transport_literal = cast(
+                "Literal['stdio', 'http', 'sse', 'streamable-http']",
+                _settings.UNRAID_MCP_TRANSPORT,
             )
             mcp.run(
                 transport=transport_literal,
@@ -254,10 +255,10 @@ def run_server() -> None:
                     #    no auth.  MCP clients probe this after a 401 to discover how to
                     #    authenticate; responding correctly stops the 401 cascade.
                     # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
-                    ASGIMiddleware(HealthMiddleware),
-                    ASGIMiddleware(WellKnownMiddleware),
+                    ASGIMiddleware(HealthMiddleware),  # type: ignore
+                    ASGIMiddleware(WellKnownMiddleware),  # type: ignore
                     ASGIMiddleware(
-                        BearerAuthMiddleware,
+                        BearerAuthMiddleware,  # type: ignore
                         token=_settings.UNRAID_MCP_BEARER_TOKEN or "",
                         disabled=_settings.UNRAID_MCP_DISABLE_HTTP_AUTH,
                     ),
