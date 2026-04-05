@@ -409,8 +409,6 @@ echo
 echo "── 16. Required directories ──"
 
 for req_dir in \
-  "backups" \
-  "logs" \
   "tests" \
   "skills"; do
   if [[ -d "$PROJECT_DIR/$req_dir" ]]; then
@@ -422,8 +420,6 @@ done
 
 # Check .gitkeep files
 for gitkeep in \
-  "backups/.gitkeep" \
-  "logs/.gitkeep"; do
   if [[ -f "$PROJECT_DIR/$gitkeep" ]]; then
     pass "$gitkeep exists"
   else

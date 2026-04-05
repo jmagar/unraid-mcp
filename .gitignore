@@ -87,11 +87,9 @@ pip-log.txt
 /DESTRUCTIVE_ACTIONS.md
 client_secret_*.apps.googleusercontent.com.json
 
-backups/*
-!backups/.gitkeep
-logs/*
-!logs/.gitkeep
 .worktrees
 
 # Personal local cheatsheet (never commit)
 CLAUDE.md.local
+logs/
+backups/
