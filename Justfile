@@ -108,6 +108,33 @@ check-contract:
     bash scripts/check-no-baked-env.sh
     bash scripts/ensure-ignore-files.sh --check
 
+# ── CLI Generation ────────────────────────────────────────────────────────────
+
+# Generate a standalone CLI for this server (requires running server)
+generate-cli:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    PORT="${UNRAID_MCP_PORT:-6970}"
+    echo "⚠  Server must be running on port ${PORT} (run 'just dev' first)"
+    echo "⚠  Generated CLI embeds your OAuth token — do not commit or share"
+    mkdir -p dist dist/.cache
+    current_hash=$(timeout 10 curl -sf \
+      -H "Authorization: Bearer $MCP_TOKEN" \
+      -H "Accept: application/json, text/event-stream" \
+      "http://localhost:${PORT}/mcp/tools/list" 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
+    cache_file="dist/.cache/unraid-mcp-cli.schema_hash"
+    if [[ -f "$cache_file" ]] && [[ "$(cat "$cache_file")" == "$current_hash" ]] && [[ -f "dist/unraid-mcp-cli" ]]; then
+      echo "SKIP: unraid-mcp tool schema unchanged — use existing dist/unraid-mcp-cli"
+      exit 0
+    fi
+    timeout 30 mcporter generate-cli \
+      --command "http://localhost:${PORT}/mcp" \
+      --header "Authorization: Bearer $MCP_TOKEN" \
+      --name unraid-mcp-cli \
+      --output dist/unraid-mcp-cli
+    printf '%s' "$current_hash" > "$cache_file"
+    echo "✓ Generated dist/unraid-mcp-cli (requires bun at runtime)"
+
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 
 # Remove build artifacts, caches, and compiled files
