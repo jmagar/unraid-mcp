@@ -1,17 +1,22 @@
 """Shared test fixtures and helpers for Unraid MCP server tests."""
 
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp import FastMCP
 from hypothesis import settings
+from hypothesis.configuration import set_hypothesis_home_dir
 from hypothesis.database import DirectoryBasedExampleDatabase
 
 
-# Configure hypothesis to use the .cache directory for its database
-settings.register_profile("default", database=DirectoryBasedExampleDatabase(".cache/.hypothesis"))
+# Redirect hypothesis storage (unicode_data, constants) and example database
+# to .cache/.hypothesis — keeps the repo root clean.
+_HYPOTHESIS_DIR = Path(__file__).parent.parent / ".cache" / ".hypothesis"
+set_hypothesis_home_dir(_HYPOTHESIS_DIR)
+settings.register_profile("default", database=DirectoryBasedExampleDatabase(str(_HYPOTHESIS_DIR)))
 settings.load_profile("default")
 
 

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-05
+
+### Added
+- **SessionStart hook**: `plugin.json` now installs Python deps via `uv sync` into `${CLAUDE_PLUGIN_DATA}/.venv` on first run and on any `uv.lock` change — fixes "server failed to start" for users installing via the plugin system.
+- **Persistent venv**: MCP server command uses `UV_PROJECT_ENVIRONMENT=${CLAUDE_PLUGIN_DATA}/.venv` so the installed venv survives plugin updates without reinstalling on every session.
+
+### Changed
+- **`.mcp.json`**: Added `UV_PROJECT_ENVIRONMENT=${CLAUDE_PLUGIN_DATA}/.venv` and `--project ${CLAUDE_PLUGIN_ROOT}` so the MCP server uses the persisted venv installed by the hook.
+
 ## [1.2.5] - 2026-04-05
 
 ### Changed

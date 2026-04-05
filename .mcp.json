@@ -4,11 +4,13 @@
       "command": "uv",
       "args": [
         "run",
+        "--project",
+        "${CLAUDE_PLUGIN_ROOT}",
         "unraid-mcp-server"
       ],
-      "cwd": "./",
       "env": {
-        "UNRAID_MCP_TRANSPORT": "stdio"
+        "UNRAID_MCP_TRANSPORT": "stdio",
+        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/.venv"
       }
     }
   }
