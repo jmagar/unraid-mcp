@@ -72,13 +72,18 @@ bash scripts/validate-marketplace.sh
 
 ### generate_unraid_api_reference.py
 
-Generates API reference documentation from GraphQL schema introspection:
+Generates the canonical Unraid API docs from GraphQL schema introspection:
 
 ```bash
 python scripts/generate_unraid_api_reference.py
 ```
 
-Produces the docs in `docs/UNRAID_API_COMPLETE_REFERENCE.md`.
+Produces:
+- `docs/unraid/UNRAID-API-SUMMARY.md`
+- `docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md`
+- `docs/unraid/UNRAID-API-INTROSPECTION.json`
+- `docs/unraid/UNRAID-SCHEMA.graphql`
+- `docs/unraid/UNRAID-API-CHANGES.md`
 
 ## Hook scripts (`hooks/scripts/`)
 

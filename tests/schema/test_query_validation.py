@@ -11,7 +11,7 @@ import pytest
 from graphql import DocumentNode, GraphQLSchema, build_schema, parse, validate
 
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid-schema.graphql"
+SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
 
 
 @pytest.fixture(scope="module")
@@ -820,7 +820,7 @@ class TestHealthQueries:
             overview { unread { alert warning total } }
           }
           docker {
-            containers(skipCache: true) { id state status }
+            containers { id state status }
           }
         }
         """

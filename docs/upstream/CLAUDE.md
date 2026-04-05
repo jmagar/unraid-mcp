@@ -68,11 +68,11 @@ The Unraid API enforces approximately 100 requests per 10 seconds. The MCP serve
 ## GraphQL schema reference
 
 The full Unraid GraphQL schema is available in:
-- `docs/unraid-schema.graphql` -- Complete schema definition (74 KB)
-- `docs/unraid-api-introspection.json` -- Introspection result (236 KB)
-- `docs/UNRAID_API_COMPLETE_REFERENCE.md` -- Human-readable reference (73 KB)
-- `docs/UNRAID_API_OPERATIONS.md` -- All supported operations with examples
-- `docs/UNRAID_API_REFERENCE.md` -- Condensed reference
+- `docs/unraid/UNRAID-API-SUMMARY.md` -- Condensed overview
+- `docs/unraid/UNRAID-API-CHANGES.md` -- Diff against the prior introspection snapshot
+- `docs/unraid/UNRAID-SCHEMA.graphql` -- Complete schema definition
+- `docs/unraid/UNRAID-API-INTROSPECTION.json` -- Introspection result
+- `docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md` -- Human-readable reference
 
 ### Query organization
 

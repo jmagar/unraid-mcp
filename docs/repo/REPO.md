@@ -116,9 +116,11 @@ unraid-mcp/
 |   +-- DESTRUCTIVE_ACTIONS.md         # Destructive action reference
 |   +-- MARKETPLACE.md                 # Marketplace guide
 |   +-- PUBLISHING.md                  # Publishing guide
-|   +-- UNRAID_API_*.md                # Unraid API documentation
-|   +-- unraid-schema.graphql          # Full GraphQL schema
-|   +-- unraid-api-introspection.json  # Schema introspection data
+|   +-- UNRAID-API-SUMMARY.md         # Condensed Unraid API overview
+|   +-- UNRAID-API-CHANGES.md         # Schema diff vs previous snapshot
+|   +-- UNRAID-API-COMPLETE-REFERENCE.md # Full Unraid API reference
+|   +-- UNRAID-SCHEMA.graphql          # Full GraphQL schema
+|   +-- UNRAID-API-INTROSPECTION.json  # Schema introspection data
 |
 +-- .github/
 |   +-- workflows/

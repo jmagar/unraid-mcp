@@ -31,7 +31,7 @@ _HEALTH_QUERIES: dict[str, str] = {
         " info { machineId time versions { core { unraid } } os { uptime } }"
         " array { state }"
         " notifications { overview { unread { alert warning total } } }"
-        " docker { containers(skipCache: true) { id state status } }"
+        " docker { containers { id state status } }"
         " }"
     ),
 }

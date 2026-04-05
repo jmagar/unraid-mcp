@@ -500,8 +500,8 @@ class TestDockerToolRequests:
             nonlocal call_count
             body = json.loads(request.content.decode())
             call_count += 1
-            if "skipCache" in body["query"]:
-                # Resolution query: docker { containers(skipCache: true) { id names } }
+            if "ResolveContainerID" in body["query"]:
+                # Resolution query: docker { containers { id names } }
                 return _graphql_response(
                     {"docker": {"containers": [{"id": resolved_id, "names": ["plex"]}]}}
                 )

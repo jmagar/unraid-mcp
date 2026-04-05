@@ -202,8 +202,8 @@ uv run pytest -x                     # Fail fast on first error
 See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_ACTIONS.md` for exact destructive-action test commands.
 
 ### API Reference Docs
-- `docs/UNRAID_API_COMPLETE_REFERENCE.md` — Full GraphQL schema reference
-- `docs/UNRAID_API_OPERATIONS.md` — All supported operations with examples
+- `docs/unraid/UNRAID-API-SUMMARY.md` — Condensed schema overview
+- `docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md` — Full GraphQL schema reference
 - `docs/MARKETPLACE.md` — Plugin marketplace listing and publishing guide
 - `docs/PUBLISHING.md` — Step-by-step instructions for publishing to Claude plugin registry
 

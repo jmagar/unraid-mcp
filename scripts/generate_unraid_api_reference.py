@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Generate a complete Markdown reference from Unraid GraphQL introspection."""
+"""Generate canonical Unraid GraphQL docs from live introspection."""
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 from collections import Counter, defaultdict
@@ -11,9 +12,17 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from graphql import build_client_schema
+from graphql import print_schema
 
 
-DEFAULT_OUTPUT = Path("docs/UNRAID_API_COMPLETE_REFERENCE.md")
+DOCS_DIR = Path("docs/unraid")
+DEFAULT_COMPLETE_OUTPUT = DOCS_DIR / "UNRAID-API-COMPLETE-REFERENCE.md"
+DEFAULT_SUMMARY_OUTPUT = DOCS_DIR / "UNRAID-API-SUMMARY.md"
+DEFAULT_INTROSPECTION_OUTPUT = DOCS_DIR / "UNRAID-API-INTROSPECTION.json"
+DEFAULT_SCHEMA_OUTPUT = DOCS_DIR / "UNRAID-SCHEMA.graphql"
+DEFAULT_CHANGES_OUTPUT = DOCS_DIR / "UNRAID-API-CHANGES.md"
+LEGACY_INTROSPECTION_OUTPUT = Path("docs/unraid-api-introspection.json")
 
 INTROSPECTION_QUERY = """
 query FullIntrospection {
@@ -371,10 +380,329 @@ def _build_markdown(schema: dict[str, Any], *, include_introspection: bool) -> s
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _visible_types(
+    schema: dict[str, Any], *, include_introspection: bool = False
+) -> list[dict[str, Any]]:
+    """Return visible types from the schema."""
+    types = schema.get("types") or []
+    return [
+        item
+        for item in types
+        if item.get("name") and (include_introspection or not str(item["name"]).startswith("__"))
+    ]
+
+
+def _types_by_name(
+    schema: dict[str, Any], *, include_introspection: bool = False
+) -> dict[str, dict[str, Any]]:
+    """Map visible types by name."""
+    return {
+        str(item["name"]): item
+        for item in _visible_types(schema, include_introspection=include_introspection)
+    }
+
+
+def _field_signature(field: dict[str, Any]) -> str:
+    """Render a stable field signature for change detection."""
+    args = sorted(field.get("args") or [], key=lambda item: str(item["name"]))
+    rendered_args = []
+    for arg in args:
+        arg_sig = f"{arg['name']}: {_type_to_str(arg.get('type'))}"
+        if arg.get("defaultValue") is not None:
+            arg_sig += f" = {arg['defaultValue']}"
+        rendered_args.append(arg_sig)
+    args_section = f"({', '.join(rendered_args)})" if rendered_args else "()"
+    return f"{field['name']}{args_section}: {_type_to_str(field.get('type'))}"
+
+
+def _input_field_signature(field: dict[str, Any]) -> str:
+    """Render a stable input field signature for change detection."""
+    signature = f"{field['name']}: {_type_to_str(field.get('type'))}"
+    if field.get("defaultValue") is not None:
+        signature += f" = {field['defaultValue']}"
+    return signature
+
+
+def _enum_value_signature(enum_value: dict[str, Any]) -> str:
+    """Render a stable enum value signature for change detection."""
+    signature = str(enum_value["name"])
+    if enum_value.get("isDeprecated"):
+        reason = _clean(enum_value.get("deprecationReason"))
+        signature += f" [deprecated: {reason}]" if reason else " [deprecated]"
+    return signature
+
+
+def _root_field_names(schema: dict[str, Any], root_key: str) -> set[str]:
+    """Return root field names for query/mutation/subscription."""
+    root_type = (schema.get(root_key) or {}).get("name")
+    if not root_type:
+        return set()
+    types = _types_by_name(schema)
+    root = types.get(str(root_type))
+    if not root:
+        return set()
+    return {str(field["name"]) for field in (root.get("fields") or [])}
+
+
+def _type_member_signatures(type_info: dict[str, Any]) -> set[str]:
+    """Return stable member signatures for a type."""
+    kind = str(type_info.get("kind", "UNKNOWN"))
+    if kind in {"OBJECT", "INTERFACE"}:
+        return {_field_signature(field) for field in (type_info.get("fields") or [])}
+    if kind == "INPUT_OBJECT":
+        return {_input_field_signature(field) for field in (type_info.get("inputFields") or [])}
+    if kind == "ENUM":
+        return {_enum_value_signature(value) for value in (type_info.get("enumValues") or [])}
+    if kind == "UNION":
+        return {
+            str(possible["name"])
+            for possible in (type_info.get("possibleTypes") or [])
+            if possible.get("name")
+        }
+    return set()
+
+
+def _build_summary_markdown(
+    schema: dict[str, Any], *, source: str, generated_at: str, include_introspection: bool
+) -> str:
+    """Build condensed root-level summary markdown."""
+    types = _types_by_name(schema, include_introspection=include_introspection)
+    visible_types = _visible_types(schema, include_introspection=include_introspection)
+    directives = sorted(schema.get("directives") or [], key=lambda item: str(item["name"]))
+    kind_counts = Counter(str(item.get("kind", "UNKNOWN")) for item in visible_types)
+    query_root = (schema.get("queryType") or {}).get("name")
+    mutation_root = (schema.get("mutationType") or {}).get("name")
+    subscription_root = (schema.get("subscriptionType") or {}).get("name")
+
+    lines = [
+        "# Unraid API Introspection Summary",
+        "",
+        f"> Auto-generated from live API introspection on {generated_at}",
+        f"> Source: {source}",
+        "",
+        "## Table of Contents",
+        "",
+        "- [Schema Summary](#schema-summary)",
+        "- [Query Fields](#query-fields)",
+        "- [Mutation Fields](#mutation-fields)",
+        "- [Subscription Fields](#subscription-fields)",
+        "- [Type Kinds](#type-kinds)",
+        "",
+        "## Schema Summary",
+        f"- Query root: `{query_root}`",
+        f"- Mutation root: `{mutation_root}`",
+        f"- Subscription root: `{subscription_root}`",
+        f"- Total types: **{len(visible_types)}**",
+        f"- Total directives: **{len(directives)}**",
+        "",
+    ]
+
+    def render_table(section_title: str, root_name: str | None) -> None:
+        lines.append(f"## {section_title}")
+        lines.append("")
+        lines.append("| Field | Return Type | Arguments |")
+        lines.append("|-------|-------------|-----------|")
+        root = types.get(str(root_name)) if root_name else None
+        for field in sorted(root.get("fields") or [], key=lambda item: str(item["name"])) if root else []:
+            args = sorted(field.get("args") or [], key=lambda item: str(item["name"]))
+            arg_text = (
+                " — "
+                if not args
+                else ", ".join(
+                    (
+                        f"{arg['name']}: {_type_to_str(arg.get('type'))}"
+                        + (
+                            f" (default: {arg['defaultValue']})"
+                            if arg.get("defaultValue") is not None
+                            else ""
+                        )
+                    )
+                    for arg in args
+                )
+            )
+            lines.append(
+                f"| `{field['name']}` | `{_type_to_str(field.get('type'))}` | {arg_text} |"
+            )
+        lines.append("")
+
+    render_table("Query Fields", query_root)
+    render_table("Mutation Fields", mutation_root)
+    render_table("Subscription Fields", subscription_root)
+
+    lines.append("## Type Kinds")
+    lines.append("")
+    for kind in sorted(kind_counts):
+        lines.append(f"- `{kind}`: {kind_counts[kind]}")
+    lines.extend(
+        [
+            "",
+            "## Notes",
+            "",
+            "- This summary is intentionally condensed; the full schema reference lives in `UNRAID-API-COMPLETE-REFERENCE.md`.",
+            "- Raw schema exports live in `UNRAID-API-INTROSPECTION.json` and `UNRAID-SCHEMA.graphql`.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _build_changes_markdown(
+    previous_schema: dict[str, Any] | None,
+    current_schema: dict[str, Any],
+    *,
+    source: str,
+    generated_at: str,
+    include_introspection: bool,
+) -> str:
+    """Build a schema change report from a previous introspection snapshot."""
+    lines = [
+        "# Unraid API Schema Changes",
+        "",
+        f"> Generated on {generated_at}",
+        f"> Source: {source}",
+        "",
+    ]
+    if previous_schema is None:
+        lines.extend(
+            [
+                "No previous introspection snapshot was available, so no diff could be computed.",
+                "",
+                "The current canonical artifacts were regenerated successfully.",
+                "",
+            ]
+        )
+        return "\n".join(lines)
+
+    current_types = _types_by_name(current_schema, include_introspection=include_introspection)
+    previous_types = _types_by_name(previous_schema, include_introspection=include_introspection)
+
+    sections = [
+        ("Query fields", _root_field_names(previous_schema, "queryType"), _root_field_names(current_schema, "queryType")),
+        (
+            "Mutation fields",
+            _root_field_names(previous_schema, "mutationType"),
+            _root_field_names(current_schema, "mutationType"),
+        ),
+        (
+            "Subscription fields",
+            _root_field_names(previous_schema, "subscriptionType"),
+            _root_field_names(current_schema, "subscriptionType"),
+        ),
+    ]
+
+    all_kinds = {"OBJECT", "INPUT_OBJECT", "ENUM", "INTERFACE", "UNION", "SCALAR"}
+    previous_by_kind = {
+        kind: {name for name, info in previous_types.items() if str(info.get("kind")) == kind}
+        for kind in all_kinds
+    }
+    current_by_kind = {
+        kind: {name for name, info in current_types.items() if str(info.get("kind")) == kind}
+        for kind in all_kinds
+    }
+
+    for label, old_set, new_set in sections:
+        added = sorted(new_set - old_set)
+        removed = sorted(old_set - new_set)
+        lines.append(f"## {label}")
+        lines.append("")
+        lines.append(f"- Added: {len(added)}")
+        if added:
+            lines.extend(f"  - `{name}`" for name in added)
+        lines.append(f"- Removed: {len(removed)}")
+        if removed:
+            lines.extend(f"  - `{name}`" for name in removed)
+        if not added and not removed:
+            lines.append("- No changes")
+        lines.append("")
+
+    lines.append("## Type Changes")
+    lines.append("")
+    for kind in sorted(all_kinds):
+        added = sorted(current_by_kind[kind] - previous_by_kind[kind])
+        removed = sorted(previous_by_kind[kind] - current_by_kind[kind])
+        if not added and not removed:
+            continue
+        lines.append(f"### {kind}")
+        lines.append("")
+        lines.append(f"- Added: {len(added)}")
+        if added:
+            lines.extend(f"  - `{name}`" for name in added)
+        lines.append(f"- Removed: {len(removed)}")
+        if removed:
+            lines.extend(f"  - `{name}`" for name in removed)
+        lines.append("")
+
+    changed_types: list[str] = []
+    for name in sorted(set(previous_types) & set(current_types)):
+        previous_info = previous_types[name]
+        current_info = current_types[name]
+        if str(previous_info.get("kind")) != str(current_info.get("kind")):
+            changed_types.append(name)
+            continue
+        if _type_member_signatures(previous_info) != _type_member_signatures(current_info):
+            changed_types.append(name)
+
+    lines.append("## Type Signature Changes")
+    lines.append("")
+    if not changed_types:
+        lines.append("No existing type signatures changed.")
+        lines.append("")
+        return "\n".join(lines)
+
+    for name in changed_types:
+        previous_info = previous_types[name]
+        current_info = current_types[name]
+        previous_members = _type_member_signatures(previous_info)
+        current_members = _type_member_signatures(current_info)
+        added = sorted(current_members - previous_members)
+        removed = sorted(previous_members - current_members)
+        lines.append(f"### `{name}` ({current_info.get('kind')})")
+        lines.append("")
+        lines.append(f"- Added members: {len(added)}")
+        if added:
+            lines.extend(f"  - `{member}`" for member in added)
+        lines.append(f"- Removed members: {len(removed)}")
+        if removed:
+            lines.extend(f"  - `{member}`" for member in removed)
+        if not added and not removed and previous_info.get("kind") != current_info.get("kind"):
+            lines.append(
+                f"- Kind changed: `{previous_info.get('kind')}` -> `{current_info.get('kind')}`"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _extract_schema(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the __schema payload or raise."""
+    schema = (payload.get("data") or {}).get("__schema")
+    if not schema:
+        raise SystemExit("GraphQL introspection returned no __schema payload.")
+    return schema
+
+
+def _load_previous_schema(path: Path) -> dict[str, Any] | None:
+    """Load a prior introspection snapshot if available."""
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return _extract_schema(payload)
+
+
+def _write_schema_graphql(path: Path, payload: dict[str, Any]) -> None:
+    """Write SDL schema output."""
+    schema_graphql = print_schema(build_client_schema(payload["data"]))
+    banner = (
+        "# ------------------------------------------------------\n"
+        "# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)\n"
+        "# ------------------------------------------------------\n\n"
+    )
+    path.write_text(banner + schema_graphql.rstrip() + "\n", encoding="utf-8")
+
+
 def _parse_args() -> argparse.Namespace:
     """Parse CLI args."""
     parser = argparse.ArgumentParser(
-        description="Generate complete Unraid GraphQL schema reference Markdown from introspection."
+        description="Generate canonical Unraid GraphQL docs from introspection."
     )
     parser.add_argument(
         "--api-url",
@@ -387,10 +715,43 @@ def _parse_args() -> argparse.Namespace:
         help="API key (default: UNRAID_API_KEY env var).",
     )
     parser.add_argument(
-        "--output",
+        "--complete-output",
         type=Path,
-        default=DEFAULT_OUTPUT,
-        help=f"Output markdown file path (default: {DEFAULT_OUTPUT}).",
+        default=DEFAULT_COMPLETE_OUTPUT,
+        help=f"Full reference output path (default: {DEFAULT_COMPLETE_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--summary-output",
+        type=Path,
+        default=DEFAULT_SUMMARY_OUTPUT,
+        help=f"Summary output path (default: {DEFAULT_SUMMARY_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--introspection-output",
+        type=Path,
+        default=DEFAULT_INTROSPECTION_OUTPUT,
+        help=f"Introspection JSON output path (default: {DEFAULT_INTROSPECTION_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--schema-output",
+        type=Path,
+        default=DEFAULT_SCHEMA_OUTPUT,
+        help=f"SDL schema output path (default: {DEFAULT_SCHEMA_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--changes-output",
+        type=Path,
+        default=DEFAULT_CHANGES_OUTPUT,
+        help=f"Schema changes report path (default: {DEFAULT_CHANGES_OUTPUT}).",
+    )
+    parser.add_argument(
+        "--previous-introspection",
+        type=Path,
+        default=None,
+        help=(
+            "Previous introspection JSON used for diffing. Defaults to the current "
+            "introspection output path, falling back to the legacy docs path if present."
+        ),
     )
     parser.add_argument(
         "--timeout-seconds",
@@ -420,7 +781,7 @@ def main() -> int:
     if not args.api_key:
         raise SystemExit("Missing API key. Provide --api-key or set UNRAID_API_KEY.")
 
-    headers = {"Authorization": f"Bearer {args.api_key}", "Content-Type": "application/json"}
+    headers = {"x-api-key": args.api_key, "Content-Type": "application/json"}
 
     with httpx.Client(timeout=args.timeout_seconds, verify=args.verify_ssl) as client:
         response = client.post(args.api_url, json={"query": INTROSPECTION_QUERY}, headers=headers)
@@ -431,15 +792,53 @@ def main() -> int:
         errors = json.dumps(payload["errors"], indent=2)
         raise SystemExit(f"GraphQL introspection returned errors:\n{errors}")
 
-    schema = (payload.get("data") or {}).get("__schema")
-    if not schema:
-        raise SystemExit("GraphQL introspection returned no __schema payload.")
+    schema = _extract_schema(payload)
+    generated_at = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
+    previous_path = (
+        args.previous_introspection
+        or (args.introspection_output if args.introspection_output.exists() else LEGACY_INTROSPECTION_OUTPUT)
+    )
+    previous_schema = _load_previous_schema(previous_path)
 
-    markdown = _build_markdown(schema, include_introspection=bool(args.include_introspection_types))
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(markdown, encoding="utf-8")
+    for path in {
+        args.complete_output,
+        args.summary_output,
+        args.introspection_output,
+        args.schema_output,
+        args.changes_output,
+    }:
+        path.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Wrote {args.output}")
+    full_reference = _build_markdown(
+        schema, include_introspection=bool(args.include_introspection_types)
+    )
+    summary = _build_summary_markdown(
+        schema,
+        source=args.api_url,
+        generated_at=generated_at,
+        include_introspection=bool(args.include_introspection_types),
+    )
+    changes = _build_changes_markdown(
+        previous_schema,
+        schema,
+        source=args.api_url,
+        generated_at=generated_at,
+        include_introspection=bool(args.include_introspection_types),
+    )
+
+    args.complete_output.write_text(full_reference, encoding="utf-8")
+    args.summary_output.write_text(summary, encoding="utf-8")
+    args.introspection_output.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    _write_schema_graphql(args.schema_output, payload)
+    args.changes_output.write_text(changes, encoding="utf-8")
+
+    print(f"Wrote {args.complete_output}")
+    print(f"Wrote {args.summary_output}")
+    print(f"Wrote {args.introspection_output}")
+    print(f"Wrote {args.schema_output}")
+    print(f"Wrote {args.changes_output}")
     return 0
 
 

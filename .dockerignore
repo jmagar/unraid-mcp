@@ -21,10 +21,11 @@
 .env.*
 !.env.example
 *.log
-logs/
-backups/
-docs/
-specs/
+logs
+backups
+docs
+scripts
+specs
 *.md
 !README.md
 __pycache__
@@ -45,5 +46,5 @@ biome.json
 .pre-commit-config.yaml
 .prettierrc
 .prettierignore
-tests/
+tests
 

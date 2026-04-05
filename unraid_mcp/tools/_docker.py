@@ -18,15 +18,15 @@ from ..core.utils import safe_get
 # ===========================================================================
 
 _DOCKER_QUERIES: dict[str, str] = {
-    "list": "query ListDockerContainers { docker { containers(skipCache: false) { id names image state status autoStart } } }",
-    "details": "query GetContainerDetails { docker { containers(skipCache: false) { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
+    "list": "query ListDockerContainers { docker { containers { id names image state status autoStart } } }",
+    "details": "query GetContainerDetails { docker { containers { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
     "networks": "query GetDockerNetworks { docker { networks { id name driver scope } } }",
     "network_details": "query GetDockerNetwork { docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } } }",
 }
 
 # Internal query used only for container ID resolution — not a public subaction.
 _DOCKER_RESOLVE_QUERY = (
-    "query ResolveContainerID { docker { containers(skipCache: true) { id names } } }"
+    "query ResolveContainerID { docker { containers { id names } } }"
 )
 
 _DOCKER_MUTATIONS: dict[str, str] = {

@@ -346,11 +346,6 @@ type Disk implements Node {
   """The serial number of the disk"""
   serialNum: String!
 
-  """
-  Device identifier from emhttp devs.ini used by disk assignment commands
-  """
-  emhttpDeviceId: String
-
   """The interface type of the disk"""
   interfaceType: DiskInterfaceType!
 
@@ -552,6 +547,7 @@ type Vars implements Node {
   flashGuid: String
   flashProduct: String
   flashVendor: String
+  tpmGuid: String
   regCheck: String
   regFile: String
   regGuid: String
@@ -595,6 +591,7 @@ type Vars implements Node {
   fsState: String
   bootEligible: Boolean
   enableBootTransfer: String
+  bootedFromFlashWithInternalBootSetup: Boolean
   reservedNames: String
 
   """Human friendly string of array events happening"""
@@ -630,6 +627,14 @@ enum ConfigErrorState {
   INVALID
   NO_KEY_SERVER
   WITHDRAWN
+}
+
+type ApiConfig {
+  version: String!
+  extraOrigins: [String!]!
+  sandbox: Boolean
+  ssoSubIds: [String!]!
+  plugins: [String!]!
 }
 
 type Permission {
@@ -724,6 +729,65 @@ enum Role {
   VIEWER
 }
 
+type NotificationCounts {
+  info: Int!
+  warning: Int!
+  alert: Int!
+  total: Int!
+}
+
+type NotificationOverview {
+  unread: NotificationCounts!
+  archive: NotificationCounts!
+}
+
+type Notification implements Node {
+  id: PrefixedID!
+
+  """Also known as 'event'"""
+  title: String!
+  subject: String!
+  description: String!
+  importance: NotificationImportance!
+  link: String
+  type: NotificationType!
+
+  """ISO Timestamp for when the notification occurred"""
+  timestamp: String
+  formattedTimestamp: String
+}
+
+enum NotificationImportance {
+  ALERT
+  INFO
+  WARNING
+}
+
+enum NotificationType {
+  UNREAD
+  ARCHIVE
+}
+
+type Notifications implements Node {
+  id: PrefixedID!
+
+  """A cached overview of the notifications in the system & their severity."""
+  overview: NotificationOverview!
+  list(filter: NotificationFilter!): [Notification!]!
+
+  """
+  Deduplicated list of unread warning and alert notifications, sorted latest first.
+  """
+  warningsAndAlerts: [Notification!]!
+}
+
+input NotificationFilter {
+  importance: NotificationImportance
+  type: NotificationType!
+  offset: Int!
+  limit: Int!
+}
+
 type SsoSettings implements Node {
   id: PrefixedID!
 
@@ -758,7 +822,7 @@ interface FormSchema {
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
 """
-scalar JSON @specifiedBy(url: "http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf")
+scalar JSON
 
 type ApiKeyFormSettings implements Node & FormSchema {
   id: PrefixedID!
@@ -1049,6 +1113,9 @@ type Onboarding {
   """The activation code from the .activationcode file, if present"""
   activationCode: String
 
+  """Whether the onboarding modal should currently be shown"""
+  shouldOpen: Boolean!
+
   """Runtime onboarding state values used by the onboarding flow"""
   onboardingState: OnboardingState!
 }
@@ -1064,10 +1131,13 @@ enum OnboardingStatus {
 }
 
 type Customization {
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ACTIVATION_CODE**"
   activationCode: ActivationCode
 
-  """Onboarding completion state and context"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CUSTOMIZATIONS**\n\n#### Description:\n\nOnboarding completion state and context"
   onboarding: Onboarding!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISPLAY**"
   availableLanguages: [Language!]
 }
 
@@ -1076,6 +1146,18 @@ type OnboardingInternalBootResult {
   ok: Boolean!
   code: Int
   output: String!
+}
+
+"""Current onboarding context for configuring internal boot"""
+type OnboardingInternalBootContext {
+  arrayStopped: Boolean!
+  bootEligible: Boolean
+  bootedFromFlashWithInternalBootSetup: Boolean!
+  enableBootTransfer: String
+  reservedNames: [String!]!
+  shareNames: [String!]!
+  poolNames: [String!]!
+  assignableDisks: [Disk!]!
 }
 
 type RCloneDrive {
@@ -1166,30 +1248,38 @@ type PluginInstallEvent {
 }
 
 type ArrayMutations {
-  """Set array state"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nSet array state"
   setState(input: ArrayStateInput!): UnraidArray!
 
-  """Add new disk to array"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nAdd new disk to array"
   addDiskToArray(input: ArrayDiskInput!): UnraidArray!
 
-  """
-  Remove existing disk from array. NOTE: The array must be stopped before running this otherwise it'll throw an error.
-  """
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nRemove existing disk from array. NOTE: The array must be stopped before running this otherwise it'll throw an error."
   removeDiskFromArray(input: ArrayDiskInput!): UnraidArray!
 
-  """Mount a disk in the array"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nMount a disk in the array"
   mountArrayDisk(id: PrefixedID!): ArrayDisk!
 
-  """Unmount a disk from the array"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nUnmount a disk from the array"
   unmountArrayDisk(id: PrefixedID!): ArrayDisk!
 
-  """Clear statistics for a disk in the array"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nClear statistics for a disk in the array"
   clearArrayDiskStatistics(id: PrefixedID!): Boolean!
 }
 
 input ArrayStateInput {
   """Array state"""
   desiredState: ArrayStateInputState!
+
+  """
+  Optional password used to unlock encrypted array disks when starting the array
+  """
+  decryptionPassword: String
+
+  """
+  Optional keyfile contents used to unlock encrypted array disks when starting the array. Accepts a data URL or raw base64 payload.
+  """
+  decryptionKeyfile: String
 }
 
 enum ArrayStateInputState {
@@ -1206,31 +1296,31 @@ input ArrayDiskInput {
 }
 
 type DockerMutations {
-  """Start a container"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nStart a container"
   start(id: PrefixedID!): DockerContainer!
 
-  """Stop a container"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nStop a container"
   stop(id: PrefixedID!): DockerContainer!
 
-  """Pause (Suspend) a container"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nPause (Suspend) a container"
   pause(id: PrefixedID!): DockerContainer!
 
-  """Unpause (Resume) a container"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUnpause (Resume) a container"
   unpause(id: PrefixedID!): DockerContainer!
 
-  """Remove a container"""
+  "\n#### Required Permissions:\n\n- Action: **DELETE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nRemove a container"
   removeContainer(id: PrefixedID!, withImage: Boolean): Boolean!
 
-  """Update auto-start configuration for Docker containers"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUpdate auto-start configuration for Docker containers"
   updateAutostartConfiguration(entries: [DockerAutostartEntryInput!]!, persistUserPreferences: Boolean): Boolean!
 
-  """Update a container to the latest image"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUpdate a container to the latest image"
   updateContainer(id: PrefixedID!): DockerContainer!
 
-  """Update multiple containers to the latest images"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUpdate multiple containers to the latest images"
   updateContainers(ids: [PrefixedID!]!): [DockerContainer!]!
 
-  """Update all containers that have available updates"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUpdate all containers that have available updates"
   updateAllContainers: [DockerContainer!]!
 }
 
@@ -1246,43 +1336,43 @@ input DockerAutostartEntryInput {
 }
 
 type VmMutations {
-  """Start a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nStart a virtual machine"
   start(id: PrefixedID!): Boolean!
 
-  """Stop a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nStop a virtual machine"
   stop(id: PrefixedID!): Boolean!
 
-  """Pause a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nPause a virtual machine"
   pause(id: PrefixedID!): Boolean!
 
-  """Resume a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nResume a virtual machine"
   resume(id: PrefixedID!): Boolean!
 
-  """Force stop a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nForce stop a virtual machine"
   forceStop(id: PrefixedID!): Boolean!
 
-  """Reboot a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nReboot a virtual machine"
   reboot(id: PrefixedID!): Boolean!
 
-  """Reset a virtual machine"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nReset a virtual machine"
   reset(id: PrefixedID!): Boolean!
 }
 
 """API Key related mutations"""
 type ApiKeyMutations {
-  """Create an API key"""
+  "\n#### Required Permissions:\n\n- Action: **CREATE_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nCreate an API key"
   create(input: CreateApiKeyInput!): ApiKey!
 
-  """Add a role to an API key"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nAdd a role to an API key"
   addRole(input: AddRoleForApiKeyInput!): Boolean!
 
-  """Remove a role from an API key"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nRemove a role from an API key"
   removeRole(input: RemoveRoleFromApiKeyInput!): Boolean!
 
-  """Delete one or more API keys"""
+  "\n#### Required Permissions:\n\n- Action: **DELETE_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nDelete one or more API keys"
   delete(input: DeleteApiKeyInput!): Boolean!
 
-  """Update an API key"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nUpdate an API key"
   update(input: UpdateApiKeyInput!): ApiKey!
 }
 
@@ -1327,13 +1417,13 @@ input UpdateApiKeyInput {
 
 """Customization related mutations"""
 type CustomizationMutations {
-  """Update the UI theme (writes dynamix.cfg)"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CUSTOMIZATIONS**\n\n#### Description:\n\nUpdate the UI theme (writes dynamix.cfg)"
   setTheme(
     """Theme to apply"""
     theme: ThemeName!
   ): Theme!
 
-  """Update the display locale (language)"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CUSTOMIZATIONS**\n\n#### Description:\n\nUpdate the display locale (language)"
   setLocale(
     """Locale code to apply (e.g. en_US)"""
     locale: String!
@@ -1344,25 +1434,25 @@ type CustomizationMutations {
 Parity check related mutations, WIP, response types and functionaliy will change
 """
 type ParityCheckMutations {
-  """Start a parity check"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nStart a parity check"
   start(correct: Boolean!): JSON!
 
-  """Pause a parity check"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nPause a parity check"
   pause: JSON!
 
-  """Resume a parity check"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nResume a parity check"
   resume: JSON!
 
-  """Cancel a parity check"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **ARRAY**\n\n#### Description:\n\nCancel a parity check"
   cancel: JSON!
 }
 
 """RClone related mutations"""
 type RCloneMutations {
-  """Create a new RClone remote"""
+  "\n#### Required Permissions:\n\n- Action: **CREATE_ANY**\n- Resource: **FLASH**\n\n#### Description:\n\nCreate a new RClone remote"
   createRCloneRemote(input: CreateRCloneRemoteInput!): RCloneRemote!
 
-  """Delete an existing RClone remote"""
+  "\n#### Required Permissions:\n\n- Action: **DELETE_ANY**\n- Resource: **FLASH**\n\n#### Description:\n\nDelete an existing RClone remote"
   deleteRCloneRemote(input: DeleteRCloneRemoteInput!): Boolean!
 }
 
@@ -1378,20 +1468,35 @@ input DeleteRCloneRemoteInput {
 
 """Onboarding related mutations"""
 type OnboardingMutations {
-  """Mark onboarding as completed"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nMark onboarding as completed"
   completeOnboarding: Onboarding!
 
-  """Reset onboarding progress (for testing)"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nReset onboarding progress (for testing)"
   resetOnboarding: Onboarding!
 
-  """Override onboarding state for testing (in-memory only)"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nForce the onboarding modal open"
+  openOnboarding: Onboarding!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nClose the onboarding modal"
+  closeOnboarding: Onboarding!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nTemporarily bypass onboarding in API memory"
+  bypassOnboarding: Onboarding!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nClear the temporary onboarding bypass"
+  resumeOnboarding: Onboarding!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nOverride onboarding state for testing (in-memory only)"
   setOnboardingOverride(input: OnboardingOverrideInput!): Onboarding!
 
-  """Clear onboarding override state and reload from disk"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nClear onboarding override state and reload from disk"
   clearOnboardingOverride: Onboarding!
 
-  """Create and configure internal boot pool via emcmd operations"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nCreate and configure internal boot pool via emcmd operations"
   createInternalBootPool(input: CreateInternalBootPoolInput!): OnboardingInternalBootResult!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nRefresh the internal boot onboarding context from the latest emhttp state"
+  refreshInternalBootContext: OnboardingInternalBootContext!
 }
 
 """Onboarding override input for testing"""
@@ -1406,6 +1511,7 @@ input OnboardingOverrideInput {
 input OnboardingOverrideCompletionInput {
   completed: Boolean
   completedAtVersion: String
+  forceOpen: Boolean
 }
 
 """Activation code override input"""
@@ -1478,10 +1584,10 @@ input CreateInternalBootPoolInput {
 
 """Unraid plugin management mutations"""
 type UnraidPluginsMutations {
-  """Install an Unraid plugin and track installation progress"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nInstall an Unraid plugin and track installation progress"
   installPlugin(input: InstallPluginInput!): PluginInstallOperation!
 
-  """Install an Unraid language pack and track installation progress"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nInstall an Unraid language pack and track installation progress"
   installLanguage(input: InstallPluginInput!): PluginInstallOperation!
 }
 
@@ -2121,36 +2227,40 @@ type DockerContainer implements Node {
   autoStartWait: Int
   templatePath: String
 
-  """Project/Product homepage URL"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nProject/Product homepage URL"
   projectUrl: String
 
-  """Registry/Docker Hub URL"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nRegistry/Docker Hub URL"
   registryUrl: String
 
-  """Support page/thread URL"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nSupport page/thread URL"
   supportUrl: String
 
-  """Icon URL"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nIcon URL"
   iconUrl: String
 
-  """Resolved WebUI URL from template"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nResolved WebUI URL from template"
   webUiUrl: String
 
-  """Shell to use for console access (from template)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nShell to use for console access (from template)"
   shell: String
 
-  """Port mappings from template (used when container is not running)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nPort mappings from template (used when container is not running)"
   templatePorts: [ContainerPort!]
 
   """Whether the container is orphaned (no template found)"""
   isOrphaned: Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   isUpdateAvailable: Boolean
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   isRebuildReady: Boolean
 
-  """Whether Tailscale is enabled for this container"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nWhether Tailscale is enabled for this container"
   tailscaleEnabled: Boolean!
 
-  """Tailscale status for this container (fetched via docker exec)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nTailscale status for this container (fetched via docker exec)"
   tailscaleStatus(forceRefresh: Boolean = false): TailscaleStatus
 }
 
@@ -2280,16 +2390,26 @@ type TailscaleStatus {
 
 type Docker implements Node {
   id: PrefixedID!
-  containers(skipCache: Boolean! = false @deprecated(reason: "Caching has been removed; this parameter is now ignored")): [DockerContainer!]!
-  networks(skipCache: Boolean! = false @deprecated(reason: "Caching has been removed; this parameter is now ignored")): [DockerNetwork!]!
-  portConflicts(skipCache: Boolean! = false @deprecated(reason: "Caching has been removed; this parameter is now ignored")): DockerPortConflicts!
 
-  """
-  Access container logs. Requires specifying a target container id through resolver arguments.
-  """
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
+  containers: [DockerContainer!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
+  networks: [DockerNetwork!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
+  portConflicts: DockerPortConflicts!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nAccess container logs. Requires specifying a target container id through resolver arguments."
   logs(id: PrefixedID!, since: DateTime, tail: Int): DockerContainerLogs!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   container(id: PrefixedID!): DockerContainer
-  organizer(skipCache: Boolean! = false @deprecated(reason: "Caching has been removed; this parameter is now ignored")): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
+  organizer: ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   containerUpdateStatuses: [ExplicitStatusItem!]!
 }
 
@@ -2324,65 +2444,6 @@ type FlatOrganizerEntry {
   hasChildren: Boolean!
   childrenIds: [String!]!
   meta: DockerContainer
-}
-
-type NotificationCounts {
-  info: Int!
-  warning: Int!
-  alert: Int!
-  total: Int!
-}
-
-type NotificationOverview {
-  unread: NotificationCounts!
-  archive: NotificationCounts!
-}
-
-type Notification implements Node {
-  id: PrefixedID!
-
-  """Also known as 'event'"""
-  title: String!
-  subject: String!
-  description: String!
-  importance: NotificationImportance!
-  link: String
-  type: NotificationType!
-
-  """ISO Timestamp for when the notification occurred"""
-  timestamp: String
-  formattedTimestamp: String
-}
-
-enum NotificationImportance {
-  ALERT
-  INFO
-  WARNING
-}
-
-enum NotificationType {
-  UNREAD
-  ARCHIVE
-}
-
-type Notifications implements Node {
-  id: PrefixedID!
-
-  """A cached overview of the notifications in the system & their severity."""
-  overview: NotificationOverview!
-  list(filter: NotificationFilter!): [Notification!]!
-
-  """
-  Deduplicated list of unread warning and alert notifications, sorted latest first.
-  """
-  warningsAndAlerts: [Notification!]!
-}
-
-input NotificationFilter {
-  importance: NotificationImportance
-  type: NotificationType!
-  offset: Int!
-  limit: Int!
 }
 
 type FlashBackupStatus {
@@ -2611,14 +2672,6 @@ enum ServerStatus {
   ONLINE
   OFFLINE
   NEVER_CONNECTED
-}
-
-type ApiConfig {
-  version: String!
-  extraOrigins: [String!]!
-  sandbox: Boolean
-  ssoSubIds: [String!]!
-  plugins: [String!]!
 }
 
 type OidcAuthorizationRule {
@@ -3129,59 +3182,110 @@ input AccessUrlObjectInput {
 scalar PrefixedID
 
 type Query {
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **API_KEY**"
   apiKeys: [ApiKey!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **API_KEY**"
   apiKey(id: PrefixedID!): ApiKey
 
-  """All possible roles for API keys"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **PERMISSION**\n\n#### Description:\n\nAll possible roles for API keys"
   apiKeyPossibleRoles: [Role!]!
 
-  """All possible permissions for API keys"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **PERMISSION**\n\n#### Description:\n\nAll possible permissions for API keys"
   apiKeyPossiblePermissions: [Permission!]!
 
-  """Get the actual permissions that would be granted by a set of roles"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **PERMISSION**\n\n#### Description:\n\nGet the actual permissions that would be granted by a set of roles"
   getPermissionsForRoles(roles: [Role!]!): [Permission!]!
 
-  """
-  Preview the effective permissions for a combination of roles and explicit permissions
-  """
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **PERMISSION**\n\n#### Description:\n\nPreview the effective permissions for a combination of roles and explicit permissions"
   previewEffectivePermissions(roles: [Role!], permissions: [AddPermissionInput!]): [Permission!]!
 
   """Get all available authentication actions with possession"""
   getAvailableAuthActions: [AuthAction!]!
 
-  """Get JSON Schema for API key creation form"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **API_KEY**\n\n#### Description:\n\nGet JSON Schema for API key creation form"
   getApiKeyCreationFormSchema: ApiKeyFormSettings!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**"
   config: Config!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISPLAY**"
   display: InfoDisplay!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **FLASH**"
   flash: Flash!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ME**"
   me: UserAccount!
 
-  """Get all notifications"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **NOTIFICATIONS**\n\n#### Description:\n\nGet all notifications"
   notifications: Notifications!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ONLINE**"
   online: Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **OWNER**"
   owner: Owner!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **WELCOME**\n\n#### Description:\n\nGet the latest onboarding context for configuring internal boot"
+  internalBootContext: OnboardingInternalBootContext!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **REGISTRATION**"
   registration: Registration
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **SERVERS**"
   server: Server
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **SERVERS**"
   servers: [Server!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **SERVICES**"
   services: [Service!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **SHARE**"
   shares: [Share!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **VARS**"
   vars: Vars!
 
-  """Get information about all VMs on the system"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **VMS**\n\n#### Description:\n\nGet information about all VMs on the system"
   vms: Vms!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ARRAY**"
   parityHistory: [ParityCheck!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ARRAY**"
   array: UnraidArray!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CUSTOMIZATIONS**"
   customization: Customization
 
   """Whether the system is a fresh install (no license key)"""
   isFreshInstall: Boolean!
   publicTheme: Theme!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   info: Info!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   docker: Docker!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISK**"
   disks: [Disk!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISK**"
+  assignableDisks: [Disk!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISK**"
   disk(id: PrefixedID!): Disk!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **FLASH**"
   rclone: RCloneBackupSettings!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **LOGS**"
   logFiles: [LogFile!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **LOGS**"
   logFile(path: String!, lines: Int, startLine: Int): LogFileContent!
   settings: Settings!
   isSSOEnabled: Boolean!
@@ -3189,42 +3293,52 @@ type Query {
   """Get public OIDC provider information for login buttons"""
   publicOidcProviders: [PublicOidcProvider!]!
 
-  """Get all configured OIDC providers (admin only)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nGet all configured OIDC providers (admin only)"
   oidcProviders: [OidcProvider!]!
 
-  """Get a specific OIDC provider by ID"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nGet a specific OIDC provider by ID"
   oidcProvider(id: PrefixedID!): OidcProvider
 
-  """Get the full OIDC configuration (admin only)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nGet the full OIDC configuration (admin only)"
   oidcConfiguration: OidcConfiguration!
 
-  """Validate an OIDC session token (internal use for CLI validation)"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nValidate an OIDC session token (internal use for CLI validation)"
   validateOidcSession(token: String!): OidcSessionValidation!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   metrics: Metrics!
 
-  """Retrieve current system time configuration"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **VARS**\n\n#### Description:\n\nRetrieve current system time configuration"
   systemTime: SystemTime!
 
-  """Retrieve available time zone options"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nRetrieve available time zone options"
   timeZoneOptions: [TimeZoneOption!]!
   upsDevices: [UPSDevice!]!
   upsDeviceById(id: String!): UPSDevice
   upsConfiguration: UPSConfiguration!
 
-  """Retrieve a plugin installation operation by identifier"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nRetrieve a plugin installation operation by identifier"
   pluginInstallOperation(operationId: ID!): PluginInstallOperation
 
-  """List all tracked plugin installation operations"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nList all tracked plugin installation operations"
   pluginInstallOperations: [PluginInstallOperation!]!
 
-  """List installed Unraid OS plugins by .plg filename"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nList installed Unraid OS plugins by .plg filename"
   installedUnraidPlugins: [String!]!
 
-  """List all installed plugins with their metadata"""
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nList all installed plugins with their metadata"
   plugins: [Plugin!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONNECT**"
   remoteAccess: RemoteAccess!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONNECT**"
   connect: Connect!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **NETWORK**"
   network: Network!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CLOUD**"
   cloud: Cloud!
 }
 
@@ -3263,47 +3377,77 @@ type Mutation {
   onboarding: OnboardingMutations!
   unraidPlugins: UnraidPluginsMutations!
 
-  """Update server name, comment, and model"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **SERVERS**\n\n#### Description:\n\nUpdate server name, comment, and model"
   updateServerIdentity(name: String!, comment: String, sysModel: String): Server!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **VARS**"
   updateSshSettings(input: UpdateSshInput!): Vars!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   createDockerFolder(name: String!, parentId: String, childrenIds: [String!]): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   setDockerFolderChildren(folderId: String, childrenIds: [String!]!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   deleteDockerEntries(entryIds: [String!]!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   moveDockerEntriesToFolder(sourceEntryIds: [String!]!, destinationFolderId: String!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   moveDockerItemsToPosition(sourceEntryIds: [String!]!, destinationFolderId: String!, position: Float!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   renameDockerFolder(folderId: String!, newName: String!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   createDockerFolderWithItems(name: String!, parentId: String, sourceEntryIds: [String!], position: Float): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   updateDockerViewPreferences(viewId: String = "default", prefs: JSON!): ResolvedOrganizerV1!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   syncDockerTemplatePaths: DockerTemplateSyncResult!
 
-  """
-  Reset Docker template mappings to defaults. Use this to recover from corrupted state.
-  """
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nReset Docker template mappings to defaults. Use this to recover from corrupted state."
   resetDockerTemplateMappings: Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**"
   refreshDockerDigests: Boolean!
 
   """Initiates a flash drive backup using a configured remote."""
   initiateFlashBackup(input: InitiateFlashBackupInput!): FlashBackupStatus!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**"
   updateSettings(input: JSON!): UpdateSettingsResponse!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **INFO**"
   updateTemperatureConfig(input: TemperatureConfigInput!): Boolean!
 
-  """Update system time configuration"""
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nUpdate system time configuration"
   updateSystemTime(input: UpdateSystemTimeInput!): SystemTime!
   configureUps(config: UPSConfigInput!): Boolean!
 
-  """
-  Add one or more plugins to the API. Returns false if restart was triggered automatically, true if manual restart is required.
-  """
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nAdd one or more plugins to the API. Returns false if restart was triggered automatically, true if manual restart is required."
   addPlugin(input: PluginManagementInput!): Boolean!
 
-  """
-  Remove one or more plugins from the API. Returns false if restart was triggered automatically, true if manual restart is required.
-  """
+  "\n#### Required Permissions:\n\n- Action: **DELETE_ANY**\n- Resource: **CONFIG**\n\n#### Description:\n\nRemove one or more plugins from the API. Returns false if restart was triggered automatically, true if manual restart is required."
   removePlugin(input: PluginManagementInput!): Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONFIG**"
   updateApiSettings(input: ConnectSettingsInput!): ConnectSettingsValues!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONNECT**"
   connectSignIn(input: ConnectSignInInput!): Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONNECT**"
   connectSignOut: Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONNECT**"
   setupRemoteAccess(input: SetupRemoteAccessInput!): Boolean!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **CONNECT__REMOTE_ACCESS**"
   enableDynamicRemoteAccess(input: EnableDynamicRemoteAccessInput!): Boolean!
 }
 
@@ -3551,20 +3695,49 @@ input AccessUrlInput {
 }
 
 type Subscription {
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DISPLAY**"
   displaySubscription: InfoDisplay!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **NOTIFICATIONS**"
   notificationAdded: Notification!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **NOTIFICATIONS**"
   notificationsOverview: NotificationOverview!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **NOTIFICATIONS**"
   notificationsWarningsAndAlerts: [Notification!]!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **OWNER**"
   ownerSubscription: Owner!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **SERVERS**"
   serversSubscription: Server!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ARRAY**"
   parityHistorySubscription: ParityCheck!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **ARRAY**"
   arraySubscription: UnraidArray!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   dockerContainerStats: DockerContainerStats!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **LOGS**"
   logFile(path: String!): LogFileContent!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsCpu: CpuUtilization!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsCpuTelemetry: CpuPackages!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsMemory: MemoryUtilization!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsTemperature: TemperatureMetrics
   upsUpdates: UPSDevice!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**"
   pluginInstallUpdates(operationId: ID!): PluginInstallEvent!
 }
