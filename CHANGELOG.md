@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-04-05
+
+### Changed
+- **`.mcp.json`**: Added all server env vars with defaults; removed `UNRAID_CREDENTIALS_DIR` (container-only override, not user-facing).
+
 ## [1.3.0] - 2026-04-05
 
 ### Added

@@ -9,8 +9,15 @@
         "unraid-mcp-server"
       ],
       "env": {
+        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/.venv",
         "UNRAID_MCP_TRANSPORT": "stdio",
-        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/.venv"
+        "UNRAID_API_URL": "",
+        "UNRAID_API_KEY": "",
+        "UNRAID_VERIFY_SSL": "true",
+        "UNRAID_MCP_LOG_LEVEL": "INFO",
+        "UNRAID_MCP_LOG_FILE": "unraid-mcp.log",
+        "UNRAID_AUTO_START_SUBSCRIPTIONS": "true",
+        "UNRAID_MAX_RECONNECT_ATTEMPTS": "10"
       }
     }
   }
