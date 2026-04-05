@@ -25,7 +25,7 @@ The individual plugin configuration for the Unraid MCP server.
 - `mcpServers` block that configures the server to run via `uv run unraid-mcp-server` in stdio mode
 
 ### 3. Validation Script
-- `scripts/validate-marketplace.sh` — Automated validation of marketplace structure
+- `bin/validate-marketplace.sh` — Automated validation of marketplace structure
 
 ## MCP Tools Exposed
 
@@ -123,7 +123,7 @@ unraid-mcp/
 │   ├── config/              # Settings management
 │   ├── core/                # GraphQL client, exceptions, shared types
 │   └── subscriptions/       # Real-time WebSocket subscription manager
-└── scripts/
+└── bin/
     └── validate-marketplace.sh  # Validation tool
 ```
 
@@ -146,7 +146,7 @@ Before publishing to GitHub:
 
 1. **Validate Structure**
    ```bash
-   ./scripts/validate-marketplace.sh
+   ./bin/validate-marketplace.sh
    ```
 
 2. **Update Version Numbers** (must be in sync)
@@ -204,7 +204,7 @@ To release a new version:
 
 1. Make changes to the plugin code
 2. Update version in `pyproject.toml`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`
-3. Run validation: `./scripts/validate-marketplace.sh`
+3. Run validation: `./bin/validate-marketplace.sh`
 4. Commit and push
 
 Users with the plugin installed will see the update available and can upgrade:
@@ -223,7 +223,7 @@ Users with the plugin installed will see the update available and can upgrade:
 Run the validation script anytime to ensure marketplace integrity:
 
 ```bash
-./scripts/validate-marketplace.sh
+./bin/validate-marketplace.sh
 ```
 
 This checks:

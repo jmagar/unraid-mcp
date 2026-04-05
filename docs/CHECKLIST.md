@@ -26,9 +26,9 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 - [ ] No credentials in code, docs, or commit history
 - [ ] `~/.unraid-mcp/.env` has `chmod 600` permissions
 - [ ] `~/.unraid-mcp/` directory has `chmod 700` permissions
-- [ ] `scripts/check-docker-security.sh` passes
-- [ ] `scripts/check-no-baked-env.sh` passes
-- [ ] `scripts/ensure-ignore-files.sh --check` passes
+- [ ] `bin/check-docker-security.sh` passes
+- [ ] `bin/check-no-baked-env.sh` passes
+- [ ] `bin/ensure-ignore-files.sh --check` passes
 - [ ] Bearer token uses constant-time comparison (`hmac.compare_digest`)
 - [ ] No sensitive values logged (even at DEBUG level)
 - [ ] `UNRAID_MCP_BEARER_TOKEN` removed from `os.environ` after startup

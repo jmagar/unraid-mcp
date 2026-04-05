@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-04-05
+
+### Fixed
+- **`bin/bump-version.sh`**: Fixed gemini path — always resolved the wrong `.gemini-extension.json` default before the conditional override; now prefers `gemini-extension.json` with dot-prefix as fallback. Added empty-version guard. Merged two `sed -i` calls per file into one with `-e`.
+- **`bin/ensure-ignore-files.sh`**: Fixed `"scripts"` → `"bin"` in `REQUIRED_DOCKER` array (was appending wrong dockerignore entry); fixed stale `scripts/` and `hooks/scripts/` path references in comments.
+- **`bin/validate-marketplace.sh`**: Replaced `eval` with `bash -c`; replaced `python3` subprocess for version read with `jq`.
+- **`bin/check-docker-security.sh`**, **`bin/check-no-baked-env.sh`**, **`bin/check-outdated-deps.sh`**: Fixed stale `scripts/` path references in header comments.
+- **`tests/test_bump_version.bats`**: Renamed `TMPDIR` → `TEST_DIR` to avoid shadowing POSIX system variable; last test now uses an isolated symlinked copy instead of mutating real repo files.
+- **Stale `scripts/` references**: Updated all remaining references from `scripts/` to `bin/` in `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `Justfile`, `docs/CHECKLIST.md`, `docs/INVENTORY.md`, `docs/MARKETPLACE.md`, `docs/repo/SCRIPTS.md`, and `docs/repo/REPO.md`. The `hooks/scripts/` and `skills/unraid/scripts/` paths are intentional and unchanged.
+
 ## [1.3.6] - 2026-04-05
 
 ### Added

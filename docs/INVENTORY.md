@@ -89,12 +89,12 @@ Complete listing of all plugin components.
 
 | Script | Purpose |
 | --- | --- |
-| `scripts/check-docker-security.sh` | Dockerfile security audit |
-| `scripts/check-no-baked-env.sh` | Verify no env vars baked into images |
-| `scripts/check-outdated-deps.sh` | Dependency freshness check |
-| `scripts/ensure-ignore-files.sh` | Gitignore/dockerignore alignment |
-| `scripts/generate_unraid_api_reference.py` | Generate canonical API docs and schema change report from GraphQL introspection |
-| `scripts/validate-marketplace.sh` | Marketplace JSON validation |
+| `bin/check-docker-security.sh` | Dockerfile security audit |
+| `bin/check-no-baked-env.sh` | Verify no env vars baked into images |
+| `bin/check-outdated-deps.sh` | Dependency freshness check |
+| `bin/ensure-ignore-files.sh` | Gitignore/dockerignore alignment |
+| `bin/generate_unraid_api_reference.py` | Generate canonical API docs and schema change report from GraphQL introspection |
+| `bin/validate-marketplace.sh` | Marketplace JSON validation |
 
 ## CI/CD workflows
 

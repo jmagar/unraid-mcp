@@ -87,7 +87,7 @@ unraid-mcp/
 |       +-- ensure-gitignore.sh        # Gitignore-specific checks
 |       +-- sync-env.sh               # Environment file synchronization
 |
-+-- scripts/
++-- bin/
 |   +-- check-docker-security.sh       # Dockerfile security audit
 |   +-- check-no-baked-env.sh          # No baked environment variables
 |   +-- check-outdated-deps.sh         # Dependency freshness

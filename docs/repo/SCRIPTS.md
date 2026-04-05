@@ -1,6 +1,6 @@
 # Scripts Reference -- unraid-mcp
 
-## Quality gate scripts (`scripts/`)
+## Quality gate scripts (`bin/`)
 
 ### check-docker-security.sh
 
@@ -11,7 +11,7 @@ Audits the Dockerfile for security best practices:
 - Minimal base image
 
 ```bash
-bash scripts/check-docker-security.sh Dockerfile
+bash bin/check-docker-security.sh Dockerfile
 ```
 
 ### check-no-baked-env.sh
@@ -21,7 +21,7 @@ Verifies no environment variables are baked into Docker images or committed to v
 - Checks for `.env` files in tracked directories
 
 ```bash
-bash scripts/check-no-baked-env.sh .
+bash bin/check-no-baked-env.sh .
 ```
 
 ### check-outdated-deps.sh
@@ -29,7 +29,7 @@ bash scripts/check-no-baked-env.sh .
 Checks for outdated Python dependencies:
 
 ```bash
-bash scripts/check-outdated-deps.sh
+bash bin/check-outdated-deps.sh
 ```
 
 ### ensure-ignore-files.sh
@@ -42,10 +42,10 @@ Validates `.gitignore` and `.dockerignore` contain required patterns:
 
 ```bash
 # Check mode (CI)
-bash scripts/ensure-ignore-files.sh --check .
+bash bin/ensure-ignore-files.sh --check .
 
 # Fix mode (development)
-bash scripts/ensure-ignore-files.sh .
+bash bin/ensure-ignore-files.sh .
 ```
 
 ### validate-marketplace.sh
@@ -53,7 +53,7 @@ bash scripts/ensure-ignore-files.sh .
 Validates marketplace JSON configuration:
 
 ```bash
-bash scripts/validate-marketplace.sh
+bash bin/validate-marketplace.sh
 ```
 
 ## Utility scripts
@@ -63,7 +63,7 @@ bash scripts/validate-marketplace.sh
 Generates the canonical Unraid API docs from GraphQL schema introspection:
 
 ```bash
-python scripts/generate_unraid_api_reference.py
+python bin/generate_unraid_api_reference.py
 ```
 
 Produces:
@@ -85,7 +85,7 @@ Produces:
 ## CI usage
 
 Scripts are called by CI workflows:
-- `ci.yml` runs `check-docker-security.sh`, `check-no-baked-env.sh`, `ensure-ignore-files.sh --check`
+- `ci.yml` runs `bin/check-docker-security.sh`, `bin/check-no-baked-env.sh`, `bin/ensure-ignore-files.sh --check`
 - `just check-contract` runs all three locally
 
 ## See Also

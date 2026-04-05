@@ -108,8 +108,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check Dockerfile security
-        run: bash scripts/check-docker-security.sh Dockerfile
+        run: bash bin/check-docker-security.sh Dockerfile
       - name: Check no baked env vars
-        run: bash scripts/check-no-baked-env.sh .
+        run: bash bin/check-no-baked-env.sh .
       - name: Check ignore files
-        run: bash scripts/ensure-ignore-files.sh --check .
+        run: bash bin/ensure-ignore-files.sh --check .
