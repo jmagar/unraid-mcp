@@ -24,27 +24,34 @@ from .utils import safe_display_url
 
 
 # Sensitive keys to redact from debug logs (frozenset — immutable, Final — no accidental reassignment)
-_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
+# Exact-match keys: short words that over-redact when used as substrings
+# (e.g. "key" would match "keyFile", "monkey", "turkey")
+_EXACT_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset({"key", "pin"})
+# Substring-match keys: compound terms safe for substring matching
+_SUBSTRING_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "password",
-        "key",
         "secret",
         "token",
         "apikey",
         "authorization",
-        "cookie",
-        "session",
         "credential",
         "passphrase",
         "jwt",
+        "cookie",
+        "session",
     }
 )
 
 
 def _is_sensitive_key(key: str) -> bool:
-    """Check if a key name contains any sensitive substring."""
-    key_lower = key.lower()
-    return any(s in key_lower for s in _SENSITIVE_KEYS)
+    """Check if a key name is sensitive (exact match or substring match).
+
+    Normalizes by stripping underscores/hyphens so "api_key_value" matches "apikey".
+    """
+    k = key.lower()
+    k_normalized = k.replace("_", "").replace("-", "")
+    return k in _EXACT_SENSITIVE_KEYS or any(s in k_normalized for s in _SUBSTRING_SENSITIVE_KEYS)
 
 
 def redact_sensitive(obj: Any) -> Any:

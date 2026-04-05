@@ -1,6 +1,6 @@
 """Key domain handler for the Unraid MCP tool.
 
-Covers: list, get, create, update, delete*, add_role, remove_role (7 subactions).
+Covers: list, get, possible_roles, create, update, delete*, add_role, remove_role (8 subactions).
 """
 
 from typing import Any
@@ -11,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.utils import safe_get, validate_subaction
 
 
 # ===========================================================================
@@ -20,6 +21,7 @@ from ..core.guards import gate_destructive_action
 _KEY_QUERIES: dict[str, str] = {
     "list": "query ListApiKeys { apiKeys { id name roles permissions { resource actions } createdAt } }",
     "get": "query GetApiKey($id: PrefixedID!) { apiKey(id: $id) { id name roles permissions { resource actions } createdAt } }",
+    "possible_roles": "query GetPossibleRoles { apiKeyPossibleRoles }",
 }
 
 _KEY_MUTATIONS: dict[str, str] = {
@@ -43,10 +45,7 @@ async def _handle_key(
     ctx: Context | None,
     confirm: bool,
 ) -> dict[str, Any]:
-    if subaction not in _KEY_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for key. Must be one of: {sorted(_KEY_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _KEY_SUBACTIONS, "key")
 
     await gate_destructive_action(
         ctx,
@@ -63,6 +62,11 @@ async def _handle_key(
             data = await _client.make_graphql_request(_KEY_QUERIES["list"])
             keys = data.get("apiKeys", [])
             return {"keys": list(keys) if isinstance(keys, list) else []}
+
+        if subaction == "possible_roles":
+            data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])
+            roles_list = data.get("apiKeyPossibleRoles", [])
+            return {"roles": list(roles_list) if isinstance(roles_list, list) else []}
 
         if subaction == "get":
             if not key_id:
@@ -81,7 +85,7 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_MUTATIONS["create"], {"input": input_data}
             )
-            created_key = (data.get("apiKey") or {}).get("create")
+            created_key = safe_get(data, "apiKey", "create")
             if not created_key:
                 raise ToolError("Failed to create API key: no data returned from server")
             return {"success": True, "key": created_key}
@@ -99,7 +103,7 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_MUTATIONS["update"], {"input": input_data}
             )
-            updated_key = (data.get("apiKey") or {}).get("update")
+            updated_key = safe_get(data, "apiKey", "update")
             if not updated_key:
                 raise ToolError("Failed to update API key: no data returned from server")
             return {"success": True, "key": updated_key}
@@ -110,7 +114,7 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_MUTATIONS["delete"], {"input": {"ids": [key_id]}}
             )
-            if not (data.get("apiKey") or {}).get("delete"):
+            if not safe_get(data, "apiKey", "delete"):
                 raise ToolError(f"Failed to delete API key '{key_id}': no confirmation from server")
             return {"success": True, "message": f"API key '{key_id}' deleted"}
 

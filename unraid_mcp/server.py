@@ -152,13 +152,15 @@ def ensure_token_exists() -> None:
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
     _chmod_safe(CREDENTIALS_DIR, 0o700, strict=True)
 
-    # Touch the file first so set_key has a target (no-op if already exists)
+    # Touch the file and restrict permissions BEFORE writing the token.
+    # This closes the window where the file has default umask permissions.
     if not CREDENTIALS_ENV_PATH.exists():
-        CREDENTIALS_ENV_PATH.touch()
-
-    # In-place .env write — preserves comments and existing keys
-    set_key(str(CREDENTIALS_ENV_PATH), "UNRAID_MCP_BEARER_TOKEN", token, quote_mode="auto")
+        CREDENTIALS_ENV_PATH.touch(mode=0o600)
     _chmod_safe(CREDENTIALS_ENV_PATH, 0o600, strict=True)
+
+    # In-place .env write — preserves comments and existing keys.
+    # File is already 0o600 so the token is never world-readable.
+    set_key(str(CREDENTIALS_ENV_PATH), "UNRAID_MCP_BEARER_TOKEN", token, quote_mode="auto")
 
     print(
         f"\n[unraid-mcp] Generated HTTP bearer token and saved it to {CREDENTIALS_ENV_PATH}.\n"

@@ -9,6 +9,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import validate_subaction
 from ..core.utils import safe_get
 
 
@@ -101,10 +102,7 @@ async def _resolve_container_id(container_id: str, *, strict: bool = False) -> s
 async def _handle_docker(
     subaction: str, container_id: str | None, network_id: str | None
 ) -> dict[str, Any]:
-    if subaction not in _DOCKER_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for docker. Must be one of: {sorted(_DOCKER_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _DOCKER_SUBACTIONS, "docker")
     if subaction in _DOCKER_NEEDS_CONTAINER_ID and not container_id:
         raise ToolError(f"container_id is required for docker/{subaction}")
     if subaction == "network_details" and not network_id:

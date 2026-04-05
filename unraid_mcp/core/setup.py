@@ -7,8 +7,10 @@ them to ~/.unraid-mcp/.env with restricted permissions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
 from typing import TYPE_CHECKING
+
+from pydantic import BaseModel, Field
 
 
 if TYPE_CHECKING:
@@ -23,10 +25,11 @@ from ..config.settings import (
 )
 
 
-@dataclass
-class _UnraidCredentials:
-    api_url: str
-    api_key: str
+class _UnraidCredentials(BaseModel):
+    """Credentials model for MCP elicitation form rendering."""
+
+    api_url: str = Field(..., description="Unraid GraphQL endpoint URL")
+    api_key: str = Field(..., description="Unraid API key")
 
 
 async def elicit_reset_confirmation(ctx: Context | None, current_url: str) -> bool:
@@ -161,6 +164,15 @@ def _write_env(api_url: str, api_key: str) -> None:
     if not key_written:
         new_lines.append(f"UNRAID_API_KEY={api_key}")
 
-    CREDENTIALS_ENV_PATH.write_text("\n".join(new_lines) + "\n")
-    CREDENTIALS_ENV_PATH.chmod(0o600)
+    # Atomic write: write to tmp file, set permissions, then rename into place.
+    # os.replace is atomic on POSIX — prevents a crash from leaving a partial .env.
+    tmp_path = CREDENTIALS_ENV_PATH.with_suffix(".tmp")
+    try:
+        tmp_path.write_text("\n".join(new_lines) + "\n")
+        tmp_path.chmod(0o600)
+        os.replace(tmp_path, CREDENTIALS_ENV_PATH)
+    finally:
+        # Clean up tmp on failure (may not exist if os.replace succeeded)
+        if tmp_path.exists():
+            tmp_path.unlink()
     logger.info("Credentials written to %s (mode 600)", CREDENTIALS_ENV_PATH)

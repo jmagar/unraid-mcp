@@ -31,8 +31,8 @@ class TestValidateSubscriptionQueryAllowed:
         assert _validate_subscription_query(query) == "memory"
 
     def test_multiline_query_accepted(self) -> None:
-        query = "subscription {\n  logFile {\n    content\n  }\n}"
-        assert _validate_subscription_query(query) == "logFile"
+        query = "subscription {\n  cpu {\n    used\n  }\n}"
+        assert _validate_subscription_query(query) == "cpu"
 
     def test_case_insensitive_subscription_keyword(self) -> None:
         """'SUBSCRIPTION' should be accepted (regex uses IGNORECASE)."""
@@ -121,6 +121,12 @@ class TestValidateSubscriptionQueryUnknownName:
 
     def test_arbitrary_field_name_rejected(self) -> None:
         query = "subscription { users { id email } }"
+        with pytest.raises(ToolError, match="not allowed"):
+            _validate_subscription_query(query)
+
+    def test_logfile_rejected_security(self) -> None:
+        """logFile allows arbitrary file reads via path argument — must be blocked."""
+        query = 'subscription { logFile(path: "/etc/shadow") { content } }'
         with pytest.raises(ToolError, match="not allowed"):
             _validate_subscription_query(query)
 

@@ -35,13 +35,14 @@ from .utils import (
 # NOT the operation-level names (e.g. "logFileSubscription").
 _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
     {
-        "logFile",
         "containerStats",
         "cpu",
+        "dockerContainerStats",
         "memory",
         "array",
         "network",
         "docker",
+        "systemMetricsTemperature",
         "vm",
     }
 )
@@ -72,7 +73,7 @@ def _validate_subscription_query(query: str) -> str:
     if not match:
         raise ToolError(
             "Query rejected: must start with 'subscription' and contain a valid "
-            'subscription field. Example: subscription { logFile(path: "/var/log/syslog") { content } }'
+            "subscription field. Example: subscription { cpu { used idle system } }"
         )
 
     field_name = match.group(1)
@@ -97,7 +98,7 @@ def register_diagnostic_tools(mcp: FastMCP) -> None:
         """Test a GraphQL subscription query directly to debug schema issues.
 
         Use this to find working subscription field names and structure.
-        Only whitelisted schema fields are permitted (logFile, containerStats,
+        Only whitelisted schema fields are permitted (containerStats,
         cpu, memory, array, network, docker, vm).
 
         Args:

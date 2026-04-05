@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import posixpath
 import re
 import time
 from collections import deque
@@ -41,6 +42,9 @@ _RATE_MAX_FAILURES = 60
 
 # Log throttle: emit at most one warning per IP per this many seconds
 _LOG_THROTTLE_SECS = 30.0
+
+# Maximum number of unique IPs to track — prevents memory exhaustion DoS
+_MAX_IP_TRACKING = 10_000
 
 
 class BearerAuthMiddleware:
@@ -172,6 +176,14 @@ class BearerAuthMiddleware:
     def _record_failure(self, ip: str) -> None:
         """Record one failed auth attempt for this IP."""
         self._prune_ip_state(ip)
+        # Evict oldest-activity IP when tracking dict is full
+        if ip not in self._ip_failures and len(self._ip_failures) >= _MAX_IP_TRACKING:
+            oldest_ip = min(
+                self._ip_failures,
+                key=lambda k: self._ip_failures[k][0] if self._ip_failures[k] else 0,
+            )
+            del self._ip_failures[oldest_ip]
+            self._ip_last_warn.pop(oldest_ip, None)
         if ip not in self._ip_failures:
             self._ip_failures[ip] = deque()
         self._ip_failures[ip].append(time.monotonic())
@@ -242,7 +254,12 @@ class HealthMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # scope["path"] is always present in ASGI HTTP scopes (required field).
-        if scope["type"] == "http" and scope["path"] == "/health" and scope["method"] == "GET":
+        # Normalize to prevent bypasses like "/health/" or "//health".
+        if (
+            scope["type"] == "http"
+            and posixpath.normpath(scope["path"]) == "/health"
+            and scope["method"] == "GET"
+        ):
             await send({"type": "http.response.start", "status": 200, "headers": self._HEADERS})
             await send({"type": "http.response.body", "body": self._BODY, "more_body": False})
             return
@@ -282,7 +299,7 @@ class WellKnownMiddleware:
             await self.app(scope, receive, send)
             return
 
-        path: str = scope.get("path", "")
+        path: str = posixpath.normpath(scope.get("path", ""))
         method: str = scope.get("method", "").upper()
 
         if method != "GET" or path not in self._WELL_KNOWN_PATHS:

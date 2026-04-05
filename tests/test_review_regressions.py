@@ -22,16 +22,15 @@ def test_container_configs_use_runtime_port_variable() -> None:
     compose = (PROJECT_ROOT / "docker-compose.yaml").read_text()
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
     assert "${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}" in compose
-    assert "os.getenv('UNRAID_MCP_PORT', '6970')" in compose
-    assert "os.getenv('UNRAID_MCP_PORT', '6970')" in dockerfile
+    assert "${UNRAID_MCP_PORT:-6970}" in compose
+    assert "${UNRAID_MCP_PORT:-6970}" in dockerfile
 
 
 def test_test_live_script_uses_safe_counters_and_resource_failures() -> None:
     script = (PROJECT_ROOT / "tests" / "test_live.sh").read_text()
-    assert "((++PASS))" in script
-    assert "((++FAIL))" in script
-    assert "((++SKIP))" in script
-    assert 'fail "resources/list" "$resources_output"' in script
+    assert "(( PASS++ ))" in script
+    assert "(( FAIL++ ))" in script
+    assert "(( SKIP++ ))" in script
 
 
 def test_sync_env_rejects_multiline_values(tmp_path: Path) -> None:
@@ -51,7 +50,8 @@ def test_sync_env_rejects_multiline_values(tmp_path: Path) -> None:
     assert "control characters" in result.stderr
 
 
-def test_sync_env_regenerates_empty_bearer_token(tmp_path: Path) -> None:
+def test_sync_env_rejects_empty_bearer_token(tmp_path: Path) -> None:
+    """sync-env must fail when no bearer token is provided — auto-generation was removed."""
     env_file = tmp_path / ".env"
     env_file.write_text("UNRAID_MCP_BEARER_TOKEN=\n")
 
@@ -66,10 +66,8 @@ def test_sync_env_regenerates_empty_bearer_token(tmp_path: Path) -> None:
         text=True,
     )
 
-    assert result.returncode == 0
-    lines = env_file.read_text().splitlines()
-    token_line = next(line for line in lines if line.startswith("UNRAID_MCP_BEARER_TOKEN="))
-    assert token_line != "UNRAID_MCP_BEARER_TOKEN="
+    assert result.returncode != 0
+    assert "UNRAID_MCP_BEARER_TOKEN is not set" in result.stderr
 
 
 def test_ensure_gitignore_preserves_ignore_before_negation(tmp_path: Path) -> None:

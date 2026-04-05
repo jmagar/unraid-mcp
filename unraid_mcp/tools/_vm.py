@@ -11,15 +11,19 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.utils import validate_subaction
 
 
 # ===========================================================================
 # VM
 # ===========================================================================
 
+# VmDomain only exposes id/name/state/uuid — no richer detail query exists in the
+# Unraid GraphQL schema, so "details" reuses the same query and filters client-side.
+_VM_LIST_QUERY = "query ListVMs { vms { id domains { id name state uuid } } }"
+
 _VM_QUERIES: dict[str, str] = {
-    "list": "query ListVMs { vms { id domains { id name state uuid } } }",
-    "details": "query ListVMs { vms { id domains { id name state uuid } } }",
+    "list": _VM_LIST_QUERY,
 }
 
 _VM_MUTATIONS: dict[str, str] = {
@@ -32,7 +36,7 @@ _VM_MUTATIONS: dict[str, str] = {
     "reset": "mutation ResetVM($id: PrefixedID!) { vm { reset(id: $id) } }",
 }
 
-_VM_SUBACTIONS: set[str] = set(_VM_QUERIES) | set(_VM_MUTATIONS)
+_VM_SUBACTIONS: set[str] = set(_VM_QUERIES) | set(_VM_MUTATIONS) | {"details"}
 _VM_DESTRUCTIVE: set[str] = {"force_stop", "reset"}
 _VM_MUTATION_FIELDS: dict[str, str] = {"force_stop": "forceStop"}
 
@@ -40,10 +44,7 @@ _VM_MUTATION_FIELDS: dict[str, str] = {"force_stop": "forceStop"}
 async def _handle_vm(
     subaction: str, vm_id: str | None, ctx: Context | None, confirm: bool
 ) -> dict[str, Any]:
-    if subaction not in _VM_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for vm. Must be one of: {sorted(_VM_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _VM_SUBACTIONS, "vm")
     if subaction != "list" and not vm_id:
         raise ToolError(f"vm_id is required for vm/{subaction}")
 
@@ -71,7 +72,8 @@ async def _handle_vm(
             return {"vms": []}
 
         if subaction == "details":
-            data = await _client.make_graphql_request(_VM_QUERIES["details"])
+            # VmDomain has no richer fields than list — reuse the same query, filter client-side.
+            data = await _client.make_graphql_request(_VM_LIST_QUERY)
             if not data.get("vms"):
                 raise ToolError("No VM data returned from server")
             vms = data["vms"].get("domains") or data["vms"].get("domain") or []

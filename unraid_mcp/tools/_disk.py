@@ -13,7 +13,7 @@ from ..core import client as _client
 from ..core.client import DISK_TIMEOUT
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import format_bytes
+from ..core.utils import format_bytes, validate_subaction
 
 
 # ===========================================================================
@@ -75,10 +75,7 @@ async def _handle_disk(
     ctx: Context | None,
     confirm: bool,
 ) -> dict[str, Any]:
-    if subaction not in _DISK_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for disk. Must be one of: {sorted(_DISK_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _DISK_SUBACTIONS, "disk")
 
     await gate_destructive_action(
         ctx,
@@ -88,52 +85,54 @@ async def _handle_disk(
         f"Back up flash drive to **{remote_name}:{destination_path}**. Existing backups will be overwritten.",
     )
 
-    if subaction == "disk_details" and not disk_id:
-        raise ToolError("disk_id is required for disk/disk_details")
+    with tool_error_handler("disk", subaction, logger):
+        if subaction == "disk_details" and not disk_id:
+            raise ToolError("disk_id is required for disk/disk_details")
 
-    if subaction == "logs":
-        if tail_lines < 1 or tail_lines > _MAX_TAIL_LINES:
-            raise ToolError(f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}")
-        if not log_path:
-            raise ToolError("log_path is required for disk/logs")
-        log_path = _validate_path(log_path, _ALLOWED_LOG_PREFIXES, "log_path")
+        if subaction == "logs":
+            if tail_lines < 1 or tail_lines > _MAX_TAIL_LINES:
+                raise ToolError(
+                    f"tail_lines must be between 1 and {_MAX_TAIL_LINES}, got {tail_lines}"
+                )
+            if not log_path:
+                raise ToolError("log_path is required for disk/logs")
+            log_path = _validate_path(log_path, _ALLOWED_LOG_PREFIXES, "log_path")
 
-    if subaction == "flash_backup":
-        if not remote_name:
-            raise ToolError("remote_name is required for disk/flash_backup")
-        if not source_path:
-            raise ToolError("source_path is required for disk/flash_backup")
-        if not destination_path:
-            raise ToolError("destination_path is required for disk/flash_backup")
-        # Validate paths — flash backup source must come from /boot/ only.
-        # NOTE: _validate_path is not reused here because its prefix check uses
-        # startswith(), which would allow '/bootleg/...' to pass '/boot' prefix.
-        # The correct check is (normalized == "/boot" or startswith("/boot/")),
-        # which requires an inline implementation.
-        if "\x00" in source_path:
-            raise ToolError("source_path must not contain null bytes")
-        # Normalize BEFORE checking '..' — raw-string check is bypassable via
-        # encoded sequences like 'foo/bar/../..'.
-        normalized = posixpath.normpath(source_path)
-        if ".." in normalized.split("/"):
-            raise ToolError("source_path must not contain path traversal sequences (../)")
-        if not (normalized == "/boot" or normalized.startswith("/boot/")):
-            raise ToolError("source_path must start with /boot/ (flash drive only)")
-        source_path = normalized
-        if "\x00" in destination_path:
-            raise ToolError("destination_path must not contain null bytes")
-        normalized_dest = posixpath.normpath(destination_path)
-        if ".." in normalized_dest.split("/"):
-            raise ToolError("destination_path must not contain path traversal sequences (../)")
-        destination_path = normalized_dest
-        input_data: dict[str, Any] = {
-            "remoteName": remote_name,
-            "sourcePath": source_path,
-            "destinationPath": destination_path,
-        }
-        if backup_options is not None:
-            input_data["options"] = backup_options
-        with tool_error_handler("disk", subaction, logger):
+        if subaction == "flash_backup":
+            if not remote_name:
+                raise ToolError("remote_name is required for disk/flash_backup")
+            if not source_path:
+                raise ToolError("source_path is required for disk/flash_backup")
+            if not destination_path:
+                raise ToolError("destination_path is required for disk/flash_backup")
+            # Validate paths — flash backup source must come from /boot/ only.
+            # NOTE: _validate_path is not reused here because its prefix check uses
+            # startswith(), which would allow '/bootleg/...' to pass '/boot' prefix.
+            # The correct check is (normalized == "/boot" or startswith("/boot/")),
+            # which requires an inline implementation.
+            if "\x00" in source_path:
+                raise ToolError("source_path must not contain null bytes")
+            # Normalize BEFORE checking '..' �� raw-string check is bypassable via
+            # encoded sequences like 'foo/bar/../..'.
+            normalized = posixpath.normpath(source_path)
+            if ".." in normalized.split("/"):
+                raise ToolError("source_path must not contain path traversal sequences (../)")
+            if not (normalized == "/boot" or normalized.startswith("/boot/")):
+                raise ToolError("source_path must start with /boot/ (flash drive only)")
+            source_path = normalized
+            if "\x00" in destination_path:
+                raise ToolError("destination_path must not contain null bytes")
+            normalized_dest = posixpath.normpath(destination_path)
+            if ".." in normalized_dest.split("/"):
+                raise ToolError("destination_path must not contain path traversal sequences (../)")
+            destination_path = normalized_dest
+            input_data: dict[str, Any] = {
+                "remoteName": remote_name,
+                "sourcePath": source_path,
+                "destinationPath": destination_path,
+            }
+            if backup_options is not None:
+                input_data["options"] = backup_options
             logger.info(
                 f"Executing unraid action=disk subaction={subaction} remote={remote_name!r} source={source_path!r} dest={destination_path!r}"
             )
@@ -145,14 +144,13 @@ async def _handle_disk(
                 raise ToolError("Failed to start flash backup: no confirmation from server")
             return {"success": True, "subaction": "flash_backup", "data": backup}
 
-    custom_timeout = DISK_TIMEOUT if subaction in ("disks", "disk_details") else None
-    variables: dict[str, Any] | None = None
-    if subaction == "disk_details":
-        variables = {"id": disk_id}
-    elif subaction == "logs":
-        variables = {"path": log_path, "lines": tail_lines}
+        custom_timeout = DISK_TIMEOUT if subaction in ("disks", "disk_details") else None
+        variables: dict[str, Any] | None = None
+        if subaction == "disk_details":
+            variables = {"id": disk_id}
+        elif subaction == "logs":
+            variables = {"path": log_path, "lines": tail_lines}
 
-    with tool_error_handler("disk", subaction, logger):
         logger.info(f"Executing unraid action=disk subaction={subaction}")
         data = await _client.make_graphql_request(
             _DISK_QUERIES[subaction], variables, custom_timeout=custom_timeout

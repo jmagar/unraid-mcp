@@ -8,6 +8,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import validate_subaction
 
 
 # ===========================================================================
@@ -28,10 +29,7 @@ _OIDC_SUBACTIONS: set[str] = set(_OIDC_QUERIES)
 async def _handle_oidc(
     subaction: str, provider_id: str | None, token: str | None
 ) -> dict[str, Any]:
-    if subaction not in _OIDC_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for oidc. Must be one of: {sorted(_OIDC_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _OIDC_SUBACTIONS, "oidc")
 
     if subaction == "provider" and not provider_id:
         raise ToolError("provider_id is required for oidc/provider")

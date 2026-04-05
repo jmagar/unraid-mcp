@@ -97,9 +97,10 @@ def register_subscription_resources(mcp: FastMCP) -> None:
     async def logs_stream_resource() -> str:
         """Real-time log stream data from subscription."""
         await ensure_subscriptions_started()
-        data = await subscription_manager.get_resource_data("logFileSubscription")
-        if data is not None:
-            return json.dumps(data, indent=2)
+        result = await subscription_manager.get_resource_data_with_timestamp("logFileSubscription")
+        if result is not None:
+            data, fetched_at = result
+            return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
         return json.dumps(
             {
                 "status": "No subscription data yet",
@@ -110,9 +111,10 @@ def register_subscription_resources(mcp: FastMCP) -> None:
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
-            data = await subscription_manager.get_resource_data(action)
-            if data is not None:
-                return json.dumps(data, indent=2)
+            result = await subscription_manager.get_resource_data_with_timestamp(action)
+            if result is not None:
+                data, fetched_at = result
+                return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
             # Surface permanent errors only when the connection is in a terminal failure
             # state — if the subscription has since reconnected, ignore the stale error.
             # Use the public get_error_state() accessor so we never touch private

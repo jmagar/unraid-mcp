@@ -43,12 +43,15 @@ class TestLiveResourcesUseManagerCache:
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_resource_returns_cached_data(self, action: str) -> None:
         cached = {"systemMetricsCpu": {"percentTotal": 12.5}}
+        ts = "2026-04-04T12:00:00+00:00"
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data = AsyncMock(return_value=cached)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=(cached, ts))
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
-        assert json.loads(result) == cached
+        parsed = json.loads(result)
+        assert parsed["_fetched_at"] == ts
+        assert parsed["systemMetricsCpu"] == cached["systemMetricsCpu"]
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
     @pytest.mark.usefixtures("_mock_ensure_started")
@@ -56,7 +59,7 @@ class TestLiveResourcesUseManagerCache:
         self, action: str
     ) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
             mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
             mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
@@ -69,7 +72,7 @@ class TestLiveResourcesUseManagerCache:
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_resource_returns_error_status_on_permanent_failure(self, action: str) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
             mock_mgr.get_error_state = AsyncMock(
                 return_value=("WebSocket auth failed", "auth_failed")
             )
@@ -107,7 +110,7 @@ class TestLogsStreamResource:
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_logs_stream_no_data(self) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://logs/stream")
             result = await resource.fn()
@@ -116,13 +119,15 @@ class TestLogsStreamResource:
 
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_logs_stream_returns_data_with_empty_dict(self) -> None:
-        """Empty dict cache hit must return data, not 'connecting' status."""
+        """Empty dict cache hit must return data with _fetched_at timestamp."""
+        ts = "2026-04-04T12:00:00+00:00"
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data = AsyncMock(return_value={})
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=({}, ts))
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://logs/stream")
             result = await resource.fn()
-            assert json.loads(result) == {}
+            parsed = json.loads(result)
+            assert parsed["_fetched_at"] == ts
 
 
 class TestAutoStartDisabledFallback:
@@ -139,7 +144,7 @@ class TestAutoStartDisabledFallback:
                 new=AsyncMock(return_value=fallback_data),
             ),
         ):
-            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
             mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
@@ -158,7 +163,7 @@ class TestAutoStartDisabledFallback:
                 new=AsyncMock(side_effect=Exception("WebSocket failed")),
             ),
         ):
-            mock_mgr.get_resource_data = AsyncMock(return_value=None)
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
             mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()

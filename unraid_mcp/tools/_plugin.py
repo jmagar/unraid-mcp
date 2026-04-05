@@ -10,6 +10,7 @@ from fastmcp import Context
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import validate_subaction
 from ..core.guards import gate_destructive_action
 
 
@@ -38,10 +39,7 @@ async def _handle_plugin(
     ctx: Context | None,
     confirm: bool,
 ) -> dict[str, Any]:
-    if subaction not in _PLUGIN_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for plugin. Must be one of: {sorted(_PLUGIN_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _PLUGIN_SUBACTIONS, "plugin")
 
     await gate_destructive_action(
         ctx,

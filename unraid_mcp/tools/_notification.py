@@ -1,7 +1,7 @@
 """Notification domain handler for the Unraid MCP tool.
 
-Covers: overview, list, create, archive, mark_unread, recalculate, archive_all,
-archive_many, unarchive_many, unarchive_all, delete*, delete_archived* (12 subactions).
+Covers: overview, list, create, notify_if_unique, archive, mark_unread, recalculate,
+archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* (13 subactions).
 """
 
 from typing import Any
@@ -12,6 +12,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.utils import safe_get, validate_subaction
 
 
 # ===========================================================================
@@ -34,6 +35,7 @@ _NOTIFICATION_MUTATIONS: dict[str, str] = {
     "unarchive_many": "mutation UnarchiveNotifications($ids: [PrefixedID!]!) { unarchiveNotifications(ids: $ids) { unread { info warning alert total } archive { info warning alert total } } }",
     "unarchive_all": "mutation UnarchiveAll($importance: NotificationImportance) { unarchiveAll(importance: $importance) { unread { info warning alert total } archive { info warning alert total } } }",
     "recalculate": "mutation RecalculateOverview { recalculateOverview { unread { info warning alert total } archive { info warning alert total } } }",
+    "notify_if_unique": "mutation NotifyIfUnique($input: NotificationData!) { notifyIfUnique(input: $input) { id title importance } }",
 }
 
 _NOTIFICATION_SUBACTIONS: set[str] = set(_NOTIFICATION_QUERIES) | set(_NOTIFICATION_MUTATIONS)
@@ -57,10 +59,7 @@ async def _handle_notification(
     subject: str | None,
     description: str | None,
 ) -> dict[str, Any]:
-    if subaction not in _NOTIFICATION_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for notification. Must be one of: {sorted(_NOTIFICATION_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _NOTIFICATION_SUBACTIONS, "notification")
 
     await gate_destructive_action(
         ctx,
@@ -91,7 +90,7 @@ async def _handle_notification(
 
         if subaction == "overview":
             data = await _client.make_graphql_request(_NOTIFICATION_QUERIES["overview"])
-            return dict((data.get("notifications") or {}).get("overview") or {})
+            return dict(safe_get(data, "notifications", "overview", default={}))
 
         if subaction == "list":
             filter_vars: dict[str, Any] = {
@@ -104,7 +103,7 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_QUERIES["list"], {"filter": filter_vars}
             )
-            return {"notifications": (data.get("notifications", {}) or {}).get("list", [])}
+            return {"notifications": safe_get(data, "notifications", "list", default=[])}
 
         if subaction == "create":
             if title is None or subject is None or description is None or importance is None:
@@ -132,6 +131,39 @@ async def _handle_notification(
             if notif is None:
                 raise ToolError("Notification creation failed: server returned no data")
             return {"success": True, "notification": notif}
+
+        if subaction == "notify_if_unique":
+            if title is None or subject is None or description is None or importance is None:
+                raise ToolError(
+                    "notify_if_unique requires title, subject, description, and importance"
+                )
+            if len(title) > 200:
+                raise ToolError(f"title must be at most 200 characters (got {len(title)})")
+            if len(subject) > 500:
+                raise ToolError(f"subject must be at most 500 characters (got {len(subject)})")
+            if len(description) > 2000:
+                raise ToolError(
+                    f"description must be at most 2000 characters (got {len(description)})"
+                )
+            data = await _client.make_graphql_request(
+                _NOTIFICATION_MUTATIONS["notify_if_unique"],
+                {
+                    "input": {
+                        "title": title,
+                        "subject": subject,
+                        "description": description,
+                        "importance": importance.upper(),
+                    }
+                },
+            )
+            notif = data.get("notifyIfUnique")
+            if notif is None:
+                return {
+                    "success": True,
+                    "duplicate": True,
+                    "message": "Equivalent unread notification already exists",
+                }
+            return {"success": True, "duplicate": False, "notification": notif}
 
         if subaction in ("archive", "mark_unread"):
             if not notification_id:

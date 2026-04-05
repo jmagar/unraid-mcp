@@ -383,8 +383,6 @@ just setup
 | `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
 | `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |
-| `UNRAID_MCP_ALLOW_DESTRUCTIVE` | No | `false` | Reserved safety flag |
-| `UNRAID_MCP_ALLOW_YOLO` | No | `false` | Reserved safety flag |
 | `DOCKER_NETWORK` | No | — | External Docker network to join; leave blank for default bridge |
 | `PGID` | No | `1000` | Container process GID |
 | `PUID` | No | `1000` | Container process UID |

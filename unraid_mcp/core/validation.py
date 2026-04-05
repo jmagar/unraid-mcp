@@ -5,6 +5,9 @@ _rclone.py, _setting.py) so they share a single source of truth.
 """
 
 import re
+from typing import Any
+
+from .exceptions import ToolError
 
 
 # Maximum string length for individual config/settings values
@@ -22,3 +25,47 @@ MAX_VALUE_LENGTH: int = 4096
 DANGEROUS_KEY_PATTERN: re.Pattern[str] = re.compile(
     r"\.\.|[/\\;|`$(){}&<>\"'#\x20\x7f]|[\x00-\x1f]"
 )
+
+
+def validate_scalar_mapping(
+    data: dict[str, Any],
+    label: str,
+    *,
+    max_keys: int = 100,
+    stringify: bool = False,
+) -> dict[str, Any]:
+    """Validate a flat scalar key-value mapping.
+
+    Enforces key count cap, rejects dangerous key names, accepts only scalar
+    values (str, int, float, bool), and enforces MAX_VALUE_LENGTH.
+
+    Args:
+        data: The mapping to validate.
+        label: Human-readable label for error messages (e.g. "config_data").
+        max_keys: Maximum number of keys allowed.
+        stringify: If True, convert all values to str (rclone style).
+                   If False, preserve original types (settings style).
+
+    Returns:
+        Validated mapping with the same or stringified values.
+    """
+    if len(data) > max_keys:
+        raise ToolError(f"{label} has {len(data)} keys (max {max_keys})")
+    validated: dict[str, Any] = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ToolError(f"{label} keys must be non-empty strings, got: {type(key).__name__}")
+        if DANGEROUS_KEY_PATTERN.search(key):
+            raise ToolError(f"{label} key '{key}' contains disallowed characters")
+        if not isinstance(value, (str, int, float, bool)):
+            raise ToolError(
+                f"{label}['{key}'] must be a string, number, or boolean"
+                + (f", got: {type(value).__name__}" if not stringify else "")
+            )
+        str_value = str(value)
+        if len(str_value) > MAX_VALUE_LENGTH:
+            raise ToolError(
+                f"{label}['{key}'] value exceeds max length ({len(str_value)} > {MAX_VALUE_LENGTH})"
+            )
+        validated[key] = str_value if stringify else value
+    return validated

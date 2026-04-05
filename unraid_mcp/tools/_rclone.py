@@ -11,7 +11,8 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.validation import DANGEROUS_KEY_PATTERN, MAX_VALUE_LENGTH
+from ..core.utils import safe_get, validate_subaction
+from ..core.validation import DANGEROUS_KEY_PATTERN, validate_scalar_mapping
 
 
 # ===========================================================================
@@ -31,28 +32,15 @@ _RCLONE_MUTATIONS: dict[str, str] = {
 _RCLONE_SUBACTIONS: set[str] = set(_RCLONE_QUERIES) | set(_RCLONE_MUTATIONS)
 _RCLONE_DESTRUCTIVE: set[str] = {"delete_remote"}
 _MAX_CONFIG_KEYS = 50
+_MAX_NAME_LENGTH = 128
 
 
-def _validate_rclone_config(config_data: dict[str, Any]) -> dict[str, str]:
-    if len(config_data) > _MAX_CONFIG_KEYS:
-        raise ToolError(f"config_data has {len(config_data)} keys (max {_MAX_CONFIG_KEYS})")
-    validated: dict[str, str] = {}
-    for key, value in config_data.items():
-        if not isinstance(key, str) or not key.strip():
-            raise ToolError(
-                f"config_data keys must be non-empty strings, got: {type(key).__name__}"
-            )
-        if DANGEROUS_KEY_PATTERN.search(key):
-            raise ToolError(f"config_data key '{key}' contains disallowed characters")
-        if not isinstance(value, (str, int, float, bool)):
-            raise ToolError(f"config_data['{key}'] must be a string, number, or boolean")
-        str_value = str(value)
-        if len(str_value) > MAX_VALUE_LENGTH:
-            raise ToolError(
-                f"config_data['{key}'] value exceeds max length ({len(str_value)} > {MAX_VALUE_LENGTH})"
-            )
-        validated[key] = str_value
-    return validated
+def _validate_rclone_name(value: str, label: str) -> None:
+    """Validate a top-level rclone field (name or provider_type)."""
+    if len(value) > _MAX_NAME_LENGTH:
+        raise ToolError(f"{label} exceeds max length ({len(value)} > {_MAX_NAME_LENGTH})")
+    if DANGEROUS_KEY_PATTERN.search(value):
+        raise ToolError(f"{label} contains disallowed characters")
 
 
 async def _handle_rclone(
@@ -63,10 +51,7 @@ async def _handle_rclone(
     ctx: Context | None,
     confirm: bool,
 ) -> dict[str, Any]:
-    if subaction not in _RCLONE_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for rclone. Must be one of: {sorted(_RCLONE_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _RCLONE_SUBACTIONS, "rclone")
 
     await gate_destructive_action(
         ctx,
@@ -81,7 +66,7 @@ async def _handle_rclone(
 
         if subaction == "list_remotes":
             data = await _client.make_graphql_request(_RCLONE_QUERIES["list_remotes"])
-            remotes = data.get("rclone", {}).get("remotes", [])
+            remotes = safe_get(data, "rclone", "remotes", default=[])
             return {"remotes": list(remotes) if isinstance(remotes, list) else []}
 
         if subaction == "config_form":
@@ -91,7 +76,7 @@ async def _handle_rclone(
             data = await _client.make_graphql_request(
                 _RCLONE_QUERIES["config_form"], variables or None
             )
-            form = (data.get("rclone") or {}).get("configForm", {})
+            form = safe_get(data, "rclone", "configForm", default={})
             if not form:
                 raise ToolError("No RClone config form data received")
             return dict(form)
@@ -99,12 +84,16 @@ async def _handle_rclone(
         if subaction == "create_remote":
             if name is None or provider_type is None or config_data is None:
                 raise ToolError("create_remote requires name, provider_type, and config_data")
-            validated = _validate_rclone_config(config_data)
+            _validate_rclone_name(name, "name")
+            _validate_rclone_name(provider_type, "provider_type")
+            validated = validate_scalar_mapping(
+                config_data, "config_data", max_keys=_MAX_CONFIG_KEYS, stringify=True
+            )
             data = await _client.make_graphql_request(
                 _RCLONE_MUTATIONS["create_remote"],
                 {"input": {"name": name, "type": provider_type, "parameters": validated}},
             )
-            remote = (data.get("rclone") or {}).get("createRCloneRemote")
+            remote = safe_get(data, "rclone", "createRCloneRemote")
             if not remote:
                 raise ToolError(f"Failed to create remote '{name}': no confirmation from server")
             return {
@@ -119,7 +108,7 @@ async def _handle_rclone(
             data = await _client.make_graphql_request(
                 _RCLONE_MUTATIONS["delete_remote"], {"input": {"name": name}}
             )
-            if not (data.get("rclone") or {}).get("deleteRCloneRemote", False):
+            if not safe_get(data, "rclone", "deleteRCloneRemote", default=False):
                 raise ToolError(f"Failed to delete remote '{name}'")
             return {"success": True, "message": f"Remote '{name}' deleted successfully"}
 

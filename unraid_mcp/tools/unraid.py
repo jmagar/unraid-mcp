@@ -4,14 +4,14 @@ Provides the `unraid` tool with 15 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
-  system       - Server info, metrics, network, UPS (19 subactions)
+  system       - Server info, metrics, network, UPS (20 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
   array        - Parity checks, array state, disk operations (13 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
   docker       - Container lifecycle and network inspection (7 subactions)
   vm           - Virtual machine lifecycle (9 subactions)
-  notification - System notifications CRUD (12 subactions)
-  key          - API key management (7 subactions)
+  notification - System notifications CRUD (13 subactions)
+  key          - API key management (8 subactions)
   plugin       - Plugin management (3 subactions)
   rclone       - Cloud storage remote management (4 subactions)
   setting      - System settings and UPS config (2 subactions)
@@ -31,6 +31,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.setup import elicit_and_configure, elicit_reset_confirmation
+from ..core.utils import validate_subaction
 
 # Re-exports: domain modules' constants and helpers needed by tests
 # Re-export array queries for schema tests
@@ -91,10 +92,7 @@ from ._vm import _VM_DESTRUCTIVE, _VM_MUTATIONS, _VM_QUERIES, _handle_vm  # noqa
 
 
 async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] | str:
-    if subaction not in _HEALTH_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for health. Must be one of: {sorted(_HEALTH_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _HEALTH_SUBACTIONS, "health")
 
     from ..config.settings import (
         CREDENTIALS_ENV_PATH,
@@ -224,7 +222,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 |-----------|------|-------------|
 | `action` | str | One of the actions above |
 | `subaction` | str | Operation within the action |
-| `confirm` | bool | Required for destructive operations (default: False) |
+| `confirm` | bool | Set `True` for destructive subactions (marked `*`). Interactive clients are prompted via elicitation; agents and one-shot API callers **must** pass `confirm=True` to bypass elicitation. (default: False) |
 | `container_id` | str | Docker container ID or name |
 | `vm_id` | str | VM identifier |
 | `disk_id` | str | Disk identifier |
@@ -395,7 +393,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │                 │ log_tail (requires path=), notification_feed                         │
         └─────────────────┴──────────────────────────────────────────────────────────────────────┘
 
-        * Destructive — requires confirm=True
+        * Destructive — interactive clients are prompted for confirmation via
+          elicitation. Agents and non-interactive callers must pass confirm=True
+          to execute these subactions.
         """
         if action == "system":
             return await _handle_system(subaction, device_id)

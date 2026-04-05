@@ -8,6 +8,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import safe_get, validate_subaction
 
 
 # ===========================================================================
@@ -29,10 +30,7 @@ _CUSTOMIZATION_SUBACTIONS: set[str] = set(_CUSTOMIZATION_QUERIES) | set(_CUSTOMI
 
 
 async def _handle_customization(subaction: str, theme_name: str | None) -> dict[str, Any]:
-    if subaction not in _CUSTOMIZATION_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for customization. Must be one of: {sorted(_CUSTOMIZATION_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _CUSTOMIZATION_SUBACTIONS, "customization")
 
     with tool_error_handler("customization", subaction, logger):
         logger.info(f"Executing unraid action=customization subaction={subaction}")
@@ -54,7 +52,7 @@ async def _handle_customization(subaction: str, theme_name: str | None) -> dict[
             return {
                 "success": True,
                 "subaction": "set_theme",
-                "data": (data.get("customization") or {}).get("setTheme"),
+                "data": safe_get(data, "customization", "setTheme"),
             }
 
         raise ToolError(f"Unhandled customization subaction '{subaction}' — this is a bug")

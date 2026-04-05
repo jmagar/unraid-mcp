@@ -14,6 +14,7 @@ import httpx
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import CredentialsNotConfiguredError
+from ..core.utils import safe_get
 
 
 # Import system online query to avoid duplication — used by setup and test_connection
@@ -85,8 +86,8 @@ async def _comprehensive_health_check() -> dict[str, Any]:
                 "status": "connected",
                 "url": safe_display_url(UNRAID_API_URL),
                 "machine_id": info.get("machineId"),
-                "version": ((info.get("versions") or {}).get("core") or {}).get("unraid"),
-                "uptime": (info.get("os") or {}).get("uptime"),
+                "version": safe_get(info, "versions", "core", "unraid"),
+                "uptime": safe_get(info, "os", "uptime"),
             }
         else:
             _escalate("degraded")

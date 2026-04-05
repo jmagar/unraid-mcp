@@ -217,6 +217,8 @@ class TestInfoQueries:
             "ups_devices",
             "ups_device",
             "ups_config",
+            "server_time",
+            "timezones",
         }
         assert set(QUERIES.keys()) == expected_actions
 
@@ -470,16 +472,17 @@ class TestVmQueries:
         errors = _validate_operation(schema, QUERIES["list"])
         assert not errors, f"list query validation failed: {errors}"
 
-    def test_details_query(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools._vm import _VM_QUERIES as QUERIES
+    def test_details_uses_list_query(self, schema: GraphQLSchema) -> None:
+        """details reuses the list query — VmDomain has no richer fields."""
+        from unraid_mcp.tools._vm import _VM_LIST_QUERY
 
-        errors = _validate_operation(schema, QUERIES["details"])
-        assert not errors, f"details query validation failed: {errors}"
+        errors = _validate_operation(schema, _VM_LIST_QUERY)
+        assert not errors, f"list query (used by details) validation failed: {errors}"
 
     def test_all_vm_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._vm import _VM_QUERIES as QUERIES
 
-        assert set(QUERIES.keys()) == {"list", "details"}
+        assert set(QUERIES.keys()) == {"list"}
 
 
 class TestVmMutations:
@@ -626,6 +629,7 @@ class TestNotificationMutations:
 
         expected = {
             "create",
+            "notify_if_unique",
             "archive",
             "mark_unread",
             "delete",
@@ -723,7 +727,7 @@ class TestKeysQueries:
     def test_all_keys_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._key import _KEY_QUERIES as QUERIES
 
-        assert set(QUERIES.keys()) == {"list", "get"}
+        assert set(QUERIES.keys()) == {"list", "get", "possible_roles"}
 
 
 class TestKeysMutations:

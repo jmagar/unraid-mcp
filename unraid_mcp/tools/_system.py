@@ -2,7 +2,7 @@
 
 Covers: overview, array, network, registration, variables, metrics, services,
 display, config, online, owner, settings, server, servers, flash, ups_devices,
-ups_device, ups_config (18 subactions).
+ups_device, ups_config, server_time, timezones (20 subactions).
 """
 
 from typing import Any
@@ -10,7 +10,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.utils import format_kb
+from ..core.utils import format_kb, safe_get, validate_subaction
 
 
 # ===========================================================================
@@ -87,6 +87,8 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "ups_devices": "query GetUpsDevices { upsDevices { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
     "ups_device": "query GetUpsDevice($id: String!) { upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
     "ups_config": "query GetUpsConfig { upsConfiguration { service upsCable upsType device batteryLevel minutes timeout killUps upsName } }",
+    "server_time": "query GetSystemTime { systemTime { currentTime timeZone useNtp ntpServers } }",
+    "timezones": "query GetTimeZones { timeZoneOptions { value label } }",
 }
 
 _SYSTEM_SUBACTIONS: set[str] = set(_SYSTEM_QUERIES)
@@ -120,10 +122,7 @@ def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
 
 
 async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any]:
-    if subaction not in _SYSTEM_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for system. Must be one of: {sorted(_SYSTEM_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _SYSTEM_SUBACTIONS, "system")
 
     if subaction == "ups_device" and not device_id:
         raise ToolError("device_id is required for system/ups_device")
@@ -197,7 +196,7 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             return {"summary": summary, "details": raw}
 
         if subaction == "display":
-            return dict((data.get("info") or {}).get("display") or {})
+            return dict(safe_get(data, "info", "display", default={}))
         if subaction == "online":
             return {"online": data.get("online")}
         if subaction == "settings":
@@ -243,6 +242,7 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             "owner": "owner",
             "flash": "flash",
             "ups_config": "upsConfiguration",
+            "server_time": "systemTime",
         }
         if subaction in simple_dict:
             result = data.get(simple_dict[subaction])
@@ -259,6 +259,7 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             "services": ("services", "services"),
             "servers": ("servers", "servers"),
             "ups_devices": ("upsDevices", "ups_devices"),
+            "timezones": ("timeZoneOptions", "timezones"),
         }
         if subaction in list_actions:
             response_key, output_key = list_actions[subaction]

@@ -29,17 +29,6 @@ _MAX_RESOURCE_DATA_LINES = 5_000
 # Minimum stable connection duration (seconds) before resetting reconnect counter
 _STABLE_CONNECTION_SECONDS = 30
 
-# Track last GraphQL error per subscription to deduplicate log spam.
-# Key: subscription name, Value: first error message seen in the current burst.
-_last_graphql_error: dict[str, str] = {}
-_graphql_error_count: dict[str, int] = {}
-
-
-def _clear_graphql_error_burst(subscription_name: str) -> None:
-    """Reset deduplicated GraphQL error tracking for one subscription."""
-    _last_graphql_error.pop(subscription_name, None)
-    _graphql_error_count.pop(subscription_name, None)
-
 
 def _preview(message: str | bytes, n: int = 200) -> str:
     """Return the first *n* characters of *message* as a UTF-8 string.
@@ -126,6 +115,10 @@ class SubscriptionManager:
         self.connection_states: dict[str, str] = {}  # Track connection state per subscription
         self.last_error: dict[str, str] = {}  # Track last error per subscription
         self._connection_start_times: dict[str, float] = {}  # Track when connections started
+        # Track last GraphQL error per subscription to deduplicate log spam.
+        # Key: subscription name, Value: first error message seen in the current burst.
+        self._last_graphql_error: dict[str, str] = {}
+        self._graphql_error_count: dict[str, int] = {}
 
         # Define subscription configurations
         from .queries import SNAPSHOT_ACTIONS
@@ -160,6 +153,22 @@ class SubscriptionManager:
         logger.debug(
             f"[SUBSCRIPTION_MANAGER] Available subscriptions: {list(self.subscription_configs.keys())}"
         )
+
+    def _clear_graphql_error_burst(self, subscription_name: str) -> None:
+        """Reset deduplicated GraphQL error tracking for one subscription."""
+        self._last_graphql_error.pop(subscription_name, None)
+        self._graphql_error_count.pop(subscription_name, None)
+
+    def _set_connection_state(self, name: str, state: str, error: str | None = None) -> None:
+        """Atomically update connection state and optionally last_error.
+
+        Must NOT contain any ``await`` — paired writes rely on asyncio
+        cooperative scheduling to stay consistent (no interleaving at
+        non-await points).
+        """
+        self.connection_states[name] = state
+        if error is not None:
+            self.last_error[name] = error
 
     async def auto_start_all_subscriptions(self) -> None:
         """Auto-start all subscriptions marked for auto-start.
@@ -233,7 +242,7 @@ class SubscriptionManager:
             raise ValueError(
                 f"subscription_name must contain only [a-zA-Z0-9_], got: {subscription_name!r}"
             )
-        _clear_graphql_error_burst(subscription_name)
+        self._clear_graphql_error_burst(subscription_name)
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Starting subscription...")
 
         # Guard must be inside the lock to prevent a TOCTOU race where two
@@ -248,7 +257,7 @@ class SubscriptionManager:
             # Reset connection tracking inside the lock so state is consistent
             # with the task creation that follows immediately.
             self.reconnect_attempts[subscription_name] = 0
-            self.connection_states[subscription_name] = "starting"
+            self._set_connection_state(subscription_name, "starting")
             self._connection_start_times.pop(subscription_name, None)
 
             try:
@@ -259,13 +268,12 @@ class SubscriptionManager:
                 logger.info(
                     f"[SUBSCRIPTION:{subscription_name}] Subscription task created and started"
                 )
-                self.connection_states[subscription_name] = "active"
+                self._set_connection_state(subscription_name, "active")
             except Exception as e:
                 logger.error(
                     f"[SUBSCRIPTION:{subscription_name}] Failed to start subscription task: {e}"
                 )
-                self.connection_states[subscription_name] = "failed"
-                self.last_error[subscription_name] = str(e)
+                self._set_connection_state(subscription_name, "failed", str(e))
                 raise
 
     async def stop_subscription(self, subscription_name: str) -> None:
@@ -283,7 +291,7 @@ class SubscriptionManager:
             if task is None:
                 logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
                 return
-            self.connection_states[subscription_name] = "stopped"
+            self._set_connection_state(subscription_name, "stopped")
             self._connection_start_times.pop(subscription_name, None)
 
         # Await cancellation OUTSIDE the lock — _subscription_loop cleanup path
@@ -294,8 +302,8 @@ class SubscriptionManager:
             await task
         except asyncio.CancelledError:
             logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
-        self.connection_states[subscription_name] = "stopped"
-        _clear_graphql_error_burst(subscription_name)
+        self._set_connection_state(subscription_name, "stopped")
+        self._clear_graphql_error_burst(subscription_name)
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
 
     async def stop_all(self) -> None:
@@ -328,7 +336,7 @@ class SubscriptionManager:
                 logger.error(
                     f"[WEBSOCKET:{subscription_name}] Max reconnection attempts ({self.max_reconnect_attempts}) exceeded, stopping"
                 )
-                self.connection_states[subscription_name] = "max_retries_exceeded"
+                self._set_connection_state(subscription_name, "max_retries_exceeded")
                 break
 
             try:
@@ -359,7 +367,7 @@ class SubscriptionManager:
                     logger.info(
                         f"[WEBSOCKET:{subscription_name}] Connected! Protocol: {selected_proto}"
                     )
-                    self.connection_states[subscription_name] = "connected"
+                    self._set_connection_state(subscription_name, "connected")
 
                     # Track connection start time — only reset retry counter
                     # after the connection proves stable (>30s connected)
@@ -410,16 +418,17 @@ class SubscriptionManager:
                         logger.info(
                             f"[PROTOCOL:{subscription_name}] Connection acknowledged successfully"
                         )
-                        self.connection_states[subscription_name] = "authenticated"
+                        self._set_connection_state(subscription_name, "authenticated")
                     elif init_data.get("type") == "connection_error":
                         error_payload = init_data.get("payload", {})
                         logger.error(
                             f"[AUTH:{subscription_name}] Authentication failed: {error_payload}"
                         )
-                        self.last_error[subscription_name] = (
-                            f"Authentication error: {error_payload}"
+                        self._set_connection_state(
+                            subscription_name,
+                            "auth_failed",
+                            f"Authentication error: {error_payload}",
                         )
-                        self.connection_states[subscription_name] = "auth_failed"
                         break
                     else:
                         logger.warning(
@@ -452,7 +461,7 @@ class SubscriptionManager:
                     logger.info(
                         f"[SUBSCRIPTION:{subscription_name}] Subscription started successfully"
                     )
-                    self.connection_states[subscription_name] = "subscribed"
+                    self._set_connection_state(subscription_name, "subscribed")
 
                     # Listen for subscription data
                     message_count = 0
@@ -464,7 +473,10 @@ class SubscriptionManager:
                             message_type = data.get("type", "unknown")
 
                             logger.debug(
-                                f"[DATA:{subscription_name}] Message #{message_count}: {message_type}"
+                                "[DATA:%s] Message #%d: %s",
+                                subscription_name,
+                                message_count,
+                                message_type,
                             )
 
                             # Handle different message types
@@ -480,9 +492,10 @@ class SubscriptionManager:
 
                                 if payload.get("data"):
                                     logger.info(
-                                        f"[DATA:{subscription_name}] Received subscription data update"
+                                        "[DATA:%s] Received subscription data update",
+                                        subscription_name,
                                     )
-                                    _clear_graphql_error_burst(subscription_name)
+                                    self._clear_graphql_error_burst(subscription_name)
                                     capped_data = (
                                         _cap_log_content(payload["data"])
                                         if isinstance(payload["data"], dict)
@@ -492,22 +505,22 @@ class SubscriptionManager:
                                     new_entry = SubscriptionData(
                                         data=capped_data,
                                         last_updated=datetime.now(UTC),
-                                        subscription_type=subscription_name,
                                     )
                                     async with self._data_lock:
                                         self.resource_data[subscription_name] = new_entry
                                     logger.debug(
-                                        f"[RESOURCE:{subscription_name}] Resource data updated successfully"
+                                        "[RESOURCE:%s] Resource data updated successfully",
+                                        subscription_name,
                                     )
                                 elif payload.get("errors"):
                                     err_msg = str(payload["errors"])
-                                    prev = _last_graphql_error.get(subscription_name)
-                                    count = _graphql_error_count.get(subscription_name, 0) + 1
-                                    _graphql_error_count[subscription_name] = count
+                                    prev = self._last_graphql_error.get(subscription_name)
+                                    count = self._graphql_error_count.get(subscription_name, 0) + 1
+                                    self._graphql_error_count[subscription_name] = count
                                     if prev != err_msg:
                                         # First occurrence of this error — log as warning
-                                        _last_graphql_error[subscription_name] = err_msg
-                                        _graphql_error_count[subscription_name] = 1
+                                        self._last_graphql_error[subscription_name] = err_msg
+                                        self._graphql_error_count[subscription_name] = 1
                                         logger.warning(
                                             "[DATA:%s] GraphQL error (will suppress repeats): %s",
                                             subscription_name,
@@ -532,47 +545,64 @@ class SubscriptionManager:
                                     )
                                 else:
                                     logger.warning(
-                                        f"[DATA:{subscription_name}] Empty or invalid data payload: {payload}"
+                                        "[DATA:%s] Empty or invalid data payload: %s",
+                                        subscription_name,
+                                        payload,
                                     )
 
                             elif data.get("type") == "ping":
                                 logger.debug(
-                                    f"[PROTOCOL:{subscription_name}] Received ping, sending pong"
+                                    "[PROTOCOL:%s] Received ping, sending pong",
+                                    subscription_name,
                                 )
                                 await websocket.send(json.dumps({"type": "pong"}))
 
                             elif data.get("type") == "error":
                                 error_payload = data.get("payload", {})
                                 logger.error(
-                                    f"[SUBSCRIPTION:{subscription_name}] Subscription error: {error_payload}"
+                                    "[SUBSCRIPTION:%s] Subscription error: %s",
+                                    subscription_name,
+                                    error_payload,
                                 )
-                                self.last_error[subscription_name] = (
-                                    f"Subscription error: {error_payload}"
+                                self._set_connection_state(
+                                    subscription_name,
+                                    "error",
+                                    f"Subscription error: {error_payload}",
                                 )
-                                self.connection_states[subscription_name] = "error"
 
                             elif data.get("type") == "complete":
                                 logger.info(
-                                    f"[SUBSCRIPTION:{subscription_name}] Subscription completed by server"
+                                    "[SUBSCRIPTION:%s] Subscription completed by server",
+                                    subscription_name,
                                 )
-                                self.connection_states[subscription_name] = "completed"
+                                self._set_connection_state(subscription_name, "completed")
                                 break
 
                             elif data.get("type") in ["ka", "pong"]:
                                 logger.debug(
-                                    f"[PROTOCOL:{subscription_name}] Keepalive message: {message_type}"
+                                    "[PROTOCOL:%s] Keepalive message: %s",
+                                    subscription_name,
+                                    message_type,
                                 )
 
                             else:
                                 logger.debug(
-                                    f"[PROTOCOL:{subscription_name}] Unhandled message type: {message_type}"
+                                    "[PROTOCOL:%s] Unhandled message type: %s",
+                                    subscription_name,
+                                    message_type,
                                 )
 
                         except json.JSONDecodeError as e:
                             logger.error(
-                                f"[PROTOCOL:{subscription_name}] Failed to decode message: {_preview(message)}..."
+                                "[PROTOCOL:%s] Failed to decode message: %s...",
+                                subscription_name,
+                                _preview(message),
                             )
-                            logger.error(f"[PROTOCOL:{subscription_name}] JSON decode error: {e}")
+                            logger.error(
+                                "[PROTOCOL:%s] JSON decode error: %s",
+                                subscription_name,
+                                e,
+                            )
                         except Exception as e:
                             logger.error(
                                 f"[DATA:{subscription_name}] Error processing message: {e}",
@@ -585,35 +615,30 @@ class SubscriptionManager:
             except TimeoutError:
                 error_msg = "Connection or authentication timeout"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
-                self.last_error[subscription_name] = error_msg
-                self.connection_states[subscription_name] = "timeout"
+                self._set_connection_state(subscription_name, "timeout", error_msg)
 
             except websockets.exceptions.ConnectionClosed as e:
                 error_msg = f"WebSocket connection closed: {e}"
                 logger.warning(f"[WEBSOCKET:{subscription_name}] {error_msg}")
-                self.last_error[subscription_name] = error_msg
-                self.connection_states[subscription_name] = "disconnected"
+                self._set_connection_state(subscription_name, "disconnected", error_msg)
 
             except websockets.exceptions.InvalidURI as e:
                 error_msg = f"Invalid WebSocket URI: {e}"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
-                self.last_error[subscription_name] = error_msg
-                self.connection_states[subscription_name] = "invalid_uri"
+                self._set_connection_state(subscription_name, "invalid_uri", error_msg)
                 break  # Don't retry on invalid URI
 
             except ValueError as e:
                 # Non-retryable configuration error (e.g. UNRAID_API_URL not set)
                 error_msg = f"Configuration error: {e}"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
-                self.last_error[subscription_name] = error_msg
-                self.connection_states[subscription_name] = "error"
+                self._set_connection_state(subscription_name, "error", error_msg)
                 break  # Don't retry on configuration errors
 
             except Exception as e:
                 error_msg = f"Unexpected error: {e}"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}", exc_info=True)
-                self.last_error[subscription_name] = error_msg
-                self.connection_states[subscription_name] = "error"
+                self._set_connection_state(subscription_name, "error", error_msg)
 
             # Check if connection was stable before deciding on retry behavior
             start_time = self._connection_start_times.pop(subscription_name, None)
@@ -642,7 +667,7 @@ class SubscriptionManager:
             logger.info(
                 f"[WEBSOCKET:{subscription_name}] Reconnecting in {retry_delay:.1f} seconds..."
             )
-            self.connection_states[subscription_name] = "reconnecting"
+            self._set_connection_state(subscription_name, "reconnecting")
             await asyncio.sleep(retry_delay)
 
         # The while loop exited (via break or max_retries exceeded).
@@ -657,21 +682,35 @@ class SubscriptionManager:
 
     async def get_resource_data(self, resource_name: str) -> dict[str, Any] | None:
         """Get current resource data with enhanced logging."""
-        logger.debug(f"[RESOURCE:{resource_name}] Resource data requested")
+        logger.debug("[RESOURCE:%s] Resource data requested", resource_name)
 
         async with self._data_lock:
             if resource_name in self.resource_data:
                 data = self.resource_data[resource_name]
                 age_seconds = (datetime.now(UTC) - data.last_updated).total_seconds()
-                logger.debug(f"[RESOURCE:{resource_name}] Data found, age: {age_seconds:.1f}s")
+                logger.debug("[RESOURCE:%s] Data found, age: %.1fs", resource_name, age_seconds)
                 return data.data
-        logger.debug(f"[RESOURCE:{resource_name}] No data available")
+        logger.debug("[RESOURCE:%s] No data available", resource_name)
         return None
 
-    def list_active_subscriptions(self) -> list[str]:
+    async def get_resource_data_with_timestamp(
+        self, resource_name: str
+    ) -> tuple[dict[str, Any], str] | None:
+        """Get resource data along with its last-updated ISO timestamp.
+
+        Returns (data_dict, iso_timestamp) or None if no data is available.
+        """
+        async with self._data_lock:
+            if resource_name in self.resource_data:
+                entry = self.resource_data[resource_name]
+                return entry.data, entry.last_updated.isoformat()
+        return None
+
+    async def list_active_subscriptions(self) -> list[str]:
         """List all active subscriptions."""
-        active = list(self.active_subscriptions.keys())
-        logger.debug(f"[SUBSCRIPTION_MANAGER] Active subscriptions: {active}")
+        async with self._task_lock:
+            active = list(self.active_subscriptions.keys())
+        logger.debug("[SUBSCRIPTION_MANAGER] Active subscriptions: %s", active)
         return active
 
     async def get_error_state(self, name: str) -> tuple[str | None, str]:
@@ -681,12 +720,10 @@ class SubscriptionManager:
         private lock attributes directly.
 
         Consistency note: _subscription_loop writes connection_states and
-        last_error without holding _task_lock (it runs as an asyncio Task with
-        no await between the two writes). The pair is consistent because asyncio
-        cooperative scheduling prevents interleaving at non-await points — not
-        because of the lock. _task_lock here prevents two *readers* from racing
-        each other, not writers. If an await is ever introduced between the two
-        write sites in _subscription_loop, this guarantee breaks.
+        last_error together via _set_connection_state() which contains no
+        ``await``, so asyncio cooperative scheduling guarantees the pair is
+        consistent. _task_lock here prevents two *readers* from racing each
+        other, not writers.
         """
         async with self._task_lock:
             return (

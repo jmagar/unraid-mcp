@@ -137,26 +137,16 @@ def test_collect_actions_all_handled():
     If this test fails, a new key was added to COLLECT_ACTIONS in
     subscriptions/queries.py without adding a corresponding if-branch in
     tools/_live.py — which would cause a ToolError('this is a bug') at runtime.
-    Fix: add an if-branch in _handle_live AND add the key to
-    _HANDLED_COLLECT_SUBACTIONS.
+    Fix: add an if-branch in _handle_live for the new key.
     """
-    from unraid_mcp.subscriptions.queries import COLLECT_ACTIONS
-    from unraid_mcp.tools._live import _HANDLED_COLLECT_SUBACTIONS
+    import inspect
 
-    unhandled = set(COLLECT_ACTIONS) - _HANDLED_COLLECT_SUBACTIONS
+    from unraid_mcp.subscriptions.queries import COLLECT_ACTIONS
+    from unraid_mcp.tools._live import _handle_live
+
+    source = inspect.getsource(_handle_live)
+    unhandled = {key for key in COLLECT_ACTIONS if f'"{key}"' not in source}
     assert not unhandled, (
         f"COLLECT_ACTIONS keys without handlers in _handle_live: {unhandled}. "
-        "Add an if-branch in unraid_mcp/tools/_live.py and update _HANDLED_COLLECT_SUBACTIONS."
+        "Add an if-branch in unraid_mcp/tools/_live.py."
     )
-
-
-def test_collect_actions_rejects_stale_handled_keys(monkeypatch):
-    import unraid_mcp.tools._live as live_module
-
-    monkeypatch.setattr(
-        live_module,
-        "_HANDLED_COLLECT_SUBACTIONS",
-        frozenset({"log_tail", "notification_feed", "stale_key"}),
-    )
-    with pytest.raises(RuntimeError, match="stale"):
-        live_module._assert_collect_subactions_complete()

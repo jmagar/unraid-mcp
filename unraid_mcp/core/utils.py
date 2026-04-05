@@ -92,3 +92,19 @@ def format_kb(k: Any) -> str:
     except (ValueError, TypeError):
         return "N/A"
     return format_bytes(kb * 1024)
+
+
+def validate_subaction(subaction: str, valid_set: set[str], domain: str) -> None:
+    """Raise ToolError if subaction is not in the valid set.
+
+    Args:
+        subaction: The subaction string to validate.
+        valid_set: Set of valid subaction names.
+        domain: The domain name for error messages (e.g. "docker").
+    """
+    from .exceptions import ToolError
+
+    if subaction not in valid_set:
+        raise ToolError(
+            f"Invalid subaction '{subaction}' for {domain}. Must be one of: {sorted(valid_set)}"
+        )

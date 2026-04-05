@@ -8,6 +8,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.utils import validate_subaction
 
 
 # ===========================================================================
@@ -22,10 +23,7 @@ _USER_SUBACTIONS: set[str] = set(_USER_QUERIES)
 
 
 async def _handle_user(subaction: str) -> dict[str, Any]:
-    if subaction not in _USER_SUBACTIONS:
-        raise ToolError(
-            f"Invalid subaction '{subaction}' for user. Must be one of: {sorted(_USER_SUBACTIONS)}"
-        )
+    validate_subaction(subaction, _USER_SUBACTIONS, "user")
 
     with tool_error_handler("user", subaction, logger):
         logger.info("Executing unraid action=user subaction=me")

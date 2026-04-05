@@ -7,16 +7,9 @@ that cap at 10MB and start over (no rotation) for consistent use across all modu
 import logging
 from pathlib import Path
 
+from fastmcp.utilities.logging import get_logger as get_fastmcp_logger
 from rich.console import Console
 from rich.logging import RichHandler
-
-
-try:
-    from fastmcp.utilities.logging import get_logger as get_fastmcp_logger
-
-    FASTMCP_AVAILABLE = True
-except ImportError:
-    FASTMCP_AVAILABLE = False
 
 from .settings import LOG_FILE_PATH, LOG_LEVEL_STR
 
@@ -55,27 +48,28 @@ class OverwriteFileHandler(logging.FileHandler):
                 base_path = Path(self.baseFilename)
                 file_size = base_path.stat().st_size if base_path.exists() else 0
                 if file_size >= self.max_bytes:
-                    old_stream = self.stream
-                    self.stream = None
+                    # Open new file FIRST, then swap — self.stream is never None.
                     try:
-                        old_stream.close()
                         base_path.unlink(missing_ok=True)
-                        self.stream = self._open()
+                        new_stream = self._open()
                     except OSError:
-                        # Recovery: attempt to reopen even if unlink failed
                         try:
-                            self.stream = self._open()
+                            new_stream = self._open()
                         except OSError:
-                            # old_stream is already closed — do NOT restore it.
-                            # Leave self.stream = None so super().emit() skips output
-                            # rather than writing to a closed file descriptor.
                             import sys
 
                             print(
                                 "WARNING: Failed to reopen log file after rotation. "
-                                "File logging suspended until next successful open.",
+                                "File logging continues on old stream.",
                                 file=sys.stderr,
                             )
+                            new_stream = None
+
+                    if new_stream is not None:
+                        old_stream = self.stream
+                        self.stream = new_stream  # atomic swap
+                        if old_stream is not None:
+                            old_stream.close()
 
                     if self.stream is not None:
                         reset_record = logging.LogRecord(
@@ -161,11 +155,8 @@ def setup_logger(name: str = "UnraidMCPServer") -> logging.Logger:
     return logger
 
 
-def configure_fastmcp_logger_with_rich() -> logging.Logger | None:
+def configure_fastmcp_logger_with_rich() -> logging.Logger:
     """Configure FastMCP logger to use Rich formatting with Nordic colors."""
-    if not FASTMCP_AVAILABLE:
-        return None
-
     # Get numeric log level
     numeric_log_level = getattr(logging, LOG_LEVEL_STR, logging.INFO)
 
@@ -238,10 +229,4 @@ def log_configuration_status(logger: logging.Logger) -> None:
 
 
 # Global logger instance - modules can import this directly
-if FASTMCP_AVAILABLE:
-    # Use FastMCP logger with Rich formatting
-    _fastmcp_logger = configure_fastmcp_logger_with_rich()
-    logger = _fastmcp_logger if _fastmcp_logger is not None else setup_logger()
-else:
-    # Fallback to our custom logger if FastMCP is not available
-    logger = setup_logger()
+logger = configure_fastmcp_logger_with_rich()

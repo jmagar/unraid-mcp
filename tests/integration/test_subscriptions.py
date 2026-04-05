@@ -369,7 +369,6 @@ class TestDataReception:
 
             assert "test_sub" in mgr.resource_data
             assert mgr.resource_data["test_sub"].data == {"test": {"value": 42}}
-            assert mgr.resource_data["test_sub"].subscription_type == "test_sub"
 
     async def test_data_message_for_legacy_protocol(self) -> None:
         mgr = SubscriptionManager()
@@ -756,20 +755,19 @@ class TestResourceData:
         mgr.resource_data["test"] = SubscriptionData(
             data={"key": "value"},
             last_updated=datetime.now(UTC),
-            subscription_type="test",
         )
         result = await mgr.get_resource_data("test")
         assert result == {"key": "value"}
 
-    def test_list_active_subscriptions_empty(self) -> None:
+    async def test_list_active_subscriptions_empty(self) -> None:
         mgr = SubscriptionManager()
-        assert mgr.list_active_subscriptions() == []
+        assert await mgr.list_active_subscriptions() == []
 
-    def test_list_active_subscriptions_returns_names(self) -> None:
+    async def test_list_active_subscriptions_returns_names(self) -> None:
         mgr = SubscriptionManager()
         mgr.active_subscriptions["sub_a"] = MagicMock()
         mgr.active_subscriptions["sub_b"] = MagicMock()
-        result = mgr.list_active_subscriptions()
+        result = await mgr.list_active_subscriptions()
         assert sorted(result) == ["sub_a", "sub_b"]
 
 
@@ -804,7 +802,6 @@ class TestSubscriptionStatus:
         mgr.resource_data["logFileSubscription"] = SubscriptionData(
             data={"log": "content"},
             last_updated=datetime.now(UTC),
-            subscription_type="logFileSubscription",
         )
         status = await mgr.get_subscription_status()
         assert status["logFileSubscription"]["data"]["available"] is True

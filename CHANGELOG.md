@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-04-04
+
+### Added
+- **Comprehensive test suite**: Added tests for core modules, configuration, validation, subscriptions, and edge cases
+- **Test coverage documentation**: `tests/TEST_COVERAGE.md` with coverage map and gap analysis
+
+### Changed
+- **Documentation**: Comprehensive updates across CLAUDE.md, README, and reference docs
+- **Version sync**: Fixed `pyproject.toml` version mismatch (was 1.2.2, now aligned with all manifests at 1.2.4)
+
 ## [1.2.3] - 2026-04-03
 
 ### Changed

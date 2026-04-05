@@ -40,6 +40,12 @@ SNAPSHOT_ACTIONS = {
     "server_status": """
         subscription { serversSubscription { id name status guid wanip lanip localurl remoteurl } }
     """,
+    "docker_container_stats": """
+        subscription { dockerContainerStats { id cpuPercent memUsage memPercent netIO blockIO } }
+    """,
+    "temperature": """
+        subscription { systemMetricsTemperature { id sensors { id name type location current { value unit status } } summary { average hottest { id name current { value unit status } } coolest { id name current { value unit status } } warningCount criticalCount } } }
+    """,
 }
 
 COLLECT_ACTIONS = {
