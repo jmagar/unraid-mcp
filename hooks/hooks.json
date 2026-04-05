@@ -24,7 +24,8 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/fix-env-perms.sh",
-            "timeout": 5
+            "timeout": 5,
+            "if": "Write(*.env*)|Edit(*.env*)|MultiEdit(*.env*)|Bash(*.env*)"
           },
           {
             "type": "command",
