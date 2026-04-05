@@ -48,18 +48,6 @@ bash scripts/ensure-ignore-files.sh --check .
 bash scripts/ensure-ignore-files.sh .
 ```
 
-### lint-plugin.sh
-
-Validates plugin manifest files:
-- JSON syntax
-- Required fields
-- Version consistency
-- MCP server configuration
-
-```bash
-bash scripts/lint-plugin.sh
-```
-
 ### validate-marketplace.sh
 
 Validates marketplace JSON configuration:

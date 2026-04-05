@@ -93,7 +93,6 @@ unraid-mcp/
 |   +-- check-outdated-deps.sh         # Dependency freshness
 |   +-- ensure-ignore-files.sh         # Ignore file validation
 |   +-- generate_unraid_api_reference.py  # GraphQL schema to docs
-|   +-- lint-plugin.sh                 # Plugin manifest validation
 |   +-- validate-marketplace.sh        # Marketplace JSON validation
 |
 +-- tests/                             # Test suite (see mcp/TESTS.md)

@@ -94,7 +94,6 @@ Complete listing of all plugin components.
 | `scripts/check-outdated-deps.sh` | Dependency freshness check |
 | `scripts/ensure-ignore-files.sh` | Gitignore/dockerignore alignment |
 | `scripts/generate_unraid_api_reference.py` | Generate canonical API docs and schema change report from GraphQL introspection |
-| `scripts/lint-plugin.sh` | Plugin manifest validation |
 | `scripts/validate-marketplace.sh` | Marketplace JSON validation |
 
 ## CI/CD workflows
