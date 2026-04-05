@@ -24,9 +24,7 @@ _DOCKER_QUERIES: dict[str, str] = {
 }
 
 # Internal query used only for container ID resolution — not a public subaction.
-_DOCKER_RESOLVE_QUERY = (
-    "query ResolveContainerID { docker { containers { id names } } }"
-)
+_DOCKER_RESOLVE_QUERY = "query ResolveContainerID { docker { containers { id names } } }"
 
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",

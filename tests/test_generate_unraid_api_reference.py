@@ -3,7 +3,9 @@ from __future__ import annotations
 from scripts.generate_unraid_api_reference import _build_changes_markdown
 
 
-def _type_ref(name: str | None = None, *, kind: str = "OBJECT", of_type: dict | None = None) -> dict:
+def _type_ref(
+    name: str | None = None, *, kind: str = "OBJECT", of_type: dict | None = None
+) -> dict:
     return {"kind": kind, "name": name, "ofType": of_type}
 
 
@@ -41,9 +43,36 @@ def _schema(
     extra_types: list[dict] | None = None,
 ) -> dict:
     types = [
-        {"kind": "OBJECT", "name": "Query", "description": None, "fields": query_fields, "inputFields": None, "interfaces": [], "enumValues": None, "possibleTypes": None},
-        {"kind": "OBJECT", "name": "Mutation", "description": None, "fields": mutation_fields or [], "inputFields": None, "interfaces": [], "enumValues": None, "possibleTypes": None},
-        {"kind": "OBJECT", "name": "Subscription", "description": None, "fields": subscription_fields or [], "inputFields": None, "interfaces": [], "enumValues": None, "possibleTypes": None},
+        {
+            "kind": "OBJECT",
+            "name": "Query",
+            "description": None,
+            "fields": query_fields,
+            "inputFields": None,
+            "interfaces": [],
+            "enumValues": None,
+            "possibleTypes": None,
+        },
+        {
+            "kind": "OBJECT",
+            "name": "Mutation",
+            "description": None,
+            "fields": mutation_fields or [],
+            "inputFields": None,
+            "interfaces": [],
+            "enumValues": None,
+            "possibleTypes": None,
+        },
+        {
+            "kind": "OBJECT",
+            "name": "Subscription",
+            "description": None,
+            "fields": subscription_fields or [],
+            "inputFields": None,
+            "interfaces": [],
+            "enumValues": None,
+            "possibleTypes": None,
+        },
     ]
     if extra_types:
         types.extend(extra_types)
