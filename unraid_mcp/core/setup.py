@@ -170,7 +170,7 @@ def _write_env(api_url: str, api_key: str) -> None:
     try:
         tmp_path.write_text("\n".join(new_lines) + "\n")
         tmp_path.chmod(0o600)
-        os.replace(tmp_path, CREDENTIALS_ENV_PATH)
+        os.replace(tmp_path, CREDENTIALS_ENV_PATH)  # noqa: PTH105
     finally:
         # Clean up tmp on failure (may not exist if os.replace succeeded)
         if tmp_path.exists():

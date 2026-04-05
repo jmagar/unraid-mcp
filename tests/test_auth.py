@@ -468,7 +468,7 @@ def _make_get_scope(path: str, host: str = "localhost:6970") -> dict:
 
 async def _run_well_known(path: str, method: str = "GET", host: str = "localhost:6970"):
     """Run WellKnownMiddleware and return (status, headers_dict, parsed_body)."""
-    app, called = _app_called_flag()
+    app, called = _app_called_flag()  # noqa: RUF059
     mw = WellKnownMiddleware(app)
     scope = {
         "type": "http",

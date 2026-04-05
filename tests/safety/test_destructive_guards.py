@@ -111,7 +111,7 @@ class TestDestructiveActionRegistries:
         Exceptions (documented, intentional):
           key/remove_role — fully reversible; the role can always be re-added via add_role.
         """
-        _HEURISTIC_EXCEPTIONS: frozenset[str] = frozenset(
+        _HEURISTIC_EXCEPTIONS: frozenset[str] = frozenset(  # noqa: N806
             {
                 "key/remove_role",  # reversible — role can be re-added via add_role
             }
@@ -126,7 +126,7 @@ class TestDestructiveActionRegistries:
                     and action_name not in destructive
                     and f"{domain}/{action_name}" not in _HEURISTIC_EXCEPTIONS
                 ):
-                    missing.append(f"{domain}/{action_name}")
+                    missing.append(f"{domain}/{action_name}")  # noqa: PERF401
         assert not missing, (
             f"Mutations with 'delete'/'remove' not in DESTRUCTIVE_ACTIONS: {missing}"
         )

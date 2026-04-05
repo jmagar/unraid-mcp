@@ -977,7 +977,7 @@ class TestSchemaCompleteness:
 
         # Known schema mismatches — bugs in tool implementation, not in tests.
         # Remove entries as they are fixed.
-        KNOWN_SCHEMA_ISSUES: set[str] = {
+        KNOWN_SCHEMA_ISSUES: set[str] = {  # noqa: N806
             # customization: Customization.theme field does not exist
             "customization/QUERIES/theme",
             # customization: publicPartnerInfo not in Query type

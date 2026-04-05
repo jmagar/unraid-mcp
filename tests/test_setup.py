@@ -15,7 +15,7 @@ def test_credentials_not_configured_error_exists():
 
 def test_credentials_not_configured_error_is_exception():
     """CredentialsNotConfiguredError must be catchable as a plain Exception."""
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         raise CredentialsNotConfiguredError()
 
 
@@ -190,7 +190,7 @@ def test_credentials_dir_env_var_override():
 
     import unraid_mcp.config.settings as s
 
-    custom = "/tmp/custom-creds"
+    custom = "/tmp/custom-creds"  # noqa: S108
     try:
         with patch.dict(os.environ, {"UNRAID_CREDENTIALS_DIR": custom}):
             importlib.reload(s)

@@ -31,7 +31,7 @@ _SUB_ID = "snapshot-1"
 async def _ws_handshake(
     query: str,
     variables: dict[str, Any] | None = None,
-    timeout: float = 10.0,
+    timeout: float = 10.0,  # noqa: ASYNC109
 ):
     """Connect, authenticate, and subscribe over WebSocket.
 

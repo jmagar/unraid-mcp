@@ -1,6 +1,6 @@
 # Unraid API Schema Changes
 
-> Generated on 2026-04-05T12:02:01+00:00
+> Generated on 2026-04-05T12:03:27+00:00
 > Source: https://10-1-0-2.95d289568cc4a4bdc8e0d50284d6f455ec0eae5f.myunraid.net:31337/graphql
 
 ## Query fields

@@ -1,6 +1,6 @@
 # Unraid API Introspection Summary
 
-> Auto-generated from live API introspection on 2026-04-05T12:02:01+00:00
+> Auto-generated from live API introspection on 2026-04-05T12:03:27+00:00
 > Source: https://10-1-0-2.95d289568cc4a4bdc8e0d50284d6f455ec0eae5f.myunraid.net:31337/graphql
 
 ## Table of Contents

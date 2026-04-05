@@ -12,8 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from graphql import build_client_schema
-from graphql import print_schema
+from graphql import build_client_schema, print_schema
 
 
 DOCS_DIR = Path("docs/unraid")
@@ -164,7 +163,13 @@ def _field_lines(field: dict[str, Any], *, is_input: bool) -> list[str]:
     return lines
 
 
-def _build_markdown(schema: dict[str, Any], *, include_introspection: bool) -> str:
+def _build_markdown(
+    schema: dict[str, Any],
+    *,
+    include_introspection: bool,
+    source: str,
+    generated_at: str,
+) -> str:
     """Build full Markdown schema reference."""
     all_types = schema.get("types") or []
     types = [
@@ -191,9 +196,8 @@ def _build_markdown(schema: dict[str, Any], *, include_introspection: bool) -> s
     lines: list[str] = []
     lines.append("# Unraid GraphQL API Complete Schema Reference")
     lines.append("")
-    lines.append(
-        "Generated via live GraphQL introspection for the configured endpoint and API key."
-    )
+    lines.append(f"> Generated from live GraphQL introspection on {generated_at}")
+    lines.append(f"> Source: {source}")
     lines.append("")
     lines.append("This is permission-scoped: it contains everything visible to the API key used.")
     lines.append("")
@@ -503,7 +507,9 @@ def _build_summary_markdown(
         lines.append("| Field | Return Type | Arguments |")
         lines.append("|-------|-------------|-----------|")
         root = types.get(str(root_name)) if root_name else None
-        for field in sorted(root.get("fields") or [], key=lambda item: str(item["name"])) if root else []:
+        for field in (
+            sorted(root.get("fields") or [], key=lambda item: str(item["name"])) if root else []
+        ):
             args = sorted(field.get("args") or [], key=lambda item: str(item["name"]))
             arg_text = (
                 " — "
@@ -532,7 +538,7 @@ def _build_summary_markdown(
     lines.append("## Type Kinds")
     lines.append("")
     for kind in sorted(kind_counts):
-        lines.append(f"- `{kind}`: {kind_counts[kind]}")
+        lines.append(f"- `{kind}`: {kind_counts[kind]}")  # noqa: PERF401
     lines.extend(
         [
             "",
@@ -577,7 +583,11 @@ def _build_changes_markdown(
     previous_types = _types_by_name(previous_schema, include_introspection=include_introspection)
 
     sections = [
-        ("Query fields", _root_field_names(previous_schema, "queryType"), _root_field_names(current_schema, "queryType")),
+        (
+            "Query fields",
+            _root_field_names(previous_schema, "queryType"),
+            _root_field_names(current_schema, "queryType"),
+        ),
         (
             "Mutation fields",
             _root_field_names(previous_schema, "mutationType"),
@@ -794,9 +804,10 @@ def main() -> int:
 
     schema = _extract_schema(payload)
     generated_at = dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat()
-    previous_path = (
-        args.previous_introspection
-        or (args.introspection_output if args.introspection_output.exists() else LEGACY_INTROSPECTION_OUTPUT)
+    previous_path = args.previous_introspection or (
+        args.introspection_output
+        if args.introspection_output.exists()
+        else LEGACY_INTROSPECTION_OUTPUT
     )
     previous_schema = _load_previous_schema(previous_path)
 
@@ -810,7 +821,10 @@ def main() -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
 
     full_reference = _build_markdown(
-        schema, include_introspection=bool(args.include_introspection_types)
+        schema,
+        include_introspection=bool(args.include_introspection_types),
+        source=args.api_url,
+        generated_at=generated_at,
     )
     summary = _build_summary_markdown(
         schema,

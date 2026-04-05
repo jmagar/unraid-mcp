@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from hypothesis import settings
 from hypothesis.database import DirectoryBasedExampleDatabase
 
+
 # Configure hypothesis to use the .cache directory for its database
 settings.register_profile("default", database=DirectoryBasedExampleDatabase(".cache/.hypothesis"))
 settings.load_profile("default")
