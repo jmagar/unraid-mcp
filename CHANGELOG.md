@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-04-05
+
+### Changed
+- **CI gating**: `mcp-integration` now runs only when both `UNRAID_API_URL` and `UNRAID_API_KEY` secrets are present, preventing fork and unconfigured-repo runs from failing on live integration setup.
+- **Plugin manifests**: Claude plugin manifest now points to `./.mcp.json` instead of embedding an inline MCP server definition; version-bearing files synchronized to `1.2.5`.
+
 ## [1.2.4] - 2026-04-04
 
 ### Added

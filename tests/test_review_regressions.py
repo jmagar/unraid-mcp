@@ -15,7 +15,13 @@ def test_plugin_manifest_restores_stdio_server_definition() -> None:
     plugin = json.loads((PROJECT_ROOT / ".claude-plugin" / "plugin.json").read_text())
     assert plugin["userConfig"]["unraid_mcp_token"]["sensitive"] is True
     assert "mcpServers" in plugin
-    assert plugin["mcpServers"]["unraid"]["type"] == "stdio"
+    assert plugin["mcpServers"] == "./.mcp.json"
+
+
+def test_ci_gates_live_integration_job_on_unraid_secrets() -> None:
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "secrets.UNRAID_API_URL != ''" in workflow
+    assert "secrets.UNRAID_API_KEY != ''" in workflow
 
 
 def test_container_configs_use_runtime_port_variable() -> None:

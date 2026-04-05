@@ -1,8 +1,15 @@
 {
   "mcpServers": {
     "unraid-mcp": {
-      "type": "http",
-      "url": "${env.UNRAID_MCP_URL}"
+      "command": "uv",
+      "args": [
+        "run",
+        "unraid-mcp-server"
+      ],
+      "cwd": "./",
+      "env": {
+        "UNRAID_MCP_TRANSPORT": "stdio"
+      }
     }
   }
 }
