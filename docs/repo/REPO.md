@@ -83,15 +83,15 @@ unraid-mcp/
 |   +-- hooks.json                     # PostToolUse hook definitions
 |   +-- scripts/
 |       +-- fix-env-perms.sh           # Credential permission enforcement
-|       +-- ensure-ignore-files.sh     # Gitignore/dockerignore alignment
-|       +-- ensure-gitignore.sh        # Gitignore-specific checks
+
+
 |       +-- sync-env.sh               # Environment file synchronization
 |
 +-- bin/
-|   +-- check-docker-security.sh       # Dockerfile security audit
-|   +-- check-no-baked-env.sh          # No baked environment variables
-|   +-- check-outdated-deps.sh         # Dependency freshness
-|   +-- ensure-ignore-files.sh         # Ignore file validation
+
+
+
+
 |   +-- generate_unraid_api_reference.py  # GraphQL schema to docs
 |   +-- validate-marketplace.sh        # Marketplace JSON validation
 |

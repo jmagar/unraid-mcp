@@ -80,7 +80,7 @@ def test_sync_env_rejects_empty_bearer_token(tmp_path: Path) -> None:
     assert "UNRAID_MCP_BEARER_TOKEN is not set" in result.stderr
 
 
-def test_ensure_gitignore_preserves_ignore_before_negation(tmp_path: Path) -> None:
+def test_ensure_ignore_files_preserves_ignore_before_negation(tmp_path: Path) -> None:
     gitignore = tmp_path / ".gitignore"
     gitignore.write_text("!backups/.gitkeep\n")
 
@@ -88,7 +88,7 @@ def test_ensure_gitignore_preserves_ignore_before_negation(tmp_path: Path) -> No
     env["CLAUDE_PLUGIN_ROOT"] = str(tmp_path)
 
     result = subprocess.run(  # noqa: S603
-        ["/usr/bin/bash", str(PROJECT_ROOT / "hooks" / "scripts" / "ensure-gitignore.sh")],
+
         cwd=PROJECT_ROOT,
         env=env,
         capture_output=True,

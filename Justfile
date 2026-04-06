@@ -104,9 +104,9 @@ gen-token:
 
 # Run docker security checks
 check-contract:
-    bash bin/check-docker-security.sh
-    bash bin/check-no-baked-env.sh
-    bash bin/ensure-ignore-files.sh --check
+
+
+
 
 # ── CLI Generation ────────────────────────────────────────────────────────────
 

@@ -11,17 +11,15 @@ set -euo pipefail
 
 REPO_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
+GEMINI_FILE="${REPO_ROOT}/gemini-extension.json"
+[ -f "$GEMINI_FILE" ] || GEMINI_FILE="${REPO_ROOT}/.gemini-extension.json"
+
 VERSION_FILES=(
     "${REPO_ROOT}/pyproject.toml"
     "${REPO_ROOT}/.claude-plugin/plugin.json"
     "${REPO_ROOT}/.codex-plugin/plugin.json"
-    "${REPO_ROOT}/.gemini-extension.json"
+    "${GEMINI_FILE}"
 )
-
-# Resolve gemini path (handles both naming conventions)
-if [ -f "${REPO_ROOT}/gemini-extension.json" ]; then
-    VERSION_FILES[3]="${REPO_ROOT}/gemini-extension.json"
-fi
 
 current_version() {
     grep -m1 '"version"' "${REPO_ROOT}/.claude-plugin/plugin.json" \
@@ -42,6 +40,7 @@ bump() {
 # Resolve new version
 ARG="${1:-}"
 CURRENT="$(current_version)"
+[ -n "$CURRENT" ] || { echo "ERROR: could not parse current version from .claude-plugin/plugin.json"; exit 1; }
 
 case "$ARG" in
     major|minor|patch) NEW="$(bump "$CURRENT" "$ARG")" ;;
@@ -53,8 +52,8 @@ echo "Bumping $CURRENT → $NEW"
 
 for file in "${VERSION_FILES[@]}"; do
     [ -f "$file" ] || { echo "  skip (not found): $file"; continue; }
-    sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEW}\"/" "$file"
-    sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" "$file"
+    sed -i -e "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEW}\"/" \
+           -e "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" "$file"
     echo "  updated: ${file#"${REPO_ROOT}/"}"
 done
 

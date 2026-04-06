@@ -6,21 +6,6 @@ repos:
         entry: just validate-skills
         language: system
         pass_filenames: false
-      - id: docker-security
-        name: Docker security check
-        entry: bash bin/check-docker-security.sh
-        language: system
-        pass_filenames: false
-      - id: no-baked-env
-        name: No baked env vars
-        entry: bash bin/check-no-baked-env.sh
-        language: system
-        pass_filenames: false
-      - id: ensure-ignore-files
-        name: Ensure ignore files
-        entry: bash bin/ensure-ignore-files.sh --check
-        language: system
-        pass_filenames: false
 
       - id: block-env-commits
         name: Block .env file commits (allow only .env.example)

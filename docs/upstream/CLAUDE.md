@@ -117,10 +117,10 @@ Defined in `subscriptions/queries.py`:
 
 ## Generating API docs
 
-The `scripts/generate_unraid_api_reference.py` script generates documentation from GraphQL introspection:
+The `bin/generate_unraid_api_reference.py` script generates documentation from GraphQL introspection:
 
 ```bash
-python scripts/generate_unraid_api_reference.py
+python bin/generate_unraid_api_reference.py
 ```
 
 This queries the Unraid API's introspection endpoint and produces structured documentation of all types, queries, mutations, and subscriptions.

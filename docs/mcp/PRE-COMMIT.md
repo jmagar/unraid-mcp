@@ -1,6 +1,6 @@
 # Pre-commit Hook Configuration
 
-Pre-commit checks and PostToolUse hooks for unraid-mcp.
+Pre-commit checks and the SessionStart hook for unraid-mcp.
 
 ## Code Quality Tools
 
@@ -40,22 +40,12 @@ uv run ty check unraid_mcp/
 
 Configured for Python 3.12 with respect for `type: ignore` comments.
 
-## PostToolUse Hooks
+## SessionStart Hook
 
-The `.claude-plugin/hooks/hooks.json` registers hooks that run after Write, Edit, MultiEdit, or Bash operations:
+The `hooks/hooks.json` file registers a `SessionStart` hook that delegates to `bin/sync-uv.sh`.
 
-### fix-env-perms.sh
-
-Ensures credential files maintain secure permissions:
-- `~/.unraid-mcp/.env` stays at mode 600
-- `~/.unraid-mcp/` directory stays at mode 700
-
-### ensure-ignore-files.sh
-
-Keeps `.gitignore` and `.dockerignore` aligned:
-- Ensures sensitive patterns are never committed
-- Prevents credential files from being included in Docker images
-- Runs in check mode (no modifications) during CI
+- `bin/sync-uv.sh` runs `UV_PROJECT_ENVIRONMENT="${CLAUDE_PLUGIN_DATA}/.venv" uv sync --project "${CLAUDE_PLUGIN_ROOT}"`
+- The hook keeps the installed virtual environment in the plugin data directory
 
 ## Justfile Integration
 

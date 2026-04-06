@@ -114,4 +114,3 @@ Subscription data with log content is capped at 1 MB / 5,000 lines to prevent un
 PostToolUse hooks run after every Write, Edit, MultiEdit, or Bash operation:
 
 - `fix-env-perms.sh`: Ensures `~/.unraid-mcp/.env` stays at mode 600
-- `ensure-ignore-files.sh`: Keeps `.gitignore` and `.dockerignore` aligned with security requirements

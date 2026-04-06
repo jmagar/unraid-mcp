@@ -16,7 +16,7 @@ GitHub Actions configuration for unraid-mcp.
 | `version-sync` | Verify all version files match | Shell script comparing pyproject.toml, plugin.json (x3), gemini-extension.json |
 | `mcp-integration` | Live MCP integration tests | `test_live.sh` with secrets (push/same-repo PRs only) |
 | `audit` | Dependency security audit | `uv audit` |
-| `docker-security` | Docker security checks | `check-docker-security.sh`, `check-no-baked-env.sh`, `ensure-ignore-files.sh` |
+
 
 ### `docker-publish.yml` -- Docker Image Build
 

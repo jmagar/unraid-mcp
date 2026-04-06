@@ -82,17 +82,16 @@ Complete listing of all plugin components.
 
 | Hook | Trigger | Script |
 | --- | --- | --- |
-| Fix env permissions | PostToolUse (Write/Edit/Bash) | `hooks/scripts/fix-env-perms.sh` |
-| Ensure ignore files | PostToolUse (Write/Edit/Bash) | `hooks/scripts/ensure-ignore-files.sh` |
+| Sync uv lockfile and venv | SessionStart | `bin/sync-uv.sh` |
 
 ## Scripts
 
 | Script | Purpose |
 | --- | --- |
-| `bin/check-docker-security.sh` | Dockerfile security audit |
-| `bin/check-no-baked-env.sh` | Verify no env vars baked into images |
-| `bin/check-outdated-deps.sh` | Dependency freshness check |
-| `bin/ensure-ignore-files.sh` | Gitignore/dockerignore alignment |
+
+
+
+
 | `bin/generate_unraid_api_reference.py` | Generate canonical API docs and schema change report from GraphQL introspection |
 | `bin/validate-marketplace.sh` | Marketplace JSON validation |
 

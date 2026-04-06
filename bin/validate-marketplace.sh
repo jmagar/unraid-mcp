@@ -20,7 +20,7 @@ check() {
     CHECKS=$((CHECKS + 1))
     echo -n "Checking: $test_name... "
 
-    if eval "$test_cmd" > /dev/null 2>&1; then
+    if bash -c "$test_cmd" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
         PASSED=$((PASSED + 1))
         return 0
@@ -73,7 +73,7 @@ fi
 # Check version sync between pyproject.toml and plugin.json
 echo "Checking version sync..."
 TOML_VER=$(grep -m1 '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
-PLUGIN_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "ERROR_READING")
+PLUGIN_VER=$(jq -r '.version' .claude-plugin/plugin.json 2>/dev/null || echo "ERROR_READING")
 if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
     echo -e "${RED}FAIL: Version mismatch — pyproject.toml=$TOML_VER, plugin.json=$PLUGIN_VER${NC}"
     CHECKS=$((CHECKS + 1))
