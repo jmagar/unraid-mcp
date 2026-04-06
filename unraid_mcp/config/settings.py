@@ -48,6 +48,10 @@ for dotenv_path in dotenv_paths:
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
 UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
 
+# Scrub sensitive credentials from process environment to reduce /proc exposure
+for _key in ("UNRAID_API_KEY", "UNRAID_API_URL"):
+    os.environ.pop(_key, None)
+
 
 # Server Configuration
 def _parse_port(env_var: str, default: int) -> int:
