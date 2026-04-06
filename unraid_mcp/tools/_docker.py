@@ -31,7 +31,10 @@ _DOCKER_MUTATIONS: dict[str, str] = {
     "stop": "mutation StopContainer($id: PrefixedID!) { docker { stop(id: $id) { id names state status } } }",
 }
 
-_DOCKER_SUBACTIONS: set[str] = set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart"}
+# "logs" has no GraphQL query (field removed in Unraid 7.2.x) but is still a
+# recognised subaction so validation passes and the informative ToolError below
+# is returned rather than a generic "Invalid action" message.
+_DOCKER_SUBACTIONS: set[str] = set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs"}
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart"}
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 _DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
@@ -130,6 +133,13 @@ async def _handle_docker(
                 if net.get("id") == network_id or net.get("name") == network_id:
                     return dict(net)
             raise ToolError(f"Network '{network_id}' not found.")
+
+        if subaction == "logs":
+            raise ToolError(
+                "Container logs are not available via the Unraid GraphQL API. "
+                "Use the Unraid terminal or SSH to run: "
+                f"`docker logs {container_id or '<container_id>'} --tail 100`"
+            )
 
         if subaction == "restart":
             actual_id = await _resolve_container_id(container_id or "", strict=True)

@@ -43,6 +43,8 @@ _SYSTEM_QUERIES: dict[str, str] = {
           }
         }
     """,
+    # Uses the vars root field — returns only the network-access subset
+    # (port, portssl, localTld, useSsl) alongside servers for URL construction.
     "network": """
         query GetNetworkInfo {
           servers { id name status wanip lanip localurl remoteurl }
@@ -54,6 +56,9 @@ _SYSTEM_QUERIES: dict[str, str] = {
           registration { id type keyFile { location } state expiration updateExpiration }
         }
     """,
+    # Uses the vars root field — returns a broad subset of system variables.
+    # Shares the same GraphQL root as "network" but requests a different field
+    # set; no overlap occurs because GraphQL returns only the requested subfields.
     "variables": """
         query GetSelectiveUnraidVariables {
           vars {
@@ -206,7 +211,19 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
             values = settings["unified"].get("values") or {}
             return dict(values) if isinstance(values, dict) else {"raw": values}
         if subaction == "server":
-            return data
+            info = data.get("info") or {}
+            summary: dict[str, Any] = {}
+            if info.get("os"):
+                summary["hostname"] = info["os"].get("hostname")
+                summary["uptime"] = info["os"].get("uptime")
+            if info.get("versions") and info["versions"].get("core"):
+                summary["unraid_version"] = info["versions"]["core"].get("unraid")
+            summary["machine_id"] = info.get("machineId")
+            summary["time"] = info.get("time")
+            array = data.get("array") or {}
+            summary["array_state"] = array.get("state")
+            summary["online"] = data.get("online")
+            return summary
         if subaction == "network":
             servers_data = data.get("servers") or []
             vars_data = data.get("vars") or {}
