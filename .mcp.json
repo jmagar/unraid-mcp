@@ -11,13 +11,16 @@
       "env": {
         "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/.venv",
         "UNRAID_MCP_TRANSPORT": "stdio",
-        "UNRAID_API_URL": "",
-        "UNRAID_API_KEY": "",
+        "UNRAID_MCP_DISABLE_HTTP_AUTH": "true",
+        "UNRAID_API_URL": "${userConfig.unraid_api_url}",
+        "UNRAID_API_KEY": "${userConfig.unraid_api_key}",
         "UNRAID_VERIFY_SSL": "true",
         "UNRAID_MCP_LOG_LEVEL": "INFO",
         "UNRAID_MCP_LOG_FILE": "unraid-mcp.log",
-        "UNRAID_AUTO_START_SUBSCRIPTIONS": "true",
-        "UNRAID_MAX_RECONNECT_ATTEMPTS": "10"
+        "UNRAID_AUTO_START_SUBSCRIPTIONS": "false",
+        "UNRAID_MAX_RECONNECT_ATTEMPTS": "3",
+        "UNRAID_CREDENTIALS_DIR": "",
+        "UNRAID_AUTOSTART_LOG_PATH": ""
       }
     }
   }

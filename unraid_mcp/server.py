@@ -198,11 +198,23 @@ def run_server() -> None:
 
         is_valid, missing = validate_required_config()
         if not is_valid:
+            if _settings.UNRAID_MCP_TRANSPORT == "stdio":
+                print(
+                    f"FATAL: unraid-mcp requires {', '.join(missing)} to be set. "
+                    "Configure it in Claude Code plugin settings.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
             logger.warning(
                 "Missing configuration: %s. "
                 "Server will prompt for credentials on first tool call via elicitation.",
                 ", ".join(missing),
             )
+
+        # Scrub sensitive credentials from os.environ to reduce /proc/PID/environ exposure.
+        # Internal consumers read from settings module globals, not os.environ.
+        for env_key in ("UNRAID_API_KEY", "UNRAID_MCP_BEARER_TOKEN"):
+            os.environ.pop(env_key, None)
 
         log_configuration_status(logger)
 

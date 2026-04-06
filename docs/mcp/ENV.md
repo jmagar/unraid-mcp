@@ -1,5 +1,16 @@
 # Environment Variable Reference
 
+## Deployment paths
+
+unraid-mcp supports two deployment models:
+
+| Path | Transport | Credentials | Auth |
+|------|-----------|-------------|------|
+| **Plugin (stdio)** | stdio | `${userConfig.*}` in `.mcp.json` | None (stdio) |
+| **Docker (HTTP)** | streamable-http | `.env` file | Bearer token |
+
+For plugin deployment, see [Plugin CONFIG](../plugin/CONFIG.md).
+
 ## Upstream Service
 
 | Variable | Required | Default | Sensitive | Description |

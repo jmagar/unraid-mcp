@@ -1,43 +1,55 @@
 # Plugin Settings -- unraid-mcp
 
-## userConfig (Claude Code)
+Plugin configuration and user-facing settings for stdio deployment.
 
-The `.claude-plugin/plugin.json` defines four user-configurable settings:
+## How it works
 
-| Key | Type | Sensitive | Default | Description |
-|-----|------|-----------|---------|-------------|
-| `unraid_mcp_url` | string | no | `https://unraid.tootie.tv/mcp` | URL of the MCP server |
-| `unraid_mcp_token` | string | yes | -- | Bearer token for MCP auth |
-| `unraid_api_url` | string | yes | -- | Unraid GraphQL API URL |
-| `unraid_api_key` | string | yes | -- | Unraid API key |
+Claude Code plugins use a two-layer config model:
 
-### How settings are used
+1. **`plugin.json`** -- declares `userConfig` fields that Claude Code prompts for at install time
+2. **`.mcp.json`** -- references those fields as `${userConfig.<key>}` in the `env` section
 
-- **Non-sensitive**: Available as literal values in skill templates (`${user_config.unraid_mcp_url}`)
-- **Sensitive**: Available ONLY as `$CLAUDE_PLUGIN_OPTION_*` environment variables in Bash subprocesses
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_MCP_TOKEN`
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL`
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`
+No `.env` file is needed for plugin deployment. Claude Code handles interpolation directly.
 
-Attempting `${user_config.unraid_api_key}` in a template will not work for sensitive values.
+## userConfig fields
 
-## Settings (Gemini CLI)
+| Key | Title | Sensitive | Purpose |
+| --- | --- | --- | --- |
+| `unraid_api_url` | Unraid GraphQL API URL | yes | Your Unraid server's GraphQL endpoint |
+| `unraid_api_key` | Unraid API Key | yes | API key from Settings > Management Access > API Keys |
 
-The `gemini-extension.json` defines two settings:
+Both fields are required. The server exits at startup if either is empty.
 
-| Name | envVar | Sensitive |
-|------|--------|-----------|
-| Unraid API URL | `UNRAID_API_URL` | no |
-| Unraid API Key | `UNRAID_API_KEY` | yes |
+## Hardcoded defaults in .mcp.json
 
-Gemini sets these as environment variables before launching the MCP server.
+| Variable | Value | Reason |
+| --- | --- | --- |
+| `UNRAID_MCP_TRANSPORT` | `stdio` | Plugin always uses stdio |
+| `UNRAID_MCP_DISABLE_HTTP_AUTH` | `true` | No HTTP layer in stdio mode |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | `false` | Prevents 11 concurrent WebSocket connections on session spawn |
+| `UNRAID_MAX_RECONNECT_ATTEMPTS` | `3` | Fast fail (vs 50min of silent retries at default 10) |
+| `UNRAID_VERIFY_SSL` | `true` | Secure by default |
 
-## Codex CLI
+## Session startup
 
-The `.codex-plugin/plugin.json` does not define explicit settings. Codex reads credentials from `~/.unraid-mcp/.env` via the standard loading chain.
+The `sync-uv.sh` hook runs at `SessionStart` to ensure Python dependencies are in sync. The venv is stored at `${CLAUDE_PLUGIN_DATA}/.venv`.
+
+## Security
+
+Sensitive credentials (`UNRAID_API_KEY`) are scrubbed from `os.environ` after capture at startup, reducing the `/proc/PID/environ` exposure window.
+
+## Other clients
+
+### Gemini CLI
+
+`gemini-extension.json` defines `UNRAID_API_URL` and `UNRAID_API_KEY` as environment settings.
+
+### Codex CLI
+
+`.codex-plugin/plugin.json` does not define explicit settings. Codex reads credentials from `~/.unraid-mcp/.env`.
 
 ## See Also
 
 - [PLUGINS.md](PLUGINS.md) -- Full plugin manifest reference
-- [SKILLS.md](SKILLS.md) -- How skills reference userConfig
 - [../mcp/ENV.md](../mcp/ENV.md) -- Server-side environment variables
+- [../CONFIG.md](../CONFIG.md) -- Full configuration reference

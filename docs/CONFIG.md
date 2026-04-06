@@ -2,6 +2,30 @@
 
 Complete environment variable reference and configuration options.
 
+## Deployment paths
+
+| Path | Transport | Credentials source | Auth |
+|------|-----------|-------------------|------|
+| **Plugin (stdio)** | stdio | `userConfig` in plugin.json, interpolated via `.mcp.json` | None |
+| **Docker (HTTP)** | streamable-http | `.env` file | Bearer token |
+
+### Plugin quickstart
+
+Install the plugin in Claude Code. You will be prompted for:
+- **Unraid GraphQL API URL** -- your server's GraphQL endpoint
+- **Unraid API Key** -- from Settings > Management Access > API Keys
+
+No `.env` file needed. The plugin uses stdio with subscriptions disabled for fast startup. See [plugin/CONFIG.md](plugin/CONFIG.md).
+
+### Docker quickstart
+
+```bash
+cp .env.example .env
+chmod 600 .env
+# Edit .env with your credentials
+docker compose up -d
+```
+
 ## Environment file
 
 The canonical configuration file is `~/.unraid-mcp/.env`. The server searches for `.env` files in this priority order:

@@ -337,11 +337,27 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 
 ## Installation
 
-### Marketplace
+### Plugin (recommended)
+
+Install as a Claude Code plugin. You will be prompted for:
+
+- **Unraid GraphQL API URL** -- your server's endpoint (e.g. `https://tower.local/graphql`)
+- **Unraid API Key** -- from Settings > Management Access > API Keys
 
 ```bash
 /plugin marketplace add jmagar/claude-homelab
 /plugin install unraid-mcp @jmagar-claude-homelab
+```
+
+The plugin uses stdio transport with subscriptions disabled for fast startup. Tools use lazy `subscribe_once` for live data.
+
+### Docker
+
+```bash
+cp .env.example .env
+chmod 600 .env
+# Edit .env with your credentials
+docker compose up -d
 ```
 
 ### Local development
@@ -351,22 +367,16 @@ uv sync --dev
 uv run unraid-mcp-server
 ```
 
-Equivalent entrypoints:
-
-```bash
-uv run unraid-mcp
-uv run python -m unraid_mcp
-```
-
-### Docker
-
-```bash
-docker compose up -d
-```
-
 ## Configuration
 
-Create `.env` from `.env.example`:
+Two deployment paths are supported:
+
+| Path | Transport | Credentials | Auth |
+|------|-----------|-------------|------|
+| **Plugin (stdio)** | stdio | `userConfig` in plugin settings | None |
+| **Docker (HTTP)** | streamable-http | `.env` file | Bearer token |
+
+For Docker, create `.env` from `.env.example`:
 
 ```bash
 just setup
