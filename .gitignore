@@ -25,7 +25,7 @@
 .full-review/
 .full-review-archive-*
 .bivvy
-
+scaffold-plans/
 # ── IDE / editor ─────────────────────────────────────────────────────────────
 .vscode/
 .cursor/

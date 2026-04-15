@@ -24,9 +24,6 @@ The individual plugin configuration for the Unraid MCP server.
 - Repository and homepage links
 - `mcpServers` block that configures the server to run via `uv run unraid-mcp-server` in stdio mode
 
-### 3. Validation Script
-- `bin/validate-marketplace.sh` — Automated validation of marketplace structure
-
 ## MCP Tools Exposed
 
 The plugin registers **3 MCP tools**:
@@ -109,6 +106,22 @@ Install from a specific branch or commit:
 /plugin marketplace add jmagar/unraid-mcp#abc123
 ```
 
+## Validation Script
+
+To verify the marketplace and plugin structure is valid before publishing:
+
+```bash
+bash bin/validate-marketplace.sh [repo-root]
+```
+
+The script checks:
+- Marketplace and plugin JSON manifests exist and are valid
+- Required plugin files are in place (`SKILL.md`, `README.md`, `scripts/`, `examples/`, `references/`)
+- Plugin is listed in the marketplace manifest
+- Version numbers are in sync between `pyproject.toml` and `.claude-plugin/plugin.json`
+
+Exits 0 on success, 1 if any check fails.
+
 ## Plugin Structure
 
 ```text
@@ -124,7 +137,8 @@ unraid-mcp/
 │   ├── core/                # GraphQL client, exceptions, shared types
 │   └── subscriptions/       # Real-time WebSocket subscription manager
 └── bin/
-    └── validate-marketplace.sh  # Validation tool
+    ├── sync-uv.sh               # Sync uv environment at SessionStart
+    └── validate-marketplace.sh  # Validate marketplace/plugin structure
 ```
 
 ## Marketplace Metadata
@@ -144,12 +158,7 @@ unraid-mcp/
 
 Before publishing to GitHub:
 
-1. **Validate Structure**
-   ```bash
-   ./bin/validate-marketplace.sh
-   ```
-
-2. **Update Version Numbers** (must be in sync)
+1. **Update Version Numbers** (must be in sync)
    - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
    - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
    - `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
@@ -204,8 +213,7 @@ To release a new version:
 
 1. Make changes to the plugin code
 2. Update version in `pyproject.toml`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`
-3. Run validation: `./bin/validate-marketplace.sh`
-4. Commit and push
+3. Commit and push
 
 Users with the plugin installed will see the update available and can upgrade:
 ```bash
@@ -218,18 +226,5 @@ Users with the plugin installed will see the update available and can upgrade:
 - **Issues:** https://github.com/jmagar/unraid-mcp/issues
 - **Destructive Actions:** `docs/DESTRUCTIVE_ACTIONS.md`
 
-## Validation
-
-Run the validation script anytime to ensure marketplace integrity:
-
-```bash
-./bin/validate-marketplace.sh
-```
-
-This checks:
-- Manifest file existence and validity
-- JSON syntax
-- Required fields
-- Plugin structure
 - Source path accuracy
 - Documentation completeness

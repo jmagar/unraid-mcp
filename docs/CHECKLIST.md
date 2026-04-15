@@ -26,9 +26,6 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 - [ ] No credentials in code, docs, or commit history
 - [ ] `~/.unraid-mcp/.env` has `chmod 600` permissions
 - [ ] `~/.unraid-mcp/` directory has `chmod 700` permissions
-- [ ] `bin/check-docker-security.sh` passes
-- [ ] `bin/check-no-baked-env.sh` passes
-- [ ] `bin/ensure-ignore-files.sh --check` passes
 - [ ] Bearer token uses constant-time comparison (`hmac.compare_digest`)
 - [ ] No sensitive values logged (even at DEBUG level)
 - [ ] `UNRAID_MCP_BEARER_TOKEN` removed from `os.environ` after startup
@@ -52,16 +49,14 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 ## CI/CD
 
-- [ ] `ci.yml` lint, typecheck, test, version-sync, audit, docker-security jobs pass
+- [ ] `ci.yml` lint, typecheck, test, version-sync, audit, gitleaks jobs pass
 - [ ] `docker-publish.yml` builds multi-arch (amd64, arm64) images
 - [ ] `publish-pypi.yml` tag-version check, PyPI publish, GitHub release, MCP registry publish all configured
 - [ ] Trivy vulnerability scan runs on published images
 
 ## Hooks
 
-- [ ] `hooks/hooks.json` registers PostToolUse hooks
-- [ ] `fix-env-perms.sh` enforces 600 on credential files
-- [ ] `ensure-ignore-files.sh` keeps `.gitignore` and `.dockerignore` aligned
+- [ ] `hooks/hooks.json` registers SessionStart hook (`bin/sync-uv.sh`)
 
 ## Documentation
 

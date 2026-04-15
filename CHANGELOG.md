@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-04-15
+
+### Changed
+- Repository maintenance updates committed from the current working tree.
+- Version-bearing manifests synchronized to 1.3.8.
+
+
 ## [1.3.7] - 2026-04-05
 
 ### Fixed

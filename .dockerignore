@@ -43,7 +43,7 @@ coverage
 target
 Justfile
 biome.json
-.pre-commit-config.yaml
+lefthook.yml
 .prettierrc
 .prettierignore
 tests

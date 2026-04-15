@@ -16,7 +16,6 @@ GitHub Actions configuration for unraid-mcp.
 | `version-sync` | Verify all version files match | Shell script comparing pyproject.toml, plugin.json (x3), gemini-extension.json |
 | `mcp-integration` | Live MCP integration tests | `test_live.sh` with secrets (push/same-repo PRs only) |
 | `audit` | Dependency security audit | `uv audit` |
-| `docker-security` | Docker security checks | `check-docker-security.sh`, `check-no-baked-env.sh`, `ensure-ignore-files.sh` |
 
 ### `docker-publish.yml` -- Docker Image Build
 
@@ -73,11 +72,10 @@ Failure blocks the CI pipeline.
 | format | `just fmt` or `uv run ruff format .` |
 | typecheck | `just typecheck` or `uv run ty check unraid_mcp/` |
 | test | `just test` or `uv run pytest` |
-| docker-security | `just check-contract` |
 | build | `just build` or `docker build -t unraid-mcp .` |
 
 ## See Also
 
 - [TESTS.md](TESTS.md) -- Test suite details
 - [PUBLISH.md](PUBLISH.md) -- Versioning and release strategy
-- [PRE-COMMIT.md](PRE-COMMIT.md) -- Local pre-commit checks
+- [PRE-COMMIT.md](PRE-COMMIT.md) -- Local git hook checks

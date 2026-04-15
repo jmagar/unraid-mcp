@@ -74,6 +74,23 @@ The full Unraid GraphQL schema is available in:
 - `docs/unraid/UNRAID-API-INTROSPECTION.json` -- Introspection result
 - `docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md` -- Human-readable reference
 
+### Regenerating the schema docs
+
+All schema docs are generated from live introspection by `bin/generate_unraid_api_reference.py`. Run it whenever the Unraid API changes:
+
+```bash
+uv run python bin/generate_unraid_api_reference.py
+```
+
+Requires `UNRAID_API_URL` and `UNRAID_API_KEY` in the environment (or pass `--api-url` / `--api-key`). The script writes all five output files under `docs/unraid/` and prints each path on success. It also computes a diff against the previous introspection snapshot and writes it to `UNRAID-API-CHANGES.md`.
+
+Additional flags:
+```
+--verify-ssl                    Enable SSL cert verification (disabled by default for self-signed certs)
+--include-introspection-types   Include __Schema/__Type etc. in generated output
+--timeout-seconds N             HTTP timeout (default: 90)
+```
+
 ### Query organization
 
 Queries are organized into domain dicts in each `tools/_<domain>.py` module:
@@ -114,16 +131,6 @@ Defined in `subscriptions/queries.py`:
 **Collect subscriptions** (accumulate over time):
 - `notificationAdded` -- New notification events
 - `logFile` -- Log file tail (requires `path` variable)
-
-## Generating API docs
-
-The `scripts/generate_unraid_api_reference.py` script generates documentation from GraphQL introspection:
-
-```bash
-python scripts/generate_unraid_api_reference.py
-```
-
-This queries the Unraid API's introspection endpoint and produces structured documentation of all types, queries, mutations, and subscriptions.
 
 ## See Also
 

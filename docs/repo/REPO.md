@@ -82,18 +82,15 @@ unraid-mcp/
 +-- hooks/
 |   +-- hooks.json                     # PostToolUse hook definitions
 |   +-- scripts/
-|       +-- fix-env-perms.sh           # Credential permission enforcement
-|       +-- ensure-ignore-files.sh     # Gitignore/dockerignore alignment
-|       +-- ensure-gitignore.sh        # Gitignore-specific checks
-|       +-- sync-env.sh               # Environment file synchronization
 |
 +-- bin/
-|   +-- check-docker-security.sh       # Dockerfile security audit
-|   +-- check-no-baked-env.sh          # No baked environment variables
-|   +-- check-outdated-deps.sh         # Dependency freshness
-|   +-- ensure-ignore-files.sh         # Ignore file validation
-|   +-- generate_unraid_api_reference.py  # GraphQL schema to docs
-|   +-- validate-marketplace.sh        # Marketplace JSON validation
+|   +-- CLAUDE.md                      # AI assistant instructions for bin/ scripts
+|   +-- sync-uv.sh                     # SessionStart hook: sync uv virtual environment
+|   +-- block-env-commits.sh           # Pre-commit hook: block .env file commits
+|   +-- bump-version.sh                # Bump version across all version-bearing files
+|   +-- check-version-sync.sh          # Verify version consistency across manifest files
+|   +-- validate-marketplace.sh        # Validate marketplace/plugin manifest structure
+|   +-- generate_unraid_api_reference.py  # Generate GraphQL API docs from live introspection
 |
 +-- tests/                             # Test suite (see mcp/TESTS.md)
 |   +-- conftest.py

@@ -78,29 +78,28 @@ Complete listing of all plugin components.
 | --- | --- | --- |
 | `skills/unraid/SKILL.md` | unraid | Client-facing skill with all domains, subactions, and workflows |
 
+## bin/ scripts
+
+| Path | Language | Description |
+| --- | --- | --- |
+| `bin/sync-uv.sh` | Bash | SessionStart hook: sync uv virtual environment |
+| `bin/block-env-commits.sh` | Bash | Pre-commit hook: block accidental .env file commits |
+| `bin/bump-version.sh` | Bash | Bump version across all version-bearing files |
+| `bin/check-version-sync.sh` | Bash | Verify version consistency across pyproject.toml and manifests |
+| `bin/validate-marketplace.sh` | Bash | Validate Claude Code marketplace and plugin manifest structure |
+| `bin/generate_unraid_api_reference.py` | Python | Generate canonical GraphQL API docs from live Unraid introspection |
+
 ## Hooks
 
 | Hook | Trigger | Script |
 | --- | --- | --- |
-| Fix env permissions | PostToolUse (Write/Edit/Bash) | `hooks/scripts/fix-env-perms.sh` |
-| Ensure ignore files | PostToolUse (Write/Edit/Bash) | `hooks/scripts/ensure-ignore-files.sh` |
-
-## Scripts
-
-| Script | Purpose |
-| --- | --- |
-| `bin/check-docker-security.sh` | Dockerfile security audit |
-| `bin/check-no-baked-env.sh` | Verify no env vars baked into images |
-| `bin/check-outdated-deps.sh` | Dependency freshness check |
-| `bin/ensure-ignore-files.sh` | Gitignore/dockerignore alignment |
-| `bin/generate_unraid_api_reference.py` | Generate canonical API docs and schema change report from GraphQL introspection |
-| `bin/validate-marketplace.sh` | Marketplace JSON validation |
+| Sync uv environment | SessionStart | `bin/sync-uv.sh` |
 
 ## CI/CD workflows
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push/PR to main | lint, typecheck, test, version-sync, mcp-integration, audit, docker-security |
+| `ci.yml` | Push/PR to main | lint, typecheck, test, version-sync, mcp-integration, audit, gitleaks |
 | `docker-publish.yml` | Push to main/tags | Build multi-arch Docker image, push to ghcr.io, Trivy scan |
 | `publish-pypi.yml` | Tag `v*.*.*` | Build, PyPI publish, GitHub release, MCP registry publish |
 

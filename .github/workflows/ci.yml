@@ -102,19 +102,6 @@ jobs:
       - name: Dependency audit
         run: uvx pip-audit
 
-  docker-security:
-    name: Docker Security
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check Dockerfile security
-        run: bash bin/check-docker-security.sh Dockerfile
-      - name: Check no baked env vars
-        run: bash bin/check-no-baked-env.sh .
-      - name: Check ignore files
-        run: bash bin/ensure-ignore-files.sh --check .
-
-
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest

@@ -44,12 +44,6 @@ Configured for Python 3.12 with respect for `type: ignore` comments.
 
 The `.claude-plugin/hooks/hooks.json` registers hooks that run after Write, Edit, MultiEdit, or Bash operations:
 
-### fix-env-perms.sh
-
-Ensures credential files maintain secure permissions:
-- `~/.unraid-mcp/.env` stays at mode 600
-- `~/.unraid-mcp/` directory stays at mode 700
-
 ### ensure-ignore-files.sh
 
 Keeps `.gitignore` and `.dockerignore` aligned:
