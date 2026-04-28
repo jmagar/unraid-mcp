@@ -113,7 +113,7 @@ Container lifecycle and network inspection. No destructive subactions.
 | --- | --- | --- |
 | `list` | All containers: ID, names, image, state, status, autoStart | — |
 | `details` | Full container detail: ports, mounts, labels, network settings | `container_id` |
-| `ports` | All host port bindings across running containers, sorted by host port. One call replaces N `details` calls when answering "what's using port X". | — |
+| `ports` | All host port bindings across running containers, sorted by `(host_port, protocol)`. One call replaces N `details` calls when answering "what's using port X". | — |
 | `start` | Start a container | `container_id` |
 | `stop` | Stop a container | `container_id` |
 | `restart` | Stop then start a container (stop + start in sequence) | `container_id` |

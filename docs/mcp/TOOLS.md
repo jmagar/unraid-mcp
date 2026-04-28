@@ -11,7 +11,7 @@ unraid-mcp exposes four MCP tools:
 | `diagnose_subscriptions` | Inspect WebSocket subscription states | _(none)_ |
 | `test_subscription_query` | Test a GraphQL subscription query | `query` (allowlisted fields only) |
 
-The consolidated action pattern keeps the MCP surface small (4 tools) while supporting 107 subactions across 15 domains. Clients call `unraid_help` first to discover available operations, then call `unraid` with the appropriate action and subaction.
+The consolidated action pattern keeps the MCP surface small (4 tools) while supporting 108 subactions across 15 domains. Clients call `unraid_help` first to discover available operations, then call `unraid` with the appropriate action and subaction.
 
 ## Primary Tool: `unraid`
 

@@ -223,6 +223,8 @@ class TestDockerPortsAggregator:
     """Tests for the docker/ports aggregator subaction."""
 
     async def test_ports_aggregates_running_containers(self, _mock_graphql: AsyncMock) -> None:
+        """Two RUNNING containers with single-port mappings each yield two
+        bindings sorted by host port, with leading-slash names stripped."""
         _mock_graphql.return_value = {
             "docker": {
                 "containers": [
@@ -389,6 +391,7 @@ class TestDockerPortsAggregator:
         assert sorted(b["host_port"] for b in result["bindings"]) == [3014, 3042]
 
     async def test_ports_empty_when_no_containers(self, _mock_graphql: AsyncMock) -> None:
+        """An empty container list returns an empty bindings list with count=0."""
         _mock_graphql.return_value = {"docker": {"containers": []}}
         tool_fn = _make_tool()
         result = await tool_fn(action="docker", subaction="ports")
@@ -429,6 +432,44 @@ class TestDockerPortsAggregator:
         called_query = _mock_graphql.call_args.args[0]
         assert "ports" in called_query
         assert "publicPort" in called_query
+
+    async def test_ports_protocol_tiebreak_orders_tcp_before_udp(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        """When two bindings share the same host port (e.g. a service exposing
+        the same port on both TCP and UDP), the secondary sort key is
+        ``protocol`` — alphabetical, so TCP precedes UDP."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/dnsmasq"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 53,
+                                "publicPort": 53,
+                                "type": "UDP",
+                            },
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 53,
+                                "publicPort": 53,
+                                "type": "TCP",
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 2
+        # Same host port — ordered by protocol alphabetically (TCP < UDP)
+        assert [b["protocol"] for b in result["bindings"]] == ["TCP", "UDP"]
+        assert all(b["host_port"] == 53 for b in result["bindings"])
 
     @pytest.mark.parametrize("state_value", ["running", "Running", "RUNNING", "rUnNiNg"])
     async def test_ports_state_check_is_case_insensitive(
