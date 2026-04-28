@@ -429,3 +429,35 @@ class TestDockerPortsAggregator:
         called_query = _mock_graphql.call_args.args[0]
         assert "ports" in called_query
         assert "publicPort" in called_query
+
+    @pytest.mark.parametrize("state_value", ["running", "Running", "RUNNING", "rUnNiNg"])
+    async def test_ports_state_check_is_case_insensitive(
+        self, _mock_graphql: AsyncMock, state_value: str
+    ) -> None:
+        """Container state values appear in mixed case across the codebase
+        (compare _health.py which uses ``.upper()``); the aggregator must include
+        a container regardless of case so a stylistic API change can't silently
+        zero out the result."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/postgres"],
+                        "state": state_value,
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 5432,
+                                "publicPort": 5432,
+                                "type": "TCP",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 1, f"Expected 1 binding for state={state_value!r}"
+        assert result["bindings"][0]["host_port"] == 5432

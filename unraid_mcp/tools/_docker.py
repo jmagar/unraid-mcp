@@ -132,7 +132,9 @@ async def _handle_docker(
             containers = safe_get(data, "docker", "containers", default=[])
             bindings: list[dict[str, Any]] = []
             for container in containers:
-                if container.get("state") != "RUNNING":
+                # Case-insensitive state check — matches the defensive pattern in _health.py
+                # since Docker state values appear in both upper- and lower-case across the API.
+                if (container.get("state") or "").upper() != "RUNNING":
                     continue
                 names = container.get("names") or []
                 container_name = names[0].lstrip("/") if names else "<unnamed>"
