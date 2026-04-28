@@ -93,7 +93,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (3 Tools: 1 Primary + 2 Diagnostic)
 
 The server registers **3 MCP tools**:
-- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 107 subactions. Call it as `unraid(action="docker", subaction="list")`.
+- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 108 subactions. Call it as `unraid(action="docker", subaction="list")`.
 - **`diagnose_subscriptions`** — inspect subscription connection states, errors, and WebSocket URLs.
 - **`test_subscription_query`** — test a specific GraphQL subscription query (allowlisted fields only).
 
@@ -103,7 +103,7 @@ The server registers **3 MCP tools**:
 | **health** (4) | check, test_connection, diagnose, setup |
 | **array** (13) | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
-| **docker** (7) | list, details, start, stop, restart, networks, network_details |
+| **docker** (8) | list, details, ports, start, stop, restart, networks, network_details |
 | **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
 | **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
 | **key** (7) | list, get, create, update, delete*, add_role, remove_role |

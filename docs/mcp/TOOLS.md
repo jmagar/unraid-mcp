@@ -116,7 +116,7 @@ Shares, physical disks, log files.
 | `logs` | Read log content | `log_path`, `tail_lines` | -- |
 | `flash_backup` | Trigger a flash backup | `remote_name`, `source_path`, `destination_path`, `backup_options` | Yes |
 
-#### `docker` (7 subactions)
+#### `docker` (8 subactions)
 
 Container lifecycle and network inspection.
 
@@ -124,6 +124,7 @@ Container lifecycle and network inspection.
 |-----------|-------------|-------------|
 | `list` | All containers with status, image, state | -- |
 | `details` | Single container details | `container_id` |
+| `ports` | All host port bindings across running containers, sorted by host port | -- |
 | `start` | Start a container | `container_id` |
 | `stop` | Stop a container | `container_id` |
 | `restart` | Restart a container | `container_id` |

@@ -86,11 +86,12 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 | `logs` | Read log content (requires `log_path`; optional `tail_lines`) |
 | `flash_backup` | ⚠️ Trigger a flash backup (requires `confirm=True`) |
 
-#### `docker` — Containers (7 subactions)
+#### `docker` — Containers (8 subactions)
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All containers with status, image, state |
 | `details` | Single container details (requires container identifier) |
+| `ports` | All host port bindings across running containers, sorted by host port |
 | `start` | Start a container (requires container identifier) |
 | `stop` | Stop a container (requires container identifier) |
 | `restart` | Restart a container (requires container identifier) |

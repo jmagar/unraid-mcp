@@ -217,3 +217,215 @@ class TestDockerNetworkErrors:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid JSON"):
             await tool_fn(action="docker", subaction="list")
+
+
+class TestDockerPortsAggregator:
+    """Tests for the docker/ports aggregator subaction."""
+
+    async def test_ports_aggregates_running_containers(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/postgres"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 5432,
+                                "publicPort": 5432,
+                                "type": "TCP",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "c2",
+                        "names": ["/redis"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 6379,
+                                "publicPort": 6379,
+                                "type": "TCP",
+                            }
+                        ],
+                    },
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 2
+        # Sorted by host_port ascending
+        assert [b["host_port"] for b in result["bindings"]] == [5432, 6379]
+        first = result["bindings"][0]
+        assert first["container"] == "postgres"  # leading slash stripped
+        assert first["container_port"] == 5432
+        assert first["protocol"] == "TCP"
+        assert first["host_ip"] == "0.0.0.0"
+
+    async def test_ports_skips_exited_containers(self, _mock_graphql: AsyncMock) -> None:
+        """Exited containers don't hold host ports — skip them even if ports[] is populated."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/postgres"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 5432,
+                                "publicPort": 5432,
+                                "type": "TCP",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "c2",
+                        "names": ["/old-app"],
+                        "state": "EXITED",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 80,
+                                "publicPort": 8080,
+                                "type": "TCP",
+                            }
+                        ],
+                    },
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 1
+        assert result["bindings"][0]["container"] == "postgres"
+
+    async def test_ports_skips_internal_only_ports(self, _mock_graphql: AsyncMock) -> None:
+        """Ports with publicPort=null are container-internal — skip them."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/glances"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 61208,
+                                "publicPort": 61208,
+                                "type": "TCP",
+                            },
+                            {
+                                "ip": "",
+                                "privatePort": 61209,
+                                "publicPort": None,
+                                "type": "TCP",
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 1
+        assert result["bindings"][0]["host_port"] == 61208
+
+    async def test_ports_handles_host_network_containers(self, _mock_graphql: AsyncMock) -> None:
+        """Host-network containers have empty ports[] — they shouldn't crash or appear."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/plex"],
+                        "state": "RUNNING",
+                        "ports": [],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 0
+        assert result["bindings"] == []
+
+    async def test_ports_emits_one_binding_per_port(self, _mock_graphql: AsyncMock) -> None:
+        """A container exposing multiple ports should emit a binding per public port."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": ["/filezilla"],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 3000,
+                                "publicPort": 3014,
+                                "type": "TCP",
+                            },
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 3001,
+                                "publicPort": 3042,
+                                "type": "TCP",
+                            },
+                        ],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 2
+        assert sorted(b["host_port"] for b in result["bindings"]) == [3014, 3042]
+
+    async def test_ports_empty_when_no_containers(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"containers": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result == {"bindings": [], "count": 0}
+
+    async def test_ports_handles_unnamed_container(self, _mock_graphql: AsyncMock) -> None:
+        """Container with empty names list falls back to '<unnamed>'."""
+        _mock_graphql.return_value = {
+            "docker": {
+                "containers": [
+                    {
+                        "id": "c1",
+                        "names": [],
+                        "state": "RUNNING",
+                        "ports": [
+                            {
+                                "ip": "0.0.0.0",
+                                "privatePort": 80,
+                                "publicPort": 8080,
+                                "type": "TCP",
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="ports")
+        assert result["count"] == 1
+        assert result["bindings"][0]["container"] == "<unnamed>"
+
+    async def test_ports_uses_details_query_not_list(self, _mock_graphql: AsyncMock) -> None:
+        """ports must call the details query (which carries port info), not list."""
+        _mock_graphql.return_value = {"docker": {"containers": []}}
+        tool_fn = _make_tool()
+        await tool_fn(action="docker", subaction="ports")
+        assert _mock_graphql.call_count == 1
+        called_query = _mock_graphql.call_args.args[0]
+        assert "ports" in called_query
+        assert "publicPort" in called_query

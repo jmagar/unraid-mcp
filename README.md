@@ -105,7 +105,7 @@ Shares, physical disks, log files, and flash backup. Destructive subactions mark
 
 **`flash_backup` details:** Calls the Unraid `initiateFlashBackup` GraphQL mutation, which triggers an rclone copy from the flash drive to a configured rclone remote. The destination on the remote is overwritten if it exists. Returns `{ status, jobId }`. To restore: use rclone to copy the backup back to the flash drive, or extract individual config files. Configure the rclone remote first via `rclone/create_remote`.
 
-#### `docker` — 7 subactions
+#### `docker` — 8 subactions
 
 Container lifecycle and network inspection. No destructive subactions.
 
@@ -113,6 +113,7 @@ Container lifecycle and network inspection. No destructive subactions.
 | --- | --- | --- |
 | `list` | All containers: ID, names, image, state, status, autoStart | — |
 | `details` | Full container detail: ports, mounts, labels, network settings | `container_id` |
+| `ports` | All host port bindings across running containers, sorted by host port. One call replaces N `details` calls when answering "what's using port X". | — |
 | `start` | Start a container | `container_id` |
 | `stop` | Stop a container | `container_id` |
 | `restart` | Stop then start a container (stop + start in sequence) | `container_id` |
