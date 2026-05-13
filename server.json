@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "tv.tootie/unraid-mcp",
+  "title": "Unraid MCP",
+  "description": "Read-only MCP server for Unraid homelab servers — query array health, Docker containers, VMs, metrics, and more via the Unraid GraphQL API.",
+  "repository": {
+    "url": "https://github.com/jmagar/unrust",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/jmagar/unraid-mcp:0.1.0",
+      "version": "0.1.0",
+      "environmentVariables": [
+        {
+          "name": "UNRAID_API_URL",
+          "description": "Base URL of your Unraid GraphQL endpoint (e.g. https://tower.local/graphql).",
+          "isRequired": true,
+          "isSecret": false
+        },
+        {
+          "name": "UNRAID_API_KEY",
+          "description": "API key for the Unraid GraphQL API (x-api-key header).",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "UNRAID_MCP_TOKEN",
+          "description": "Bearer token for authenticating MCP endpoint requests.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "UNRAID_API_SKIP_TLS_VERIFY",
+          "description": "Skip TLS certificate verification when connecting to Unraid (default: false). Set to true for self-signed certs.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://unraid.tootie.tv/mcp"
+    }
+  ]
+}

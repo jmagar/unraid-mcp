@@ -1,0 +1,38 @@
+services:
+  unraid-mcp:
+    # Default to the published image so plugin deploys can `docker compose pull`
+    # without source. Override with --build (or `docker compose build`) for local
+    # source development.
+    image: ghcr.io/jmagar/unraid-mcp:${VERSION:-latest}
+    build:
+      context: .
+      dockerfile: config/Dockerfile
+    container_name: unraid-mcp
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${UNRAID_MCP_HOST_PORT:-40010}:40010/tcp"
+    volumes:
+      - ${UNRAID_MCP_DATA_VOLUME:-${HOME}/.unraid}:/data
+    networks:
+      - jakenet
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:40010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+networks:
+  jakenet:
+    name: ${DOCKER_NETWORK:-jakenet}
+    external: true

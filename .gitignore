@@ -1,0 +1,80 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime artifacts ────────────────────────────────────────────────────────
+*.log
+*.pid
+*.bak
+*.bak-*
+storage/
+
+# ── Claude Code / AI tooling ────────────────────────────────────────────────
+.claude/settings.local.json
+.claude/worktrees/
+.omc/
+.lavra/
+.beads/
+.dolt/
+*.db
+*.db-shm
+*.db-wal
+.beads-credential-key
+.serena/
+.worktrees/
+.worktree/
+.full-review/
+.full-review-archive-*
+.bivvy
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode/
+.cursor/
+.windsurf/
+.1code/
+.idea/
+.zed/
+*.iml
+*.swp
+*.swo
+*~
+.emdash.json
+
+# ── OS generated ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Caches (ALL tool caches go here) ─────────────────────────────────────────
+.cache/
+
+
+# ── Build artifacts ──────────────────────────────────────────────────────────
+dist/
+
+# ── Rust ─────────────────────────────────────────────────────────────────────
+/target/
+**/*.rs.bk
+*.profraw
+*.profdata
+
+# ── Repo-specific ────────────────────────────────────────────────────────────
+config.local.toml
+config/docker-hosts.toml
+data/
+*.key
+*.pem
+*.cert
+
+.worktrees
+
+# Personal local cheatsheet (never commit)
+CLAUDE.md.local
+logs/
+backups/
+
+# bin/ is tracked via Git LFS — do NOT ignore it
+# (bin/* is in .gitattributes with lfs filter)
+
+# Auto-generated reference docs (refresh-docs.sh output)
+docs/references/

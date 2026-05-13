@@ -1,0 +1,18 @@
+{
+  "_comment_merge": "Merge this 'env' block into your existing ~/.claude/settings.json — DO NOT overwrite the whole file. Endpoint targets the syslog-mcp host (currently dookie:3100). Verify Phase 1 is healthy first: curl -s http://dookie:3100/health | jq .otlp_logs_received",
+  "_comment_auth": "If you set SYSLOG_MCP_TOKEN on the receiver, every OTLP request must carry an Authorization header. Add OTEL_EXPORTER_OTLP_HEADERS=\"Authorization=Bearer YOUR_TOKEN\" to the env block below. Without it, the receiver returns 401 and the exporter retries forever.",
+  "_comment_privacy": "OTEL_LOG_USER_PROMPTS=1 sends verbatim prompt text. OTEL_LOG_TOOL_DETAILS=1 sends tool call output (file reads, command stdout). Both are stored as plaintext in syslog-mcp's SQLite database and FTS5-indexed. The receiver's defense-in-depth scrubber (SYSLOG_MCP_SCRUB_PROMPTS=true, default) redacts known credential patterns — best-effort, not a compliance control. Do not enable on shared/public networks.",
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_LOGS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://dookie:3100",
+    "_OTEL_EXPORTER_OTLP_HEADERS_example": "Authorization=Bearer your_token_here",
+    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "cumulative",
+    "OTEL_METRIC_EXPORT_INTERVAL": "10000",
+    "OTEL_LOGS_EXPORT_INTERVAL": "5000",
+    "OTEL_LOG_USER_PROMPTS": "1",
+    "OTEL_LOG_TOOL_DETAILS": "1"
+  }
+}

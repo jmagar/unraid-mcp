@@ -1,0 +1,15 @@
+# Append to ~/.codex/config.toml on each dev host (dookie, steamy-wsl, vivobook-wsl).
+# Endpoint targets the syslog-mcp host (currently dookie:3100). Phase 1 of the
+# OTLP receiver must be deployed first.
+#
+# Caveat: codex `exec` and `mcp-server` emit no telemetry. Only interactive
+# codex sessions do. The JSONL transcript pipeline (40-ai-transcripts.conf)
+# covers what OTel misses.
+#
+# trace_exporter is omitted because syslog-mcp's /v1/traces returns 404
+# (deferred — see CHANGELOG 0.11.0 for rationale).
+
+[otel]
+environment = "homelab"
+log_user_prompt = true
+exporter = { otlp-http = { endpoint = "http://dookie:3100/v1/logs", protocol = "binary" } }
