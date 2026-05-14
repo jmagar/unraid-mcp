@@ -1,0 +1,261 @@
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+
+use anyhow::Result;
+use serde::Serialize;
+
+use unraid_mcp::config::{default_data_dir, AuthMode, Config};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SetupCommand {
+    Check,
+    Repair,
+    PluginHook { no_repair: bool },
+}
+
+#[derive(Debug, Serialize)]
+struct SetupFailure {
+    code: &'static str,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct SetupReport {
+    exit_policy: &'static str,
+    ran_repair: bool,
+    no_repair: bool,
+    blocking_failures: Vec<SetupFailure>,
+    advisory_failures: Vec<SetupFailure>,
+}
+
+impl SetupReport {
+    fn new(no_repair: bool) -> Self {
+        Self {
+            exit_policy: "success",
+            ran_repair: false,
+            no_repair,
+            blocking_failures: Vec::new(),
+            advisory_failures: Vec::new(),
+        }
+    }
+
+    fn finish(mut self) -> Self {
+        self.exit_policy = if !self.blocking_failures.is_empty() {
+            "blocking_failure"
+        } else if !self.advisory_failures.is_empty() {
+            "advisory_failure"
+        } else {
+            "success"
+        };
+        self
+    }
+
+    fn should_exit_failure(&self) -> bool {
+        !self.blocking_failures.is_empty()
+    }
+}
+
+pub async fn run_setup(config: &Config, command: SetupCommand) -> Result<()> {
+    let report = match command {
+        SetupCommand::Check => check(config, true),
+        SetupCommand::Repair => repair(config)?,
+        SetupCommand::PluginHook { no_repair } => run_plugin_hook(config, no_repair)?,
+    };
+
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    if report.should_exit_failure() {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn run_plugin_hook(config: &Config, no_repair: bool) -> Result<SetupReport> {
+    let initial = check(config, no_repair);
+    if initial.blocking_failures.is_empty() || no_repair {
+        return Ok(initial);
+    }
+    repair(config)
+}
+
+fn check(config: &Config, no_repair: bool) -> SetupReport {
+    let mut report = SetupReport::new(no_repair);
+    let data_dir = setup_data_dir();
+
+    if !data_dir.is_dir() {
+        report.blocking_failures.push(SetupFailure {
+            code: "appdata_missing",
+            message: format!("appdata directory does not exist: {}", data_dir.display()),
+        });
+    }
+    let env_path = data_dir.join(".env");
+    if !env_path.is_file() {
+        report.advisory_failures.push(SetupFailure {
+            code: "env_file_missing",
+            message: format!(
+                "{} does not exist; setup repair will create one, but process env can supply values",
+                env_path.display()
+            ),
+        });
+    }
+
+    if config.unraid.api_url.is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code: "missing_unraid_api_url",
+            message: "UNRAID_API_URL is required".into(),
+        });
+    }
+    if config.unraid.api_key.is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code: "missing_unraid_api_key",
+            message: "UNRAID_API_KEY is required".into(),
+        });
+    }
+
+    validate_auth(config, &mut report);
+    check_port(config.mcp.port, &mut report);
+
+    report.finish()
+}
+
+fn repair(config: &Config) -> Result<SetupReport> {
+    let data_dir = setup_data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+    write_env_file(&data_dir, config)?;
+
+    let mut report = check(config, false);
+    report.ran_repair = true;
+
+    if report
+        .blocking_failures
+        .iter()
+        .any(|failure| failure.code == "appdata_missing")
+    {
+        report = check(config, false);
+        report.ran_repair = true;
+    }
+
+    Ok(report.finish())
+}
+
+fn validate_auth(config: &Config, report: &mut SetupReport) {
+    if config.mcp.no_auth {
+        return;
+    }
+
+    if config.mcp.auth.mode == AuthMode::OAuth {
+        if config
+            .mcp
+            .auth
+            .public_url
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_public_url",
+                message: "UNRAID_MCP_PUBLIC_URL is required for OAuth mode".into(),
+            });
+        }
+        if config
+            .mcp
+            .auth
+            .google_client_id
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_client_id",
+                message: "UNRAID_MCP_GOOGLE_CLIENT_ID is required for OAuth mode".into(),
+            });
+        }
+        if config
+            .mcp
+            .auth
+            .google_client_secret
+            .as_deref()
+            .unwrap_or("")
+            .is_empty()
+        {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_client_secret",
+                message: "UNRAID_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode".into(),
+            });
+        }
+        if config.mcp.auth.admin_email.is_empty() {
+            report.blocking_failures.push(SetupFailure {
+                code: "missing_oauth_admin_email",
+                message: "UNRAID_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode".into(),
+            });
+        }
+    } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
+        report.blocking_failures.push(SetupFailure {
+            code: "missing_mcp_token",
+            message: "UNRAID_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
+        });
+    }
+}
+
+fn check_port(port: u16, report: &mut SetupReport) {
+    if TcpListener::bind(("127.0.0.1", port)).is_err() {
+        report.advisory_failures.push(SetupFailure {
+            code: "mcp_port_in_use",
+            message: format!("MCP port {port} is already in use"),
+        });
+    }
+}
+
+fn setup_data_dir() -> PathBuf {
+    std::env::var_os("CLAUDE_PLUGIN_DATA")
+        .or_else(|| std::env::var_os("UNRAID_HOME"))
+        .map(PathBuf::from)
+        .unwrap_or_else(default_data_dir)
+}
+
+fn write_env_file(data_dir: &Path, config: &Config) -> Result<()> {
+    let env_path = data_dir.join(".env");
+    let mut lines = vec![
+        format!("UNRAID_MCP_HOST={}", config.mcp.host),
+        format!("UNRAID_MCP_PORT={}", config.mcp.port),
+        format!("UNRAID_MCP_NO_AUTH={}", config.mcp.no_auth),
+    ];
+
+    if let Some(token) = config
+        .mcp
+        .api_token
+        .as_deref()
+        .filter(|value| !value.is_empty())
+    {
+        lines.push(format!("UNRAID_MCP_TOKEN={token}"));
+    }
+    if !config.unraid.api_url.is_empty() {
+        lines.push(format!("UNRAID_API_URL={}", config.unraid.api_url));
+    }
+    if !config.unraid.api_key.is_empty() {
+        lines.push(format!("UNRAID_API_KEY={}", config.unraid.api_key));
+    }
+    if config.unraid.skip_tls_verify {
+        lines.push("UNRAID_API_SKIP_TLS_VERIFY=true".into());
+    }
+    if config.mcp.auth.mode == AuthMode::OAuth {
+        lines.push("UNRAID_MCP_AUTH_MODE=oauth".into());
+        if let Some(value) = &config.mcp.auth.public_url {
+            lines.push(format!("UNRAID_MCP_PUBLIC_URL={value}"));
+        }
+        if let Some(value) = &config.mcp.auth.google_client_id {
+            lines.push(format!("UNRAID_MCP_GOOGLE_CLIENT_ID={value}"));
+        }
+        if let Some(value) = &config.mcp.auth.google_client_secret {
+            lines.push(format!("UNRAID_MCP_GOOGLE_CLIENT_SECRET={value}"));
+        }
+        if !config.mcp.auth.admin_email.is_empty() {
+            lines.push(format!(
+                "UNRAID_MCP_AUTH_ADMIN_EMAIL={}",
+                config.mcp.auth.admin_email
+            ));
+        }
+    }
+
+    std::fs::write(env_path, format!("{}\n", lines.join("\n")))?;
+    Ok(())
+}

@@ -37,8 +37,10 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
         CliCommand::Rclone => ("rclone", service.rclone().await?),
         CliCommand::RemoteAccess => ("remote_access", service.remote_access().await?),
         CliCommand::Connect => ("connect", service.connect().await?),
-        // Doctor is intercepted in main.rs before reaching dispatch.
-        CliCommand::Doctor => unreachable!("doctor is handled before service construction"),
+        // Doctor and setup are intercepted in main.rs before reaching dispatch.
+        CliCommand::Doctor | CliCommand::Setup(_) => {
+            unreachable!("doctor/setup are handled before service construction")
+        }
     };
 
     if json {

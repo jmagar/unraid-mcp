@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 
-use super::commands::CliCommand;
+use super::{commands::CliCommand, setup::SetupCommand};
 
 impl CliCommand {
     /// Parse CLI arguments into a `(CliCommand, json_mode)` pair.
@@ -47,6 +47,11 @@ impl CliCommand {
             ["remote-access"] | ["remote", "access"] => Self::RemoteAccess,
             ["connect"] => Self::Connect,
             ["doctor"] => Self::Doctor,
+            ["setup", "check"] => Self::Setup(SetupCommand::Check),
+            ["setup", "repair"] => Self::Setup(SetupCommand::Repair),
+            ["setup", "plugin-hook", flags @ ..] => Self::Setup(SetupCommand::PluginHook {
+                no_repair: flags.contains(&"--no-repair"),
+            }),
             other => bail!(
                 "unknown command: {}\n\nRun `unraid --help` for usage.",
                 other.join(" ")

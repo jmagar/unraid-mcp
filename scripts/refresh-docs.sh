@@ -197,8 +197,8 @@ append_changes_log() {
   local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   {
     printf '\n## %s\n\n' "$ts"
-    printf '- scope: `%s`\n' "$(refresh_scope)"
-    printf '- summary: `%s added, %s modified, %s removed`\n' "$4" "$5" "$6"
+    printf -- '- scope: `%s`\n' "$(refresh_scope)"
+    printf -- '- summary: `%s added, %s modified, %s removed`\n' "$4" "$5" "$6"
   } >> "$CHANGES_FILE"
 }
 
@@ -232,13 +232,13 @@ main() {
     "$REF_DIR/mcp/docs"   "$REF_DIR/mcp/repos"
 
   if [[ "$SKIP_CRAWL" != true ]]; then
-    crawl_docs "https://docs.unraid.net"       "docs.unraid.net"         "unraid/docs"
-    crawl_docs "https://modelcontextprotocol.io" "modelcontextprotocol.io" "mcp/docs"
+    crawl_docs "https://docs.unraid.net" || log "WARN: unraid docs crawl failed, continuing"       "docs.unraid.net"         "unraid/docs"
+    crawl_docs "https://modelcontextprotocol.io" "modelcontextprotocol.io" "mcp/docs" || log "WARN: mcp docs crawl failed, continuing"
   fi
 
   if [[ "$SKIP_REPOMIX" != true ]]; then
     # Unraid API source — GraphQL schema + TypeScript resolvers
-    pack_repo "jmagar/unraid-api" "unraid/repos/jmagar-unraid-api.xml" \
+    pack_repo "unraid/api" "unraid/repos/unraid-api.xml" \
       "api/**,packages/**,src/**" "node_modules/**,*.lock"
 
     # MCP Rust SDK (rmcp crate used by this server)

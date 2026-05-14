@@ -41,7 +41,7 @@ if ! chown -R 1000:1000 "${DATA_DIR}" 2>/dev/null; then
 fi
 
 # Verify data dir is actually writable by UID 1000 before starting.
-if ! su-exec 1000:1000 sh -c "touch '${DATA_DIR}/.write_test' 2>/dev/null && rm -f '${DATA_DIR}/.write_test'"; then
+if ! gosu 1000:1000 sh -c "touch '${DATA_DIR}/.write_test' 2>/dev/null && rm -f '${DATA_DIR}/.write_test'"; then
     echo "FATAL: ${DATA_DIR} is not writable by UID 1000" >&2
     echo "  Check the volume mount permissions on the host." >&2
     exit 1
@@ -71,4 +71,4 @@ echo "[entrypoint] UNRAID_API_KEY: set"
 # ── 7. Drop privileges and exec ──────────────────────────────────────────────
 # exec replaces this shell so PID 1 is the actual service binary.
 # Signals (SIGTERM, SIGINT) go directly to the service for graceful shutdown.
-exec su-exec 1000:1000 "${BINARY}" "$@"
+exec gosu 1000:1000 "${BINARY}" "$@"

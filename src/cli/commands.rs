@@ -1,3 +1,5 @@
+use super::setup::SetupCommand;
+
 /// All CLI subcommands. Each variant maps 1:1 to a service method.
 pub enum CliCommand {
     Array,
@@ -32,4 +34,5 @@ pub enum CliCommand {
     RemoteAccess,
     Connect,
     Doctor,
+    Setup(SetupCommand),
 }

@@ -142,6 +142,9 @@ async fn run_cli(args: Vec<String>) -> Result<()> {
     if matches!(cmd, cli::CliCommand::Doctor) {
         return cli::doctor::run_doctor(&config, json).await;
     }
+    if let cli::CliCommand::Setup(command) = cmd {
+        return cli::setup::run_setup(&config, command).await;
+    }
 
     let service = UnraidService::new(UnraidClient::new(&config.unraid)?);
     cli::run(&service, cmd, json).await
@@ -189,6 +192,9 @@ fn print_usage() {
   unraid [serve]                        Start MCP HTTP server
   unraid mcp                            Start MCP stdio transport
   unraid doctor [--json]                Validate environment and config
+  unraid setup check                    Check plugin setup without mutating appdata
+  unraid setup repair                   Create missing appdata/env setup files
+  unraid setup plugin-hook [--no-repair]  Plugin hook JSON contract
 
 Core:
   unraid array [--json]                 Array state, disk health, parity

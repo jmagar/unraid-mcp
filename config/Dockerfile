@@ -8,22 +8,24 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 # Cache deps layer — build a stub binary first so dependency compilation
 # is cached independently from source changes.
 COPY Cargo.toml Cargo.lock ./
+# Strip xtask workspace member — not needed in Docker build context
+RUN sed -i 's/, \"xtask\"//g; s/\"xtask\", //g; s/\"xtask\"//g' Cargo.toml
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=unraid-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=unraid-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked && rm -rf src
+    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked -p unraid-mcp && rm -rf src
 
 # Build real binary
 COPY src/ src/
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=unraid-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=unraid-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked && cp target/release/unraid /usr/local/bin/unraid
+    touch src/main.rs && cargo build --release --locked -p unraid-mcp && cp target/release/unraid /usr/local/bin/unraid
 
 # Runtime image — minimal Debian with TLS certs and curl for healthcheck
 FROM debian:bookworm-slim
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl su-exec && \
+    apt-get install -y ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/unraid /usr/local/bin/unraid
