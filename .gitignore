@@ -11,7 +11,8 @@
 !.env.example
 
 # ── Local config (runtime settings — never commit) ───────────────────────────
-config.toml
+# Use /config.toml (root-anchored) so .cargo/config.toml is NOT excluded.
+/config.toml
 config.local.toml
 config/docker-hosts.toml
 
