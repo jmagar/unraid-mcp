@@ -13,6 +13,6 @@ services:
       dockerfile: config/Dockerfile
 
 networks:
-  jakenet:
-    name: ${DOCKER_NETWORK:-jakenet}
+  unrust:
+    name: ${DOCKER_NETWORK:-unrust}
     external: true
