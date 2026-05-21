@@ -1,0 +1,47 @@
+name: unrust
+
+x-common-service: &common-service
+  networks:
+    - jakenet
+  restart: unless-stopped
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  ulimits:
+    nofile:
+      soft: 65535
+      hard: 65535
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+      compress: "true"
+
+services:
+  unraid-mcp:
+    <<: *common-service
+    image: ghcr.io/jmagar/unrust:${VERSION:-latest}
+    container_name: unraid-mcp
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      - "${UNRAID_MCP_HOST_PORT:-40010}:40010/tcp"
+    volumes:
+      - ${UNRAID_MCP_DATA_VOLUME:-${HOME}/.unraid}:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:40010/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+networks:
+  jakenet:
+    name: ${DOCKER_NETWORK:-jakenet}
+    external: true
