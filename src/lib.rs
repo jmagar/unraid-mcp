@@ -51,8 +51,15 @@ pub mod testing {
     }
 
     pub async fn oauth_state(data_dir: &std::path::Path) -> AppState {
-        let auth_state = build_auth_state(data_dir).await;
-        AppState {
+        let (state, _) = oauth_state_with_auth_state(data_dir).await;
+        state
+    }
+
+    pub async fn oauth_state_with_auth_state(
+        data_dir: &std::path::Path,
+    ) -> (AppState, Arc<lab_auth::state::AuthState>) {
+        let auth_state = Arc::new(build_auth_state(data_dir).await);
+        let state = AppState {
             config: McpConfig {
                 auth: crate::config::AuthConfig {
                     public_url: Some("https://unraid.example.com".to_string()),
@@ -61,11 +68,12 @@ pub mod testing {
                 ..McpConfig::default()
             },
             auth_policy: AuthPolicy::Mounted {
-                auth_state: Some(Arc::new(auth_state)),
+                auth_state: Some(auth_state.clone()),
             },
             service: stub_service(),
             counters: Counters::new(),
-        }
+        };
+        (state, auth_state)
     }
 
     pub async fn build_auth_state(data_dir: &std::path::Path) -> lab_auth::state::AuthState {

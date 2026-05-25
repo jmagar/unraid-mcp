@@ -16,9 +16,9 @@ use axum::{
     body::to_bytes,
     http::{header, Request, StatusCode},
 };
-use syslog_mcp::{mcp::router, testing};
 use tempfile::TempDir;
 use tower::util::ServiceExt;
+use unraid_mcp::{mcp::router, testing};
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 
@@ -81,8 +81,7 @@ async fn well_known_returns_200_when_oauth_mounted() {
 /// `/.well-known/oauth-authorization-server` → 404 in bearer-only mode.
 #[tokio::test]
 async fn well_known_returns_404_when_bearer_only() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::bearer_state(dir.path(), "test-token");
+    let state = testing::bearer_state("test-token");
     assert_eq!(
         get_status(router(state), "/.well-known/oauth-authorization-server").await,
         StatusCode::NOT_FOUND,
@@ -93,8 +92,7 @@ async fn well_known_returns_404_when_bearer_only() {
 /// `/.well-known/oauth-authorization-server` → 404 when LoopbackDev.
 #[tokio::test]
 async fn well_known_returns_404_when_loopback_dev() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::loopback_state(dir.path());
+    let state = testing::loopback_state();
     assert_eq!(
         get_status(router(state), "/.well-known/oauth-authorization-server").await,
         StatusCode::NOT_FOUND,
@@ -117,8 +115,7 @@ async fn jwks_returns_200_when_oauth_mounted() {
 /// `/jwks` → 404 when bearer-only.
 #[tokio::test]
 async fn jwks_returns_404_when_bearer_only() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::bearer_state(dir.path(), "test-token");
+    let state = testing::bearer_state("test-token");
     assert_eq!(
         get_status(router(state), "/jwks").await,
         StatusCode::NOT_FOUND,
@@ -129,8 +126,7 @@ async fn jwks_returns_404_when_bearer_only() {
 /// `/jwks` → 404 when LoopbackDev.
 #[tokio::test]
 async fn jwks_returns_404_when_loopback_dev() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::loopback_state(dir.path());
+    let state = testing::loopback_state();
     assert_eq!(
         get_status(router(state), "/jwks").await,
         StatusCode::NOT_FOUND,
@@ -144,11 +140,9 @@ async fn jwks_returns_404_when_loopback_dev() {
 /// Locked Decision: `/register` is excluded from `bearer_only_router`.
 #[tokio::test]
 async fn register_returns_404_in_all_modes() {
-    let d1 = TempDir::new().unwrap();
-    let d2 = TempDir::new().unwrap();
     let d3 = TempDir::new().unwrap();
-    let loopback = testing::loopback_state(d1.path());
-    let bearer = testing::bearer_state(d2.path(), "tok");
+    let loopback = testing::loopback_state();
+    let bearer = testing::bearer_state("tok");
     let oauth = testing::oauth_state(d3.path()).await;
 
     for (label, state) in [
@@ -176,10 +170,8 @@ async fn register_returns_404_in_all_modes() {
 /// so that DCR /register is available; this means /auth/login is also mounted then.
 #[tokio::test]
 async fn auth_login_returns_404_without_oauth() {
-    let d1 = TempDir::new().unwrap();
-    let d2 = TempDir::new().unwrap();
-    let loopback = testing::loopback_state(d1.path());
-    let bearer = testing::bearer_state(d2.path(), "tok");
+    let loopback = testing::loopback_state();
+    let bearer = testing::bearer_state("tok");
 
     for (label, state) in [("LoopbackDev", loopback), ("bearer-only", bearer)] {
         let status = get_status(router(state), "/auth/login").await;
@@ -196,11 +188,9 @@ async fn auth_login_returns_404_without_oauth() {
 /// `/health` → 200 in ALL modes without credentials.
 #[tokio::test]
 async fn health_returns_200_in_all_modes() {
-    let d1 = TempDir::new().unwrap();
-    let d2 = TempDir::new().unwrap();
     let d3 = TempDir::new().unwrap();
-    let loopback = testing::loopback_state(d1.path());
-    let bearer = testing::bearer_state(d2.path(), "tok");
+    let loopback = testing::loopback_state();
+    let bearer = testing::bearer_state("tok");
     let oauth = testing::oauth_state(d3.path()).await;
 
     for (label, state) in [
@@ -222,8 +212,7 @@ async fn health_returns_200_in_all_modes() {
 /// `POST /mcp` without credentials → 401 when Mounted (bearer-only).
 #[tokio::test]
 async fn mcp_without_credentials_returns_401_when_mounted() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::bearer_state(dir.path(), "secret-token");
+    let state = testing::bearer_state("secret-token");
     let (status, _) = post_mcp(router(state), jsonrpc_body("tools/list"), None).await;
     assert_eq!(
         status,
@@ -235,8 +224,7 @@ async fn mcp_without_credentials_returns_401_when_mounted() {
 /// `POST /mcp` without credentials → 200 when LoopbackDev (no auth applied).
 #[tokio::test]
 async fn mcp_without_credentials_succeeds_when_loopback_dev() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::loopback_state(dir.path());
+    let state = testing::loopback_state();
     let (status, value) = post_mcp(router(state), jsonrpc_body("tools/list"), None).await;
     assert_eq!(
         status,
@@ -246,7 +234,7 @@ async fn mcp_without_credentials_succeeds_when_loopback_dev() {
     let tools = value["result"]["tools"].as_array();
     assert!(
         tools.is_some_and(|t| !t.is_empty()),
-        "tools/list should return the syslog tool in LoopbackDev mode"
+        "tools/list should return the unraid tool in LoopbackDev mode"
     );
 }
 
@@ -256,8 +244,7 @@ async fn mcp_without_credentials_succeeds_when_loopback_dev() {
 /// The server must NOT gate `tools/list` on any specific scope.
 #[tokio::test]
 async fn tools_list_succeeds_with_auth_context() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::bearer_state(dir.path(), "discover-token");
+    let state = testing::bearer_state("discover-token");
     let (status, value) = post_mcp(
         router(state),
         jsonrpc_body("tools/list"),
@@ -271,8 +258,8 @@ async fn tools_list_succeeds_with_auth_context() {
     );
     let tools = value["result"]["tools"].as_array();
     assert!(
-        tools.is_some_and(|t| t.iter().any(|tool| tool["name"] == "syslog")),
-        "tools/list must return the syslog tool"
+        tools.is_some_and(|t| t.iter().any(|tool| tool["name"] == "unraid")),
+        "tools/list must return the unraid tool"
     );
 }
 
@@ -294,8 +281,7 @@ async fn protected_resource_returns_200_when_oauth_mounted() {
 /// `/.well-known/oauth-protected-resource` → 404 in bearer-only mode.
 #[tokio::test]
 async fn protected_resource_returns_404_when_bearer_only() {
-    let dir = TempDir::new().unwrap();
-    let state = testing::bearer_state(dir.path(), "test-token");
+    let state = testing::bearer_state("test-token");
     assert_eq!(
         get_status(router(state), "/.well-known/oauth-protected-resource").await,
         StatusCode::NOT_FOUND,

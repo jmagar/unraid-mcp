@@ -124,7 +124,7 @@ async fn auth_middleware(mut req: Request, next: Next) -> Response {
     // any non-None value confirms propagation works.
     req.extensions_mut().insert(AuthContext {
         subject: EXPECTED_SUBJECT.to_string(),
-        scopes: vec!["syslog:read".to_string(), "syslog:admin".to_string()],
+        scopes: vec!["unraid:read".to_string(), "unraid:admin".to_string()],
     });
     next.run(req).await
 }
@@ -194,7 +194,7 @@ async fn axum_extension_propagates_into_tool_handler_stateless() {
         seen,
         Some(AuthContext {
             subject: EXPECTED_SUBJECT.to_string(),
-            scopes: vec!["syslog:read".to_string(), "syslog:admin".to_string()],
+            scopes: vec!["unraid:read".to_string(), "unraid:admin".to_string()],
         }),
         "tool handler did not observe the AuthContext set by middleware (body={body})",
     );
@@ -225,7 +225,7 @@ async fn axum_extension_propagates_into_tool_handler_stateful() {
         seen,
         Some(AuthContext {
             subject: EXPECTED_SUBJECT.to_string(),
-            scopes: vec!["syslog:read".to_string(), "syslog:admin".to_string()],
+            scopes: vec!["unraid:read".to_string(), "unraid:admin".to_string()],
         }),
         "tool handler did not observe the AuthContext set by middleware (body={body})",
     );

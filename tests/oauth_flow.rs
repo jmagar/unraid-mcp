@@ -10,9 +10,9 @@ use axum::{
 };
 use lab_auth::jwt::AccessClaims;
 use lab_auth::metadata::canonical_resource_url;
-use syslog_mcp::{mcp::router, testing};
 use tempfile::TempDir;
 use tower::util::ServiceExt;
+use unraid_mcp::{mcp::router, testing};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -76,52 +76,52 @@ async fn post_mcp(
     (status, json)
 }
 
-fn stats_call() -> serde_json::Value {
-    serde_json::json!({ "name": "syslog", "arguments": { "action": "stats" } })
+fn status_call() -> serde_json::Value {
+    serde_json::json!({ "name": "unraid", "arguments": { "action": "status" } })
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
-/// Valid JWT with `syslog:read` → `tools/call action=stats` succeeds (200).
+/// Valid JWT with `unraid:read` -> `tools/call action=status` succeeds (200).
 #[tokio::test]
-async fn valid_jwt_with_read_scope_allows_stats() {
+async fn valid_jwt_with_read_scope_allows_status() {
     let dir = TempDir::new().unwrap();
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
     let token = auth_state
         .signing_keys
-        .issue_access_token(&make_claims(&auth_state, "syslog:read", 60))
+        .issue_access_token(&make_claims(&auth_state, "unraid:read", 60))
         .unwrap();
 
-    let (status, value) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, value) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::OK,
-        "valid JWT with syslog:read should succeed"
+        "valid JWT with unraid:read should succeed"
     );
     assert!(
         value["result"]["content"][0]["text"]
             .as_str()
             .unwrap_or("")
-            .contains("total_logs"),
-        "stats response should contain total_logs; got: {value}"
+            .contains("\"status\""),
+        "status response should contain status field; got: {value}"
     );
 }
 
-/// `syslog:admin` implicitly satisfies `syslog:read` — stats must succeed.
+/// `unraid:admin` implicitly satisfies `unraid:read` — status must succeed.
 #[tokio::test]
 async fn valid_jwt_with_admin_scope_satisfies_read() {
     let dir = TempDir::new().unwrap();
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
     let token = auth_state
         .signing_keys
-        .issue_access_token(&make_claims(&auth_state, "syslog:admin", 60))
+        .issue_access_token(&make_claims(&auth_state, "unraid:admin", 60))
         .unwrap();
 
-    let (status, _) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, _) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::OK,
-        "syslog:admin must implicitly satisfy syslog:read"
+        "unraid:admin must implicitly satisfy unraid:read"
     );
 }
 
@@ -133,10 +133,10 @@ async fn expired_jwt_returns_401() {
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
     let token = auth_state
         .signing_keys
-        .issue_access_token(&make_claims(&auth_state, "syslog:read", -120))
+        .issue_access_token(&make_claims(&auth_state, "unraid:read", -120))
         .unwrap();
 
-    let (status, _) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, _) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
@@ -149,14 +149,14 @@ async fn expired_jwt_returns_401() {
 async fn jwt_with_wrong_issuer_returns_401() {
     let dir = TempDir::new().unwrap();
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
-    let mut bad_claims = make_claims(&auth_state, "syslog:read", 60);
+    let mut bad_claims = make_claims(&auth_state, "unraid:read", 60);
     bad_claims.iss = "https://attacker.example.com".to_string();
     let token = auth_state
         .signing_keys
         .issue_access_token(&bad_claims)
         .unwrap();
 
-    let (status, _) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, _) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
@@ -175,7 +175,7 @@ async fn jwt_with_empty_scope_is_denied_at_scope_check() {
         .issue_access_token(&make_claims(&auth_state, "", 60))
         .unwrap();
 
-    let (status, value) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, value) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     // HTTP 200 — auth passed. MCP layer returns a JSON-RPC error.
     assert_eq!(
         status,
@@ -193,7 +193,7 @@ async fn jwt_with_empty_scope_is_denied_at_scope_check() {
     );
 }
 
-/// `tools/list` with valid JWT → 200 and syslog tool present.
+/// `tools/list` with valid JWT -> 200 and unraid tool present.
 /// Tool discovery does not require any specific scope — only an AuthContext.
 #[tokio::test]
 async fn tools_list_succeeds_with_valid_jwt() {
@@ -201,7 +201,7 @@ async fn tools_list_succeeds_with_valid_jwt() {
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
     let token = auth_state
         .signing_keys
-        .issue_access_token(&make_claims(&auth_state, "syslog:read", 60))
+        .issue_access_token(&make_claims(&auth_state, "unraid:read", 60))
         .unwrap();
 
     let (status, value) = post_mcp(router(state), "tools/list", None, &token).await;
@@ -212,8 +212,8 @@ async fn tools_list_succeeds_with_valid_jwt() {
     );
     let tools = value["result"]["tools"].as_array();
     assert!(
-        tools.is_some_and(|t| t.iter().any(|tool| tool["name"] == "syslog")),
-        "tools/list must return the syslog tool"
+        tools.is_some_and(|t| t.iter().any(|tool| tool["name"] == "unraid")),
+        "tools/list must return the unraid tool"
     );
 }
 
@@ -232,13 +232,13 @@ async fn jwt_signed_with_wrong_key_returns_401() {
     // separate TempDir — same config, different key material.
     let dir2 = TempDir::new().unwrap();
     let (_, auth_state2) = testing::oauth_state_with_auth_state(dir2.path()).await;
-    let claims = make_claims(&auth_state, "syslog:read", 60); // valid iss/aud for server
+    let claims = make_claims(&auth_state, "unraid:read", 60); // valid iss/aud for server
     let token = auth_state2
         .signing_keys
         .issue_access_token(&claims) // signed with wrong key
         .unwrap();
 
-    let (status, _) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, _) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
@@ -254,14 +254,14 @@ async fn jwt_signed_with_wrong_key_returns_401() {
 async fn jwt_with_wrong_audience_returns_401() {
     let dir = TempDir::new().unwrap();
     let (state, auth_state) = testing::oauth_state_with_auth_state(dir.path()).await;
-    let mut bad_claims = make_claims(&auth_state, "syslog:read", 60);
+    let mut bad_claims = make_claims(&auth_state, "unraid:read", 60);
     bad_claims.aud = "https://other-service.example.com/mcp".to_string();
     let token = auth_state
         .signing_keys
         .issue_access_token(&bad_claims)
         .unwrap();
 
-    let (status, _) = post_mcp(router(state), "tools/call", Some(stats_call()), &token).await;
+    let (status, _) = post_mcp(router(state), "tools/call", Some(status_call()), &token).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
