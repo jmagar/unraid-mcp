@@ -274,4 +274,56 @@ def register_storage_tools(mcp: FastMCP) -> None:
             logger.error(f"Error in get_disk_details for {disk_id}: {e}", exc_info=True)
             raise ToolError(f"Failed to retrieve disk details for {disk_id}: {str(e)}") from e
 
+    @mcp.tool()
+    async def archive_all_notifications(importance: str | None = None) -> dict[str, Any]:
+        """Archives all unread notifications. Option: ALERT/WARNING/INFO."""
+        query = """
+        mutation ArchiveAllNotifications($importance: NotificationImportance) {
+          archiveAll(importance: $importance) {
+            unread {
+              total
+              alert
+              warning
+            }
+            archive {
+              total
+            }
+          }
+        }
+        """
+        variables = {}
+        if importance:
+            variables["importance"] = importance.upper()
+
+        try:
+            logger.info(f"Executing archive_all_notifications tool: importance={importance}")
+            response_data = await make_graphql_request(query, variables)
+            return response_data.get("archiveAll", {})
+        except Exception as e:
+            logger.error(f"Error in archive_all_notifications: {e}", exc_info=True)
+            raise ToolError(f"Failed to archive notifications: {str(e)}") from e
+
+    @mcp.tool()
+    async def delete_archived_notifications() -> dict[str, Any]:
+        """Deletes all archived notifications to clear space."""
+        query = """
+        mutation DeleteArchivedNotifications {
+          deleteArchivedNotifications {
+            unread {
+              total
+            }
+            archive {
+              total
+            }
+          }
+        }
+        """
+        try:
+            logger.info("Executing delete_archived_notifications tool")
+            response_data = await make_graphql_request(query)
+            return response_data.get("deleteArchivedNotifications", {})
+        except Exception as e:
+            logger.error(f"Error in delete_archived_notifications: {e}", exc_info=True)
+            raise ToolError(f"Failed to delete archived notifications: {str(e)}") from e
+
     logger.info("Storage tools registered successfully")
