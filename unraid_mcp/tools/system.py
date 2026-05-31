@@ -20,7 +20,7 @@ async def _get_system_info() -> dict[str, Any]:
     query = """
     query GetSystemInfo {
       info {
-        os { platform distro release codename kernel arch hostname codepage logofile serial build uptime }
+        os { platform distro release codename kernel arch hostname logofile serial build uptime }
         cpu { manufacturer brand vendor family model stepping revision voltage speed speedmin speedmax threads cores processors socket cache flags }
         memory {
           # Avoid fetching problematic fields that cause type errors
@@ -28,8 +28,23 @@ async def _get_system_info() -> dict[str, Any]:
         }
         baseboard { manufacturer model version serial assetTag }
         system { manufacturer model version serial uuid sku }
-        versions { kernel openssl systemOpenssl systemOpensslLib node v8 npm yarn pm2 gulp grunt git tsc mysql redis mongodb apache nginx php docker postfix postgresql perl python gcc unraid }
-        apps { installed started }
+        versions {
+          core {
+            unraid
+            api
+            kernel
+          }
+          packages {
+            openssl
+            node
+            npm
+            pm2
+            git
+            nginx
+            php
+            docker
+          }
+        }
         # Remove devices section as it has non-nullable fields that might be null
         machineId
         time

@@ -37,7 +37,11 @@ def register_health_tools(mcp: FastMCP) -> None:
               info {
                 machineId
                 time
-                versions { unraid }
+                versions {
+                  core {
+                    unraid
+                  }
+                }
                 os { uptime }
               }
               array {
@@ -91,7 +95,7 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "url": UNRAID_API_URL,
                     "machine_id": info.get("machineId"),
                     "time": info.get("time"),
-                    "version": info.get("versions", {}).get("unraid"),
+                    "version": info.get("versions", {}).get("core", {}).get("unraid"),
                     "uptime": info.get("os", {}).get("uptime")
                 }
             else:
