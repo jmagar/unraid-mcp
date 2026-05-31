@@ -6,6 +6,7 @@ and detailed container information retrieval.
 """
 
 from typing import Any
+import httpx
 
 from fastmcp import FastMCP
 
@@ -384,5 +385,74 @@ def register_docker_tools(mcp: FastMCP) -> None:
         except Exception as e:
             logger.error(f"Error in get_docker_container_details: {e}", exc_info=True)
             raise ToolError(f"Failed to retrieve Docker container details: {str(e)}") from e
+
+    @mcp.tool()
+    async def get_docker_container_logs(container_identifier: str, tail: int = 100) -> str:
+        """Retrieves the console logs of a specific Docker container by its ID or name.
+
+        Args:
+            container_identifier: Container ID or name to retrieve logs for
+            tail: Number of lines to return from the end of the logs (default 100)
+
+        Returns:
+            String containing the container logs
+        """
+        actual_id = container_identifier
+        try:
+            list_query = """
+            query GetContainersForLogResolution {
+              docker {
+                containers(skipCache: false) {
+                  id
+                  names
+                }
+              }
+            }
+            """
+            list_response = await make_graphql_request(list_query)
+            if list_response.get("docker"):
+                containers = list_response["docker"].get("containers", [])
+                resolved_container = find_container_by_identifier(container_identifier, containers)
+                if resolved_container:
+                    full_id = resolved_container.get("id", "")
+                    actual_id = full_id.split(":")[-1] if ":" in full_id else full_id
+                else:
+                    actual_id = container_identifier.lstrip("/")
+
+            transport = httpx.AsyncHTTPTransport(uds="/var/run/docker.sock")
+            async with httpx.AsyncClient(transport=transport) as client:
+                url = f"http://localhost/containers/{actual_id}/logs?stdout=true&stderr=true&tail={tail}&timestamps=false"
+                logger.info(f"Querying Docker Socket for container logs: {actual_id}")
+                response = await client.get(url, timeout=10.0)
+                if response.status_code != 200:
+                    raise ToolError(f"Docker API returned status {response.status_code}: {response.text}")
+                
+                content = response.content
+                if not content:
+                    return "A tárolónak nincsenek log bejegyzései."
+
+                if len(content) >= 8 and content[0] in (0, 1, 2) and content[1:4] == b'\x00\x00\x00':
+                    text = []
+                    i = 0
+                    n = len(content)
+                    while i < n:
+                        if i + 8 > n:
+                            text.append(content[i:].decode("utf-8", errors="ignore"))
+                            break
+                        size = int.from_bytes(content[i+4:i+8], byteorder="big")
+                        i += 8
+                        if i + size <= n:
+                            text.append(content[i:i+size].decode("utf-8", errors="ignore"))
+                            i += size
+                        else:
+                            text.append(content[i:].decode("utf-8", errors="ignore"))
+                            break
+                    return "".join(text)
+                else:
+                    return content.decode("utf-8", errors="ignore")
+
+        except Exception as e:
+            logger.error(f"Error in get_docker_container_logs: {e}", exc_info=True)
+            raise ToolError(f"Failed to retrieve logs for container '{container_identifier}': {str(e)}")
 
     logger.info("Docker tools registered successfully")

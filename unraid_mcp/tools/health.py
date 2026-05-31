@@ -8,6 +8,8 @@ notifications, Docker services, and API responsiveness.
 import datetime
 import time
 from typing import Any
+from urllib.parse import urlparse
+import httpx
 
 from fastmcp import FastMCP
 
@@ -186,5 +188,48 @@ def register_health_tools(mcp: FastMCP) -> None:
                     "port": UNRAID_MCP_PORT
                 }
             }
+
+    @mcp.tool()
+    async def get_nas_doctor_status() -> dict[str, Any]:
+        """Retrieves the overall status, metrics, and health information from the local NAS Doctor container."""
+        try:
+            parsed = urlparse(UNRAID_API_URL)
+            host_ip = parsed.hostname or "192.168.1.3"
+            url = f"http://{host_ip}:8060/api/v1/status"
+            logger.info(f"Querying NAS Doctor status: {url}")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=5.0)
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    return {"status": "error", "message": f"NAS Doctor returned HTTP {response.status_code}"}
+        except Exception as e:
+            logger.error(f"Error calling NAS Doctor: {e}")
+            return {"status": "error", "message": f"Could not connect to NAS Doctor: {str(e)}"}
+
+    @mcp.tool()
+    async def get_nas_doctor_alerts(status: str = "open") -> list[dict[str, Any]]:
+        """Retrieves active alerts, warning, info and critical events from the local NAS Doctor container.
+
+        Args:
+            status: Status of the alerts to fetch - 'open' or 'resolved' (default 'open')
+
+        Returns:
+            List of alerts
+        """
+        try:
+            parsed = urlparse(UNRAID_API_URL)
+            host_ip = parsed.hostname or "192.168.1.3"
+            url = f"http://{host_ip}:8060/api/v1/alerts?status={status}"
+            logger.info(f"Querying NAS Doctor alerts: {url}")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, timeout=5.0)
+                if response.status_code == 200:
+                    return response.json()
+                else:
+                    raise ToolError(f"NAS Doctor returned HTTP {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"Error calling NAS Doctor: {e}")
+            raise ToolError(f"Could not connect to NAS Doctor: {str(e)}")
 
     logger.info("Health tools registered successfully")
