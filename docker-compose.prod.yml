@@ -2,7 +2,7 @@ name: unrust
 
 x-common-service: &common-service
   networks:
-    - jakenet
+    - unrust
   restart: unless-stopped
   extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -42,6 +42,6 @@ services:
           cpus: '0.5'
 
 networks:
-  jakenet:
-    name: ${DOCKER_NETWORK:-jakenet}
+  unrust:
+    name: ${DOCKER_NETWORK:-unrust}
     external: true

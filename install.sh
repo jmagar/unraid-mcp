@@ -270,7 +270,7 @@ UNRAID_MCP_TOKEN=your_bearer_token
 # Docker Compose runtime
 PUID=1000
 PGID=1000
-DOCKER_NETWORK=jakenet
+DOCKER_NETWORK=unrust
 RUST_LOG=info
 EOF
 
