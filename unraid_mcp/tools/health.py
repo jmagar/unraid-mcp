@@ -140,8 +140,8 @@ def register_health_tools(mcp: FastMCP) -> None:
             docker_info = response_data.get("docker", {})
             if docker_info and docker_info.get("containers"):
                 containers = docker_info["containers"]
-                running_containers = [c for c in containers if c.get("state") == "running"]
-                stopped_containers = [c for c in containers if c.get("state") == "exited"]
+                running_containers = [c for c in containers if c.get("state", "").lower() == "running"]
+                stopped_containers = [c for c in containers if c.get("state", "").lower() in ("exited", "stopped")]
 
                 health_info["docker_services"] = {
                     "total_containers": len(containers),
