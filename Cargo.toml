@@ -12,7 +12,7 @@ description = "Unraid MCP server — GraphQL API bridge"
 autobins = false
 
 [[bin]]
-name = "unraid"
+name = "runraid"
 path = "src/main.rs"
 
 [dependencies]

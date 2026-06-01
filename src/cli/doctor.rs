@@ -372,7 +372,7 @@ pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
         "Log directory",
         &data_dir.join("logs"),
     ));
-    checks.push(check_binary_in_path("unraid"));
+    checks.push(check_binary_in_path("runraid"));
 
     // Required credentials
     checks.push(check_required_var("UNRAID_API_URL", &config.unraid.api_url));

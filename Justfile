@@ -9,7 +9,7 @@ release:
 
 # Run pre-flight environment check
 doctor:
-    ./target/release/unraid doctor
+    ./target/release/runraid doctor
 
 check:
     cargo check --workspace
@@ -93,7 +93,7 @@ repair:
     cargo build --release
     echo "==> Restarting..."
     if systemctl --user list-unit-files unraid-mcp.service 2>/dev/null | grep -q unraid-mcp; then
-      install -m 755 target/release/unraid "${HOME}/.local/bin/unraid"
+      install -m 755 target/release/runraid "${HOME}/.local/bin/runraid"
       systemctl --user start unraid-mcp.service
       echo "    started systemd unit"
     elif [ -f docker-compose.yml ]; then
@@ -101,7 +101,7 @@ repair:
       docker compose up -d --force-recreate
       echo "    started docker container"
     else
-      echo "    No service manager detected; binary at target/release/unraid"
+      echo "    No service manager detected; binary at target/release/runraid"
     fi
     echo "==> Done"
 
@@ -116,7 +116,7 @@ validate-skills:
 validate-plugin: validate-skills
 
 runtime-current:
-    bash scripts/check-runtime-current.sh --unit unraid-mcp.service --service unraid-mcp --expected-binary target/release/unraid
+    bash scripts/check-runtime-current.sh --unit unraid-mcp.service --service unraid-mcp --expected-binary target/release/runraid
 
 # Generate a standalone CLI for this server (requires running server; HTTP-only transport)
 generate-cli:
@@ -151,12 +151,12 @@ build-plugin: release
     #!/bin/sh
     set -eu
     target_dir="${CARGO_TARGET_DIR:-target}"
-    if [ ! -x "$target_dir/release/unraid" ] && [ -x ".cache/cargo/release/unraid" ]; then
+    if [ ! -x "$target_dir/release/runraid" ] && [ -x ".cache/cargo/release/runraid" ]; then
       target_dir=".cache/cargo"
     fi
     mkdir -p bin plugins/unraid/bin
-    install -m 755 "$target_dir/release/unraid" bin/unraid
-    install -m 755 "$target_dir/release/unraid" plugins/unraid/bin/unraid
+    install -m 755 "$target_dir/release/runraid" bin/runraid
+    install -m 755 "$target_dir/release/runraid" plugins/unraid/bin/runraid
 
 # Publish: bump version, tag, push (triggers crates.io + Docker publish)
 publish bump="patch":

@@ -20,7 +20,7 @@ COPY src/ src/
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=unraid-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=unraid-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked -p unraid-mcp && cp target/release/unraid /usr/local/bin/unraid
+    touch src/main.rs && cargo build --release --locked -p unraid-mcp && cp target/release/runraid /usr/local/bin/runraid
 
 # Runtime image — minimal Debian with TLS certs and curl for healthcheck
 FROM debian:bookworm-slim
@@ -28,7 +28,7 @@ RUN apt-get update && \
     apt-get install -y ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /usr/local/bin/unraid /usr/local/bin/unraid
+COPY --from=builder /usr/local/bin/runraid /usr/local/bin/runraid
 COPY entrypoint.sh /entrypoint.sh
 
 RUN groupadd --gid 1000 unraid && \

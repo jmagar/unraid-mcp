@@ -23,20 +23,20 @@ export_if_set() {
   export "${env_name}=${value}"
 }
 
-ensure_unraid_binary() {
-  if command -v unraid >/dev/null 2>&1; then
+ensure_runraid_binary() {
+  if command -v runraid >/dev/null 2>&1; then
     return 0
   fi
 
-  local bundled="${CLAUDE_PLUGIN_ROOT}/bin/unraid"
+  local bundled="${CLAUDE_PLUGIN_ROOT}/bin/runraid"
   if [[ -x "${bundled}" ]]; then
     mkdir -p "${HOME}/.local/bin"
-    ln -sf "${bundled}" "${HOME}/.local/bin/unraid"
+    ln -sf "${bundled}" "${HOME}/.local/bin/runraid"
     export PATH="${HOME}/.local/bin:${PATH}"
   fi
 
-  command -v unraid >/dev/null 2>&1 || {
-    printf 'unraid plugin setup: unraid binary not found on PATH or at %s\n' "${bundled}" >&2
+  command -v runraid >/dev/null 2>&1 || {
+    printf 'unraid plugin setup: runraid binary not found on PATH or at %s\n' "${bundled}" >&2
     exit 1
   }
 }
@@ -58,8 +58,8 @@ main() {
   chmod 700 "${UNRAID_HOME}" 2>/dev/null || true
   export CLAUDE_PLUGIN_DATA UNRAID_HOME
 
-  ensure_unraid_binary
-  unraid setup plugin-hook "$@"
+  ensure_runraid_binary
+  runraid setup plugin-hook "$@"
 }
 
 main "$@"

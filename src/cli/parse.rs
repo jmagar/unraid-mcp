@@ -49,6 +49,7 @@ impl CliCommand {
             ["doctor"] => Self::Doctor,
             ["setup", "check"] => Self::Setup(SetupCommand::Check),
             ["setup", "repair"] => Self::Setup(SetupCommand::Repair),
+            ["setup", "install"] => Self::Setup(SetupCommand::Install),
             ["setup", "plugin-hook", flags @ ..] => Self::Setup(SetupCommand::PluginHook {
                 no_repair: flags.contains(&"--no-repair"),
             }),
