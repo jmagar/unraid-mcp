@@ -15,7 +15,7 @@ async fn stdio_client(
     rmcp::service::RunningService<rmcp::RoleClient, ()>,
     Option<tokio::process::ChildStderr>,
 )> {
-    let binary = env!("CARGO_BIN_EXE_unraid");
+    let binary = env!("CARGO_BIN_EXE_runraid");
     let (transport, stderr) = TokioChildProcess::builder(Command::new(binary).configure(|cmd| {
         cmd.arg("mcp")
             .env("UNRAID_API_URL", "http://localhost:1/graphql")

@@ -186,6 +186,6 @@ bd close <id>         # Complete work
 
 ## Plugin setup hooks
 
-Plugin setup is owned by the binary. Keep `plugins/unraid/hooks/plugin-setup.sh` as a thin adapter that maps `CLAUDE_PLUGIN_OPTION_*` values to environment variables, prepares appdata, ensures `unraid` is on `PATH`, and then calls `unraid setup plugin-hook "$@"`.
+Plugin setup is owned by the binary. `plugins/unraid/hooks/hooks.json` calls `${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook` directly (no shell wrapper). The binary's `apply_plugin_options()` (`src/cli/setup.rs`), hoisted in `run_cli` before `Config::load()` (unraid is template-style — `check()` validates the pre-loaded `&Config`), maps `CLAUDE_PLUGIN_OPTION_*` values to the binary's `UNRAID_*` env vars; `install_self()` self-installs the binary into `~/.local/bin`.
 
-`unraid setup check` is read-only, `unraid setup repair` is idempotent, and `unraid setup plugin-hook --no-repair` is audit mode. Do not add Docker Compose, systemd, or service bootstrap logic back into the hook script.
+`unraid setup check` is read-only, `unraid setup repair` is idempotent, and `unraid setup plugin-hook --no-repair` is audit mode. Do not add Docker Compose, systemd, or service bootstrap logic into the hook path.

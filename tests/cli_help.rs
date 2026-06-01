@@ -2,7 +2,7 @@ use std::process::Command;
 
 #[test]
 fn help_lists_unraid_commands() {
-    let output = Command::new(env!("CARGO_BIN_EXE_unraid"))
+    let output = Command::new(env!("CARGO_BIN_EXE_runraid"))
         .arg("--help")
         .output()
         .unwrap();
@@ -16,7 +16,7 @@ fn help_lists_unraid_commands() {
 
 #[test]
 fn version_flag_reports_package_name() {
-    let output = Command::new(env!("CARGO_BIN_EXE_unraid"))
+    let output = Command::new(env!("CARGO_BIN_EXE_runraid"))
         .arg("--version")
         .output()
         .unwrap();

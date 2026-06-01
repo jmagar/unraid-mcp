@@ -135,8 +135,15 @@ async fn serve_stdio_mcp() -> Result<()> {
 }
 
 async fn run_cli(args: Vec<String>) -> Result<()> {
-    let config = Config::load()?;
     let (cmd, json) = cli::CliCommand::parse(&args)?;
+    // Translate CLAUDE_PLUGIN_OPTION_* into UNRAID_* env vars BEFORE Config::load()
+    // so the plugin hook can call the binary directly (no plugin-setup.sh wrapper).
+    // unrust is template-style: check() validates the pre-loaded &Config, so the
+    // mapping must happen before the load, not inside the handler.
+    if matches!(cmd, cli::CliCommand::Setup(_)) {
+        cli::setup::apply_plugin_options();
+    }
+    let config = Config::load()?;
 
     // Doctor does not need a live service/client connection.
     if matches!(cmd, cli::CliCommand::Doctor) {

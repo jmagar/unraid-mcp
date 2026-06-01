@@ -58,6 +58,59 @@ impl SetupReport {
     }
 }
 
+/// Translate Claude Code plugin options (`CLAUDE_PLUGIN_OPTION_*`) into the
+/// `UNRAID_*` process env vars the binary reads, before `Config::load()` runs.
+///
+/// This replaces the former `plugin-setup.sh` wrapper: the binary now owns the
+/// env-var mapping itself, so the plugin hook calls the binary directly. unrust
+/// is template-style — `Config::load()` runs before the setup command dispatches
+/// and `check()` validates the pre-loaded `&Config` — so this MUST be called
+/// before `Config::load()` (hoisted in `run_cli`, gated to the setup path), not
+/// inside the handler. Values containing newlines/CR are skipped, mirroring the
+/// script's `reject_unsafe_value` guard.
+///
+/// No `CLAUDE_PLUGIN_DATA` → `UNRAID_HOME` mapping is needed: `setup_data_dir()`
+/// already reads `CLAUDE_PLUGIN_DATA` natively (the script's `UNRAID_HOME`
+/// re-export was redundant).
+pub fn apply_plugin_options() {
+    // CLAUDE_PLUGIN_OPTION_<OPT> -> <UNRAID_ENVVAR>
+    let map = [
+        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "UNRAID_MCP_TOKEN"),
+        ("CLAUDE_PLUGIN_OPTION_MCP_PORT", "UNRAID_MCP_PORT"),
+        ("CLAUDE_PLUGIN_OPTION_UNRAID_API_URL", "UNRAID_API_URL"),
+        ("CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY", "UNRAID_API_KEY"),
+        (
+            "CLAUDE_PLUGIN_OPTION_UNRAID_SKIP_TLS",
+            "UNRAID_API_SKIP_TLS_VERIFY",
+        ),
+        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "UNRAID_MCP_NO_AUTH"),
+        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "UNRAID_MCP_AUTH_MODE"),
+        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "UNRAID_MCP_PUBLIC_URL"),
+        (
+            "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID",
+            "UNRAID_MCP_GOOGLE_CLIENT_ID",
+        ),
+        (
+            "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET",
+            "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
+        ),
+        (
+            "CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL",
+            "UNRAID_MCP_AUTH_ADMIN_EMAIL",
+        ),
+    ];
+    for (opt, dest) in map {
+        if let Some(v) = std::env::var_os(opt) {
+            let s = v.to_string_lossy();
+            if s.is_empty() || s.contains('\n') || s.contains('\r') {
+                continue;
+            }
+            // edition 2021: set_var is safe (no unsafe block required).
+            std::env::set_var(dest, v);
+        }
+    }
+}
+
 pub async fn run_setup(config: &Config, command: SetupCommand) -> Result<()> {
     let report = match command {
         SetupCommand::Check => check(config, true),

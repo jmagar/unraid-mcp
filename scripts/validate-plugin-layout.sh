@@ -15,7 +15,6 @@ claude_manifest="${plugin_root}/.claude-plugin/plugin.json"
 codex_manifest="${plugin_root}/.codex-plugin/plugin.json"
 mcp_json="${plugin_root}/.mcp.json"
 hooks_json="${plugin_root}/hooks/hooks.json"
-hook_script="${plugin_root}/hooks/plugin-setup.sh"
 skills_dir="${plugin_root}/skills"
 
 for file in "${claude_manifest}" "${codex_manifest}" "${mcp_json}" "${hooks_json}"; do
@@ -31,14 +30,8 @@ for file in "${claude_manifest}" "${codex_manifest}"; do
 done
 
 jq -er '.mcpServers | type == "object" and length > 0' "${mcp_json}" >/dev/null
-jq -er '.hooks.SessionStart[]?.hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/hooks/plugin-setup.sh"' "${hooks_json}" >/dev/null
-
-[[ -f "${hook_script}" ]] || { echo "MISSING: ${hook_script}"; exit 1; }
-sh -n "${hook_script}"
-if grep -Eq 'cargo (build|install|run)|curl .*[|][[:space:]]*sh|docker compose|systemctl' "${hook_script}"; then
-  echo "FORBIDDEN: hook performs build/install/service bootstrap: ${hook_script}"
-  exit 1
-fi
+jq -er '.hooks.SessionStart[]?.hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"' "${hooks_json}" >/dev/null
+jq -er '.hooks.ConfigChange[]? | select(.matcher == "user_settings") | .hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"' "${hooks_json}" >/dev/null
 
 [[ -d "${skills_dir}" ]] || { echo "MISSING: ${skills_dir}"; exit 1; }
 skill_count=0

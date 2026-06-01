@@ -4,7 +4,7 @@ use serde_json::Value;
 use tempfile::tempdir;
 
 fn unraid_bin() -> &'static str {
-    env!("CARGO_BIN_EXE_unraid")
+    env!("CARGO_BIN_EXE_runraid")
 }
 
 fn base_command(data_dir: &std::path::Path) -> Command {
@@ -70,10 +70,59 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
     assert!(env_file.contains("UNRAID_MCP_TOKEN=mcp-secret"));
 }
 
+/// The plugin hook config must call the binary directly (no plugin-setup.sh).
 #[test]
-fn plugin_setup_script_delegates_to_binary_setup_command() {
-    let script = std::fs::read_to_string("plugins/unraid/hooks/plugin-setup.sh").unwrap();
-    assert!(script.contains("unraid setup plugin-hook"));
-    assert!(!script.contains("systemctl --user"));
-    assert!(!script.contains("docker compose"));
+fn claude_hooks_call_binary_directly() {
+    let hooks: Value =
+        serde_json::from_str(&std::fs::read_to_string("plugins/unraid/hooks/hooks.json").unwrap())
+            .unwrap();
+    for hook_name in ["SessionStart", "ConfigChange"] {
+        let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
+            .as_str()
+            .unwrap();
+        assert_eq!(command, "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook");
+    }
+}
+
+/// The hook calls the binary directly now, so `apply_plugin_options()` (run
+/// before `Config::load()`) must map `CLAUDE_PLUGIN_OPTION_*` into the binary's
+/// `UNRAID_*` env vars. Setting the credential options here makes the
+/// `missing_unraid_api_url` / `missing_unraid_api_key` blocking failures
+/// disappear — proving the mapping reaches the loaded config.
+#[test]
+fn plugin_hook_maps_plugin_options_into_env() {
+    let dir = tempdir().unwrap();
+    let mut cmd = Command::new(unraid_bin());
+    cmd.env_clear()
+        .env("HOME", dir.path())
+        .env("PATH", std::env::var("PATH").unwrap_or_default())
+        .env("CLAUDE_PLUGIN_DATA", dir.path())
+        .env("UNRAID_MCP_PORT", "0")
+        // Supply credentials only via plugin options — not UNRAID_* directly.
+        .env(
+            "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL",
+            "https://tower.example/graphql",
+        )
+        .env("CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY", "secret")
+        .env("CLAUDE_PLUGIN_OPTION_API_TOKEN", "mcp-secret");
+    let output = cmd
+        .args(["setup", "plugin-hook", "--no-repair"])
+        .output()
+        .unwrap();
+
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let blocking: Vec<String> = json["blocking_failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["code"].as_str().unwrap_or_default().to_string())
+        .collect();
+    assert!(
+        !blocking.contains(&"missing_unraid_api_url".to_string()),
+        "API URL option should map into UNRAID_API_URL; blocking: {blocking:?}"
+    );
+    assert!(
+        !blocking.contains(&"missing_unraid_api_key".to_string()),
+        "API key option should map into UNRAID_API_KEY; blocking: {blocking:?}"
+    );
 }
