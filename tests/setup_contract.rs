@@ -12,7 +12,7 @@ fn base_command(data_dir: &std::path::Path) -> Command {
     cmd.env_clear()
         .env("HOME", data_dir)
         .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("CLAUDE_PLUGIN_DATA", data_dir)
+        .env("UNRAID_HOME", data_dir)
         .env("UNRAID_API_URL", "https://tower.example/graphql")
         .env("UNRAID_API_KEY", "secret")
         .env("UNRAID_MCP_PORT", "0")
@@ -96,7 +96,7 @@ fn plugin_hook_maps_plugin_options_into_env() {
     cmd.env_clear()
         .env("HOME", dir.path())
         .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("CLAUDE_PLUGIN_DATA", dir.path())
+        .env("UNRAID_HOME", dir.path())
         .env("UNRAID_MCP_PORT", "0")
         // Supply credentials only via plugin options — not UNRAID_* directly.
         .env(
