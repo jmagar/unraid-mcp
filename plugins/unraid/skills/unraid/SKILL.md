@@ -109,7 +109,7 @@ Binary: `/home/jmagar/workspace/unrust/target/release/unraid`
 All commands accept `--json` for machine-readable output.
 
 ```bash
-UNRAID_BIN=/home/jmagar/workspace/unrust/target/release/unraid
+UNRAID_BIN=/home/jmagar/workspace/unrust/target/release/runraid
 
 # Core queries
 $UNRAID_BIN array
