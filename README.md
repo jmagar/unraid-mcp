@@ -30,7 +30,7 @@ Rust MCP server that bridges Claude (and any MCP client) to the Unraid server Gr
 
 ### Prerequisites
 
-- Rust 1.86+ (`rustup show`)
+- Rust 1.90+ (`rustup show`)
 - Unraid API URL and API key (Settings → API Management in Unraid)
 
 ### Run

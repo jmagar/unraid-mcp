@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Builder Rust version MUST stay >= the `rust-version` (MSRV) declared in Cargo.toml
-# (currently 1.86). 1.90 is >= MSRV and intentionally chosen here. Do NOT downgrade
+# (currently 1.90). 1.90 matches the MSRV exactly and is intentionally chosen here. Do NOT downgrade
 # below the MSRV, and bump deliberately — CI uses floating `stable`, so this pin is
 # the one fixed Rust version in the build matrix.
 # TODO: digest-pin (rust:1.90-slim-bookworm@sha256:...) for fully reproducible builds.

@@ -4,7 +4,7 @@ Get unraid-mcp running and make your first MCP call in five minutes.
 
 ## Prerequisites
 
-- Rust 1.86+ (`rustup show` or `curl https://sh.rustup.rs | sh`)
+- Rust 1.90+ (`rustup show` or `curl https://sh.rustup.rs | sh`)
 - An Unraid server with the API enabled
 - Your Unraid API URL and API key (Settings → API Management in the Unraid web UI)
 

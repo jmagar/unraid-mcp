@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
-      - uses: dtolnay/rust-toolchain@1.86
+      - uses: dtolnay/rust-toolchain@1.90
         with:
           components: rustfmt
 
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
-      - uses: dtolnay/rust-toolchain@1.86
+      - uses: dtolnay/rust-toolchain@1.90
         with:
           components: clippy
 
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
-      - uses: dtolnay/rust-toolchain@1.86
+      - uses: dtolnay/rust-toolchain@1.90
 
       - uses: Swatinem/rust-cache@v2
 
