@@ -20,7 +20,9 @@ x-common-service: &common-service
 services:
   unraid-mcp:
     <<: *common-service
-    image: ghcr.io/jmagar/unrust:${VERSION:-latest}
+    # Default pins to a known, immutable version for safe rollback.
+    # Override with VERSION to deploy/roll back, e.g.: VERSION=0.1.0 docker compose up -d
+    image: ghcr.io/jmagar/unrust:${VERSION:-0.1.1}
     container_name: unraid-mcp
     env_file:
       - path: .env

@@ -43,6 +43,13 @@ impl UnraidClient {
         if cfg.api_key.is_empty() {
             anyhow::bail!("UNRAID_API_KEY is not set");
         }
+        if cfg.skip_tls_verify {
+            tracing::warn!(
+                "UNRAID_API_SKIP_TLS_VERIFY is enabled: TLS certificate verification is DISABLED. \
+                 The API key is sent to an unverified endpoint and is exposed to on-path (MITM) \
+                 attackers. Only use this for self-signed certificates on a trusted network."
+            );
+        }
         let client = reqwest::ClientBuilder::new()
             .danger_accept_invalid_certs(cfg.skip_tls_verify)
             .connect_timeout(Duration::from_secs(5))

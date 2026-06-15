@@ -1,5 +1,5 @@
-mod arg_helpers;
-mod paginate;
+pub(crate) mod arg_helpers;
+pub(crate) mod paginate;
 
 use std::sync::LazyLock;
 
@@ -152,10 +152,19 @@ async fn dispatch_action(
     args: &Value,
 ) -> Result<Value, ToolError> {
     // Helper: run a service call and classify any failure by its typed source.
+    //
+    // This is the single seam where every upstream-hitting action funnels through
+    // (the non-upstream `status`/`help` actions never use it), so the upstream-call
+    // observability counters are incremented here — once per upstream call, with the
+    // error counter bumped only on failure.
     macro_rules! svc {
-        ($fut:expr) => {
-            ($fut).await.map_err(|e| classify_service_error(e, action))
-        };
+        ($fut:expr) => {{
+            state.counters.inc_upstream();
+            ($fut).await.map_err(|e| {
+                state.counters.inc_upstream_err();
+                classify_service_error(e, action)
+            })
+        }};
     }
     // Helper: turn an arg-helper `anyhow::Result` into an `InvalidParams` failure.
     macro_rules! arg {

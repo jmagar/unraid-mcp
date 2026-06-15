@@ -18,10 +18,10 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: unraid
+            artifact: runraid
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact: unraid
+            artifact: runraid
             cross: true
 
     steps:

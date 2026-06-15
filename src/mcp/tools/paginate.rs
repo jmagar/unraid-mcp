@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 ///
 /// `filter` matches against `name`, `names[0]`, or `state` fields
 /// (case-insensitive substring).
-pub(super) fn paginate_array(
+pub(crate) fn paginate_array(
     mut data: Value,
     path: &[&str],
     limit: usize,
@@ -31,7 +31,16 @@ pub(super) fn paginate_array(
 
     let arr = match parent[last_key].as_array_mut() {
         Some(a) => std::mem::take(a),
-        None => return data,
+        None => {
+            // The hardcoded key path did not resolve to an array — likely the
+            // upstream GraphQL response shape drifted. Surface it so it's
+            // observable; return data unchanged (no behavior change).
+            tracing::debug!(
+                path = %path.join("."),
+                "paginate_array: no array found at expected path; returning data unchanged"
+            );
+            return data;
+        }
     };
 
     // Apply optional substring filter.

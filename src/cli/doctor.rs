@@ -177,12 +177,14 @@ fn check_skip_tls_warn(skip: bool) -> Option<DoctorCheck> {
     }
 }
 
-async fn check_upstream(url: &str, api_key: &str) -> DoctorCheck {
+async fn check_upstream(url: &str, api_key: &str, skip_tls_verify: bool) -> DoctorCheck {
     // Use a lightweight introspection query to probe connectivity
     let query = r#"{"query":"{ info { os { platform } } }"}"#;
+    // Honor the same TLS-verify setting the real client uses, so doctor does not
+    // report "reachable" against a cert the real client would reject.
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
-        .danger_accept_invalid_certs(true) // doctor should still probe even if TLS is broken
+        .danger_accept_invalid_certs(skip_tls_verify)
         .build();
 
     let Ok(client) = client else {
@@ -243,18 +245,64 @@ async fn check_upstream(url: &str, api_key: &str) -> DoctorCheck {
                 }
             }
         }
-        Err(e) => DoctorCheck {
-            category: "connectivity",
-            name: "Upstream reachable".into(),
-            ok: false,
-            value: Some(url.to_string()),
-            hint: Some(format!(
-                "Connection failed: {e} — is Unraid running and reachable at {url}?"
-            )),
-            latency_ms: Some(elapsed),
-            warn_only: false,
-        },
+        Err(e) => {
+            // If TLS verification is ON and this failure is specifically a cert
+            // error, the upstream is reachable but presenting an invalid/self-signed
+            // certificate. Surface that as a distinct warning rather than a hard
+            // "unreachable" failure (or silently accepting it).
+            if !skip_tls_verify && is_tls_cert_error(&e) {
+                DoctorCheck {
+                    category: "connectivity",
+                    name: "Upstream reachable".into(),
+                    ok: true,
+                    value: Some(format!(
+                        "{url} → TLS certificate invalid ({elapsed} ms)"
+                    )),
+                    hint: Some(
+                        "upstream reachable but TLS certificate invalid — set \
+                         UNRAID_API_SKIP_TLS_VERIFY=true if this is intentional (self-signed)"
+                            .into(),
+                    ),
+                    latency_ms: Some(elapsed),
+                    warn_only: true,
+                }
+            } else {
+                DoctorCheck {
+                    category: "connectivity",
+                    name: "Upstream reachable".into(),
+                    ok: false,
+                    value: Some(url.to_string()),
+                    hint: Some(format!(
+                        "Connection failed: {e} — is Unraid running and reachable at {url}?"
+                    )),
+                    latency_ms: Some(elapsed),
+                    warn_only: false,
+                }
+            }
+        }
     }
+}
+
+/// Best-effort detection of a TLS certificate-verification failure in a reqwest
+/// error chain. reqwest does not expose a typed cert-error variant, so we walk the
+/// `source()` chain and match on the textual markers emitted by rustls/OpenSSL.
+fn is_tls_cert_error(err: &reqwest::Error) -> bool {
+    let mut src: Option<&(dyn std::error::Error + 'static)> = Some(err);
+    while let Some(e) = src {
+        let msg = e.to_string().to_lowercase();
+        if msg.contains("certificate")
+            || msg.contains("cert verify")
+            || msg.contains("self-signed")
+            || msg.contains("self signed")
+            || msg.contains("unknownissuer")
+            || msg.contains("invalidcertificate")
+            || msg.contains("tls handshake")
+        {
+            return true;
+        }
+        src = e.source();
+    }
+    false
 }
 
 fn check_port_available(port: u16) -> DoctorCheck {
@@ -377,11 +425,14 @@ pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
     }
 
     // Upstream connectivity (skip if URL not set — would panic the client)
+    let skip_tls = config.unraid.skip_tls_verify;
     if !config.unraid.api_url.is_empty() && !config.unraid.api_key.is_empty() {
-        checks.push(check_upstream(&config.unraid.api_url, &config.unraid.api_key).await);
+        checks.push(
+            check_upstream(&config.unraid.api_url, &config.unraid.api_key, skip_tls).await,
+        );
     } else if !config.unraid.api_url.is_empty() {
         // URL set but no key — still probe (will get 401, caught by check_upstream)
-        checks.push(check_upstream(&config.unraid.api_url, "").await);
+        checks.push(check_upstream(&config.unraid.api_url, "", skip_tls).await);
     }
 
     // MCP port
