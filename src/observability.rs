@@ -91,6 +91,18 @@ pub async fn probe_upstream(client: &reqwest::Client, url: &str, api_key: &str) 
     match res {
         Ok(r) if r.status().is_success() => UpstreamHealth::ok(started.elapsed()),
         Ok(r) => UpstreamHealth::down(format!("HTTP {}", r.status())),
-        Err(e) => UpstreamHealth::down(e),
+        Err(e) => {
+            // `/health` is public — log the full error (which may embed the
+            // upstream URL) server-side, but return only a category to the caller.
+            tracing::warn!(error = %e, "upstream health probe failed");
+            let category = if e.is_timeout() {
+                "request timed out"
+            } else if e.is_connect() {
+                "connection failed"
+            } else {
+                "request failed"
+            };
+            UpstreamHealth::down(category)
+        }
     }
 }
