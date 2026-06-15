@@ -4,12 +4,12 @@ use lab_auth::AuthLayer;
 
 use crate::{app::UnraidService, config::McpConfig, observability::Counters};
 
-mod host_filter;
+pub(crate) mod host_filter;
 mod prompts;
 mod rmcp_server;
 mod routes;
 mod schemas;
-mod tools;
+pub(crate) mod tools;
 
 pub use rmcp_server::{
     rmcp_server, streamable_http_config, streamable_http_service, UnraidRmcpServer,

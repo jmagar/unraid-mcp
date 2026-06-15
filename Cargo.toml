@@ -66,3 +66,4 @@ rmcp = { version = "1.6.0", default-features = false, features = [
   "client",
   "transport-child-process",
 ] }
+wiremock = "0.6"
