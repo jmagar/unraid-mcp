@@ -13,7 +13,9 @@ pub enum SetupCommand {
     /// Copy this binary into ~/.local/bin so it is callable as a bare command
     /// in the user's own terminal, independent of Claude Code.
     Install,
-    PluginHook { no_repair: bool },
+    PluginHook {
+        no_repair: bool,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -135,24 +137,42 @@ pub async fn run_setup(config: &Config, command: SetupCommand) -> Result<()> {
 /// (not symlink) so it survives `/plugin update`. std + anyhow only.
 fn install_self() -> anyhow::Result<std::path::PathBuf> {
     let exe = std::env::current_exe()?;
-    let name = exe.file_name().ok_or_else(|| anyhow::anyhow!("no binary name"))?;
+    let name = exe
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("no binary name"))?;
     let home = std::env::var_os("HOME").ok_or_else(|| anyhow::anyhow!("HOME is not set"))?;
     let bin_dir = std::path::PathBuf::from(home).join(".local").join("bin");
     std::fs::create_dir_all(&bin_dir)?;
     let dest = bin_dir.join(name);
-    if dest == exe { return Ok(dest); }
+    if dest == exe {
+        return Ok(dest);
+    }
     let tmp = bin_dir.join(format!(".{}.tmp", name.to_string_lossy()));
     std::fs::copy(&exe, &tmp)?;
     #[cfg(unix)]
-    { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?; }
-    std::fs::rename(&tmp, &dest).inspect_err(|_| { let _ = std::fs::remove_file(&tmp); })?;
-    let on_path = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).any(|d| d == bin_dir)).unwrap_or(false);
-    if !on_path { eprintln!("note: {} is not on your PATH; add:  export PATH=\"$HOME/.local/bin:$PATH\"", bin_dir.display()); }
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755))?;
+    }
+    std::fs::rename(&tmp, &dest).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })?;
+    let on_path = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).any(|d| d == bin_dir))
+        .unwrap_or(false);
+    if !on_path {
+        eprintln!(
+            "note: {} is not on your PATH; add:  export PATH=\"$HOME/.local/bin:$PATH\"",
+            bin_dir.display()
+        );
+    }
     Ok(dest)
 }
 
 fn run_plugin_hook(config: &Config, no_repair: bool) -> Result<SetupReport> {
-    if let Err(e) = install_self() { eprintln!("setup plugin-hook: self-install skipped: {e}"); }
+    if let Err(e) = install_self() {
+        eprintln!("setup plugin-hook: self-install skipped: {e}");
+    }
     let initial = check(config, no_repair);
     if initial.blocking_failures.is_empty() || no_repair {
         return Ok(initial);
@@ -205,17 +225,11 @@ fn repair(config: &Config) -> Result<SetupReport> {
     std::fs::create_dir_all(&data_dir)?;
     write_env_file(&data_dir, config)?;
 
+    // Remediation (create_dir_all + write_env_file) ran above, *before* this
+    // check, so the check already reflects the repaired state — re-running it
+    // would produce an identical result.
     let mut report = check(config, false);
     report.ran_repair = true;
-
-    if report
-        .blocking_failures
-        .iter()
-        .any(|failure| failure.code == "appdata_missing")
-    {
-        report = check(config, false);
-        report.ran_repair = true;
-    }
 
     Ok(report.finish())
 }

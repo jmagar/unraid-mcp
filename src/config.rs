@@ -85,7 +85,14 @@ pub fn default_data_dir() -> std::path::PathBuf {
     {
         std::path::PathBuf::from("/data")
     } else {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        let home = std::env::var("HOME").unwrap_or_else(|_| {
+            tracing::warn!(
+                "HOME is not set; falling back to /tmp for the data directory — secrets \
+                 (.env, auth.db, JWT key) will be world-readable and non-persistent. \
+                 Set HOME (or run in a container, which uses /data) to fix this."
+            );
+            "/tmp".to_string()
+        });
         std::path::PathBuf::from(home).join(".unraid")
     }
 }

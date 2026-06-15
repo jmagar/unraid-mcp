@@ -3,7 +3,7 @@ use std::net::Ipv6Addr;
 use crate::config::McpConfig;
 
 /// Compute the set of allowed `Host` header values for the MCP server.
-pub(super) fn allowed_hosts(config: &McpConfig) -> Vec<String> {
+pub(crate) fn allowed_hosts(config: &McpConfig) -> Vec<String> {
     let mut hosts = vec!["localhost".to_string(), "127.0.0.1".to_string()];
     push_host_variants(&mut hosts, &config.host, config.port);
     push_host_variants(&mut hosts, "localhost", config.port);
@@ -21,7 +21,7 @@ pub(super) fn allowed_hosts(config: &McpConfig) -> Vec<String> {
 }
 
 /// Compute the set of allowed CORS origins for the MCP server.
-pub(super) fn allowed_origins(config: &McpConfig) -> Vec<String> {
+pub(crate) fn allowed_origins(config: &McpConfig) -> Vec<String> {
     let mut origins = vec![
         format!("http://localhost:{}", config.port),
         format!("http://127.0.0.1:{}", config.port),

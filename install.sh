@@ -6,18 +6,18 @@
 #
 # What it does:
 #   1. Runs pre-flight checks (OS/arch, tools, disk space, PATH, port)
-#   2. Downloads the latest release binary to ~/.local/bin/unraid  OR
+#   2. Downloads the latest release binary to ~/.local/bin/runraid  OR
 #      builds from source if cargo is available and no release binary found
 #   3. Creates ~/.unraid/ data directory
 #   4. Writes a starter ~/.unraid/.env if one doesn't already exist
-#   5. Runs `unraid doctor` to validate the installation
+#   5. Runs `runraid doctor` to validate the installation
 #   6. Prints next steps
 
 set -euo pipefail
 
 REPO="jmagar/unraid-mcp"
-BIN_NAME="unraid"
-SERVICE="unraid"
+BIN_NAME="runraid"
+SERVICE="unraid-mcp"
 INSTALL_DIR="${HOME}/.local/bin"
 DATA_DIR="${HOME}/.unraid"
 
@@ -111,8 +111,8 @@ preflight() {
     echo "  ⚠  UNRAID_API_KEY: not set (required before running the server)"
   fi
 
-  # 7. Port 6970 availability (warn only)
-  local port="${UNRAID_MCP_PORT:-6970}"
+  # 7. Port 40010 availability (warn only)
+  local port="${UNRAID_MCP_PORT:-40010}"
   if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${port}$" 2>/dev/null; then
     echo "  ⚠  Port ${port}: already in use (change UNRAID_MCP_PORT if needed)"
   else
@@ -260,9 +260,9 @@ UNRAID_API_KEY=your_unraid_api_key
 # MCP server bearer token (generate with: openssl rand -hex 32)
 UNRAID_MCP_TOKEN=your_bearer_token
 
-# Optional: bind host and port (default: 0.0.0.0:6970)
+# Optional: bind host and port (default: 0.0.0.0:40010)
 # UNRAID_MCP_HOST=127.0.0.1
-# UNRAID_MCP_PORT=6970
+# UNRAID_MCP_PORT=40010
 
 # Optional: skip TLS verification for self-signed certs (not recommended)
 # UNRAID_API_SKIP_TLS_VERIFY=true

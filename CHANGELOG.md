@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the binary `unraid` → `runraid` (package remains `unraid-mcp`; env vars and
+  the `~/.unraid` data dir are unchanged — only the executable name moved).
+- Default MCP port is now **40010** (`config.rs` `default_mcp_port()` and `config.toml`
+  agree). Earlier docs referencing 3100/6970 were incorrect.
+- The binary loads `~/.unraid/.env` (or `/data/.env` in a container) at startup via
+  `dotenvy` before `Config::load`, so it can find its credentials without a process
+  manager. The loader is symlink-guarded (a symlinked `.env` is refused) and never
+  overrides already-set env vars.
+
+### Added
+
+- `status` MCP action — a server reachability/health observability action
+  (requires `unraid:read`). MCP-only; no CLI command.
+- `setup install` and `doctor` CLI commands (CLI-only; not exposed as MCP actions).
+- Pagination/filtering on list actions (`limit`/`offset`, plus `state`/`name` filters
+  where relevant), returning a `{items, total, limit, offset, has_more, next_offset}`
+  envelope (MCP surface).
+- ~40 KB truncation cap on MCP tool responses.
+
+### Fixed
+
+- GraphQL injection: queries now pass arguments as GraphQL variables instead of
+  interpolating them into the query string.
+- UTF-8 truncation panic: response truncation no longer splits a multi-byte character.
+- `/status` info leak: the endpoint no longer returns server details to unauthenticated
+  callers.
+
 ## [0.1.1] - 2026-06-01
 
 ### Changed

@@ -1,13 +1,13 @@
 # unraid-mcp
 
-Rust MCP server that bridges Claude (and any MCP client) to the Unraid server GraphQL API. Exposes 24 read-only actions covering array health, Docker, VMs, shares, logs, metrics, UPS, and more.
+Rust MCP server that bridges Claude (and any MCP client) to the Unraid server GraphQL API. Exposes 24 read-only data actions covering array health, Docker, VMs, shares, logs, metrics, UPS, and more, plus a `status` observability action and a `help` action.
 
 ## Architecture
 
 ```
                       ┌────────────────────────────────────┐
   Claude / MCP ◀────▶ │  POST /mcp  (RMCP Streamable HTTP) │
-  stdio client ◀────▶ │  unraid mcp  (stdio transport)      │
+  stdio client ◀────▶ │  runraid mcp  (stdio transport)     │
                       │                                    │
                       │  mcp/tools.rs  ─▶  app.rs          │
                       │                       │            │
@@ -30,7 +30,7 @@ Rust MCP server that bridges Claude (and any MCP client) to the Unraid server Gr
 
 ### Prerequisites
 
-- Rust 1.86+ (`rustup show`)
+- Rust 1.90+ (`rustup show`)
 - Unraid API URL and API key (Settings → API Management in Unraid)
 
 ### Run
@@ -42,7 +42,7 @@ cd unraid-mcp
 # Set required environment variables
 export UNRAID_API_URL="https://10-1-0-2.<hash>.myunraid.net:31337/graphql"
 export UNRAID_API_KEY="your-api-key-here"
-export UNRAID_MCP_PORT=6970
+export UNRAID_MCP_PORT=40010
 export UNRAID_MCP_DISABLE_HTTP_AUTH=true
 
 # Or copy .env and edit it
@@ -52,14 +52,14 @@ cp .env .env.local
 cargo run -- serve mcp
 
 # Verify it is up
-curl -sf http://localhost:6970/health | jq .
+curl -sf http://localhost:40010/health | jq .
 # → {"status":"ok"}
 ```
 
 ### First MCP call
 
 ```bash
-curl -s -X POST http://localhost:6970/mcp \
+curl -s -X POST http://localhost:40010/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{
@@ -77,9 +77,9 @@ curl -s -X POST http://localhost:6970/mcp \
 
 | Mode | Command | Description |
 |------|---------|-------------|
-| HTTP MCP | `unraid serve mcp` or `unraid` (no args) | RMCP Streamable HTTP on `POST /mcp` |
-| stdio MCP | `unraid mcp` | For MCP clients that launch the server as a child process |
-| CLI | `unraid <command>` | Human-readable or `--json` output |
+| HTTP MCP | `runraid serve mcp` or `runraid` (no args) | RMCP Streamable HTTP on `POST /mcp` |
+| stdio MCP | `runraid mcp` | For MCP clients that launch the server as a child process |
+| CLI | `runraid <command>` | Human-readable or `--json` output |
 
 ## MCP Tool Reference
 
@@ -160,6 +160,7 @@ One tool is exposed: `unraid`. Set the required `action` argument to select the 
 
 | Action | Description |
 |--------|-------------|
+| `status` | Server observability: version, PID, uptime, and request counters (requires `unraid:read`) |
 | `help` | Markdown reference for all actions (no auth required) |
 
 ### Action parameters
@@ -172,53 +173,72 @@ One tool is exposed: `unraid`. Set the required `action` argument to select the 
 | `lines` | integer | `log_file` | Number of lines to read |
 | `start_line` | integer | `log_file` | Starting line number (1-indexed) |
 | `tail` | integer | `docker_logs` | Lines to return (default 100) |
+| `limit` | integer | list actions | Max items per page (default 50, max 200) |
+| `offset` | integer | list actions | Number of items to skip (default 0) |
+| `state` | string | `docker` | Filter containers by state |
+| `name` | string | `shares`, `plugins` | Filter results by name |
+
+Pagination and filtering are MCP-only. List actions return a paginated envelope:
+
+```json
+{
+  "items": [ /* ... */ ],
+  "total": 120,
+  "limit": 50,
+  "offset": 0,
+  "has_more": true,
+  "next_offset": 50
+}
+```
 
 ## CLI Reference
 
 All CLI commands accept `--json` for machine-readable output.
 
 ```
-unraid [serve]                        Start MCP HTTP server (default)
-unraid mcp                            Start MCP stdio transport
+runraid [serve]                       Start MCP HTTP server (default)
+runraid mcp                           Start MCP stdio transport
 
 Core:
-  unraid array [--json]
-  unraid disks [--json]
-  unraid docker [--json]
-  unraid docker logs <id> [--tail N] [--json]
-  unraid vms [--json]
-  unraid server [--json]
-  unraid info [--json]
-  unraid shares [--json]
-  unraid notifications [--json]
+  runraid array [--json]
+  runraid disks [--json]
+  runraid docker [--json]
+  runraid docker logs <id> [--tail N] [--json]
+  runraid vms [--json]
+  runraid server [--json]
+  runraid info [--json]
+  runraid shares [--json]
+  runraid notifications [--json]
 
 System:
-  unraid services [--json]
-  unraid network [--json]
-  unraid metrics [--json]
-  unraid vars [--json]
-  unraid registration [--json]
-  unraid flash [--json]
+  runraid services [--json]
+  runraid network [--json]
+  runraid metrics [--json]
+  runraid vars [--json]
+  runraid registration [--json]
+  runraid flash [--json]
 
 Logs:
-  unraid log-files [--json]
-  unraid log <path> [--lines N] [--start-line N] [--json]
+  runraid log-files [--json]
+  runraid log <path> [--lines N] [--start-line N] [--json]
 
 Storage:
-  unraid parity-history [--json]
-  unraid rclone [--json]
+  runraid parity-history [--json]
+  runraid rclone [--json]
 
 UPS:
-  unraid ups [--json]
-  unraid ups-config [--json]
+  runraid ups [--json]
+  runraid ups-config [--json]
 
 Remote access:
-  unraid remote-access [--json]
-  unraid connect [--json]
+  runraid remote-access [--json]
+  runraid connect [--json]
 
 Plugins:
-  unraid plugins [--json]
+  runraid plugins [--json]
 ```
+
+Every read-only data action is reachable from both the CLI and the MCP tool. A few capabilities are surface-specific: `status` is MCP-only, the `setup` and `doctor` commands are CLI-only, and pagination/filtering and output truncation apply only to MCP responses.
 
 ## HTTP Endpoints
 
@@ -244,7 +264,7 @@ Configuration loads from three sources, highest priority first:
 | `UNRAID_API_KEY` | **yes** | — | API key sent as `x-api-key` header |
 | `UNRAID_API_SKIP_TLS_VERIFY` | no | `false` | Skip TLS certificate check |
 | `UNRAID_MCP_HOST` | no | `0.0.0.0` | Bind host |
-| `UNRAID_MCP_PORT` | no | `3100` | Bind port (project default: `6970` via config.toml) |
+| `UNRAID_MCP_PORT` | no | `40010` | Bind port |
 | `UNRAID_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (safe on loopback or trusted networks) |
 | `UNRAID_MCP_NO_AUTH` | no | `false` | Alias for disabling auth |
@@ -263,7 +283,7 @@ api_key  = "your-api-key"
 
 [mcp]
 host = "0.0.0.0"
-port = 6970
+port = 40010
 server_name = "unraid-mcp"
 # allowed_hosts = ["unraid.example.com"]
 # allowed_origins = ["https://unraid.example.com"]
@@ -298,7 +318,7 @@ just gen-token # openssl rand -hex 32
 {
   "mcpServers": {
     "unraid-mcp": {
-      "command": "/path/to/unraid",
+      "command": "/path/to/runraid",
       "args": ["mcp"],
       "env": {
         "UNRAID_API_URL": "https://...",

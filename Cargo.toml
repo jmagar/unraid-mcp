@@ -7,7 +7,7 @@ resolver = "2"
 name = "unraid-mcp"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.86"
+rust-version = "1.90"
 description = "Unraid MCP server — GraphQL API bridge"
 autobins = false
 
@@ -17,7 +17,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 
 # HTTP / MCP transport
 axum = "0.8"
@@ -52,6 +52,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 # Errors
 anyhow = "1"
+thiserror = "2"
 dotenvy = "0.15.7"
 
 [features]
@@ -65,3 +66,4 @@ rmcp = { version = "1.6.0", default-features = false, features = [
   "client",
   "transport-child-process",
 ] }
+wiremock = "0.6"

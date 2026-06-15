@@ -118,4 +118,66 @@ pub mod testing {
             .await
             .expect("test auth state should init")
     }
+
+    // ── test-support wrappers over internal APIs (for integration tests) ──
+
+    /// Build a loopback `AppState` whose upstream client points at `url`
+    /// (e.g. a wiremock mock server), instead of the default `localhost:1` stub.
+    pub fn state_with_upstream(url: &str) -> AppState {
+        let client = UnraidClient::new(&UnraidConfig {
+            api_url: url.to_string(),
+            api_key: "test".into(),
+            skip_tls_verify: true,
+        })
+        .expect("stub client should build");
+        AppState {
+            config: McpConfig::default(),
+            auth_policy: AuthPolicy::LoopbackDev,
+            service: UnraidService::new(client),
+            counters: Counters::new(),
+        }
+    }
+
+    /// Drive the `unraid` tool dispatch by name + args without the transport layer.
+    /// The typed error is flattened to its display string for assertions.
+    pub async fn execute_tool(
+        state: &AppState,
+        name: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        crate::mcp::tools::execute_tool(state, name, args)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Wrapper over the internal `paginate_array` for unit/integration testing.
+    pub fn paginate_array(
+        data: serde_json::Value,
+        path: &[&str],
+        limit: usize,
+        offset: usize,
+        filter: Option<String>,
+    ) -> serde_json::Value {
+        crate::mcp::tools::paginate::paginate_array(data, path, limit, offset, filter)
+    }
+
+    pub fn string_arg(args: &serde_json::Value, name: &str) -> Option<String> {
+        crate::mcp::tools::arg_helpers::string_arg(args, name)
+    }
+
+    pub fn i64_arg(args: &serde_json::Value, name: &str) -> anyhow::Result<Option<i64>> {
+        crate::mcp::tools::arg_helpers::i64_arg(args, name)
+    }
+
+    pub fn usize_arg(args: &serde_json::Value, name: &str) -> anyhow::Result<Option<usize>> {
+        crate::mcp::tools::arg_helpers::usize_arg(args, name)
+    }
+
+    pub fn allowed_hosts(config: &McpConfig) -> Vec<String> {
+        crate::mcp::host_filter::allowed_hosts(config)
+    }
+
+    pub fn allowed_origins(config: &McpConfig) -> Vec<String> {
+        crate::mcp::host_filter::allowed_origins(config)
+    }
 }

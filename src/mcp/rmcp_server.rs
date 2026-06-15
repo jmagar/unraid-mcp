@@ -21,41 +21,13 @@ use crate::config::McpConfig;
 use super::{
     host_filter::{allowed_hosts, allowed_origins},
     prompts,
-    schemas::tool_definitions,
+    schemas::{tool_definitions, ACTIONS},
     tools::{execute_tool, serialize_response},
     AppState, AuthPolicy,
 };
 
 const READ_SCOPE: &str = "unraid:read";
 const DENY_SCOPE: &str = "unraid:__deny__";
-
-const READ_ONLY_ACTIONS: &[&str] = &[
-    "array",
-    "disks",
-    "docker",
-    "docker_logs",
-    "vms",
-    "server",
-    "info",
-    "shares",
-    "notifications",
-    "log_files",
-    "log_file",
-    "services",
-    "network",
-    "ups",
-    "ups_config",
-    "metrics",
-    "plugins",
-    "parity_history",
-    "vars",
-    "registration",
-    "flash",
-    "rclone",
-    "remote_access",
-    "connect",
-    "status",
-];
 
 #[derive(Clone)]
 pub struct UnraidRmcpServer {
@@ -108,6 +80,9 @@ impl ServerHandler for UnraidRmcpServer {
             .map(Value::Object)
             .unwrap_or_else(|| Value::Object(Map::new()));
         let started = Instant::now();
+        // Count every tool call exactly once at the MCP boundary (see the note in
+        // `tools::dispatch`). Covers pre-dispatch validation and serialization errors.
+        self.state.counters.inc_requests();
         tracing::info!(tool = %tool_name, action = %action, "MCP tool execution started");
 
         // All errors become agent-readable CallToolResult::error — never Err(ErrorData).
@@ -118,16 +93,24 @@ impl ServerHandler for UnraidRmcpServer {
                 tracing::info!(tool = %tool_name, elapsed_ms = elapsed, "MCP tool execution completed");
                 match serialize_response(result) {
                     Ok(text) => Ok(CallToolResult::success(vec![Content::text(text)])),
-                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                        "ERROR: serialization failed\nReason: {e}"
-                    ))])),
+                    Err(e) => {
+                        self.state.counters.inc_errors();
+                        Ok(CallToolResult::error(vec![Content::text(format!(
+                            "ERROR: serialization failed\nReason: {e}"
+                        ))]))
+                    }
                 }
             }
             Err(error) => {
                 let elapsed = started.elapsed().as_millis();
                 self.state.counters.inc_errors();
+                // Route on the typed variant, never on message prose: an
+                // agent-correctable input mistake becomes a protocol-level
+                // `invalid_params` error; every other failure (upstream
+                // unreachable/auth/other, internal) stays an in-band tool error so
+                // the MCP session survives upstream outages.
                 let msg = error.to_string();
-                if is_validation_error(&msg) {
+                if error.is_invalid_params() {
                     tracing::warn!(tool = %tool_name, elapsed_ms = elapsed, "MCP tool rejected invalid params");
                     Err(ErrorData::invalid_params(msg, None))
                 } else {
@@ -326,21 +309,54 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
     ))
 }
 
+/// Map an action to its required scope, driven entirely off the canonical
+/// [`ACTIONS`] list in `schemas.rs`:
+/// - a read-only action (every action except `help`) requires [`READ_SCOPE`];
+/// - `help` (the one non-read-only spec) requires no scope;
+/// - any action not in the canonical list falls through to [`DENY_SCOPE`],
+///   which no caller can hold, so an unmapped action is unreachable.
 fn required_scope_for(action: &str) -> Option<&'static str> {
-    if action == "help" {
-        None
-    } else if READ_ONLY_ACTIONS.contains(&action) {
-        Some(READ_SCOPE)
-    } else {
-        Some(DENY_SCOPE)
+    match ACTIONS.iter().find(|a| a.name == action) {
+        Some(spec) if spec.read_only => Some(READ_SCOPE),
+        Some(_) => None, // non-read-only spec (`help`) needs no scope
+        None => Some(DENY_SCOPE),
     }
 }
 
-/// Returns true for errors that represent agent-correctable input mistakes.
-/// Returned as `InvalidParams` at the protocol level so agents can self-correct.
-fn is_validation_error(msg: &str) -> bool {
-    msg.contains("\" is required")
-        || msg.contains("unknown unraid action")
-        || msg.contains("unknown tool")
-        || msg.contains("must be an integer")
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Scope gating is derived from the single canonical [`ACTIONS`] list:
+    /// every read-only spec maps to `unraid:read`, `help` maps to no scope,
+    /// and an unknown action falls through to the deny sentinel.
+    #[test]
+    fn required_scope_tracks_canonical_list() {
+        for spec in ACTIONS {
+            let got = required_scope_for(spec.name);
+            if spec.read_only {
+                assert_eq!(
+                    got,
+                    Some(READ_SCOPE),
+                    "{} must require the read scope",
+                    spec.name
+                );
+            } else {
+                assert_eq!(got, None, "{} must require no scope", spec.name);
+            }
+        }
+    }
+
+    #[test]
+    fn help_requires_no_scope() {
+        assert_eq!(required_scope_for("help"), None);
+    }
+
+    #[test]
+    fn unknown_action_falls_to_deny_sentinel() {
+        assert_eq!(
+            required_scope_for("definitely_not_an_action"),
+            Some(DENY_SCOPE)
+        );
+    }
 }

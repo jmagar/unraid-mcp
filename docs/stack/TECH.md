@@ -5,7 +5,7 @@ Technology stack reference and crate selection rationale.
 ## Language: Rust
 
 Rust was chosen because:
-- Single static binary (`unraid`) simplifies deployment and Docker images
+- Single static binary (`runraid`) simplifies deployment and Docker images
 - Memory safety without GC pause eliminates latency spikes in HTTP service code
 - Strong async story via tokio for the MCP HTTP server and concurrent GraphQL calls
 - `reqwest` with `rustls` avoids OpenSSL system library version issues
@@ -29,7 +29,7 @@ Minimal, composable HTTP framework built on tokio and tower:
 
 rmcp owns the MCP protocol lifecycle:
 - `transport-streamable-http-server` — Streamable HTTP in stateless JSON-response mode
-- `transport-io` — stdio transport for `unraid mcp` child-process mode
+- `transport-io` — stdio transport for `runraid mcp` child-process mode
 - `server` + `macros` — `ServerHandler` trait and derive helpers
 - stateless mode: every `POST /mcp` is independent; no session state stored
 

@@ -69,6 +69,7 @@ One tool is exposed. The required `action` argument selects the operation. All a
 
 | Action | Description |
 |--------|-------------|
+| `status` | Server observability: version, PID, uptime, request counters (requires `unraid:read`; MCP-only) |
 | `help` | Markdown reference for all actions (no auth scope required) |
 
 ### Action parameters
@@ -81,6 +82,12 @@ One tool is exposed. The required `action` argument selects the operation. All a
 | `lines` | integer | `log_file` | Number of lines to read |
 | `start_line` | integer | `log_file` | Starting line number (1-indexed) |
 | `tail` | integer | `docker_logs` | Log lines to return (default 100) |
+| `limit` | integer | list actions | Max items per page (default 50, max 200) — MCP-only |
+| `offset` | integer | list actions | Number of items to skip (default 0) — MCP-only |
+| `state` | string | `docker` | Filter containers by state — MCP-only |
+| `name` | string | `shares`, `plugins` | Filter results by name — MCP-only |
+
+List actions return a paginated envelope: `{items, total, limit, offset, has_more, next_offset}`.
 
 ## MCP resources
 
@@ -100,40 +107,42 @@ All commands accept `--json` for machine-readable output.
 
 | Command | MCP action | Notes |
 |---------|-----------|-------|
-| `unraid array` | `array` | |
-| `unraid disks` | `disks` | |
-| `unraid docker` | `docker` | |
-| `unraid docker logs <id> [--tail N]` | `docker_logs` | |
-| `unraid vms` | `vms` | |
-| `unraid server` | `server` | |
-| `unraid info` | `info` | |
-| `unraid shares` | `shares` | |
-| `unraid notifications` | `notifications` | |
-| `unraid services` | `services` | |
-| `unraid network` | `network` | |
-| `unraid metrics` | `metrics` | |
-| `unraid vars` | `vars` | |
-| `unraid registration` | `registration` | |
-| `unraid flash` | `flash` | |
-| `unraid log-files` | `log_files` | also: `unraid log files` |
-| `unraid log <path> [--lines N] [--start-line N]` | `log_file` | also: `unraid log-file <path>` |
-| `unraid parity-history` | `parity_history` | also: `unraid parity history` |
-| `unraid rclone` | `rclone` | |
-| `unraid ups` | `ups` | |
-| `unraid ups-config` | `ups_config` | also: `unraid ups config` |
-| `unraid remote-access` | `remote_access` | also: `unraid remote access` |
-| `unraid connect` | `connect` | |
-| `unraid plugins` | `plugins` | |
+| `runraid array` | `array` | |
+| `runraid disks` | `disks` | |
+| `runraid docker` | `docker` | |
+| `runraid docker logs <id> [--tail N]` | `docker_logs` | |
+| `runraid vms` | `vms` | |
+| `runraid server` | `server` | |
+| `runraid info` | `info` | |
+| `runraid shares` | `shares` | |
+| `runraid notifications` | `notifications` | |
+| `runraid services` | `services` | |
+| `runraid network` | `network` | |
+| `runraid metrics` | `metrics` | |
+| `runraid vars` | `vars` | |
+| `runraid registration` | `registration` | |
+| `runraid flash` | `flash` | |
+| `runraid log-files` | `log_files` | also: `runraid log files` |
+| `runraid log <path> [--lines N] [--start-line N]` | `log_file` | also: `runraid log-file <path>` |
+| `runraid parity-history` | `parity_history` | also: `runraid parity history` |
+| `runraid rclone` | `rclone` | |
+| `runraid ups` | `ups` | |
+| `runraid ups-config` | `ups_config` | also: `runraid ups config` |
+| `runraid remote-access` | `remote_access` | also: `runraid remote access` |
+| `runraid connect` | `connect` | |
+| `runraid plugins` | `plugins` | |
+
+The `status` action is MCP-only and has no CLI command. The CLI additionally provides `setup` and `doctor` commands that have no MCP action.
 
 Server/transport commands:
 
 | Command | Description |
 |---------|-------------|
-| `unraid` or `unraid serve` | Start RMCP Streamable HTTP server |
-| `unraid serve mcp` | Same as above (explicit) |
-| `unraid mcp` | Start stdio MCP transport |
-| `unraid --help` | Print usage |
-| `unraid --version` | Print version |
+| `runraid` or `runraid serve` | Start RMCP Streamable HTTP server |
+| `runraid serve mcp` | Same as above (explicit) |
+| `runraid mcp` | Start stdio MCP transport |
+| `runraid --help` | Print usage |
+| `runraid --version` | Print version |
 
 ## HTTP endpoints
 
@@ -154,7 +163,7 @@ Server/transport commands:
 | `UNRAID_API_KEY` | **yes** | — | API key sent as `x-api-key` header |
 | `UNRAID_API_SKIP_TLS_VERIFY` | no | `false` | Skip TLS certificate verification |
 | `UNRAID_MCP_HOST` | no | `0.0.0.0` | Bind host for the MCP HTTP server |
-| `UNRAID_MCP_PORT` | no | `3100` (code) / `6970` (config.toml) | Bind port |
+| `UNRAID_MCP_PORT` | no | `40010` | Bind port |
 | `UNRAID_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (1/true/yes) |
 | `UNRAID_MCP_NO_AUTH` | no | `false` | Alias for disabling auth |

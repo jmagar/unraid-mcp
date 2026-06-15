@@ -3,8 +3,16 @@ use serde_json::Value;
 
 use crate::graphql::UnraidClient;
 
-/// Business service layer. All logic lives here.
-/// CLI and MCP are thin shims that call into this.
+/// Thin, intentional typed seam between the CLI / MCP front-ends and
+/// [`UnraidClient`]. Each method is a verbatim pass-through to the client by
+/// design — there is deliberately no business logic here.
+///
+/// Where the actual work lives:
+/// - data retrieval (GraphQL queries) → `graphql.rs`
+/// - pagination, argument validation, action dispatch → `mcp/tools.rs`
+///
+/// Keeping this seam lets both front-ends share one typed `Service` surface
+/// without coupling them to the raw HTTP client.
 #[derive(Clone)]
 pub struct UnraidService {
     client: UnraidClient,
