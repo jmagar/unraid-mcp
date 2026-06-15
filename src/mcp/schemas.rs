@@ -21,33 +21,111 @@ pub(super) struct ActionSpec {
 /// The canonical action list. Order is preserved in the JSON Schema enum and the
 /// error-message list, so it doubles as the documented action ordering.
 pub(super) const ACTIONS: &[ActionSpec] = &[
-    ActionSpec { name: "array", read_only: true },
-    ActionSpec { name: "disks", read_only: true },
-    ActionSpec { name: "docker", read_only: true },
-    ActionSpec { name: "docker_logs", read_only: true },
-    ActionSpec { name: "vms", read_only: true },
-    ActionSpec { name: "server", read_only: true },
-    ActionSpec { name: "info", read_only: true },
-    ActionSpec { name: "shares", read_only: true },
-    ActionSpec { name: "notifications", read_only: true },
-    ActionSpec { name: "log_files", read_only: true },
-    ActionSpec { name: "log_file", read_only: true },
-    ActionSpec { name: "services", read_only: true },
-    ActionSpec { name: "network", read_only: true },
-    ActionSpec { name: "ups", read_only: true },
-    ActionSpec { name: "ups_config", read_only: true },
-    ActionSpec { name: "metrics", read_only: true },
-    ActionSpec { name: "plugins", read_only: true },
-    ActionSpec { name: "parity_history", read_only: true },
-    ActionSpec { name: "vars", read_only: true },
-    ActionSpec { name: "registration", read_only: true },
-    ActionSpec { name: "flash", read_only: true },
-    ActionSpec { name: "rclone", read_only: true },
-    ActionSpec { name: "remote_access", read_only: true },
-    ActionSpec { name: "connect", read_only: true },
-    ActionSpec { name: "status", read_only: true },
+    ActionSpec {
+        name: "array",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "disks",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "docker",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "docker_logs",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "vms",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "server",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "info",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "shares",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "notifications",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "log_files",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "log_file",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "services",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "network",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "ups",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "ups_config",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "metrics",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "plugins",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "parity_history",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "vars",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "registration",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "flash",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "rclone",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "remote_access",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "connect",
+        read_only: true,
+    },
+    ActionSpec {
+        name: "status",
+        read_only: true,
+    },
     // `help` is the only action that requires no scope.
-    ActionSpec { name: "help", read_only: false },
+    ActionSpec {
+        name: "help",
+        read_only: false,
+    },
 ];
 
 /// All valid action names, derived from [`ACTIONS`]. Used for the JSON Schema enum.

@@ -99,9 +99,7 @@ impl UnraidClient {
 
         let status = resp.status();
 
-        if status == reqwest::StatusCode::UNAUTHORIZED
-            || status == reqwest::StatusCode::FORBIDDEN
-        {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             // Read the body only to log it; never return it to the caller.
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(status = %status, body = %body, "upstream rejected the request (auth)");
@@ -111,9 +109,7 @@ impl UnraidClient {
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             tracing::error!(status = %status, body = %body, "upstream returned a non-success HTTP status");
-            return Err(
-                UpstreamError::Other(format!("upstream returned HTTP {status}")).into(),
-            );
+            return Err(UpstreamError::Other(format!("upstream returned HTTP {status}")).into());
         }
 
         let body: Value = match resp.json().await {

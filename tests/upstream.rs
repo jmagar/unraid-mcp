@@ -53,7 +53,8 @@ async fn log_file_path_travels_as_variable_not_interpolated() {
 
     // 1. The malicious value is carried verbatim as a GraphQL variable.
     assert_eq!(
-        body["variables"]["path"], json!(malicious),
+        body["variables"]["path"],
+        json!(malicious),
         "path must be sent as a GraphQL variable, exactly as supplied"
     );
 
@@ -101,7 +102,8 @@ async fn docker_logs_id_travels_as_variable_not_interpolated() {
     let body = first_request_body(&server).await;
 
     assert_eq!(
-        body["variables"]["id"], json!(malicious_id),
+        body["variables"]["id"],
+        json!(malicious_id),
         "id must be sent as a GraphQL variable, exactly as supplied"
     );
 

@@ -348,6 +348,9 @@ mod tests {
 
     #[test]
     fn unknown_action_falls_to_deny_sentinel() {
-        assert_eq!(required_scope_for("definitely_not_an_action"), Some(DENY_SCOPE));
+        assert_eq!(
+            required_scope_for("definitely_not_an_action"),
+            Some(DENY_SCOPE)
+        );
     }
 }

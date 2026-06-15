@@ -255,9 +255,7 @@ async fn check_upstream(url: &str, api_key: &str, skip_tls_verify: bool) -> Doct
                     category: "connectivity",
                     name: "Upstream reachable".into(),
                     ok: true,
-                    value: Some(format!(
-                        "{url} → TLS certificate invalid ({elapsed} ms)"
-                    )),
+                    value: Some(format!("{url} → TLS certificate invalid ({elapsed} ms)")),
                     hint: Some(
                         "upstream reachable but TLS certificate invalid — set \
                          UNRAID_API_SKIP_TLS_VERIFY=true if this is intentional (self-signed)"
@@ -427,9 +425,7 @@ pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
     // Upstream connectivity (skip if URL not set — would panic the client)
     let skip_tls = config.unraid.skip_tls_verify;
     if !config.unraid.api_url.is_empty() && !config.unraid.api_key.is_empty() {
-        checks.push(
-            check_upstream(&config.unraid.api_url, &config.unraid.api_key, skip_tls).await,
-        );
+        checks.push(check_upstream(&config.unraid.api_url, &config.unraid.api_key, skip_tls).await);
     } else if !config.unraid.api_url.is_empty() {
         // URL set but no key — still probe (will get 401, caught by check_upstream)
         checks.push(check_upstream(&config.unraid.api_url, "", skip_tls).await);

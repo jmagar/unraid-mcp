@@ -13,7 +13,9 @@ pub enum SetupCommand {
     /// Copy this binary into ~/.local/bin so it is callable as a bare command
     /// in the user's own terminal, independent of Claude Code.
     Install,
-    PluginHook { no_repair: bool },
+    PluginHook {
+        no_repair: bool,
+    },
 }
 
 #[derive(Debug, Serialize)]

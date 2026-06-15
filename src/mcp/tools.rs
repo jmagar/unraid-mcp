@@ -146,11 +146,7 @@ async fn dispatch(state: &AppState, args: Value) -> Result<Value, ToolError> {
 /// Run the action. Argument-validation / unknown-action failures are returned as
 /// [`ToolError::InvalidParams`]; each service call's `anyhow` error is classified
 /// by its typed source into the matching upstream/internal [`ToolError`] variant.
-async fn dispatch_action(
-    state: &AppState,
-    action: &str,
-    args: &Value,
-) -> Result<Value, ToolError> {
+async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> Result<Value, ToolError> {
     // Helper: run a service call and classify any failure by its typed source.
     //
     // This is the single seam where every upstream-hitting action funnels through

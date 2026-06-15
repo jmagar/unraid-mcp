@@ -22,7 +22,10 @@ async fn missing_action_is_invalid_params() {
     let err = execute_tool(&state, "unraid", json!({}))
         .await
         .expect_err("missing action must be an error");
-    assert!(err.contains("action"), "message should mention action: {err}");
+    assert!(
+        err.contains("action"),
+        "message should mention action: {err}"
+    );
     assert!(
         err.contains("required"),
         "message should mention required: {err}"

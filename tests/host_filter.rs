@@ -256,10 +256,7 @@ fn extra_allowed_hosts_are_included_with_port_variant() {
     let hosts = allowed_hosts(&config);
 
     // A plain hostname with no port gets a host:port variant added.
-    assert!(
-        has(&hosts, "unraid.local"),
-        "missing extra host: {hosts:?}"
-    );
+    assert!(has(&hosts, "unraid.local"), "missing extra host: {hosts:?}");
     assert!(
         has(&hosts, &format!("unraid.local:{port}")),
         "missing extra host:port variant: {hosts:?}"

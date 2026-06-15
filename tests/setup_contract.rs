@@ -80,7 +80,10 @@ fn claude_hooks_call_binary_directly() {
         let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert_eq!(command, "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook");
+        assert_eq!(
+            command,
+            "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"
+        );
     }
 }
 
