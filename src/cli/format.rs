@@ -419,6 +419,12 @@ fn fmt_ups(data: &Value) {
             return;
         }
     };
+    if devices.is_empty() {
+        // Field present but no devices — distinct from the missing-field case above,
+        // but the user-facing message is the same. Without this, output is silent.
+        println!("No UPS devices found.");
+        return;
+    }
     for d in devices {
         println!("── {} ({}) ──", str_val(&d["name"]), str_val(&d["model"]));
         println!("  Status:   {}", str_val(&d["status"]));

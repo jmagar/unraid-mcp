@@ -132,15 +132,12 @@ async fn dispatch(state: &AppState, args: Value) -> Result<Value, ToolError> {
         }
     };
 
-    state.counters.inc_requests();
-
-    match dispatch_action(state, &action, &args).await {
-        Ok(v) => Ok(v),
-        Err(e) => {
-            state.counters.inc_errors();
-            Err(e)
-        }
-    }
+    // Request/error counting lives at the MCP boundary (`call_tool` in
+    // `rmcp_server.rs`) so every tool call — including pre-dispatch validation
+    // failures (missing/unknown action) and serialization errors — is counted
+    // exactly once. `inc_upstream`/`inc_upstream_err` (the upstream-specific
+    // metrics) stay in the dispatch layer where the upstream call happens.
+    dispatch_action(state, &action, &args).await
 }
 
 /// Run the action. Argument-validation / unknown-action failures are returned as

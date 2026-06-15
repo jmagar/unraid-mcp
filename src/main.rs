@@ -83,10 +83,17 @@ async fn main() -> Result<()> {
 /// `build_auth_policy` so the no-auth guard and the auto-bypass agree on what
 /// counts as loopback.
 fn is_loopback_host(host: &str) -> bool {
-    host.starts_with("127.")
-        || host == "::1"
-        || host == "[::1]"
-        || host.eq_ignore_ascii_case("localhost")
+    // Parse as an IP (covering all of 127.0.0.0/8 and ::1) rather than a string
+    // prefix, so e.g. "127.evil.com" is NOT treated as loopback. Strip optional
+    // IPv6 brackets first ("[::1]" -> "::1").
+    let trimmed = host
+        .strip_prefix('[')
+        .and_then(|s| s.strip_suffix(']'))
+        .unwrap_or(host);
+    if let Ok(ip) = trimmed.parse::<std::net::IpAddr>() {
+        return ip.is_loopback();
+    }
+    host.eq_ignore_ascii_case("localhost")
 }
 
 /// Safety guard: refuse to start if binding to a non-loopback address with auth disabled

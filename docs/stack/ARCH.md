@@ -2,13 +2,13 @@
 
 ## Overview
 
-`unraid-mcp` is a thin GraphQL proxy. It exposes 24 read-only actions through the Model Context Protocol and an equivalent CLI. There is no local database, no ingestion pipeline, and no background tasks. All data comes from the Unraid GraphQL API on demand.
+`unraid-mcp` is a thin GraphQL proxy. It exposes 24 read-only data actions (plus a `status` observability action and `help`) through the Model Context Protocol and an equivalent CLI. There is no local database, no ingestion pipeline, and no background tasks. All data comes from the Unraid GraphQL API on demand.
 
 ```
                       ┌─────────────────────────────────────────┐
   Claude / MCP ◀────▶ │  POST /mcp  (RMCP Streamable HTTP)      │
-  stdio client ◀────▶ │  unraid mcp  (stdio transport)           │
-  shell / CI  ────▶   │  unraid <cmd>  (CLI)                     │
+  stdio client ◀────▶ │  runraid mcp  (stdio transport)          │
+  shell / CI  ────▶   │  runraid <cmd>  (CLI)                    │
                       │                                         │
                       │  Routes layer (axum)                    │
                       │    /mcp         → RMCP service           │
@@ -76,7 +76,7 @@ JSON-RPC response → MCP client
 ## Request flow (CLI)
 
 ```
-unraid <command> [--json]
+runraid <command> [--json]
     │
     ▼
 CliCommand::parse()  (cli.rs)
@@ -150,7 +150,7 @@ Scopes enforced per-action:
 
 ## MCP surface
 
-- **1 tool**: `unraid` with `action` dispatch (24 read-only actions + `help`)
+- **1 tool**: `unraid` with `action` dispatch (24 read-only data actions + `status` + `help`)
 - **1 resource**: `unraid://schema/mcp-tool` — JSON Schema of the tool (application/json)
 - **1 prompt**: `server_summary` — instructs the model to call `action=info` and summarise
 

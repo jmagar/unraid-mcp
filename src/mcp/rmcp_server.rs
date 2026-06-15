@@ -80,6 +80,9 @@ impl ServerHandler for UnraidRmcpServer {
             .map(Value::Object)
             .unwrap_or_else(|| Value::Object(Map::new()));
         let started = Instant::now();
+        // Count every tool call exactly once at the MCP boundary (see the note in
+        // `tools::dispatch`). Covers pre-dispatch validation and serialization errors.
+        self.state.counters.inc_requests();
         tracing::info!(tool = %tool_name, action = %action, "MCP tool execution started");
 
         // All errors become agent-readable CallToolResult::error — never Err(ErrorData).
@@ -90,9 +93,12 @@ impl ServerHandler for UnraidRmcpServer {
                 tracing::info!(tool = %tool_name, elapsed_ms = elapsed, "MCP tool execution completed");
                 match serialize_response(result) {
                     Ok(text) => Ok(CallToolResult::success(vec![Content::text(text)])),
-                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
-                        "ERROR: serialization failed\nReason: {e}"
-                    ))])),
+                    Err(e) => {
+                        self.state.counters.inc_errors();
+                        Ok(CallToolResult::error(vec![Content::text(format!(
+                            "ERROR: serialization failed\nReason: {e}"
+                        ))]))
+                    }
                 }
             }
             Err(error) => {

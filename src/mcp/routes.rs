@@ -135,7 +135,12 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
         "config": {
             "host": state.config.host,
             "port": state.config.port,
-            "auth_mode": format!("{:?}", state.auth_policy),
+            // Coarse label only — don't disclose the precise deployment topology
+            // (e.g. whether auth is bypassed) via the Debug representation.
+            "auth_mode": match state.auth_policy {
+                AuthPolicy::LoopbackDev => "loopback",
+                AuthPolicy::Mounted { .. } => "authenticated",
+            },
         },
         "counters": snap,
     }))

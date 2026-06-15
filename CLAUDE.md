@@ -83,7 +83,7 @@ in `rmcp_server.rs`) are all *derived* from it — do not hand-maintain those li
    `"your_action" => state.service.your_action().await,`. Also add the description
    to `HELP_TEXT`.
 
-5. **`src/cli.rs`** — add the `CliCommand` variant, parse arm in `CliCommand::parse`, dispatch arm in `run`, and a human-readable formatter `fmt_your_action`.
+5. **`src/cli/` submodules** — add the `CliCommand` variant in `src/cli/commands.rs`, the parse arm in `src/cli/parse.rs`, the dispatch arm in `src/cli/dispatch.rs`, and a human-readable formatter `fmt_your_action` in `src/cli/format.rs`. (`src/cli.rs` itself is just the module facade.)
 
 That's it — no separate scope list or schema-enum edit is needed; both are derived
 from the `ACTIONS` entry in step 3, and a unit test in each of `schemas.rs` and
