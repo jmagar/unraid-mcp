@@ -1,10 +1,32 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use reqwest::Client;
 use serde_json::{json, Value};
+use thiserror::Error;
 
 use crate::config::UnraidConfig;
+
+/// Typed classification of a failure talking to the upstream Unraid GraphQL API.
+///
+/// This is the *routing* contract: the dispatch layer downcasts an [`anyhow::Error`]
+/// to this enum to decide how to surface the failure to the MCP caller, instead of
+/// matching on message prose. Each variant carries only a category-level message —
+/// raw upstream bodies / GraphQL `errors` are logged server-side, never embedded
+/// here (see `query_with_vars`), so they cannot leak to the caller or aid schema
+/// probing.
+#[derive(Debug, Error)]
+pub enum UpstreamError {
+    /// Could not reach the upstream (connection refused, DNS, TLS handshake, timeout).
+    #[error("{0}")]
+    Unreachable(String),
+    /// Upstream rejected our credentials (HTTP 401/403).
+    #[error("{0}")]
+    Auth(String),
+    /// Any other upstream-side failure (5xx, GraphQL errors, malformed response).
+    #[error("{0}")]
+    Other(String),
+}
 
 #[derive(Clone)]
 pub struct UnraidClient {
@@ -43,7 +65,7 @@ impl UnraidClient {
         let span = tracing::info_span!("graphql.query", url = %self.url);
         let _guard = span.enter();
 
-        let resp = self
+        let resp = match self
             .client
             .post(&self.url)
             .header("x-api-key", &self.api_key)
@@ -52,24 +74,66 @@ impl UnraidClient {
             .timeout(Duration::from_secs(30))
             .send()
             .await
-            .context("GraphQL request failed — is UNRAID_API_URL reachable?")?;
+        {
+            Ok(resp) => resp,
+            Err(e) => {
+                // Transport-level failure: connection refused, DNS, TLS, timeout.
+                // The reqwest error text can carry OS-locale-specific wording, so it
+                // is logged server-side; the caller gets a stable category message.
+                tracing::warn!(error = %e, "GraphQL request failed at the transport layer");
+                let category = if e.is_connect() || e.is_timeout() {
+                    "upstream unreachable — is UNRAID_API_URL reachable?"
+                } else {
+                    "upstream request failed before a response was received"
+                };
+                return Err(UpstreamError::Unreachable(category.to_string()).into());
+            }
+        };
 
         let status = resp.status();
-        let body: Value = resp
-            .json()
-            .await
-            .context("failed to parse GraphQL response — unexpected non-JSON from upstream")?;
+
+        if status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::FORBIDDEN
+        {
+            // Read the body only to log it; never return it to the caller.
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!(status = %status, body = %body, "upstream rejected the request (auth)");
+            return Err(UpstreamError::Auth("upstream rejected the request — check that UNRAID_API_KEY is correct and has not expired".to_string()).into());
+        }
 
         if !status.is_success() {
-            anyhow::bail!("GraphQL HTTP {status}: {body}");
+            let body = resp.text().await.unwrap_or_default();
+            tracing::error!(status = %status, body = %body, "upstream returned a non-success HTTP status");
+            return Err(
+                UpstreamError::Other(format!("upstream returned HTTP {status}")).into(),
+            );
         }
+
+        let body: Value = match resp.json().await {
+            Ok(body) => body,
+            Err(e) => {
+                tracing::error!(error = %e, "failed to parse GraphQL response as JSON");
+                return Err(UpstreamError::Other(
+                    "upstream returned an unexpected non-JSON response".to_string(),
+                )
+                .into());
+            }
+        };
+
         if let Some(errors) = body.get("errors") {
-            anyhow::bail!("GraphQL errors: {errors}");
+            // Log the full GraphQL `errors` array server-side; the caller only learns
+            // that a GraphQL-level error occurred (no field names / messages leaked).
+            tracing::error!(errors = %errors, "upstream returned GraphQL errors");
+            return Err(UpstreamError::Other(
+                "upstream GraphQL error — see server logs for details".to_string(),
+            )
+            .into());
         }
-        let data = body
-            .get("data")
-            .cloned()
-            .ok_or_else(|| anyhow!("GraphQL response missing 'data' field"))?;
+
+        let data = body.get("data").cloned().ok_or_else(|| {
+            tracing::error!(body = %body, "GraphQL response missing 'data' field");
+            UpstreamError::Other("upstream GraphQL response missing 'data' field".to_string())
+        })?;
         tracing::debug!(status = %status, "GraphQL query ok");
         Ok(data)
     }

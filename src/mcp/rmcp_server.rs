@@ -98,8 +98,13 @@ impl ServerHandler for UnraidRmcpServer {
             Err(error) => {
                 let elapsed = started.elapsed().as_millis();
                 self.state.counters.inc_errors();
+                // Route on the typed variant, never on message prose: an
+                // agent-correctable input mistake becomes a protocol-level
+                // `invalid_params` error; every other failure (upstream
+                // unreachable/auth/other, internal) stays an in-band tool error so
+                // the MCP session survives upstream outages.
                 let msg = error.to_string();
-                if is_validation_error(&msg) {
+                if error.is_invalid_params() {
                     tracing::warn!(tool = %tool_name, elapsed_ms = elapsed, "MCP tool rejected invalid params");
                     Err(ErrorData::invalid_params(msg, None))
                 } else {
@@ -310,15 +315,6 @@ fn required_scope_for(action: &str) -> Option<&'static str> {
         Some(_) => None, // non-read-only spec (`help`) needs no scope
         None => Some(DENY_SCOPE),
     }
-}
-
-/// Returns true for errors that represent agent-correctable input mistakes.
-/// Returned as `InvalidParams` at the protocol level so agents can self-correct.
-fn is_validation_error(msg: &str) -> bool {
-    msg.contains("\" is required")
-        || msg.contains("unknown unraid action")
-        || msg.contains("unknown tool")
-        || msg.contains("must be an integer")
 }
 
 #[cfg(test)]

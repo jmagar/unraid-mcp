@@ -14,9 +14,10 @@ jobs:
     name: Formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.86
         with:
           components: rustfmt
 
@@ -27,9 +28,10 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.86
         with:
           components: clippy
 
@@ -42,9 +44,10 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: dtolnay/rust-toolchain@stable
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.86
 
       - uses: Swatinem/rust-cache@v2
 
@@ -58,7 +61,7 @@ jobs:
     name: TOML Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install taplo
         uses: taiki-e/install-action@v2
@@ -75,19 +78,42 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # RUSTSEC-2023-0071: Marvin timing attack on rsa 0.9.x (no fixed 0.9.x release).
+          # Reaches us only transitively via lab-auth's RS256 JWT verification. This server
+          # is read-only and token/OAuth-gated; the timing side-channel is not exploitable in
+          # our threat model. The job still fails on any NEW advisory. Revisit when lab-auth
+          # moves off rsa 0.9.x. Reviewed 2026-06-15.
+          ignore: RUSTSEC-2023-0071
 
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  no-env-files:
+    name: No tracked .env files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # CI equivalent of the lefthook block-env-commits.sh guard: fail if any
+      # non-example .env file is tracked in git.
+      - name: Check for tracked .env files
+        run: |
+          tracked=$(git ls-files '*.env' '.env' '.env.*' | grep -v -E '\.example($|\.)' | grep -v -E 'example\.env$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Tracked .env file(s) detected — remove and use .env.example instead:"
+            echo "$tracked"
+            exit 1
+          fi
+          echo "OK — no tracked .env files."

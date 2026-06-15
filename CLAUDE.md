@@ -2,14 +2,14 @@
 
 ## What this project is
 
-`unraid-mcp` is a Rust binary (`unraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It is read-only: all 24 actions fetch data; none modify state.
+`unraid-mcp` is a Rust binary (`runraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It is read-only: all data actions fetch data; none modify state.
 
 ## Module map
 
 | File | Role |
 |------|------|
 | `src/graphql.rs` | `UnraidClient` — raw HTTP client, one method per GraphQL query |
-| `src/app.rs` | `UnraidService` — business layer, thin wrapper over the client |
+| `src/app.rs` | `UnraidService` — thin pass-through to `UnraidClient` (no business logic) |
 | `src/mcp/tools.rs` | Dispatches JSON args to service methods, returns `Value` |
 | `src/mcp/schemas.rs` | MCP tool JSON Schema and action enum |
 | `src/mcp/rmcp_server.rs` | RMCP `ServerHandler`: tools, resources, prompts, scope checks |
@@ -34,19 +34,31 @@
 ## Environment variables
 
 ```
-UNRAID_API_URL              Unraid GraphQL endpoint (required)
-UNRAID_API_KEY              API key for x-api-key header (required)
-UNRAID_API_SKIP_TLS_VERIFY  Skip TLS cert check (default false)
-UNRAID_MCP_HOST             Bind host (default 0.0.0.0)
-UNRAID_MCP_PORT             Bind port (config.toml default: 6970)
-UNRAID_MCP_TOKEN            Static bearer token for /mcp
-UNRAID_MCP_DISABLE_HTTP_AUTH  Disable MCP auth (1/true/yes)
-UNRAID_MCP_NO_AUTH            Alias for disabling auth
-UNRAID_MCP_ALLOWED_HOSTS    Extra comma-separated Host header values
-UNRAID_MCP_ALLOWED_ORIGINS  Extra comma-separated CORS origins
-UNRAID_MCP_PUBLIC_URL       Public URL for OAuth metadata
-RUST_LOG                    Log filter
+UNRAID_API_URL                Unraid GraphQL endpoint (required)
+UNRAID_API_KEY                API key for x-api-key header (required)
+UNRAID_API_SKIP_TLS_VERIFY    Skip TLS cert check (default false)
+UNRAID_MCP_HOST               Bind host (default 0.0.0.0)
+UNRAID_MCP_PORT               Bind port (default 40010)
+UNRAID_MCP_TOKEN              Static bearer token for /mcp
+UNRAID_MCP_DISABLE_HTTP_AUTH  Disable MCP auth entirely (1/true/yes)
+UNRAID_MCP_NO_AUTH            Alias that disables MCP auth entirely (1/true/yes)
+UNRAID_MCP_ALLOWED_HOSTS      Extra comma-separated Host header values
+UNRAID_MCP_ALLOWED_ORIGINS    Extra comma-separated CORS origins
+UNRAID_MCP_PUBLIC_URL         Public URL for OAuth metadata
+UNRAID_MCP_AUTH_MODE          Auth mode: `bearer` (default) or `oauth`
+UNRAID_MCP_AUTH_ADMIN_EMAIL   Admin email for OAuth policy
+UNRAID_MCP_GOOGLE_CLIENT_ID       Google OAuth client ID
+UNRAID_MCP_GOOGLE_CLIENT_SECRET   Google OAuth client secret
+UNRAID_NOAUTH                 Permits a NON-loopback bind without auth being mounted.
+                              This is NOT the same as the two flags above — it does
+                              NOT disable auth; it only lifts main.rs's safety check
+                              that otherwise refuses a non-127.x bind in no-auth mode.
+RUST_LOG                      Log filter
 ```
+
+The binary also loads `~/.unraid/.env` (or `/data/.env` in a container) at startup
+via `dotenvy` before `Config::load` — see `load_dotenv()` in `config.rs`. A symlinked
+`.env` is refused (symlink-attack guard); already-set env vars are not overridden.
 
 ## How to add a new action
 
@@ -84,8 +96,9 @@ For actions with parameters (like `docker_logs` with `id` and `tail`), follow th
 - **BigInt fields** from the Unraid GraphQL API arrive as JSON strings, not numbers. See `bigint_f64()` in `cli.rs`. Memory sizes in the `metrics` query use this pattern.
 - **Temperature unit** is a GraphQL enum (`CELSIUS`, `FAHRENHEIT`, `KELVIN`). See `temp_unit_symbol()` in `cli.rs`.
 - **`flash.guid`** is declared non-nullable in the Unraid schema but can be null at runtime. The query omits it.
-- **Default port**: `config.rs` built-in default is 3100, but `config.toml` sets 6970. The project runs on 6970.
-- **Scopes**: `unraid:read` is required for all 24 data actions. `unraid:admin` satisfies `unraid:read`. `help` has no scope requirement.
+- **Default port**: the built-in default in `config.rs` (`default_mcp_port()`) is **40010**, matching `config.toml`. The project runs on 40010.
+- **Scopes**: `unraid:read` is required for every data action (including `status`). `unraid:admin` satisfies `unraid:read`. `help` has no scope requirement.
+- **Pagination + truncation (MCP surface only)**: list actions accept optional `limit`/`offset` (and `state`/`name` filters where relevant) and return a `{items, total, limit, offset, has_more, next_offset}` envelope. MCP responses are truncated at ~40 KB. Neither pagination nor the truncation cap is exposed through the CLI.
 - **Tests** in `tests/` use stub clients pointing at `http://localhost:1/graphql`. They do not need a real Unraid server.
 - **`tests/test_live.sh` and `tests/TEST_COVERAGE.md`** are stale syslog-mcp artifacts; ignore them.
 
@@ -102,41 +115,53 @@ For actions with parameters (like `docker_logs` with `id` and `tail`), follow th
 
 ## CLI ↔ MCP action parity
 
-Every MCP action has a corresponding CLI command (§37 pattern). The `help` MCP action
-maps to `unraid --help`. Full parity verified — no gaps.
+Most data actions exist on both surfaces, but the two are **not** a perfect mirror —
+there are known, intentional gaps:
+
+- **`status`** is **MCP-only** — it is an observability action with no CLI command.
+- **`doctor`** and **`setup`** (incl. `setup install` / `setup plugin-hook`) are
+  **CLI-only** — they are not exposed as MCP actions.
+- **Pagination/filtering** (`limit`/`offset`/`state`/`name`) and the **~40 KB
+  response truncation** are part of the **MCP surface only**; the CLI does not take
+  these params.
+
+The `help` MCP action maps to `runraid --help`.
 
 | Service Method | MCP Action | CLI Command |
 |---|---|---|
-| `service.array()` | `unraid(action="array")` | `unraid array` |
-| `service.disks()` | `unraid(action="disks")` | `unraid disks` |
-| `service.docker()` | `unraid(action="docker")` | `unraid docker` |
-| `service.docker_logs(id, tail)` | `unraid(action="docker_logs", id=…, tail=…)` | `unraid docker logs <id> [--tail N]` |
-| `service.vms()` | `unraid(action="vms")` | `unraid vms` |
-| `service.server()` | `unraid(action="server")` | `unraid server` |
-| `service.info()` | `unraid(action="info")` | `unraid info` |
-| `service.shares()` | `unraid(action="shares")` | `unraid shares` |
-| `service.notifications()` | `unraid(action="notifications")` | `unraid notifications` |
-| `service.log_files()` | `unraid(action="log_files")` | `unraid log-files` |
-| `service.log_file(path, lines, start_line)` | `unraid(action="log_file", path=…, lines=…, start_line=…)` | `unraid log <path> [--lines N] [--start-line N]` |
-| `service.services()` | `unraid(action="services")` | `unraid services` |
-| `service.network()` | `unraid(action="network")` | `unraid network` |
-| `service.ups()` | `unraid(action="ups")` | `unraid ups` |
-| `service.ups_config()` | `unraid(action="ups_config")` | `unraid ups-config` |
-| `service.metrics()` | `unraid(action="metrics")` | `unraid metrics` |
-| `service.plugins()` | `unraid(action="plugins")` | `unraid plugins` |
-| `service.parity_history()` | `unraid(action="parity_history")` | `unraid parity-history` |
-| `service.vars()` | `unraid(action="vars")` | `unraid vars` |
-| `service.registration()` | `unraid(action="registration")` | `unraid registration` |
-| `service.flash()` | `unraid(action="flash")` | `unraid flash` |
-| `service.rclone()` | `unraid(action="rclone")` | `unraid rclone` |
-| `service.remote_access()` | `unraid(action="remote_access")` | `unraid remote-access` |
-| `service.connect()` | `unraid(action="connect")` | `unraid connect` |
-| _(meta)_ | `unraid(action="help")` | `unraid --help` |
+| `service.array()` | `unraid(action="array")` | `runraid array` |
+| `service.disks()` | `unraid(action="disks")` | `runraid disks` |
+| `service.docker()` | `unraid(action="docker")` | `runraid docker` |
+| `service.docker_logs(id, tail)` | `unraid(action="docker_logs", id=…, tail=…)` | `runraid docker logs <id> [--tail N]` |
+| `service.vms()` | `unraid(action="vms")` | `runraid vms` |
+| `service.server()` | `unraid(action="server")` | `runraid server` |
+| `service.info()` | `unraid(action="info")` | `runraid info` |
+| `service.shares()` | `unraid(action="shares")` | `runraid shares` |
+| `service.notifications()` | `unraid(action="notifications")` | `runraid notifications` |
+| `service.log_files()` | `unraid(action="log_files")` | `runraid log-files` |
+| `service.log_file(path, lines, start_line)` | `unraid(action="log_file", path=…, lines=…, start_line=…)` | `runraid log <path> [--lines N] [--start-line N]` |
+| `service.services()` | `unraid(action="services")` | `runraid services` |
+| `service.network()` | `unraid(action="network")` | `runraid network` |
+| `service.ups()` | `unraid(action="ups")` | `runraid ups` |
+| `service.ups_config()` | `unraid(action="ups_config")` | `runraid ups-config` |
+| `service.metrics()` | `unraid(action="metrics")` | `runraid metrics` |
+| `service.plugins()` | `unraid(action="plugins")` | `runraid plugins` |
+| `service.parity_history()` | `unraid(action="parity_history")` | `runraid parity-history` |
+| `service.vars()` | `unraid(action="vars")` | `runraid vars` |
+| `service.registration()` | `unraid(action="registration")` | `runraid registration` |
+| `service.flash()` | `unraid(action="flash")` | `runraid flash` |
+| `service.rclone()` | `unraid(action="rclone")` | `runraid rclone` |
+| `service.remote_access()` | `unraid(action="remote_access")` | `runraid remote-access` |
+| `service.connect()` | `unraid(action="connect")` | `runraid connect` |
+| `service.status()` | `unraid(action="status")` | _(MCP-only — no CLI command)_ |
+| _(meta)_ | `unraid(action="help")` | `runraid --help` |
+| _(CLI-only)_ | _(no MCP action)_ | `runraid doctor` |
+| _(CLI-only)_ | _(no MCP action)_ | `runraid setup [install\|plugin-hook]` |
 
 ## Build commands
 
 ```bash
-cargo build --release     # produces target/release/unraid
+cargo build --release     # produces target/release/runraid
 just dev                  # cargo run -- serve mcp
 just test                 # cargo test
 just lint                 # cargo clippy -- -D warnings

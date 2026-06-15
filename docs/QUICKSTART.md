@@ -14,7 +14,7 @@ Get unraid-mcp running and make your first MCP call in five minutes.
 git clone https://github.com/jmagar/unraid-mcp
 cd unraid-mcp
 cargo build --release
-# Binary at: target/release/unraid
+# Binary at: target/release/runraid
 ```
 
 ## 2. Configure
@@ -24,7 +24,7 @@ Copy `.env` and edit it, or set environment variables directly:
 ```bash
 export UNRAID_API_URL="https://10-1-0-2.<hash>.myunraid.net:31337/graphql"
 export UNRAID_API_KEY="your-api-key-here"
-export UNRAID_MCP_PORT=6970
+export UNRAID_MCP_PORT=40010
 export UNRAID_MCP_DISABLE_HTTP_AUTH=true
 ```
 
@@ -40,22 +40,22 @@ export UNRAID_API_SKIP_TLS_VERIFY=true
 cargo run -- serve mcp
 
 # With the release binary
-./target/release/unraid serve mcp
+./target/release/runraid serve mcp
 
 # Or just
-./target/release/unraid
+./target/release/runraid
 ```
 
 You should see:
 ```
-INFO unraid_mcp: unraid-mcp starting bind=0.0.0.0:6970
-INFO unraid_mcp: MCP HTTP server listening bind=0.0.0.0:6970
+INFO unraid_mcp: unraid-mcp starting bind=0.0.0.0:40010
+INFO unraid_mcp: MCP HTTP server listening bind=0.0.0.0:40010
 ```
 
 ## 4. Verify
 
 ```bash
-curl -sf http://localhost:6970/health | jq .
+curl -sf http://localhost:40010/health | jq .
 ```
 Expected: `{"status":"ok"}`
 
@@ -63,7 +63,7 @@ Expected: `{"status":"ok"}`
 
 ```bash
 # Get server identity
-curl -s -X POST http://localhost:6970/mcp \
+curl -s -X POST http://localhost:40010/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{
@@ -97,7 +97,7 @@ Add to your Claude Code MCP config (`~/.claude/mcp_servers.json` or project `.mc
 {
   "mcpServers": {
     "unraid": {
-      "command": "/path/to/unraid",
+      "command": "/path/to/runraid",
       "args": ["mcp"],
       "env": {
         "UNRAID_API_URL": "https://10-1-0-2.<hash>.myunraid.net:31337/graphql",
@@ -114,22 +114,22 @@ Then in Claude: "Use the unraid tool to show me the array status."
 ## Try the CLI
 
 ```bash
-./target/release/unraid array
-./target/release/unraid docker
-./target/release/unraid metrics
-./target/release/unraid notifications
-./target/release/unraid server --json | jq .server.name
+./target/release/runraid array
+./target/release/runraid docker
+./target/release/runraid metrics
+./target/release/runraid notifications
+./target/release/runraid server --json | jq .server.name
 ```
 
 ## Get help
 
 ```bash
-./target/release/unraid --help
+./target/release/runraid --help
 ```
 
 Or via MCP:
 ```bash
-curl -s -X POST http://localhost:6970/mcp \
+curl -s -X POST http://localhost:40010/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"unraid","arguments":{"action":"help"}}}' \

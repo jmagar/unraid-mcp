@@ -38,8 +38,8 @@ fn dist() -> anyhow::Result<()> {
     run("cargo", &["build", "--release", "--locked"])?;
 
     let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into());
-    let src = format!("{target_dir}/release/unraid");
-    let dst = "bin/unraid";
+    let src = format!("{target_dir}/release/runraid");
+    let dst = "bin/runraid";
 
     std::fs::create_dir_all("bin")?;
     std::fs::copy(&src, dst)?;

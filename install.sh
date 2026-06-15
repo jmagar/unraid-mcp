@@ -111,8 +111,8 @@ preflight() {
     echo "  ⚠  UNRAID_API_KEY: not set (required before running the server)"
   fi
 
-  # 7. Port 6970 availability (warn only)
-  local port="${UNRAID_MCP_PORT:-6970}"
+  # 7. Port 40010 availability (warn only)
+  local port="${UNRAID_MCP_PORT:-40010}"
   if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${port}$" 2>/dev/null; then
     echo "  ⚠  Port ${port}: already in use (change UNRAID_MCP_PORT if needed)"
   else
@@ -260,9 +260,9 @@ UNRAID_API_KEY=your_unraid_api_key
 # MCP server bearer token (generate with: openssl rand -hex 32)
 UNRAID_MCP_TOKEN=your_bearer_token
 
-# Optional: bind host and port (default: 0.0.0.0:6970)
+# Optional: bind host and port (default: 0.0.0.0:40010)
 # UNRAID_MCP_HOST=127.0.0.1
-# UNRAID_MCP_PORT=6970
+# UNRAID_MCP_PORT=40010
 
 # Optional: skip TLS verification for self-signed certs (not recommended)
 # UNRAID_API_SKIP_TLS_VERIFY=true

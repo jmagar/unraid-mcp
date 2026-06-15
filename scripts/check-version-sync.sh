@@ -40,6 +40,11 @@ if [ -f "gemini-extension.json" ]; then
   [ -n "$v" ] && versions+=("gemini-extension.json=$v") && files_checked+=("gemini-extension.json")
 fi
 
+if [ -f "server.json" ]; then
+  v=$(python3 -c "import json; print(json.load(open('server.json')).get('version',''))" 2>/dev/null)
+  [ -n "$v" ] && versions+=("server.json=$v") && files_checked+=("server.json")
+fi
+
 # Need at least one version source
 if [ ${#versions[@]} -eq 0 ]; then
   echo "[version-sync] No version-bearing files found — skipping"

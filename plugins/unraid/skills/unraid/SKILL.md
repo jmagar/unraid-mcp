@@ -17,10 +17,10 @@ description: >
 
 Read-only access to an Unraid NAS server. Three access tiers in priority order:
 1. **MCP tool** `unraid` (preferred when available)
-2. **CLI binary** `unraid` (fallback)
+2. **CLI binary** `runraid` (fallback)
 3. **Direct GraphQL curl** (last resort)
 
-All 24 data actions are read-only — nothing modifies the server.
+All data actions are read-only — nothing modifies the server.
 
 ---
 
@@ -34,26 +34,33 @@ unraid(action="<action>")
 
 ### All actions
 
+List actions (`disks`, `docker`, `vms`, `shares`, `services`, `plugins`,
+`parity_history`, `notifications`) accept optional pagination/filtering params on the
+**MCP surface**: `limit`, `offset`, and where relevant `state` / `name` filters. They
+return a `{items, total, limit, offset, has_more, next_offset}` envelope. MCP
+responses are truncated at ~40 KB. (The CLI does not take these params.)
+
 | Action | What it returns | Required params | Optional params |
 |--------|----------------|-----------------|-----------------|
 | `array` | Array state, capacity (TB), parity status, data disks, cache pools | — | — |
-| `disks` | All physical disks: SMART status, temp, size, interface, partitions | — | — |
-| `docker` | All containers: name, state, status, ports, update availability | — | — |
+| `disks` | All physical disks: SMART status, temp, size, interface, partitions | — | `limit`, `offset`, `name` |
+| `docker` | All containers: name, state, status, ports, update availability | — | `limit`, `offset`, `state`, `name` |
 | `docker_logs` | Container log lines | `id` (container ID) | `tail` (default 100) |
-| `vms` | Virtual machines and their state | — | — |
+| `vms` | Virtual machines and their state | — | `limit`, `offset`, `state`, `name` |
 | `server` | Server name, LAN/WAN IP, local/remote URL, GUID, online status | — | — |
 | `info` | OS, CPU (brand/cores/threads/speed), memory layout, Unraid + kernel versions | — | — |
-| `shares` | User shares: name, size/used/free (KB), cache setting, allocator | — | — |
-| `notifications` | Unread counts by severity + active warnings and alerts with detail | — | — |
+| `shares` | User shares: name, size/used/free (KB), cache setting, allocator | — | `limit`, `offset`, `name` |
+| `notifications` | Unread counts by severity + active warnings and alerts with detail | — | `limit`, `offset` |
 | `log_files` | List of available log files with path, size, modified date | — | — |
 | `log_file` | Contents of one log file | `path` | `lines`, `start_line` |
-| `services` | System services: name, online status, version, uptime | — | — |
+| `services` | System services: name, online status, version, uptime | — | `limit`, `offset`, `name` |
 | `network` | Network access URLs: type, name, IPv4, IPv6 | — | — |
 | `ups` | UPS devices: battery %, runtime estimate, health, input/output voltage, load | — | — |
 | `ups_config` | UPS monitoring config: service, cable, type, device, shutdown thresholds | — | — |
 | `metrics` | Live CPU %, per-core %, memory used/total/swap, temperature sensors | — | — |
-| `plugins` | Installed community plugins with name and version | — | — |
-| `parity_history` | All past parity check results: date, duration, speed, errors | — | — |
+| `status` | Server reachability/health snapshot (observability) — MCP-only, no CLI command | — | — |
+| `plugins` | Installed community plugins with name and version | — | `limit`, `offset`, `name` |
+| `parity_history` | All past parity check results: date, duration, speed, errors | — | `limit`, `offset` |
 | `vars` | System config variables: timezone, model, protocol enables, reg state | — | — |
 | `registration` | License type, state, expiration date | — | — |
 | `flash` | USB flash drive vendor and product (guid omitted — null at runtime) | — | — |
@@ -160,6 +167,10 @@ The CLI requires `UNRAID_API_URL` and `UNRAID_API_KEY` environment variables to 
 ## Tier 3 — Direct GraphQL curl
 
 Use when both MCP and CLI are unavailable.
+
+> The query shapes below are hand-transcribed and can drift. `src/graphql.rs` (the
+> `UnraidClient` methods) is the source of truth for the exact queries each action runs —
+> check it if a field is rejected or missing.
 
 ```bash
 # Auth: x-api-key header; endpoint from UNRAID_API_URL env var

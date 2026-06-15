@@ -17,9 +17,9 @@
     "server_url": {
       "type": "string",
       "title": "Server URL",
-      "description": "Base URL the MCP client connects to. Keep the default http://localhost:6970 when Claude Code runs on the same machine as the unraid-mcp server. Change to e.g. http://nas:6970 or https://unraid.example.com when connecting to a remote instance. Do NOT append /mcp — the plugin adds it.",
+      "description": "Base URL the MCP client connects to. Keep the default http://localhost:40010 when Claude Code runs on the same machine as the unraid-mcp server. Change to e.g. http://nas:40010 or https://unraid.example.com when connecting to a remote instance. Do NOT append /mcp — the plugin adds it.",
       "required": true,
-      "default": "http://localhost:6970"
+      "default": "http://localhost:40010"
     },
     "api_token": {
       "type": "string",
@@ -71,7 +71,7 @@
     "use_docker": {
       "type": "boolean",
       "title": "Deploy with Docker",
-      "description": "Deployment method. true: run via the bundled docker compose stack (ports 6970, mounts data_dir). false: run as a systemd user service (lighter weight, logs to journald).",
+      "description": "Deployment method. true: run via the bundled docker compose stack (ports 40010, mounts data_dir). false: run as a systemd user service (lighter weight, logs to journald).",
       "required": true,
       "default": false
     },

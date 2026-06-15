@@ -4,13 +4,78 @@ mod paginate;
 use std::sync::LazyLock;
 
 use serde_json::{json, Value};
+use thiserror::Error;
 
+use crate::graphql::UpstreamError;
 use crate::token_limit::truncate_if_needed;
 
 use self::arg_helpers::{i64_arg, string_arg, usize_arg};
 use self::paginate::paginate_array;
 use super::schemas::ACTIONS;
 use super::AppState;
+
+/// Typed outcome of a tool dispatch, used to *route* failures at the MCP protocol
+/// boundary without matching on message prose.
+///
+/// The variant — not the message text — decides whether a failure is an
+/// agent-correctable protocol `invalid_params` error or an in-band tool error that
+/// keeps the session alive. The message strings stay rich and helpful, but rewording
+/// them can never change routing.
+#[derive(Debug, Error)]
+pub(crate) enum ToolError {
+    /// Missing/malformed argument, unknown action, or unknown tool — the caller can
+    /// fix the request and retry. Routes to protocol `invalid_params`.
+    #[error("{0}")]
+    InvalidParams(String),
+    /// Could not reach the upstream Unraid API. Routes to an in-band tool error.
+    #[error("{0}")]
+    UpstreamUnreachable(String),
+    /// Upstream rejected our credentials (401/403). In-band tool error.
+    #[error("{0}")]
+    UpstreamAuth(String),
+    /// Any other upstream-side failure. In-band tool error.
+    #[error("{0}")]
+    Upstream(String),
+    /// Internal/unexpected error (e.g. serialization). In-band tool error.
+    #[error("{0}")]
+    Internal(#[from] anyhow::Error),
+}
+
+impl ToolError {
+    /// True when this failure is an agent-correctable input mistake that should be
+    /// surfaced as a protocol-level `invalid_params` error.
+    pub(crate) fn is_invalid_params(&self) -> bool {
+        matches!(self, ToolError::InvalidParams(_))
+    }
+}
+
+/// Map a service-layer `anyhow` error to the right [`ToolError`] variant.
+///
+/// Routing is by typed source: if the error chain contains an [`UpstreamError`]
+/// (produced by `graphql.rs`), classify by its variant and wrap the message with
+/// helpful, action-specific guidance. Anything else is an internal failure.
+fn classify_service_error(err: anyhow::Error, action: &str) -> ToolError {
+    match err.downcast_ref::<UpstreamError>() {
+        Some(UpstreamError::Unreachable(msg)) => ToolError::UpstreamUnreachable(format!(
+            "ERROR: {action} failed — upstream unreachable\n\
+             Reason: {msg}\n\
+             Hint: check that UNRAID_API_URL is reachable and UNRAID_API_KEY is valid.\n\
+             Use action=status to check server health."
+        )),
+        Some(UpstreamError::Auth(msg)) => ToolError::UpstreamAuth(format!(
+            "ERROR: {action} failed — API key rejected\n\
+             Reason: {msg}\n\
+             Hint: check that UNRAID_API_KEY is correct and has not expired."
+        )),
+        Some(UpstreamError::Other(msg)) => ToolError::Upstream(format!(
+            "ERROR: {action} failed\n\
+             Reason: {msg}\n\
+             Hint: check UNRAID_API_URL and UNRAID_API_KEY. \
+             Use action=status to check server health."
+        )),
+        None => ToolError::Internal(err.context(format!("{action} failed"))),
+    }
+}
 
 /// All valid action names — used in error messages. Derived from the canonical
 /// [`ACTIONS`] list so it can never drift from the schema enum or scope source.
@@ -34,14 +99,14 @@ pub(crate) async fn execute_tool(
     state: &AppState,
     name: &str,
     args: Value,
-) -> anyhow::Result<Value> {
+) -> Result<Value, ToolError> {
     match name {
         "unraid" => dispatch(state, args).await,
-        _ => Err(anyhow::anyhow!(
+        _ => Err(ToolError::InvalidParams(format!(
             "unknown tool: {name}\n\
              Hint: the only supported tool is \"unraid\".\n\
              Use action=help for documentation."
-        )),
+        ))),
     }
 }
 
@@ -53,88 +118,99 @@ pub(super) fn serialize_response(value: Value) -> anyhow::Result<String> {
 
 // ── dispatch ──────────────────────────────────────────────────────────────────
 
-async fn dispatch(state: &AppState, args: Value) -> anyhow::Result<Value> {
+async fn dispatch(state: &AppState, args: Value) -> Result<Value, ToolError> {
     let action = match string_arg(&args, "action") {
         Some(a) => a,
         None => {
             let valid = &*VALID_ACTIONS;
-            return Err(anyhow::anyhow!(
+            return Err(ToolError::InvalidParams(format!(
                 "\"action\" is required.\n\
                  Valid actions: {valid}\n\
                  Example: {{\"action\": \"docker\"}}\n\
                  See: action=help for full documentation."
-            ));
+            )));
         }
     };
 
     state.counters.inc_requests();
 
-    let result = dispatch_action(state, &action, &args).await;
-
-    match result {
+    match dispatch_action(state, &action, &args).await {
         Ok(v) => Ok(v),
         Err(e) => {
             state.counters.inc_errors();
-            Err(annotate_upstream_error(e, &action))
+            Err(e)
         }
     }
 }
 
-async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> anyhow::Result<Value> {
+/// Run the action. Argument-validation / unknown-action failures are returned as
+/// [`ToolError::InvalidParams`]; each service call's `anyhow` error is classified
+/// by its typed source into the matching upstream/internal [`ToolError`] variant.
+async fn dispatch_action(
+    state: &AppState,
+    action: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    // Helper: run a service call and classify any failure by its typed source.
+    macro_rules! svc {
+        ($fut:expr) => {
+            ($fut).await.map_err(|e| classify_service_error(e, action))
+        };
+    }
+    // Helper: turn an arg-helper `anyhow::Result` into an `InvalidParams` failure.
+    macro_rules! arg {
+        ($res:expr) => {
+            $res.map_err(|e: anyhow::Error| ToolError::InvalidParams(e.to_string()))?
+        };
+    }
+
     match action {
-        "array" => state.service.array().await,
-        "disks" => state.service.disks().await,
+        "array" => svc!(state.service.array()),
+        "disks" => svc!(state.service.disks()),
 
         "docker" => {
             let filter = string_arg(args, "state");
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .docker()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.docker())
                 .map(|v| paginate_array(v, &["docker", "containers"], limit, offset, filter))
         }
 
         "docker_logs" => {
             let id = string_arg(args, "id").ok_or_else(|| {
-                anyhow::anyhow!(
+                ToolError::InvalidParams(
                     "\"id\" is required for action=docker_logs.\n\
                      Hint: call action=docker first to list available container IDs.\n\
-                     Example: {{\"action\": \"docker_logs\", \"id\": \"<container_id>\", \"tail\": 100}}"
+                     Example: {\"action\": \"docker_logs\", \"id\": \"<container_id>\", \"tail\": 100}"
+                        .to_string(),
                 )
             })?;
-            state.service.docker_logs(&id, i64_arg(args, "tail")?).await
+            let tail = arg!(i64_arg(args, "tail"));
+            svc!(state.service.docker_logs(&id, tail))
         }
 
         "vms" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .vms()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.vms())
                 .map(|v| paginate_array(v, &["vms", "domains"], limit, offset, None))
         }
 
-        "server" => state.service.server().await,
-        "info" => state.service.info().await,
+        "server" => svc!(state.service.server()),
+        "info" => svc!(state.service.info()),
 
         "shares" => {
             let filter = string_arg(args, "name");
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .shares()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.shares())
                 .map(|v| paginate_array(v, &["shares"], limit, offset, filter))
         }
 
         "notifications" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state.service.notifications().await.map(|v| {
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.notifications()).map(|v| {
                 paginate_array(
                     v,
                     &["notifications", "warningsAndAlerts"],
@@ -146,81 +222,66 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> anyhow
         }
 
         "log_files" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .log_files()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.log_files())
                 .map(|v| paginate_array(v, &["logFiles"], limit, offset, None))
         }
 
         "log_file" => {
             let path = string_arg(args, "path").ok_or_else(|| {
-                anyhow::anyhow!(
+                ToolError::InvalidParams(
                     "\"path\" is required for action=log_file.\n\
                      Hint: call action=log_files first to list available log file paths.\n\
-                     Example: {{\"action\": \"log_file\", \"path\": \"/var/log/syslog\", \"lines\": 100}}"
+                     Example: {\"action\": \"log_file\", \"path\": \"/var/log/syslog\", \"lines\": 100}"
+                        .to_string(),
                 )
             })?;
-            state
-                .service
-                .log_file(&path, i64_arg(args, "lines")?, i64_arg(args, "start_line")?)
-                .await
+            let lines = arg!(i64_arg(args, "lines"));
+            let start_line = arg!(i64_arg(args, "start_line"));
+            svc!(state.service.log_file(&path, lines, start_line))
         }
 
         "services" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .services()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.services())
                 .map(|v| paginate_array(v, &["services"], limit, offset, None))
         }
 
-        "network" => state.service.network().await,
+        "network" => svc!(state.service.network()),
 
         "ups" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .ups()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.ups())
                 .map(|v| paginate_array(v, &["upsDevices"], limit, offset, None))
         }
 
-        "ups_config" => state.service.ups_config().await,
-        "metrics" => state.service.metrics().await,
+        "ups_config" => svc!(state.service.ups_config()),
+        "metrics" => svc!(state.service.metrics()),
 
         "plugins" => {
             let filter = string_arg(args, "name");
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .plugins()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.plugins())
                 .map(|v| paginate_array(v, &["plugins"], limit, offset, filter))
         }
 
         "parity_history" => {
-            let limit = usize_arg(args, "limit")?.unwrap_or(50).min(200);
-            let offset = usize_arg(args, "offset")?.unwrap_or(0);
-            state
-                .service
-                .parity_history()
-                .await
+            let limit = arg!(usize_arg(args, "limit")).unwrap_or(50).min(200);
+            let offset = arg!(usize_arg(args, "offset")).unwrap_or(0);
+            svc!(state.service.parity_history())
                 .map(|v| paginate_array(v, &["parityHistory"], limit, offset, None))
         }
 
-        "vars" => state.service.vars().await,
-        "registration" => state.service.registration().await,
-        "flash" => state.service.flash().await,
-        "rclone" => state.service.rclone().await,
-        "remote_access" => state.service.remote_access().await,
-        "connect" => state.service.connect().await,
+        "vars" => svc!(state.service.vars()),
+        "registration" => svc!(state.service.registration()),
+        "flash" => svc!(state.service.flash()),
+        "rclone" => svc!(state.service.rclone()),
+        "remote_access" => svc!(state.service.remote_access()),
+        "connect" => svc!(state.service.connect()),
 
         "status" => {
             let snap = state.counters.snapshot();
@@ -238,43 +299,12 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> anyhow
 
         other => {
             let valid = &*VALID_ACTIONS;
-            Err(anyhow::anyhow!(
+            Err(ToolError::InvalidParams(format!(
                 "unknown unraid action: \"{other}\"\n\
                  Valid actions: {valid}\n\
                  See: action=help for full documentation."
-            ))
+            )))
         }
-    }
-}
-
-// ── upstream error annotation ─────────────────────────────────────────────────
-
-fn annotate_upstream_error(err: anyhow::Error, action: &str) -> anyhow::Error {
-    let msg = err.to_string();
-    if msg.contains("connection refused")
-        || msg.contains("failed to connect")
-        || msg.contains("No connection could be made")
-        || msg.contains("os error")
-    {
-        anyhow::anyhow!(
-            "ERROR: {action} failed — upstream unreachable\n\
-             Reason: {msg}\n\
-             Hint: check that UNRAID_API_URL is reachable and UNRAID_API_KEY is valid.\n\
-             Use action=status to check server health."
-        )
-    } else if msg.contains("API key") || msg.contains("401") || msg.contains("Unauthorized") {
-        anyhow::anyhow!(
-            "ERROR: {action} failed — API key rejected\n\
-             Reason: {msg}\n\
-             Hint: check that UNRAID_API_KEY is correct and has not expired."
-        )
-    } else {
-        anyhow::anyhow!(
-            "ERROR: {action} failed\n\
-             Reason: {msg}\n\
-             Hint: check UNRAID_API_URL and UNRAID_API_KEY. \
-             Use action=status to check server health."
-        )
     }
 }
 
@@ -335,3 +365,75 @@ Response shape: {items, total, limit, offset, has_more, next_offset}
 ## Meta
 - `help`           — This documentation
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // These tests lock the routing contract that used to live implicitly in
+    // substring matching: routing is decided by the typed `ToolError` variant, not
+    // by the wording of the message. Rewording a message must not change routing.
+
+    #[test]
+    fn invalid_params_routes_to_protocol_error() {
+        assert!(ToolError::InvalidParams("anything".into()).is_invalid_params());
+    }
+
+    #[test]
+    fn upstream_variants_route_in_band() {
+        // None of the upstream/internal variants are agent-correctable input
+        // mistakes, so they must NOT route to protocol invalid_params (they stay
+        // in-band tool errors that keep the session alive).
+        assert!(!ToolError::UpstreamUnreachable("x".into()).is_invalid_params());
+        assert!(!ToolError::UpstreamAuth("x".into()).is_invalid_params());
+        assert!(!ToolError::Upstream("x".into()).is_invalid_params());
+        assert!(!ToolError::Internal(anyhow::anyhow!("boom")).is_invalid_params());
+    }
+
+    #[test]
+    fn classify_maps_unreachable_upstream_error() {
+        let err = anyhow::Error::from(UpstreamError::Unreachable("nope".into()));
+        let classified = classify_service_error(err, "array");
+        assert!(matches!(classified, ToolError::UpstreamUnreachable(_)));
+        assert!(!classified.is_invalid_params());
+        // Helpful, action-specific message text is preserved.
+        assert!(classified.to_string().contains("array failed"));
+    }
+
+    #[test]
+    fn classify_maps_auth_upstream_error() {
+        let err = anyhow::Error::from(UpstreamError::Auth("rejected".into()));
+        let classified = classify_service_error(err, "disks");
+        assert!(matches!(classified, ToolError::UpstreamAuth(_)));
+        assert!(!classified.is_invalid_params());
+        assert!(classified.to_string().contains("API key rejected"));
+    }
+
+    #[test]
+    fn classify_maps_other_upstream_error() {
+        let err = anyhow::Error::from(UpstreamError::Other("HTTP 500".into()));
+        let classified = classify_service_error(err, "metrics");
+        assert!(matches!(classified, ToolError::Upstream(_)));
+        assert!(!classified.is_invalid_params());
+    }
+
+    #[test]
+    fn classify_maps_unknown_error_to_internal() {
+        // An error with no UpstreamError in its chain is an internal failure, and
+        // routes in-band (not invalid_params).
+        let err = anyhow::anyhow!("some non-upstream failure");
+        let classified = classify_service_error(err, "info");
+        assert!(matches!(classified, ToolError::Internal(_)));
+        assert!(!classified.is_invalid_params());
+    }
+
+    #[test]
+    fn classify_finds_upstream_error_through_context_layers() {
+        // Routing must survive added context layers — it downcasts the source chain,
+        // it does not match on the top-level message.
+        let err = anyhow::Error::from(UpstreamError::Auth("401".into()))
+            .context("while fetching docker containers");
+        let classified = classify_service_error(err, "docker");
+        assert!(matches!(classified, ToolError::UpstreamAuth(_)));
+    }
+}
