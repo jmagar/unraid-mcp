@@ -43,9 +43,9 @@ fn fmt_array(data: &Value) {
     println!("Array: {}", str_val(&a["state"]));
 
     let kb = &a["capacity"]["kilobytes"];
-    let total = kb_to_tb(kb["total"].as_str().unwrap_or("0"));
-    let used = kb_to_tb(kb["used"].as_str().unwrap_or("0"));
-    let free = kb_to_tb(kb["free"].as_str().unwrap_or("0"));
+    let total = kb_to_tb(&kb["total"]);
+    let used = kb_to_tb(&kb["used"]);
+    let free = kb_to_tb(&kb["free"]);
     println!("Capacity: {total:.1} TB total  {used:.1} TB used  {free:.1} TB free");
 
     let parity = &a["parityCheckStatus"];
@@ -332,7 +332,7 @@ fn fmt_notifications(data: &Value) {
                     str_val(&n["importance"]),
                     str_val(&n["title"]),
                     str_val(&n["subject"]),
-                    str_val_or(&n["formattedTimestamp"], ""),
+                    str_val_or(&n["timestamp"], ""),
                 );
             }
         }
@@ -436,9 +436,6 @@ fn fmt_ups(data: &Value) {
             pwr["outputVoltage"].as_f64().unwrap_or(0.0),
             pwr["loadPercent"].as_f64().unwrap_or(0.0),
         );
-    }
-    if devices.is_empty() {
-        println!("No UPS devices found.");
     }
 }
 
@@ -586,7 +583,6 @@ fn fmt_vars(data: &Value) {
     println!("Unraid:      {}", str_val_or(&v["version"], "?"));
     println!("Model:       {}", str_val_or(&v["sysModel"], "--"));
     println!("Timezone:    {}", str_val_or(&v["timeZone"], "--"));
-    println!("Array slots: {}", v["sysArraySlots"].as_i64().unwrap_or(0));
     println!("Devices:     {}", v["deviceCount"].as_i64().unwrap_or(0));
     println!(
         "Config:      {}",
@@ -719,8 +715,8 @@ fn fmt_gib(bytes: f64) -> String {
     }
 }
 
-fn kb_to_tb(s: &str) -> f64 {
-    s.parse::<f64>().unwrap_or(0.0) / (1024.0 * 1024.0 * 1024.0)
+fn kb_to_tb(v: &Value) -> f64 {
+    bigint_f64(v) / (1024.0 * 1024.0 * 1024.0)
 }
 
 fn yn(v: Option<bool>) -> &'static str {

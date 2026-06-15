@@ -10,7 +10,11 @@ pub fn truncate_if_needed(text: String) -> String {
     if text.len() <= MAX_RESPONSE_BYTES {
         return text;
     }
-    let truncated = &text[..MAX_RESPONSE_BYTES];
+    let mut end = MAX_RESPONSE_BYTES;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let truncated = &text[..end];
     format!(
         "{truncated}\n\n[TRUNCATED: response exceeded 10K token limit (~40 KB). \
          Use limit/offset params or more specific filters to page through results.]"
@@ -41,5 +45,20 @@ mod tests {
         let s = "y".repeat(MAX_RESPONSE_BYTES);
         let result = truncate_if_needed(s.clone());
         assert_eq!(result, s);
+    }
+
+    #[test]
+    fn multibyte_at_boundary_does_not_panic() {
+        // 'é' is 2 bytes; 'a'*(cap-1) + 'é'*N puts a 2-byte char straddling the cap.
+        let s = "a".repeat(MAX_RESPONSE_BYTES - 1) + &"é".repeat(50);
+        let out = truncate_if_needed(s); // must not panic
+        assert!(out.contains("[TRUNCATED:"));
+    }
+
+    #[test]
+    fn truncates_on_char_boundary_for_emoji() {
+        let big = "🦀".repeat(MAX_RESPONSE_BYTES); // 4 bytes each, well over cap
+        let out = truncate_if_needed(big); // must not panic
+        assert!(out.contains("[TRUNCATED:"));
     }
 }

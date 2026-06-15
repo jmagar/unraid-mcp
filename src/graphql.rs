@@ -23,6 +23,7 @@ impl UnraidClient {
         }
         let client = reqwest::ClientBuilder::new()
             .danger_accept_invalid_certs(cfg.skip_tls_verify)
+            .connect_timeout(Duration::from_secs(5))
             .build()
             .context("failed to build HTTP client")?;
         Ok(Self {
@@ -33,6 +34,12 @@ impl UnraidClient {
     }
 
     async fn query(&self, gql: &str) -> Result<Value> {
+        self.query_with_vars(gql, Value::Null).await
+    }
+
+    /// Same as [`query`], but sends GraphQL `variables` alongside the query so
+    /// caller-controlled values never have to be interpolated into the query text.
+    async fn query_with_vars(&self, gql: &str, variables: Value) -> Result<Value> {
         let span = tracing::info_span!("graphql.query", url = %self.url);
         let _guard = span.enter();
 
@@ -41,7 +48,7 @@ impl UnraidClient {
             .post(&self.url)
             .header("x-api-key", &self.api_key)
             .header("Content-Type", "application/json")
-            .json(&json!({ "query": gql }))
+            .json(&json!({ "query": gql, "variables": variables }))
             .timeout(Duration::from_secs(30))
             .send()
             .await
@@ -128,18 +135,19 @@ impl UnraidClient {
     }
 
     pub async fn docker_logs(&self, container_id: &str, tail: Option<i64>) -> Result<Value> {
-        let tail_val = tail.unwrap_or(100);
-        let q = format!(
-            r#"query {{
-  docker {{
-    logs(id: "{container_id}", tail: {tail_val}) {{
+        let gql = r#"query($id: PrefixedID!, $tail: Int) {
+  docker {
+    logs(id: $id, tail: $tail) {
       logLineUrl
       lines
-    }}
-  }}
-}}"#
-        );
-        self.query(&q).await
+    }
+  }
+}"#;
+        self.query_with_vars(
+            gql,
+            json!({ "id": container_id, "tail": tail.unwrap_or(100) }),
+        )
+        .await
     }
 
     pub async fn vms(&self) -> Result<Value> {
@@ -211,14 +219,16 @@ impl UnraidClient {
         lines: Option<i64>,
         start_line: Option<i64>,
     ) -> Result<Value> {
-        let lines_arg = lines.map(|n| format!(", lines: {n}")).unwrap_or_default();
-        let start_arg = start_line
-            .map(|n| format!(", startLine: {n}"))
-            .unwrap_or_default();
-        let q = format!(
-            r#"query {{ logFile(path: "{path}"{lines_arg}{start_arg}) {{ path content totalLines startLine }} }}"#
-        );
-        self.query(&q).await
+        let gql = r#"query($path: String!, $lines: Int, $startLine: Int) {
+  logFile(path: $path, lines: $lines, startLine: $startLine) {
+    path content totalLines startLine
+  }
+}"#;
+        self.query_with_vars(
+            gql,
+            json!({ "path": path, "lines": lines, "startLine": start_line }),
+        )
+        .await
     }
 
     pub async fn services(&self) -> Result<Value> {

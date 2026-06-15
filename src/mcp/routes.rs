@@ -3,16 +3,13 @@ use std::time::Instant;
 
 use axum::{
     extract::State,
-    http::{HeaderValue, Method, StatusCode},
+    http::{header, HeaderName, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Json},
     routing::get,
     Router,
 };
 use serde_json::json;
-use tower_http::{
-    cors::{Any, CorsLayer},
-    limit::RequestBodyLimitLayer,
-};
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 
 use crate::observability::probe_upstream;
 
@@ -24,8 +21,13 @@ const MCP_BODY_LIMIT_BYTES: usize = 65_536;
 
 pub fn router(state: AppState) -> Router {
     let rmcp_config = streamable_http_config(&state.config);
-    let mcp_service =
-        Router::new().nest_service("/mcp", streamable_http_service(state.clone(), rmcp_config));
+    // Group the authenticated surface together: the /mcp service and the
+    // /status endpoint (which leaks runtime state) both live behind the auth
+    // layer. /health is mounted separately and stays public.
+    let protected = Router::new()
+        .nest_service("/mcp", streamable_http_service(state.clone(), rmcp_config))
+        .route("/status", get(status))
+        .with_state(state.clone());
 
     let resource_url = match &state.auth_policy {
         AuthPolicy::Mounted { .. } => state
@@ -42,9 +44,9 @@ pub fn router(state: AppState) -> Router {
         state.config.api_token.as_deref().map(Arc::<str>::from),
         resource_url,
     ) {
-        mcp_service.layer(layer)
+        protected.layer(layer)
     } else {
-        mcp_service
+        protected
     };
 
     let oauth_router: Option<Router> = if let AuthPolicy::Mounted {
@@ -74,7 +76,6 @@ pub fn router(state: AppState) -> Router {
     let base: Router<()> = Router::new()
         .merge(authenticated)
         .route("/health", get(health))
-        .route("/status", get(status))
         .with_state(state.clone());
 
     let combined = match oauth_router {
@@ -96,7 +97,12 @@ fn cors_layer(config: &crate::config::McpConfig) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods([Method::POST, Method::GET])
-        .allow_headers(Any)
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            HeaderName::from_static("mcp-session-id"),
+        ])
 }
 
 /// GET /health — always returns 200; status is "ok" or "degraded".
@@ -115,10 +121,11 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
-/// GET /status — full runtime state. Requires valid auth when auth is mounted.
+/// GET /status — runtime state. Gated behind the auth layer when auth is
+/// Mounted (returns 401 without a valid token/OAuth credential); reachable
+/// without auth in LoopbackDev mode. Does not expose the upstream endpoint.
 async fn status(State(state): State<AppState>) -> impl IntoResponse {
     let snap = state.counters.snapshot();
-    let (_, url, _) = state.service.raw_client_parts();
     Json(json!({
         "status": "ok",
         "server": {
@@ -129,7 +136,6 @@ async fn status(State(state): State<AppState>) -> impl IntoResponse {
             "host": state.config.host,
             "port": state.config.port,
             "auth_mode": format!("{:?}", state.auth_policy),
-            "upstream_url": url,
         },
         "counters": snap,
     }))

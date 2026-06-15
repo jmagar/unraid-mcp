@@ -6,18 +6,18 @@
 #
 # What it does:
 #   1. Runs pre-flight checks (OS/arch, tools, disk space, PATH, port)
-#   2. Downloads the latest release binary to ~/.local/bin/unraid  OR
+#   2. Downloads the latest release binary to ~/.local/bin/runraid  OR
 #      builds from source if cargo is available and no release binary found
 #   3. Creates ~/.unraid/ data directory
 #   4. Writes a starter ~/.unraid/.env if one doesn't already exist
-#   5. Runs `unraid doctor` to validate the installation
+#   5. Runs `runraid doctor` to validate the installation
 #   6. Prints next steps
 
 set -euo pipefail
 
 REPO="jmagar/unraid-mcp"
-BIN_NAME="unraid"
-SERVICE="unraid"
+BIN_NAME="runraid"
+SERVICE="unraid-mcp"
 INSTALL_DIR="${HOME}/.local/bin"
 DATA_DIR="${HOME}/.unraid"
 
