@@ -104,7 +104,7 @@ unraid(action="parity_history")
 
 ## Tier 2 — CLI Binary
 
-Binary: `/home/jmagar/workspace/unrust/target/release/unraid`
+Binary: `/home/jmagar/workspace/unrust/target/release/runraid`
 
 All commands accept `--json` for machine-readable output.
 

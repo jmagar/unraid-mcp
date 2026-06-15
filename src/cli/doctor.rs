@@ -264,7 +264,7 @@ fn check_port_available(port: u16) -> DoctorCheck {
             category: "mcp_server",
             name: format!("MCP port {port}"),
             ok: true, // warn-only: port in use doesn't prevent running
-            value: Some(format!("already in use (change UNRAID_MCP_PORT if needed)")),
+            value: Some("already in use (change UNRAID_MCP_PORT if needed)".to_string()),
             hint: None,
             latency_ms: None,
             warn_only: true,
@@ -362,21 +362,16 @@ fn print_doctor_report(checks: &[DoctorCheck]) {
 
 pub async fn run_doctor(config: &Config, json: bool) -> anyhow::Result<()> {
     let data_dir = default_data_dir();
-    let mut checks: Vec<DoctorCheck> = Vec::new();
-
-    // Config / filesystem
-    checks.push(check_config_file(&data_dir));
-    checks.push(check_dir_writable("config", "Data directory", &data_dir));
-    checks.push(check_dir_writable(
-        "config",
-        "Log directory",
-        &data_dir.join("logs"),
-    ));
-    checks.push(check_binary_in_path("runraid"));
-
-    // Required credentials
-    checks.push(check_required_var("UNRAID_API_URL", &config.unraid.api_url));
-    checks.push(check_required_var("UNRAID_API_KEY", &config.unraid.api_key));
+    let mut checks: Vec<DoctorCheck> = vec![
+        // Config / filesystem
+        check_config_file(&data_dir),
+        check_dir_writable("config", "Data directory", &data_dir),
+        check_dir_writable("config", "Log directory", &data_dir.join("logs")),
+        check_binary_in_path("runraid"),
+        // Required credentials
+        check_required_var("UNRAID_API_URL", &config.unraid.api_url),
+        check_required_var("UNRAID_API_KEY", &config.unraid.api_key),
+    ];
     if let Some(w) = check_skip_tls_warn(config.unraid.skip_tls_verify) {
         checks.push(w);
     }
