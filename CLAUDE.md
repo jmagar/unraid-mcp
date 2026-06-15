@@ -50,15 +50,32 @@ RUST_LOG                    Log filter
 
 ## How to add a new action
 
+The set of valid actions lives in ONE place: the `ACTIONS: &[ActionSpec]` slice in
+`src/mcp/schemas.rs`. The schema enum (`UNRAID_ACTIONS`), the error-message action
+list (`VALID_ACTIONS` in `tools.rs`), and the MCP scope gating (`required_scope_for`
+in `rmcp_server.rs`) are all *derived* from it — do not hand-maintain those lists.
+
 1. **`src/graphql.rs`** — add `pub async fn your_action(&self) -> Result<Value>` that calls `self.query(...)`.
 
 2. **`src/app.rs`** — add a delegating method: `pub async fn your_action(&self) -> Result<Value> { self.client.your_action().await }`.
 
-3. **`src/mcp/tools.rs`** — add the match arm: `"your_action" => state.service.your_action().await,`. Also add the description to `HELP_TEXT`.
+3. **`src/mcp/schemas.rs`** — add **one** entry to the `ACTIONS` slice:
+   `ActionSpec { name: "your_action", read_only: true }`. This single entry feeds
+   the schema enum, the valid-actions error text, and the scope check. Set
+   `read_only: true` for any data action (it then requires the `unraid:read`
+   scope); `read_only: false` means the action needs **no** scope and is reserved
+   for `help`-style meta actions. Anything not in this slice falls through to the
+   `DENY_SCOPE` sentinel and is unreachable, so the entry is mandatory.
 
-4. **`src/mcp/schemas.rs`** — add `"your_action"` to the `UNRAID_ACTIONS` slice.
+4. **`src/mcp/tools.rs`** — add the dispatch match arm in `dispatch_action`:
+   `"your_action" => state.service.your_action().await,`. Also add the description
+   to `HELP_TEXT`.
 
 5. **`src/cli.rs`** — add the `CliCommand` variant, parse arm in `CliCommand::parse`, dispatch arm in `run`, and a human-readable formatter `fmt_your_action`.
+
+That's it — no separate scope list or schema-enum edit is needed; both are derived
+from the `ACTIONS` entry in step 3, and a unit test in each of `schemas.rs` and
+`rmcp_server.rs` asserts the derived lists stay consistent.
 
 For actions with parameters (like `docker_logs` with `id` and `tail`), follow the `docker_logs` pattern in `tools.rs` for extracting args with `string_arg` and `i64_arg`.
 

@@ -70,7 +70,7 @@ pub fn build_auth_layer(
             AuthLayer::new()
                 .with_static_token(static_token)
                 .with_auth_state(auth_state.clone())
-                .with_static_token_scopes(vec!["unraid:read".into(), "unraid:admin".into()])
+                .with_static_token_scopes(vec!["unraid:read".into()])
                 .with_resource_url(resource_url)
                 .with_allow_session_cookie(false),
         ),

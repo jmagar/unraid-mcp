@@ -1,5 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
+# Builder Rust version MUST stay >= the `rust-version` (MSRV) declared in Cargo.toml
+# (currently 1.86). 1.90 is >= MSRV and intentionally chosen here. Do NOT downgrade
+# below the MSRV, and bump deliberately — CI uses floating `stable`, so this pin is
+# the one fixed Rust version in the build matrix.
+# TODO: digest-pin (rust:1.90-slim-bookworm@sha256:...) for fully reproducible builds.
 FROM rust:1.90-slim-bookworm AS builder
 
 WORKDIR /app
@@ -23,9 +28,15 @@ RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry
     touch src/main.rs && cargo build --release --locked -p unraid-mcp && cp target/release/runraid /usr/local/bin/runraid
 
 # Runtime image — minimal Debian with TLS certs and curl for healthcheck
+# TODO: digest-pin (debian:bookworm-slim@sha256:...) for fully reproducible builds.
 FROM debian:bookworm-slim
+# curl is intentionally installed: the Docker HEALTHCHECK below (and the compose
+# healthcheck) probe http://localhost:40010/health, and the runraid binary has no
+# self-probe subcommand. ca-certificates is needed for outbound TLS to the Unraid
+# GraphQL API; gosu is used by entrypoint.sh to drop from root to 1000:1000.
+# --no-install-recommends + cleaning apt lists in the same layer keeps the image lean.
 RUN apt-get update && \
-    apt-get install -y ca-certificates curl gosu && \
+    apt-get install -y --no-install-recommends ca-certificates curl gosu && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/runraid /usr/local/bin/runraid

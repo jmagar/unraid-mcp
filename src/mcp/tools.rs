@@ -1,25 +1,36 @@
 mod arg_helpers;
 mod paginate;
 
+use std::sync::LazyLock;
+
 use serde_json::{json, Value};
 
 use crate::token_limit::truncate_if_needed;
 
 use self::arg_helpers::{i64_arg, string_arg, usize_arg};
 use self::paginate::paginate_array;
+use super::schemas::ACTIONS;
 use super::AppState;
 
-/// All valid action names — used in error messages.
-const VALID_ACTIONS: &str =
-    "array, disks, docker, docker_logs, vms, server, info, shares, notifications, \
-     log_files, log_file, services, network, ups, ups_config, metrics, plugins, \
-     parity_history, vars, registration, flash, rclone, remote_access, connect, status, help";
+/// All valid action names — used in error messages. Derived from the canonical
+/// [`ACTIONS`] list so it can never drift from the schema enum or scope source.
+static VALID_ACTIONS: LazyLock<String> = LazyLock::new(|| {
+    ACTIONS
+        .iter()
+        .map(|a| a.name)
+        .collect::<Vec<_>>()
+        .join(", ")
+});
 
 // ── public entry point ────────────────────────────────────────────────────────
 
 /// Dispatch a named MCP tool. Returns `Ok(Value)` always; errors are encoded in
 /// the returned value so the MCP protocol layer does not treat them as fatal.
-pub(super) async fn execute_tool(
+///
+/// Exposed at `pub(crate)` so in-crate test-support helpers (gated behind
+/// `#[cfg(any(test, feature = "test-support"))]`, see [`crate::testing`]) can
+/// drive a tool by name + args without going through the HTTP/stdio transports.
+pub(crate) async fn execute_tool(
     state: &AppState,
     name: &str,
     args: Value,
@@ -46,9 +57,10 @@ async fn dispatch(state: &AppState, args: Value) -> anyhow::Result<Value> {
     let action = match string_arg(&args, "action") {
         Some(a) => a,
         None => {
+            let valid = &*VALID_ACTIONS;
             return Err(anyhow::anyhow!(
                 "\"action\" is required.\n\
-                 Valid actions: {VALID_ACTIONS}\n\
+                 Valid actions: {valid}\n\
                  Example: {{\"action\": \"docker\"}}\n\
                  See: action=help for full documentation."
             ));
@@ -224,11 +236,14 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> anyhow
 
         "help" => Ok(json!({ "help": HELP_TEXT })),
 
-        other => Err(anyhow::anyhow!(
-            "unknown unraid action: \"{other}\"\n\
-             Valid actions: {VALID_ACTIONS}\n\
-             See: action=help for full documentation."
-        )),
+        other => {
+            let valid = &*VALID_ACTIONS;
+            Err(anyhow::anyhow!(
+                "unknown unraid action: \"{other}\"\n\
+                 Valid actions: {valid}\n\
+                 See: action=help for full documentation."
+            ))
+        }
     }
 }
 

@@ -77,11 +77,23 @@ async fn main() -> Result<()> {
     }
 }
 
+/// Returns true if `host` is a loopback bind target: the IPv4 `127.0.0.0/8`
+/// range, the IPv6 loopback `::1` (bracketed or not), or `localhost`
+/// (case-insensitive). Shared by `validate_bind_security` and
+/// `build_auth_policy` so the no-auth guard and the auto-bypass agree on what
+/// counts as loopback.
+fn is_loopback_host(host: &str) -> bool {
+    host.starts_with("127.")
+        || host == "::1"
+        || host == "[::1]"
+        || host.eq_ignore_ascii_case("localhost")
+}
+
 /// Safety guard: refuse to start if binding to a non-loopback address with auth disabled
 /// unless the operator explicitly sets UNRAID_NOAUTH=true.
 fn validate_bind_security(config: &Config) -> Result<()> {
     let host = &config.mcp.host;
-    let is_loopback = host.starts_with("127.") || host == "::1" || host == "localhost";
+    let is_loopback = is_loopback_host(host);
     let auth_disabled = config.mcp.no_auth;
 
     if !is_loopback && auth_disabled {
@@ -174,7 +186,7 @@ async fn build_state(config: Config) -> Result<AppState> {
 }
 
 async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
-    if config.mcp.no_auth || config.mcp.host.starts_with("127.") {
+    if config.mcp.no_auth || is_loopback_host(&config.mcp.host) {
         return Ok(AuthPolicy::LoopbackDev);
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
