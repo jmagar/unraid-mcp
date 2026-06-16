@@ -204,7 +204,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
             .default_scope("unraid:read")
             .resource_path("/mcp")
             .enable_dynamic_registration(true)
-            .build_from_sources(vec![])
+            .build_from_sources(std::env::vars())
             .map_err(|e| anyhow::anyhow!("OAuth config error: {e}"))?;
         let auth_state = lab_auth::state::AuthState::new(auth_cfg)
             .await
