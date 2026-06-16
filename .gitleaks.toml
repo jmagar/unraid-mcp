@@ -1,0 +1,20 @@
+# gitleaks config for unraid-mcp.
+#
+# We keep the full upstream ruleset (useDefault = true) and only carve out the
+# tests/ tree. Everything under tests/ is offline scaffolding with SYNTHETIC
+# credentials, not real secrets:
+#   - tests/fixtures/scenarios/*.json hold fake Unraid API-key values
+#     (e.g. "unraid_ak_4f9c2e1b7a6d8390") used to exercise the api_keys actions
+#     against the offline mock.
+#   - tests/test_live.sh (a stale syslog-mcp artifact) embeds an obviously-fake
+#     "intentionally-wrong-token-for-testing" bearer token for the 401 path.
+# None of these ever reach a live server; gitleaks' generic-api-key /
+# curl-auth-header rules flag them as false positives, so tests/ is allowlisted.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic credentials in offline test scaffolding (not real secrets)"
+paths = [
+  '''tests/.*''',
+]

@@ -143,6 +143,12 @@ async fn dispatch(state: &AppState, args: Value) -> Result<Value, ToolError> {
 /// Run the action. Argument-validation / unknown-action failures are returned as
 /// [`ToolError::InvalidParams`]; each service call's `anyhow` error is classified
 /// by its typed source into the matching upstream/internal [`ToolError`] variant.
+/// Extract the required `id` argument for a single-entity lookup action.
+fn require_id(args: &Value, action: &str) -> Result<String, ToolError> {
+    string_arg(args, "id")
+        .ok_or_else(|| ToolError::InvalidParams(format!("\"id\" is required for action={action}.")))
+}
+
 async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> Result<Value, ToolError> {
     // Helper: run a service call and classify any failure by its typed source.
     //
@@ -284,6 +290,446 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> Result
         "rclone" => svc!(state.service.rclone()),
         "remote_access" => svc!(state.service.remote_access()),
         "connect" => svc!(state.service.connect()),
+        "online" => svc!(state.service.online()),
+        "system_time" => svc!(state.service.system_time()),
+        "installed_unraid_plugins" => svc!(state.service.installed_unraid_plugins()),
+        "is_sso_enabled" => svc!(state.service.is_sso_enabled()),
+        "public_oidc_providers" => svc!(state.service.public_oidc_providers()),
+        "oidc_providers" => svc!(state.service.oidc_providers()),
+        "oidc_configuration" => svc!(state.service.oidc_configuration()),
+        "api_keys" => svc!(state.service.api_keys()),
+        "api_key_possible_roles" => svc!(state.service.api_key_possible_roles()),
+        "api_key_possible_permissions" => svc!(state.service.api_key_possible_permissions()),
+        "get_available_auth_actions" => svc!(state.service.get_available_auth_actions()),
+        "get_api_key_creation_form_schema" => {
+            svc!(state.service.get_api_key_creation_form_schema())
+        }
+        "config" => svc!(state.service.config()),
+        "settings" => svc!(state.service.settings()),
+        "display" => svc!(state.service.display()),
+        "customization" => svc!(state.service.customization()),
+        "internal_boot_context" => svc!(state.service.internal_boot_context()),
+        "me" => svc!(state.service.me()),
+        "owner" => svc!(state.service.owner()),
+        "servers" => svc!(state.service.servers()),
+        "is_fresh_install" => svc!(state.service.is_fresh_install()),
+        "public_theme" => svc!(state.service.public_theme()),
+        "network_interfaces" => svc!(state.service.network_interfaces()),
+        "time_zone_options" => svc!(state.service.time_zone_options()),
+        "assignable_disks" => svc!(state.service.assignable_disks()),
+        "plugin_install_operations" => svc!(state.service.plugin_install_operations()),
+        "cloud" => svc!(state.service.cloud()),
+
+        // ── arg-bearing read actions ──
+        "api_key" => {
+            let id = require_id(args, "api_key")?;
+            svc!(state.service.api_key(&id))
+        }
+        "disk" => {
+            let id = require_id(args, "disk")?;
+            svc!(state.service.disk(&id))
+        }
+        "oidc_provider" => {
+            let id = require_id(args, "oidc_provider")?;
+            svc!(state.service.oidc_provider(&id))
+        }
+        "ups_device_by_id" => {
+            let id = require_id(args, "ups_device_by_id")?;
+            svc!(state.service.ups_device_by_id(&id))
+        }
+        "plugin_install_operation" => {
+            let id = require_id(args, "plugin_install_operation")?;
+            svc!(state.service.plugin_install_operation(&id))
+        }
+        "validate_oidc_session" => {
+            let token = string_arg(args, "token").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"token\" is required for action=validate_oidc_session.".to_string(),
+                )
+            })?;
+            svc!(state.service.validate_oidc_session(&token))
+        }
+        "get_permissions_for_roles" => {
+            let roles = args
+                .get("roles")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                })
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    ToolError::InvalidParams(
+                        "\"roles\" (a non-empty array of role names) is required for \
+                         action=get_permissions_for_roles."
+                            .to_string(),
+                    )
+                })?;
+            svc!(state.service.get_permissions_for_roles(&roles))
+        }
+
+        // ── mutations (require unraid:admin) ──
+        "recalculate_overview" => svc!(state.service.recalculate_overview()),
+        "delete_archived_notifications" => svc!(state.service.delete_archived_notifications()),
+        "archive_notification" => {
+            let id = require_id(args, "archive_notification")?;
+            svc!(state.service.archive_notification(&id))
+        }
+        "create_notification" => {
+            let req = |k: &str| {
+                string_arg(args, k).ok_or_else(|| {
+                    ToolError::InvalidParams(format!(
+                        "\"{k}\" is required for action=create_notification."
+                    ))
+                })
+            };
+            let title = req("title")?;
+            let subject = req("subject")?;
+            let description = req("description")?;
+            let importance = req("importance")?;
+            let link = string_arg(args, "link");
+            svc!(state.service.create_notification(
+                &title,
+                &subject,
+                &description,
+                &importance,
+                link.as_deref()
+            ))
+        }
+        "vm_start" => {
+            let id = require_id(args, "vm_start")?;
+            svc!(state.service.vm_start(&id))
+        }
+        "vm_stop" => {
+            let id = require_id(args, "vm_stop")?;
+            svc!(state.service.vm_stop(&id))
+        }
+        "vm_pause" => {
+            let id = require_id(args, "vm_pause")?;
+            svc!(state.service.vm_pause(&id))
+        }
+        "vm_resume" => {
+            let id = require_id(args, "vm_resume")?;
+            svc!(state.service.vm_resume(&id))
+        }
+        "vm_force_stop" => {
+            let id = require_id(args, "vm_force_stop")?;
+            svc!(state.service.vm_force_stop(&id))
+        }
+        "vm_reboot" => {
+            let id = require_id(args, "vm_reboot")?;
+            svc!(state.service.vm_reboot(&id))
+        }
+        "vm_reset" => {
+            let id = require_id(args, "vm_reset")?;
+            svc!(state.service.vm_reset(&id))
+        }
+        "docker_start" => {
+            let id = require_id(args, "docker_start")?;
+            svc!(state.service.docker_start(&id))
+        }
+        "docker_stop" => {
+            let id = require_id(args, "docker_stop")?;
+            svc!(state.service.docker_stop(&id))
+        }
+        "docker_pause" => {
+            let id = require_id(args, "docker_pause")?;
+            svc!(state.service.docker_pause(&id))
+        }
+        "docker_unpause" => {
+            let id = require_id(args, "docker_unpause")?;
+            svc!(state.service.docker_unpause(&id))
+        }
+        "docker_update_container" => {
+            let id = require_id(args, "docker_update_container")?;
+            svc!(state.service.docker_update_container(&id))
+        }
+        "docker_remove_container" => {
+            let id = require_id(args, "docker_remove_container")?;
+            let with_image = args.get("with_image").and_then(|v| v.as_bool());
+            svc!(state.service.docker_remove_container(&id, with_image))
+        }
+        "docker_update_containers" => {
+            let ids = args.get("ids").and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>())
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| ToolError::InvalidParams("\"ids\" (non-empty array) is required for action=docker_update_containers.".to_string()))?;
+            svc!(state.service.docker_update_containers(&ids))
+        }
+        "docker_update_all_containers" => svc!(state.service.docker_update_all_containers()),
+        "array_set_state" => {
+            let ds = string_arg(args, "desired_state").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"desired_state\" (START/STOP) is required for action=array_set_state."
+                        .to_string(),
+                )
+            })?;
+            svc!(state.service.array_set_state(&ds))
+        }
+        "array_add_disk_to_array" => {
+            let id = require_id(args, "array_add_disk_to_array")?;
+            svc!(state.service.array_add_disk_to_array(
+                &id,
+                args.get("slot").and_then(|v| v.as_i64()).map(|n| n as i32)
+            ))
+        }
+        "array_remove_disk_from_array" => {
+            let id = require_id(args, "array_remove_disk_from_array")?;
+            svc!(state.service.array_remove_disk_from_array(
+                &id,
+                args.get("slot").and_then(|v| v.as_i64()).map(|n| n as i32)
+            ))
+        }
+        "array_mount_array_disk" => {
+            let id = require_id(args, "array_mount_array_disk")?;
+            svc!(state.service.array_mount_array_disk(&id))
+        }
+        "array_unmount_array_disk" => {
+            let id = require_id(args, "array_unmount_array_disk")?;
+            svc!(state.service.array_unmount_array_disk(&id))
+        }
+        "array_clear_array_disk_statistics" => {
+            let id = require_id(args, "array_clear_array_disk_statistics")?;
+            svc!(state.service.array_clear_array_disk_statistics(&id))
+        }
+        "parity_check_start" => {
+            let correct = args
+                .get("correct")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            svc!(state.service.parity_check_start(correct))
+        }
+        "parity_check_pause" => svc!(state.service.parity_check_pause()),
+        "parity_check_resume" => svc!(state.service.parity_check_resume()),
+        "parity_check_cancel" => svc!(state.service.parity_check_cancel()),
+        "api_key_create" => {
+            let name = string_arg(args, "name").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"name\" is required for action=api_key_create.".to_string(),
+                )
+            })?;
+            let roles = args.get("roles").and_then(|v| v.as_array()).map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            });
+            let perms = args.get("permissions").cloned().unwrap_or(Value::Null);
+            svc!(state.service.api_key_create(
+                &name,
+                string_arg(args, "description").as_deref(),
+                roles.as_deref(),
+                &perms,
+                args.get("overwrite").and_then(|v| v.as_bool())
+            ))
+        }
+        "api_key_add_role" => {
+            let id = string_arg(args, "api_key_id").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"api_key_id\" is required for action=api_key_add_role.".to_string(),
+                )
+            })?;
+            let role = string_arg(args, "role").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"role\" is required for action=api_key_add_role.".to_string(),
+                )
+            })?;
+            svc!(state.service.api_key_add_role(&id, &role))
+        }
+        "api_key_remove_role" => {
+            let id = string_arg(args, "api_key_id").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"api_key_id\" is required for action=api_key_remove_role.".to_string(),
+                )
+            })?;
+            let role = string_arg(args, "role").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"role\" is required for action=api_key_remove_role.".to_string(),
+                )
+            })?;
+            svc!(state.service.api_key_remove_role(&id, &role))
+        }
+        "api_key_delete" => {
+            let ids = args
+                .get("ids")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                })
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    ToolError::InvalidParams(
+                        "\"ids\" (non-empty array) is required for action=api_key_delete."
+                            .to_string(),
+                    )
+                })?;
+            svc!(state.service.api_key_delete(&ids))
+        }
+        "api_key_update" => {
+            let id = require_id(args, "api_key_update")?;
+            let roles = args.get("roles").and_then(|v| v.as_array()).map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            });
+            let perms = args.get("permissions").cloned().unwrap_or(Value::Null);
+            svc!(state.service.api_key_update(
+                &id,
+                string_arg(args, "name").as_deref(),
+                string_arg(args, "description").as_deref(),
+                roles.as_deref(),
+                &perms
+            ))
+        }
+        "rclone_create_r_clone_remote" => {
+            let name = string_arg(args, "name").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"name\" is required for action=rclone_create_r_clone_remote.".to_string(),
+                )
+            })?;
+            let ty = string_arg(args, "type").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"type\" is required for action=rclone_create_r_clone_remote.".to_string(),
+                )
+            })?;
+            let parameters = args
+                .get("parameters")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state
+                .service
+                .rclone_create_r_clone_remote(&name, &ty, parameters))
+        }
+        "rclone_delete_r_clone_remote" => {
+            let name = string_arg(args, "name").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"name\" is required for action=rclone_delete_r_clone_remote.".to_string(),
+                )
+            })?;
+            svc!(state.service.rclone_delete_r_clone_remote(&name))
+        }
+        "unraid_plugins_install_plugin" => {
+            let url = string_arg(args, "url").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"url\" is required for action=unraid_plugins_install_plugin.".to_string(),
+                )
+            })?;
+            svc!(state.service.unraid_plugins_install_plugin(
+                &url,
+                string_arg(args, "name").as_deref(),
+                args.get("forced").and_then(|v| v.as_bool())
+            ))
+        }
+        "unraid_plugins_install_language" => {
+            let url = string_arg(args, "url").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"url\" is required for action=unraid_plugins_install_language.".to_string(),
+                )
+            })?;
+            svc!(state.service.unraid_plugins_install_language(
+                &url,
+                string_arg(args, "name").as_deref(),
+                args.get("forced").and_then(|v| v.as_bool())
+            ))
+        }
+        "onboarding_complete_onboarding" => svc!(state.service.onboarding_complete_onboarding()),
+        "onboarding_reset_onboarding" => svc!(state.service.onboarding_reset_onboarding()),
+        "archive_notifications" => {
+            let ids = args
+                .get("ids")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                })
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    ToolError::InvalidParams(
+                        "\"ids\" (non-empty array) is required for action=archive_notifications."
+                            .to_string(),
+                    )
+                })?;
+            svc!(state.service.archive_notifications(&ids))
+        }
+        "unarchive_notifications" => {
+            let ids = args
+                .get("ids")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(String::from))
+                        .collect::<Vec<_>>()
+                })
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    ToolError::InvalidParams(
+                        "\"ids\" (non-empty array) is required for action=unarchive_notifications."
+                            .to_string(),
+                    )
+                })?;
+            svc!(state.service.unarchive_notifications(&ids))
+        }
+        "unread_notification" => {
+            let id = require_id(args, "unread_notification")?;
+            svc!(state.service.unread_notification(&id))
+        }
+        "archive_all" => svc!(state
+            .service
+            .archive_all(string_arg(args, "importance").as_deref())),
+        "unarchive_all" => svc!(state
+            .service
+            .unarchive_all(string_arg(args, "importance").as_deref())),
+        "update_server_identity" => {
+            let name = string_arg(args, "name").ok_or_else(|| {
+                ToolError::InvalidParams(
+                    "\"name\" is required for action=update_server_identity.".to_string(),
+                )
+            })?;
+            svc!(state.service.update_server_identity(
+                &name,
+                string_arg(args, "comment").as_deref(),
+                string_arg(args, "sys_model").as_deref()
+            ))
+        }
+        "configure_ups" => {
+            let config = args
+                .get("config")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state.service.configure_ups(config))
+        }
+        "update_system_time" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state.service.update_system_time(input))
+        }
+        "update_temperature_config" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state.service.update_temperature_config(input))
+        }
+        "add_plugin" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state.service.add_plugin(input))
+        }
+        "remove_plugin" => {
+            let input = args
+                .get("input")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+            svc!(state.service.remove_plugin(input))
+        }
+        "connect_sign_out" => svc!(state.service.connect_sign_out()),
 
         "status" => {
             let snap = state.counters.snapshot();

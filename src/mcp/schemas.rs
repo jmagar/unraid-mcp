@@ -11,11 +11,20 @@ use serde_json::{json, Value};
 pub(super) struct ActionSpec {
     /// The action name as passed in the `action` argument.
     pub name: &'static str,
-    /// Whether the action requires the `unraid:read` scope.
-    ///
-    /// `true` for all data actions and `status` (need `unraid:read`).
-    /// `false` only for `help`, which requires no scope.
-    pub read_only: bool,
+    /// The OAuth/JWT scope this action requires.
+    pub scope: Scope,
+}
+
+/// Scope an action requires. `unraid:admin` satisfies `unraid:read`, so a
+/// read-scoped token cannot reach a [`Scope::Write`] (mutating) action.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Scope {
+    /// No scope required (the `help` meta action).
+    None,
+    /// `unraid:read` — every data *query* action, plus `status`.
+    Read,
+    /// `unraid:admin` — mutating actions that change server state.
+    Write,
 }
 
 /// The canonical action list. Order is preserved in the JSON Schema enum and the
@@ -23,108 +32,452 @@ pub(super) struct ActionSpec {
 pub(super) const ACTIONS: &[ActionSpec] = &[
     ActionSpec {
         name: "array",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "disks",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "docker",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "docker_logs",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "vms",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "server",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "info",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "shares",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "notifications",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "log_files",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "log_file",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "services",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "network",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "ups",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "ups_config",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "metrics",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "plugins",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "parity_history",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "vars",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "registration",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "flash",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "rclone",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "remote_access",
-        read_only: true,
+        scope: Scope::Read,
     },
     ActionSpec {
         name: "connect",
-        read_only: true,
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "online",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "system_time",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "installed_unraid_plugins",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "is_sso_enabled",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "public_oidc_providers",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "oidc_providers",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "oidc_configuration",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "api_keys",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "api_key_possible_roles",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "api_key_possible_permissions",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "get_available_auth_actions",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "get_api_key_creation_form_schema",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "config",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "settings",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "display",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "customization",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "internal_boot_context",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "me",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "owner",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "servers",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "is_fresh_install",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "public_theme",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "network_interfaces",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "time_zone_options",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "assignable_disks",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "plugin_install_operations",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "cloud",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "api_key",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "disk",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "oidc_provider",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "ups_device_by_id",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "plugin_install_operation",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "validate_oidc_session",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "get_permissions_for_roles",
+        scope: Scope::Read,
+    },
+    ActionSpec {
+        name: "recalculate_overview",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "delete_archived_notifications",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "archive_notification",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "create_notification",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_start",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_stop",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_pause",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_resume",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_force_stop",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_reboot",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "vm_reset",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_start",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_stop",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_pause",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_unpause",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_update_container",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_remove_container",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_update_containers",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_update_all_containers",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_set_state",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_add_disk_to_array",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_remove_disk_from_array",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_mount_array_disk",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_unmount_array_disk",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "array_clear_array_disk_statistics",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "parity_check_start",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "parity_check_pause",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "parity_check_resume",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "parity_check_cancel",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "api_key_create",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "api_key_add_role",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "api_key_remove_role",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "api_key_delete",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "api_key_update",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "rclone_create_r_clone_remote",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "rclone_delete_r_clone_remote",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "unraid_plugins_install_plugin",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "unraid_plugins_install_language",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_complete_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_reset_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "archive_notifications",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "unarchive_notifications",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "unread_notification",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "archive_all",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "unarchive_all",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_server_identity",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "configure_ups",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_system_time",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_temperature_config",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "add_plugin",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "remove_plugin",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "connect_sign_out",
+        scope: Scope::Write,
     },
     ActionSpec {
         name: "status",
-        read_only: true,
+        scope: Scope::Read,
     },
     // `help` is the only action that requires no scope.
     ActionSpec {
         name: "help",
-        read_only: false,
+        scope: Scope::None,
     },
 ];
 
@@ -132,10 +485,32 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
 pub(super) static UNRAID_ACTIONS: LazyLock<Vec<&'static str>> =
     LazyLock::new(|| ACTIONS.iter().map(|a| a.name).collect());
 
+/// The upstream-GraphQL-backed data actions (every read-only action except
+/// `status`, which is local observability with no query/fixture). Re-exported so
+/// the scenario + schema-contract integration tests cover every action
+/// automatically — adding an entry to [`ACTIONS`] is enough.
+pub fn data_action_names() -> Vec<&'static str> {
+    ACTIONS
+        .iter()
+        .filter(|a| a.scope == Scope::Read && a.name != "status")
+        .map(|a| a.name)
+        .collect()
+}
+
+/// The mutating (write-scoped) actions. Re-exported for the same reason as
+/// [`data_action_names`] — so the contract/scenario tests cover mutations too.
+pub fn write_action_names() -> Vec<&'static str> {
+    ACTIONS
+        .iter()
+        .filter(|a| a.scope == Scope::Write)
+        .map(|a| a.name)
+        .collect()
+}
+
 pub(super) fn tool_definitions() -> Vec<Value> {
     vec![json!({
         "name": "unraid",
-        "description": "Query the Unraid server via its GraphQL API (read-only). Use action=help for documentation.",
+        "description": "Query and manage the Unraid server via its GraphQL API. Read actions need scope unraid:read; mutating actions need unraid:admin. Use action=help for documentation.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -179,7 +554,38 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "name": {
                     "type": "string",
                     "description": "Filter shares or plugins by name substring (case-insensitive)."
-                }
+                },
+                "token": {
+                    "type": "string",
+                    "description": "Session token — required for action=validate_oidc_session."
+                },
+                "roles": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Role names — required for action=get_permissions_for_roles."
+                },
+                "title": { "type": "string", "description": "Notification title (create_notification)." },
+                "subject": { "type": "string", "description": "Notification subject (create_notification)." },
+                "description": { "type": "string", "description": "Notification body (create_notification)." },
+                "importance": { "type": "string", "enum": ["ALERT", "INFO", "WARNING"], "description": "Notification importance (create_notification)." },
+                "link": { "type": "string", "description": "Optional notification link (create_notification)." },
+                "desired_state": { "type": "string", "enum": ["START", "STOP"], "description": "Array target state (array_set_state)." },
+                "slot": { "type": "integer", "description": "Array disk slot (array_add/remove_disk_from_array)." },
+                "correct": { "type": "boolean", "description": "Whether the parity check should write corrections (parity_check_start)." },
+                "with_image": { "type": "boolean", "description": "Also remove the image (docker_remove_container)." },
+                "ids": { "type": "array", "items": { "type": "string" }, "description": "Container IDs (docker_update_containers) / API key IDs (api_key_delete)." },
+                "api_key_id": { "type": "string", "description": "API key ID (api_key_add_role/remove_role)." },
+                "role": { "type": "string", "description": "Role name (api_key_add_role/remove_role)." },
+                "permissions": { "type": "array", "items": { "type": "object" }, "description": "Permissions [{resource, actions}] (api_key_create/update)." },
+                "overwrite": { "type": "boolean", "description": "Overwrite existing key (api_key_create)." },
+                "url": { "type": "string", "description": "Plugin .plg URL (unraid_plugins_install_*)." },
+                "forced": { "type": "boolean", "description": "Force install (unraid_plugins_install_*)." },
+                "type": { "type": "string", "description": "RClone remote type (rclone_create_r_clone_remote)." },
+                "parameters": { "type": "object", "description": "RClone remote parameters JSON (rclone_create_r_clone_remote)." },
+                "comment": { "type": "string", "description": "Server comment (update_server_identity)." },
+                "sys_model": { "type": "string", "description": "Server model (update_server_identity)." },
+                "config": { "type": "object", "description": "UPS config object (configure_ups)." },
+                "input": { "type": "object", "description": "Input object for update_system_time / update_temperature_config / add_plugin / remove_plugin." }
             },
             "required": ["action"]
         }
@@ -190,15 +596,18 @@ pub(super) fn tool_definitions() -> Vec<Value> {
 mod tests {
     use super::*;
 
-    /// `help` is the only action that requires no scope; every other action is
-    /// read-scoped. This guards against silently flipping the scope flag.
+    /// `help` is the only unscoped action; query actions are read-scoped and
+    /// mutating actions are write-scoped. Guards against silently flipping scope.
     #[test]
     fn only_help_is_unscoped() {
         for spec in ACTIONS {
-            if spec.name == "help" {
-                assert!(!spec.read_only, "help must require no scope");
-            } else {
-                assert!(spec.read_only, "{} must be read-scoped", spec.name);
+            match spec.name {
+                "help" => assert!(spec.scope == Scope::None, "help must be unscoped"),
+                _ => assert!(
+                    spec.scope == Scope::Read || spec.scope == Scope::Write,
+                    "{} must be read- or write-scoped",
+                    spec.name
+                ),
             }
         }
     }

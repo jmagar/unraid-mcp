@@ -75,14 +75,12 @@ fn fmt_array(data: &Value) {
                 str_val(&d["device"]),
                 str_val(&d["status"]),
                 temp,
-                fmt_kb(d["size"].as_i64().unwrap_or(0)),
-                d["fsUsed"]
-                    .as_i64()
-                    .map(fmt_kb)
+                fmt_kb(bigint_f64(&d["size"]) as i64),
+                bigint_opt(&d["fsUsed"])
+                    .map(|v| fmt_kb(v as i64))
                     .unwrap_or_else(|| "--".into()),
-                d["fsFree"]
-                    .as_i64()
-                    .map(fmt_kb)
+                bigint_opt(&d["fsFree"])
+                    .map(|v| fmt_kb(v as i64))
                     .unwrap_or_else(|| "--".into()),
                 str_val_or(&d["fsType"], "--"),
             );
@@ -106,14 +104,12 @@ fn fmt_array(data: &Value) {
                 str_val(&c["device"]),
                 str_val(&c["status"]),
                 temp,
-                fmt_kb(c["size"].as_i64().unwrap_or(0)),
-                c["fsUsed"]
-                    .as_i64()
-                    .map(fmt_kb)
+                fmt_kb(bigint_f64(&c["size"]) as i64),
+                bigint_opt(&c["fsUsed"])
+                    .map(|v| fmt_kb(v as i64))
                     .unwrap_or_else(|| "--".into()),
-                c["fsFree"]
-                    .as_i64()
-                    .map(fmt_kb)
+                bigint_opt(&c["fsFree"])
+                    .map(|v| fmt_kb(v as i64))
                     .unwrap_or_else(|| "--".into()),
                 str_val_or(&c["fsType"], "--"),
             );
@@ -185,9 +181,16 @@ fn fmt_docker(data: &Value) {
 }
 
 fn fmt_docker_logs(data: &Value) {
+    // Each log line is a { timestamp, message } object (DockerContainerLogLine).
     if let Some(lines) = data["docker"]["logs"]["lines"].as_array() {
         for line in lines {
-            println!("{}", line.as_str().unwrap_or(""));
+            let ts = str_val_or(&line["timestamp"], "");
+            let msg = str_val_or(&line["message"], "");
+            if ts.is_empty() {
+                println!("{msg}");
+            } else {
+                println!("{ts}  {msg}");
+            }
         }
     } else {
         println!("{}", serde_json::to_string_pretty(data).unwrap_or_default());
@@ -262,8 +265,11 @@ fn fmt_info(data: &Value) {
     );
 
     if let Some(slots) = info["memory"]["layout"].as_array() {
-        let total_gb: f64 =
-            slots.iter().filter_map(|s| s["size"].as_f64()).sum::<f64>() / 1_073_741_824.0;
+        let total_gb: f64 = slots
+            .iter()
+            .filter_map(|s| bigint_opt(&s["size"]))
+            .sum::<f64>()
+            / 1_073_741_824.0;
         println!("\n── Memory ──────────────────────────");
         println!("  {total_gb:.0} GB across {} slot(s)", slots.len());
     }
@@ -290,17 +296,14 @@ fn fmt_shares(data: &Value) {
         println!(
             "{:<24} {:>10}  {:>10}  {:>10}  {}",
             str_val_or(&s["name"], "?"),
-            s["size"]
-                .as_i64()
-                .map(fmt_kb)
+            bigint_opt(&s["size"])
+                .map(|v| fmt_kb(v as i64))
                 .unwrap_or_else(|| "--".into()),
-            s["used"]
-                .as_i64()
-                .map(fmt_kb)
+            bigint_opt(&s["used"])
+                .map(|v| fmt_kb(v as i64))
                 .unwrap_or_else(|| "--".into()),
-            s["free"]
-                .as_i64()
-                .map(fmt_kb)
+            bigint_opt(&s["free"])
+                .map(|v| fmt_kb(v as i64))
                 .unwrap_or_else(|| "--".into()),
             if s["cache"].as_bool() == Some(true) {
                 "yes"
@@ -440,7 +443,7 @@ fn fmt_ups(data: &Value) {
             "  Power:    {:.1}V in  {:.1}V out  {:.1}% load",
             pwr["inputVoltage"].as_f64().unwrap_or(0.0),
             pwr["outputVoltage"].as_f64().unwrap_or(0.0),
-            pwr["loadPercent"].as_f64().unwrap_or(0.0),
+            pwr["loadPercentage"].as_f64().unwrap_or(0.0),
         );
     }
 }
@@ -740,11 +743,69 @@ fn bigint_f64(v: &Value) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Like [`bigint_f64`] but returns `None` for a null/absent/unparseable value,
+/// so callers can render `--` for a genuinely-missing field (e.g. `fsUsed` on a
+/// parity disk) instead of a misleading `0`. BigInt fields arrive as JSON
+/// strings, so a plain `as_i64`/`as_f64` would wrongly treat them as missing.
+fn bigint_opt(v: &Value) -> Option<f64> {
+    if v.is_null() {
+        return None;
+    }
+    v.as_f64()
+        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+}
+
 /// Map GraphQL TemperatureUnit enum to a display symbol.
 fn temp_unit_symbol(unit: &str) -> &'static str {
     match unit {
         "FAHRENHEIT" => "F",
         "KELVIN" => "K",
         _ => "C",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // Regression: Unraid types ArrayDisk/Share/MemoryLayout size fields as
+    // BigInt, which arrive as JSON *strings*. The formatters must parse those,
+    // not silently render 0 (the bug fixed alongside the offline mock).
+    #[test]
+    fn bigint_helpers_accept_string_and_number() {
+        assert_eq!(bigint_f64(&json!("7810000000")), 7_810_000_000.0);
+        assert_eq!(bigint_f64(&json!(7810000000_i64)), 7_810_000_000.0);
+        assert_eq!(bigint_f64(&json!(null)), 0.0);
+
+        assert_eq!(bigint_opt(&json!("5710000000")), Some(5_710_000_000.0));
+        assert_eq!(bigint_opt(&json!(42_i64)), Some(42.0));
+        // A genuinely-missing field stays None so the CLI can render "--".
+        assert_eq!(bigint_opt(&json!(null)), None);
+        assert_eq!(bigint_opt(&Value::Null), None);
+    }
+
+    #[test]
+    fn fmt_kb_renders_bigint_string_size_not_zero() {
+        // 7_810_000_000 KB ≈ 7.3 TB — the value that previously rendered "0 KB".
+        let size = bigint_f64(&json!("7810000000")) as i64;
+        assert_eq!(fmt_kb(size), "7.3 TB");
+    }
+
+    /// Every action's healthy fixture must render through `print_human` without
+    /// panicking (index-out-of-bounds, bad unwraps, wrong-shape access). New
+    /// actions fall through to the JSON default; this guards the bespoke ones.
+    #[test]
+    fn print_human_handles_every_fixture() {
+        const HEALTHY: &str = include_str!("../../tests/fixtures/scenarios/healthy.json");
+        let fixtures: serde_json::Map<String, Value> =
+            serde_json::from_str(HEALTHY).expect("healthy fixture is valid JSON");
+        for (action, payload) in &fixtures {
+            if action.starts_with('_') {
+                continue;
+            }
+            // Must not panic for any action's real-shaped payload.
+            print_human(action, payload);
+        }
     }
 }

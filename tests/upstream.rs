@@ -79,10 +79,10 @@ async fn log_file_path_travels_as_variable_not_interpolated() {
 #[tokio::test]
 async fn docker_logs_id_travels_as_variable_not_interpolated() {
     let server = MockServer::start().await;
-    // Minimal valid `docker.logs` response (shape from graphql.rs::docker_logs).
+    // Minimal valid `docker.logs` response (cynic DockerContainerLogs shape).
     Mock::given(method("POST"))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "data": { "docker": { "logs": { "logLineUrl": "", "lines": "" } } }
+            "data": { "docker": { "logs": { "containerId": "x", "lines": [], "cursor": null } } }
         })))
         .mount(&server)
         .await;

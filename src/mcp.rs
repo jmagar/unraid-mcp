@@ -15,6 +15,7 @@ pub use rmcp_server::{
     rmcp_server, streamable_http_config, streamable_http_service, UnraidRmcpServer,
 };
 pub use routes::router;
+pub use schemas::{data_action_names, write_action_names};
 
 /// Authentication policy attached to [`AppState`].
 ///

@@ -13,6 +13,12 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/li
 # Cache deps layer — build a stub binary first so dependency compilation
 # is cached independently from source changes.
 COPY Cargo.toml Cargo.lock ./
+# build.rs + the vendored SDL must be present before any `cargo build`: build.rs
+# calls cynic_codegen::register_schema(...).from_sdl_file("schema/unraid-schema.graphql"),
+# and without them the cynic `#[cynic::schema("unraid")]` derives fail to compile with
+# "you requested a schema named unraid but it doesn't look like you've registered any".
+COPY build.rs ./
+COPY schema/ schema/
 # Strip xtask workspace member — not needed in Docker build context
 RUN sed -i 's/, \"xtask\"//g; s/\"xtask\", //g; s/\"xtask\"//g' Cargo.toml
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \

@@ -1,8 +1,17 @@
+#![recursion_limit = "512"]
 pub mod app;
 pub mod config;
 pub mod graphql;
+
+/// Typed GraphQL operations (cynic) — spike for compile-time query checking.
+mod gql_typed;
 pub mod logging;
 pub mod mcp;
+
+/// Scenario-driven mock of the Unraid GraphQL upstream. Test/dev only.
+#[cfg(any(test, feature = "test-support"))]
+pub mod mock;
+
 pub mod observability;
 pub mod token_limit;
 
@@ -148,6 +157,95 @@ pub mod testing {
         crate::mcp::tools::execute_tool(state, name, args)
             .await
             .map_err(|e| e.to_string())
+    }
+
+    /// Every upstream data action plus the args it needs, derived from the
+    /// canonical `ACTIONS` slice so new actions are covered by the scenario and
+    /// schema-contract tests automatically. Only the few arg-bearing actions need
+    /// an entry in the override map below.
+    pub fn upstream_action_calls() -> Vec<(&'static str, serde_json::Value)> {
+        use serde_json::json;
+        crate::mcp::data_action_names()
+            .into_iter()
+            .map(|name| {
+                let args = match name {
+                    "docker_logs" => json!({ "action": "docker_logs", "id": "a1b2c3d4e5f6" }),
+                    "log_file" => json!({ "action": "log_file", "path": "/var/log/syslog" }),
+                    "api_key" => json!({ "action": "api_key", "id": "abc123:key-001" }),
+                    "disk" => json!({ "action": "disk", "id": "disk-1" }),
+                    "oidc_provider" => {
+                        json!({ "action": "oidc_provider", "id": "oidc-provider-google" })
+                    }
+                    "ups_device_by_id" => json!({ "action": "ups_device_by_id", "id": "ups-1" }),
+                    "plugin_install_operation" => {
+                        json!({ "action": "plugin_install_operation", "id": "op-1a2b3c" })
+                    }
+                    "validate_oidc_session" => {
+                        json!({ "action": "validate_oidc_session", "token": "session-token-xyz" })
+                    }
+                    "get_permissions_for_roles" => {
+                        json!({ "action": "get_permissions_for_roles", "roles": ["ADMIN"] })
+                    }
+                    _ => json!({ "action": name }),
+                };
+                (name, args)
+            })
+            .collect()
+    }
+
+    /// Every mutating action plus representative args, derived from `ACTIONS`
+    /// (write-scoped). Covered by the contract + scenario tests alongside reads.
+    pub fn mutation_action_calls() -> Vec<(&'static str, serde_json::Value)> {
+        use serde_json::json;
+        crate::mcp::write_action_names()
+            .into_iter()
+            .map(|name| {
+                let args = match name {
+                    "archive_notification" => {
+                        json!({ "action": "archive_notification", "id": "ntf-1" })
+                    }
+                    "create_notification" => json!({
+                        "action": "create_notification",
+                        "title": "T", "subject": "S", "description": "D", "importance": "INFO"
+                    }),
+                    n if n.starts_with("vm_") => json!({ "action": name, "id": "vm-win11" }),
+                    "docker_update_all_containers" => json!({ "action": name }),
+                    "docker_update_containers" => {
+                        json!({ "action": name, "ids": ["docker/abc123"] })
+                    }
+                    n if n.starts_with("docker_") => {
+                        json!({ "action": name, "id": "docker/abc123" })
+                    }
+                    "array_set_state" => json!({ "action": name, "desired_state": "START" }),
+                    "parity_check_start" => json!({ "action": name, "correct": true }),
+                    n if n.starts_with("array_") => json!({ "action": name, "id": "disk/sdb" }),
+                    "api_key_create" => json!({ "action": name, "name": "k" }),
+                    "api_key_add_role" | "api_key_remove_role" => {
+                        json!({ "action": name, "api_key_id": "apikey:0001", "role": "VIEWER" })
+                    }
+                    "api_key_delete" => json!({ "action": name, "ids": ["apikey:0001"] }),
+                    "api_key_update" => json!({ "action": name, "id": "apikey:0001" }),
+                    "rclone_create_r_clone_remote" => {
+                        json!({ "action": name, "name": "r", "type": "b2", "parameters": {} })
+                    }
+                    "rclone_delete_r_clone_remote" => json!({ "action": name, "name": "r" }),
+                    n if n.starts_with("unraid_plugins_install_") => {
+                        json!({ "action": name, "url": "https://example.com/p.plg" })
+                    }
+                    "archive_notifications" | "unarchive_notifications" => {
+                        json!({ "action": name, "ids": ["ntf-1"] })
+                    }
+                    "unread_notification" => json!({ "action": name, "id": "ntf-1" }),
+                    "update_server_identity" => json!({ "action": name, "name": "Tower" }),
+                    "add_plugin" | "remove_plugin" => json!({
+                        "action": name,
+                        "input": { "names": ["my.plugin"], "bundled": false, "restart": true }
+                    }),
+                    _ => json!({ "action": name }),
+                };
+                (name, args)
+            })
+            .collect()
     }
 
     /// Wrapper over the internal `paginate_array` for unit/integration testing.

@@ -1,6 +1,12 @@
 dev:
     cargo run -- serve mcp
 
+# Run the standalone mock Unraid GraphQL server (no real Unraid box needed).
+# Point UNRAID_API_URL at http://127.0.0.1:8999/graphql to drive the real binary.
+# Scenarios: healthy (default) | degraded | parity-running | disk-failing
+mock scenario="healthy" port="8999":
+    cargo run --example mock_unraid -- --scenario {{scenario}} --port {{port}}
+
 build:
     cargo build
 

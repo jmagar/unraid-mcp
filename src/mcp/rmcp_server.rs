@@ -27,6 +27,7 @@ use super::{
 };
 
 const READ_SCOPE: &str = "unraid:read";
+const WRITE_SCOPE: &str = "unraid:admin";
 const DENY_SCOPE: &str = "unraid:__deny__";
 
 #[derive(Clone)]
@@ -316,9 +317,13 @@ fn check_scope(auth: &AuthContext, required_scope: &str, action: &str) -> Result
 /// - any action not in the canonical list falls through to [`DENY_SCOPE`],
 ///   which no caller can hold, so an unmapped action is unreachable.
 fn required_scope_for(action: &str) -> Option<&'static str> {
+    use crate::mcp::schemas::Scope;
     match ACTIONS.iter().find(|a| a.name == action) {
-        Some(spec) if spec.read_only => Some(READ_SCOPE),
-        Some(_) => None, // non-read-only spec (`help`) needs no scope
+        Some(spec) => match spec.scope {
+            Scope::None => None,               // `help`
+            Scope::Read => Some(READ_SCOPE),   // query actions + `status`
+            Scope::Write => Some(WRITE_SCOPE), // mutating actions
+        },
         None => Some(DENY_SCOPE),
     }
 }
@@ -328,22 +333,19 @@ mod tests {
     use super::*;
 
     /// Scope gating is derived from the single canonical [`ACTIONS`] list:
-    /// every read-only spec maps to `unraid:read`, `help` maps to no scope,
-    /// and an unknown action falls through to the deny sentinel.
+    /// read specs map to `unraid:read`, write (mutating) specs to `unraid:admin`,
+    /// `help` to no scope, and an unknown action to the deny sentinel.
     #[test]
     fn required_scope_tracks_canonical_list() {
+        use crate::mcp::schemas::Scope;
         for spec in ACTIONS {
             let got = required_scope_for(spec.name);
-            if spec.read_only {
-                assert_eq!(
-                    got,
-                    Some(READ_SCOPE),
-                    "{} must require the read scope",
-                    spec.name
-                );
-            } else {
-                assert_eq!(got, None, "{} must require no scope", spec.name);
-            }
+            let want = match spec.scope {
+                Scope::None => None,
+                Scope::Read => Some(READ_SCOPE),
+                Scope::Write => Some(WRITE_SCOPE),
+            };
+            assert_eq!(got, want, "{} scope mapping", spec.name);
         }
     }
 

@@ -2,13 +2,17 @@
 
 ## What this project is
 
-`unraid-mcp` is a Rust binary (`runraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It is read-only: all data actions fetch data; none modify state.
+`unraid-mcp` is a Rust binary (`runraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It covers the **full GraphQL surface** — all read queries **and** mutations (write operations). Read actions require the `unraid:read` scope; mutating actions require `unraid:admin` (see the scope model below).
 
 ## Module map
 
 | File | Role |
 |------|------|
-| `src/graphql.rs` | `UnraidClient` — raw HTTP client, one method per GraphQL query |
+| `src/graphql.rs` | `UnraidClient` — HTTP client; one method per operation. Read queries are hand-written strings; newer/typed operations run via cynic (`run_typed`/`send_graphql`) |
+| `src/gql_typed.rs` | **Typed cynic operations**: QueryFragment/Enum/Scalar/InputObject structs checked against the vendored SDL at compile time (`build.rs`) |
+| `build.rs` | Registers `schema/unraid-schema.graphql` with cynic for compile-time query checking |
+| `schema/unraid-schema.graphql` | Vendored Unraid SDL (provenance header at top) — the contract source |
+| `src/mock.rs` | Scenario-driven offline mock + `classify_query` router (behind `test-support`) |
 | `src/app.rs` | `UnraidService` — thin pass-through to `UnraidClient` (no business logic) |
 | `src/mcp/tools.rs` | Dispatches JSON args to service methods, returns `Value` |
 | `src/mcp/schemas.rs` | MCP tool JSON Schema and action enum |
@@ -27,7 +31,17 @@
 
 **Action-based dispatch.** The single MCP tool `unraid` uses an `action` string parameter. `mcp/tools.rs` matches on `action` and calls the corresponding service method.
 
-**GraphQL as the data layer.** `graphql.rs` POSTs to `UNRAID_API_URL` with `x-api-key: UNRAID_API_KEY`. Responses are `serde_json::Value` throughout — no typed schema on the Rust side.
+**GraphQL as the data layer.** `graphql.rs` POSTs to `UNRAID_API_URL` with `x-api-key: UNRAID_API_KEY`. Responses are `serde_json::Value` throughout the dispatch/CLI/MCP layers.
+
+**Typed at the wire, `Value` downstream (cynic).** Most operations are defined as typed cynic structs in `gql_typed.rs`, checked against the vendored SDL at **compile time** — a query/mutation that selects a non-existent field or wrong arg won't compile. `run_typed` runs the op over the existing reqwest client (we do NOT use cynic's `http-reqwest` — it wants reqwest 0.13, we're on 0.12) and serialises the typed result back to `Value`, so dispatch/formatters/MCP are unchanged. cynic owns response **deserialization** (its derives generate serde `Deserialize`); structs add `serde::Serialize` for the `Value` round-trip with `#[serde(rename_all = "camelCase")]`. Input objects add `serde::Deserialize` so MCP JSON args build them via `from_value`.
+
+**cynic gotchas** (learned the hard way): `ID!` → `cynic::Id` (not `String`); `BigInt` → string scalar, `Float`/`Int` → numbers; a Rust-keyword field (`type`, `virtual`) needs `r#type` + `#[cynic(rename = "...")]`; a GraphQL **argument** named after a keyword (`type:`) can't be expressed — `delete_notification` is omitted for this reason; enums whose SDL name differs in case (`UPSServiceState`) or whose values are lowercase (`ThemeName`) / double-underscored (`CONNECT__REMOTE_ACCESS`) need hand-written `#[cynic(graphql_type/rename)]`; namespaced mutations map to a selection — `mutation { vm { start } }` needs paired `Mutation`-root + `VmMutations`-namespace structs.
+
+**Scope model (`schemas.rs::Scope`).** `ActionSpec.scope` is `None` (only `help`), `Read` (`unraid:read` — all queries + `status`), or `Write` (`unraid:admin` — mutations). `unraid:admin` satisfies `unraid:read`, so a read-scoped token can't reach a mutation. `required_scope_for` derives gating from this single source.
+
+**Adding an action.** Edit `ACTIONS` in `schemas.rs` (one entry, with `Scope`), add the cynic op in `gql_typed.rs`, the `*_typed` client method (`graphql.rs`), the service pass-through (`app.rs`), the dispatch arm (`tools.rs`), the CLI (`commands.rs`/`parse.rs`/`dispatch.rs`), and a `healthy.json` fixture. The mock router (`classify_query`) and both test lists (`upstream_action_calls`/`mutation_action_calls`, derived from `ACTIONS`) cover it automatically; the schema-contract test validates the query + fixture against the SDL.
+
+**No hand-written query strings.** Every operation — reads and writes — is a typed cynic op in `gql_typed.rs`, checked against the SDL at compile time. `send_graphql` is the shared transport; `run_typed` is the single execution path.
 
 **Auth policy enum.** `AuthPolicy::LoopbackDev` skips all auth. `AuthPolicy::Mounted` uses `lab-auth` (bearer token or OAuth). Auth is automatically set to `LoopbackDev` when `config.mcp.host` starts with `127.` or `no_auth` is set.
 
@@ -112,6 +126,58 @@ For actions with parameters (like `docker_logs` with `id` and `tail`), follow th
 | `tests/rmcp_compat.rs` | RMCP stateless JSON-response mode, SSE negotiation |
 | `tests/stdio_mcp.rs` | stdio child-process transport: `tools/list` then `tools/call` |
 | `tests/spike_rmcp_extensions.rs` | Axum extension propagation into tool handlers |
+| `tests/scenarios.rs` | Scenario-driven mock: every action dispatches across all scenarios (also proves `classify_query` routing) |
+| `tests/schema_contract.rs` | Validates every `graphql.rs` query AND every fixture against the vendored Unraid SDL (`apollo-compiler`) — the drift guardrail |
+
+## Mocking the Unraid upstream (no real server needed)
+
+Because the Rust side treats every GraphQL response as an opaque `Value`, a
+faithful mock just has to recognise *which* query is asked and return canned
+JSON. That lives in `src/mock.rs` (gated behind the `test-support` feature) with
+one source of truth: `tests/fixtures/scenarios/*.json`.
+
+- **Fixtures.** `healthy.json` is a full realistic snapshot (all 24 query
+  payloads). `degraded.json`, `parity-running.json`, `disk-failing.json` are
+  thin overlays that replace only the fixture keys that differ; `_`-prefixed
+  keys are docs and ignored. `Scenario::load` merges base + overlay.
+- **Routing.** `mock::classify_query(query)` **parses the query AST**
+  (`graphql-parser`, optional dep behind `test-support`) and routes on the
+  operation's real root field name (`upsDevices` → `ups`). The only shared root
+  field is `docker`, disambiguated by sub-selection (`logs` → `docker_logs`).
+  Robust to whitespace/reordering — not substring matching.
+- **Fixture field types mirror the real SDL** (`api/generated-schema.graphql` in
+  `unraid/api`), not a guess. The split that matters:
+  - `BigInt` scalars arrive as JSON **strings** (KB): `ArrayDisk.size`/`fsSize`/
+    `fsFree`/`fsUsed`/`numReads`/`numWrites`/`numErrors`, `Share.free`/`used`/
+    `size`, `MemoryLayout.size`, `MemoryUtilization.*`, `Capacity.*`.
+  - `Float!`/`Int!` arrive as JSON **numbers**: `Disk.size`/`DiskPartition.size`
+    (bytes), `LogFile.size` (bytes).
+  - Enums are exact: `DiskSmartStatus` = `{OK, UNKNOWN}` (no `FAILING`);
+    `ArrayDiskType` = `DATA|PARITY|CACHE|BOOT|FLASH` (UPPERCASE);
+    `ArrayDiskStatus` = `DISK_OK|DISK_DSBL|…`; `ArrayDiskFsColor` = `GREEN_ON|…`.
+  - A failing disk is signalled by `UNKNOWN` SMART + array `numErrors`/`DISK_DSBL`
+    + an ALERT notification — there is no `FAILING` SMART value.
+  Note: the CLI formatters must read BigInt size fields with `bigint_f64`/
+  `bigint_opt` (string-or-number aware), **not** `as_i64`/`as_f64` — the latter
+  silently render `0` against real (string) data (fixed in `src/cli/format.rs`;
+  see the bigint regression tests there).
+- **Standalone server** (`examples/mock_unraid.rs`): `just mock [scenario]` or
+  `cargo run --example mock_unraid -- --scenario degraded --port 8999`. Point
+  `UNRAID_API_URL` at `http://127.0.0.1:PORT/graphql`, set any `UNRAID_API_KEY`,
+  then drive the real `runraid` CLI / `serve mcp` / Claude skill. Hot-swap the
+  scenario live: `curl -XPOST http://127.0.0.1:PORT/scenario/disk-failing`.
+  `--require-key KEY` exercises the upstream-auth (401) path.
+- **Schema-as-contract guard** (`tests/schema_contract.rs`). The vendored SDL
+  `tests/fixtures/unraid-schema.graphql` (provenance comment at the top — copied
+  from `unraid/api`, re-copy when Unraid ships an API change) is the source of
+  truth. The test validates **every query** `graphql.rs` sends and **every
+  fixture leaf** (scalar JSON-type + enum membership) against it via
+  `apollo-compiler`. This is what mechanically catches drift — it already caught
+  two real production query bugs (`docker_logs` selected the non-existent
+  `logLineUrl` and treated `lines` as a scalar; `ups` queried `loadPercent`
+  instead of `loadPercentage`). It is **lenient on nullability** (the real server
+  violates its own non-null types, e.g. `flash.guid`) and does **not** prove a
+  real server returns fixture-shaped data — only a live test does.
 
 ## CLI ↔ MCP action parity
 

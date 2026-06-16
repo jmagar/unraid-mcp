@@ -1,0 +1,81 @@
+name: Schema drift
+
+# Daily check: has Unraid's published GraphQL SDL drifted from our vendored copy?
+# A non-empty diff is the signal to re-vendor schema/unraid-schema.graphql and
+# update queries/fixtures (the schema-contract test will then flag what changed).
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Compare vendored SDL to unraid/api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Fetch upstream SDL
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/unraid/api/main/api/generated-schema.graphql \
+            -o upstream-schema.graphql
+
+      - name: Strip vendored provenance header
+        run: sed '1,/VENDOR-HEADER-END/d' schema/unraid-schema.graphql > vendored-body.graphql
+
+      - name: Diff
+        id: diff
+        run: |
+          if diff -u vendored-body.graphql upstream-schema.graphql > schema.diff; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "✓ Vendored Unraid SDL is up to date."
+          else
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            echo "⚠ Unraid SDL has drifted from the vendored copy:"
+            cat schema.diff
+          fi
+
+      - name: Open / update drift issue
+        if: steps.diff.outputs.drift == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const diff = fs.readFileSync('schema.diff', 'utf8').slice(0, 60000);
+            const title = 'Unraid GraphQL schema drift detected';
+            const body = [
+              'The vendored `schema/unraid-schema.graphql` no longer matches',
+              'Unraid\'s published SDL (`unraid/api@main`).',
+              '',
+              'Re-vendor it (copy the upstream file, re-add the provenance header),',
+              'then let the schema-contract test surface which queries/fixtures need',
+              'updating.',
+              '',
+              '<details><summary>diff</summary>',
+              '',
+              '```diff',
+              diff,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'schema-drift',
+            });
+            if (existing.data.length) {
+              await github.rest.issues.update({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: existing.data[0].number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['schema-drift'],
+              });
+            }
