@@ -30,7 +30,6 @@ from fastmcp import Context, FastMCP
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
-from ..core.setup import elicit_and_configure, elicit_reset_confirmation
 from ..core.utils import validate_subaction
 
 # Re-exports: domain modules' constants and helpers needed by tests
@@ -86,8 +85,7 @@ from ._vm import _VM_DESTRUCTIVE, _VM_MUTATIONS, _VM_QUERIES, _handle_vm  # noqa
 
 
 # ===========================================================================
-# HEALTH handler — kept here so test patches on unraid_mcp.tools.unraid.*
-# intercept elicit_and_configure / elicit_reset_confirmation correctly
+# HEALTH handler
 # ===========================================================================
 
 
@@ -97,44 +95,39 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
     from ..config.settings import (
         CREDENTIALS_ENV_PATH,
         UNRAID_API_URL,
+        is_configured,
     )
     from ..core.utils import safe_display_url
     from ..subscriptions.utils import _analyze_subscription_status
 
     if subaction == "setup":
-        if CREDENTIALS_ENV_PATH.exists():
-            connection_error_type: str | None = None
+        if is_configured():
             try:
                 await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
-                connection_ok = True
+                status = "and the connection test succeeded"
             except Exception as e:
-                connection_ok = False
-                connection_error_type = type(e).__name__
-                logger.debug(f"health/setup connection probe failed: {connection_error_type}: {e}")
-            if connection_ok:
-                status_note = "and working"
-            elif connection_error_type:
-                status_note = f"but the connection test failed ({connection_error_type}) — may be a transient outage or misconfiguration"
-            else:
-                status_note = "but the connection test failed — may be a transient outage"
-            reset = await elicit_reset_confirmation(
-                ctx,
-                f"{safe_display_url(UNRAID_API_URL) or ''} ({status_note})",
-            )
-            if not reset:
-                return (
-                    f"✅ Credentials already configured ({status_note}).\n"
-                    f"URL: `{safe_display_url(UNRAID_API_URL)}`\n\nNo changes made."
+                status = (
+                    f"but the connection test failed ({type(e).__name__}) — "
+                    "this may be a transient outage or a misconfiguration"
                 )
-        configured = await elicit_and_configure(ctx)
-        if configured:
-            return "✅ Credentials configured successfully. You can now use all Unraid MCP tools."
+            return (
+                f"✅ Credentials are configured ({status}).\n"
+                f"URL: `{safe_display_url(UNRAID_API_URL)}`\n"
+                f"File: `{CREDENTIALS_ENV_PATH}`\n\n"
+                "To change them, update the plugin's userConfig form "
+                "(Unraid GraphQL API URL / Unraid API Key) or edit that file, "
+                "then restart the server."
+            )
         return (
-            f"⚠️ Credentials not configured.\n\n"
-            f"Your MCP client may not support elicitation, or setup was cancelled.\n\n"
-            f"**Manual setup** — create `{CREDENTIALS_ENV_PATH}` with:\n"
-            f"```\nUNRAID_API_URL=https://your-unraid-server:port\nUNRAID_API_KEY=your-api-key\n```\n\n"
-            "Then run any Unraid tool to connect."
+            "⚠️ Credentials are not configured.\n\n"
+            "**Claude Code plugin:** set *Unraid GraphQL API URL* and *Unraid API Key* "
+            "in the plugin's configuration form — they are applied automatically on the "
+            "next session and persisted to disk.\n\n"
+            f"**Manual / Docker:** create `{CREDENTIALS_ENV_PATH}` with:\n"
+            "```\nUNRAID_API_URL=https://your-unraid-server:port\n"
+            "UNRAID_API_KEY=your-api-key\n```\n\n"
+            "Then restart the server and run "
+            '`unraid(action="health", subaction="test_connection")` to verify.'
         )
 
     with tool_error_handler("health", subaction, logger):

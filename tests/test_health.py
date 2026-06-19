@@ -248,198 +248,73 @@ class TestSafeDisplayUrl:
         assert result == "<unparseable>"
 
 
-@pytest.mark.asyncio
-async def test_health_setup_action_calls_elicitation() -> None:
-    """setup subaction triggers elicit_and_configure when no credentials exist."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = False
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
-        ) as mock_elicit,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    assert mock_elicit.called
-    assert "configured" in result.lower() or "success" in result.lower()
 
 
 @pytest.mark.asyncio
-async def test_health_setup_action_returns_declined_message() -> None:
-    """setup subaction with declined elicitation returns appropriate message."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = False
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch("unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=False)),
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    assert (
-        "not configured" in result.lower()
-        or "declined" in result.lower()
-        or "cancel" in result.lower()
-    )
-
-
-@pytest.mark.asyncio
-async def test_health_setup_already_configured_and_working_no_reset() -> None:
-    """setup returns early when credentials exist, connection works, and user declines reset."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = True
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.core.client.make_graphql_request",
-            new=AsyncMock(return_value={"online": True}),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
-            new=AsyncMock(return_value=False),
-        ),
-        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    mock_configure.assert_not_called()
-    assert "already configured" in result.lower()
-    assert "no changes" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_health_setup_already_configured_user_confirms_reset() -> None:
-    """setup proceeds with elicitation when credentials exist but user confirms reset."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = True
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.core.client.make_graphql_request",
-            new=AsyncMock(return_value={"online": True}),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
-            new=AsyncMock(return_value=True),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
-        ) as mock_configure,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    mock_configure.assert_called_once()
-    assert "configured" in result.lower() or "success" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_health_setup_credentials_exist_but_connection_fails_user_confirms() -> None:
-    """setup prompts for confirmation even on failed probe, then reconfigures if confirmed."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = True
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.core.client.make_graphql_request",
-            new=AsyncMock(side_effect=Exception("connection refused")),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
-            new=AsyncMock(return_value=True),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=True)
-        ) as mock_configure,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    mock_configure.assert_called_once()
-    assert "configured" in result.lower() or "success" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_health_setup_credentials_exist_connection_fails_user_declines() -> None:
-    """setup returns 'no changes' when credentials exist (even with failed probe) and user declines."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = True
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.core.client.make_graphql_request",
-            new=AsyncMock(side_effect=Exception("connection refused")),
-        ),
-        patch(
-            "unraid_mcp.tools.unraid.elicit_reset_confirmation",
-            new=AsyncMock(return_value=False),
-        ),
-        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
-
-    mock_configure.assert_not_called()
-    assert "no changes" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_health_setup_ctx_none_already_configured_returns_no_changes() -> None:
-    """When ctx=None and credentials are working, setup returns 'already configured' gracefully."""
-    tool_fn = _make_tool()
-
-    mock_path = MagicMock()
-    mock_path.exists.return_value = True
-
-    with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch(
-            "unraid_mcp.core.client.make_graphql_request",
-            new=AsyncMock(return_value={"online": True}),
-        ),
-        patch("unraid_mcp.tools.unraid.elicit_and_configure") as mock_configure,
-    ):
-        result = await tool_fn(action="health", subaction="setup", ctx=None)
-
-    mock_configure.assert_not_called()
-    assert "already configured" in result.lower()
-    assert "no changes" in result.lower()
-
-
-@pytest.mark.asyncio
-async def test_health_setup_declined_message_includes_manual_path() -> None:
-    """Declined setup message includes the exact credentials file path and variable names."""
+async def test_health_setup_not_configured_returns_manual_instructions() -> None:
+    """setup returns plugin + manual .env instructions when credentials are absent."""
     from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
 
     tool_fn = _make_tool()
-
-    real_path_str = str(CREDENTIALS_ENV_PATH)
-    mock_path = MagicMock()
-    mock_path.exists.return_value = False
-    # Override __str__ on the instance's mock directly — avoids mutating the shared MagicMock class.
-    mock_path.__str__ = MagicMock(return_value=real_path_str)
-
     with (
-        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", mock_path),
-        patch("unraid_mcp.tools.unraid.elicit_and_configure", new=AsyncMock(return_value=False)),
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", None),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", None),
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 
-    assert real_path_str in result
+    assert "not configured" in result.lower()
+    assert str(CREDENTIALS_ENV_PATH) in result
     assert "UNRAID_API_URL=" in result
     assert "UNRAID_API_KEY=" in result
+
+
+@pytest.mark.asyncio
+async def test_health_setup_configured_and_working_reports_status() -> None:
+    """setup reports configured + working status without any prompting."""
+    tool_fn = _make_tool()
+    with (
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://my-unraid.example.com:31337"),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", "key123"),
+        patch(
+            "unraid_mcp.core.client.make_graphql_request",
+            new=AsyncMock(return_value={"online": True}),
+        ),
+    ):
+        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
+
+    assert "configured" in result.lower()
+    assert "succeeded" in result.lower()
+    assert "restart" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_health_setup_configured_but_connection_fails_reports_failure() -> None:
+    """setup reports configured-but-failing status without prompting."""
+    tool_fn = _make_tool()
+    with (
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://my-unraid.example.com:31337"),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", "key123"),
+        patch(
+            "unraid_mcp.core.client.make_graphql_request",
+            new=AsyncMock(side_effect=Exception("connection refused")),
+        ),
+    ):
+        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
+
+    assert "configured" in result.lower()
+    assert "connection test failed" in result.lower()
+
+
+@pytest.mark.asyncio
+async def test_health_setup_never_calls_elicit() -> None:
+    """setup must not invoke ctx.elicit for any configuration state."""
+    tool_fn = _make_tool()
+    mock_ctx = MagicMock()
+    mock_ctx.elicit = AsyncMock()
+    with (
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", None),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", None),
+    ):
+        await tool_fn(action="health", subaction="setup", ctx=mock_ctx)
+
+    mock_ctx.elicit.assert_not_called()
