@@ -110,7 +110,10 @@ def run_plugin_hook() -> int:
         for option, canonical in PLUGIN_OPTION_MAP.items():
             if canonical in resolved:
                 continue
-            if os.environ.get(option):
+            if option in os.environ:
+                # Present (key set) but absent from `resolved` → empty or unsafe value.
+                # Use key presence, not truthiness, so an explicit empty value is
+                # classified as "rejected", not "not supplied".
                 failures.append(
                     f"{canonical} was supplied but rejected (empty or unsafe characters) — "
                     "check the value in the plugin config form."

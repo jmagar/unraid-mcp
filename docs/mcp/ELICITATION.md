@@ -65,7 +65,8 @@ _ARRAY_DESTRUCTIVE = {"stop_array", "remove_disk", "clear_disk_stats"}
 
 When the client does not support elicitation (`NotImplementedError`), destructive
 actions return a `ToolError`:
-```
+
+```text
 Action 'stop_array' was not confirmed. Re-run with confirm=True to bypass elicitation.
 ```
 

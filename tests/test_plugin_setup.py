@@ -239,6 +239,37 @@ def test_run_plugin_hook_reports_rejected_value_distinctly(tmp_path, capsys):
     assert "rejected" in advisory.lower()
 
 
+def test_run_plugin_hook_reports_empty_value_as_rejected(tmp_path, capsys):
+    """An explicitly-empty option is 'rejected', not 'not supplied' (key-presence check)."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "",  # present but empty
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    assert not creds_file.exists()
+    report = json.loads(capsys.readouterr().out)
+    assert len(report["advisory_failures"]) == 1
+    advisory = report["advisory_failures"][0]
+    assert "UNRAID_API_URL" in advisory
+    assert "rejected" in advisory.lower()
+
+
 def test_run_plugin_hook_returns_zero_on_write_failure(tmp_path, capsys):
     """A .env write error must be surfaced in advisory_failures, not escape (always exit 0)."""
     from unraid_mcp.core import setup as setup_mod
