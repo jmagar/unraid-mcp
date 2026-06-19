@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Claude/Codex plugin manifests are no longer versioned.** Removed the `version`
+  field from `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`. The
+  plugin is distributed from this git repo, so Claude Code (and the Codex surface)
+  version it by **git commit SHA** — every commit to `main` is its own version
+  (the documented approach for actively developed, git-hosted plugins). This
+  eliminates the manual semver bump that had to be kept in sync across files, which
+  was pure overhead and a recurring merge-conflict source. `gemini-extension.json`
+  keeps a static `version` (the Gemini CLI requires the field). `pyproject.toml`
+  keeps its `version` (required by Python packaging / runtime metadata) and is
+  bumped only for tagged PyPI/Docker releases via `just publish`.
+- **Tooling**: removed `bin/bump-version.sh` and `tests/test_bump_version.bats`;
+  replaced `bin/check-version-sync.sh` with `bin/check-no-plugin-version.sh`, which
+  fails if a `version` field reappears in the Claude/Codex manifests. The CI
+  `version-sync` job is now `no-plugin-version`; `bin/validate-marketplace.sh` and
+  the docs were updated to match. Added regression tests asserting the Claude/Codex
+  manifests carry no version and Gemini keeps one.
+
 ## [1.5.0] - 2026-06-19
 
 ### Added

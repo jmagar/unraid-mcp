@@ -13,7 +13,7 @@ GitHub Actions configuration for unraid-mcp.
 | `lint` | Ruff check and format verification | `ruff check`, `ruff format --check` |
 | `typecheck` | Static type analysis | `ty check` |
 | `test` | Unit tests with coverage | `pytest -m "not slow and not integration" --cov` |
-| `version-sync` | Verify all version files match | Shell script comparing pyproject.toml, plugin.json (x3), gemini-extension.json |
+| `no-plugin-version` | Verify plugin manifests declare no `version` (SHA-versioned) | `bin/check-no-plugin-version.sh` |
 | `mcp-integration` | Live MCP integration tests | `test_live.sh` with secrets (push/same-repo PRs only) |
 | `audit` | Dependency security audit | `uv audit` |
 
@@ -45,15 +45,18 @@ GitHub Actions configuration for unraid-mcp.
 | GitHub Release | Auto-generated release notes with dist artifacts |
 | MCP Registry publish | DNS-authenticated publish to `tv.tootie/unraid-mcp` via `mcp-publisher` |
 
-## Version sync enforcement
+## No-plugin-version enforcement
 
-The `version-sync` job ensures these files all contain the same version string:
-- `pyproject.toml`
+The Claude/Codex plugin manifests are versioned by git commit SHA, so they must
+**not** declare a `version` field. The `no-plugin-version` job runs
+`bin/check-no-plugin-version.sh`, which fails the pipeline if a `version` key
+reappears in either of:
 - `.claude-plugin/plugin.json`
 - `.codex-plugin/plugin.json`
-- `gemini-extension.json`
 
-Failure blocks the CI pipeline.
+Not checked: `gemini-extension.json` keeps a static `version` (the Gemini CLI
+requires the field), and `pyproject.toml` keeps its `version` (required by Python
+packaging).
 
 ## Secrets required
 

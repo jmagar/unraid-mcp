@@ -84,8 +84,7 @@ Complete listing of all plugin components.
 | --- | --- | --- |
 | `bin/sync-uv.sh` | Bash | SessionStart hook: sync uv virtual environment |
 | `bin/block-env-commits.sh` | Bash | Pre-commit hook: block accidental .env file commits |
-| `bin/bump-version.sh` | Bash | Bump version across all version-bearing files |
-| `bin/check-version-sync.sh` | Bash | Verify version consistency across pyproject.toml and manifests |
+| `bin/check-no-plugin-version.sh` | Bash | Guard: plugin manifests must not declare a `version` (SHA-versioned) |
 | `bin/validate-marketplace.sh` | Bash | Validate Claude Code marketplace and plugin manifest structure |
 | `bin/generate_unraid_api_reference.py` | Python | Generate canonical GraphQL API docs from live Unraid introspection |
 
@@ -99,7 +98,7 @@ Complete listing of all plugin components.
 
 | Workflow | Trigger | Jobs |
 | --- | --- | --- |
-| `ci.yml` | Push/PR to main | lint, typecheck, test, version-sync, mcp-integration, audit, gitleaks |
+| `ci.yml` | Push/PR to main | lint, typecheck, test, no-plugin-version, mcp-integration, audit, gitleaks |
 | `docker-publish.yml` | Push to main/tags | Build multi-arch Docker image, push to ghcr.io, Trivy scan |
 | `publish-pypi.yml` | Tag `v*.*.*` | Build, PyPI publish, GitHub release, MCP registry publish |
 

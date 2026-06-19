@@ -209,10 +209,23 @@ See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_A
 
 Use these when adding new queries/mutations.
 
-### Version Bumps
-When bumping the version, **always update both files** — they must stay in sync:
-- `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
-- `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
+### Versioning (no manual plugin bumps)
+**The Claude/Codex plugin manifests are NOT versioned — do not add a `version`
+field to them.** The plugin is distributed from this git repo, so Claude Code
+(and the Codex surface) version it by **git commit SHA** — every commit to `main`
+is its own version. This removes the manual semver bump that had to be kept in
+sync across multiple files (a frequent merge-conflict source). See
+`bin/check-no-plugin-version.sh` (enforced by the `No Plugin Version` CI job).
+- `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`
+  → **no `version` field** (CI fails if one reappears).
+- `gemini-extension.json` → **keeps a static `version`** because the Gemini CLI
+  requires the field. It is not SHA-versioned and need not stay in sync; update it
+  only if a Gemini release needs it.
+- `pyproject.toml` → keeps `version` (required by Python packaging and read at
+  runtime via importlib metadata). Bump it only for an explicit PyPI/Docker
+  release via `just publish [patch|minor|major]` — not on every commit.
+- `CHANGELOG.md` is still a useful human-readable log, but entries are optional
+  and no longer tied to a synced manifest version.
 
 ### Credential Storage (`~/.unraid-mcp/.env`)
 All runtimes (plugin, direct `uv run`) load credentials from `~/.unraid-mcp/.env`.
@@ -278,24 +291,19 @@ bd close <id>         # Complete work
 <!-- END BEADS INTEGRATION -->
 
 
-## Version Bumping
+## Versioning
 
-**Every feature branch push MUST bump the version in ALL version-bearing files.**
+**Do NOT bump versions on feature-branch pushes.** Plugin distribution is
+git-SHA-versioned (see "Versioning (no manual plugin bumps)" above), so there is
+no per-commit version to maintain.
 
-Bump type is determined by the commit message prefix:
-- `feat!:` or `BREAKING CHANGE` → **major** (X+1.0.0)
-- `feat` or `feat(...)` → **minor** (X.Y+1.0)
-- Everything else (`fix`, `chore`, `refactor`, `test`, `docs`, etc.) → **patch** (X.Y.Z+1)
-
-**Files to update (if they exist in this repo):**
-- `Cargo.toml` — `version = "X.Y.Z"` in `[package]`
-- `package.json` — `"version": "X.Y.Z"`
-- `pyproject.toml` — `version = "X.Y.Z"` in `[project]`
-- `.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `gemini-extension.json` — `"version": "X.Y.Z"`
-- `README.md` — version badge or header
-- `CHANGELOG.md` — new entry under the bumped version
-
-All files MUST have the same version. Never bump only one file.
-CHANGELOG.md must have an entry for every version bump.
+- **Claude/Codex manifests** (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`)
+  carry **no `version` field**. The `No Plugin Version` CI job
+  (`bin/check-no-plugin-version.sh`) fails if one is added back.
+- **`gemini-extension.json`** keeps a static `version` (the Gemini CLI requires it);
+  it is not SHA-versioned and not kept in sync.
+- **`pyproject.toml`** keeps a `version` (required by Python packaging). Bump it
+  **only** when cutting an explicit PyPI/Docker release: `just publish [patch|minor|major]`,
+  which updates `pyproject.toml`, commits, tags `vX.Y.Z`, and pushes.
+- **`CHANGELOG.md`** remains a human log; add an entry when a change is worth
+  noting, but it is no longer required for every push or tied to a manifest version.

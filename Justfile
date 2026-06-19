@@ -144,7 +144,10 @@ clean:
     find . -name '*.pyc' -not -path './.venv/*' -delete 2>/dev/null || true
     @echo "Cleaned build artifacts"
 
-# Publish: bump version, tag, push (triggers PyPI + Docker publish)
+# Publish a PyPI/Docker release: bump pyproject version, tag, push.
+# NOTE: plugin manifests (Claude/Codex/Gemini) are NOT versioned — they are
+# distributed from git and versioned by commit SHA. Only pyproject.toml carries
+# a version, used for the Python package / Docker image release.
 publish bump="patch":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -160,12 +163,8 @@ publish bump="patch":
       *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
     esac
     NEW="${major}.${minor}.${patch}"
-    echo "Version: ${CURRENT} → ${NEW}"
+    echo "pyproject version: ${CURRENT} → ${NEW}"
     sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" pyproject.toml
-    for f in .claude-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json; do
-      [ -f "$f" ] && python3 -c "import json; d=json.load(open(\"$f\")); d[\"version\"]=\"${NEW}\"; json.dump(d,open(\"$f\",\"w\"),indent=2); open(\"$f\",\"a\").write(\"
-\")"
-    done
     git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
     echo "Tagged v${NEW} — publish workflow will run automatically"
 

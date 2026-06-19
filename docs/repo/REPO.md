@@ -87,8 +87,7 @@ unraid-mcp/
 |   +-- CLAUDE.md                      # AI assistant instructions for bin/ scripts
 |   +-- sync-uv.sh                     # SessionStart hook: sync uv virtual environment
 |   +-- block-env-commits.sh           # Pre-commit hook: block .env file commits
-|   +-- bump-version.sh                # Bump version across all version-bearing files
-|   +-- check-version-sync.sh          # Verify version consistency across manifest files
+|   +-- check-no-plugin-version.sh     # Guard: plugin manifests carry no version (SHA-versioned)
 |   +-- validate-marketplace.sh        # Validate marketplace/plugin manifest structure
 |   +-- generate_unraid_api_reference.py  # Generate GraphQL API docs from live introspection
 |

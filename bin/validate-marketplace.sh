@@ -44,7 +44,8 @@ check "Marketplace has plugins array" "jq -e '.plugins | type == \"array\"' .cla
 check "Plugin manifest exists" "test -f .claude-plugin/plugin.json"
 check "Plugin manifest is valid JSON" "jq empty .claude-plugin/plugin.json"
 check "Plugin has name" "jq -e '.name' .claude-plugin/plugin.json"
-check "Plugin has version" "jq -e '.version' .claude-plugin/plugin.json"
+# Plugins are versioned by git commit SHA — the manifest must NOT pin a version.
+check "Plugin has no version field" "jq -e 'has(\"version\") | not' .claude-plugin/plugin.json"
 
 # Check plugin structure
 check "Plugin has SKILL.md" "test -f skills/unraid/SKILL.md"
@@ -68,20 +69,6 @@ else
     CHECKS=$((CHECKS + 1))
     FAILED=$((FAILED + 1))
     echo -e "Checking: Plugin source path is valid... ${RED}✗${NC} (plugin not found in marketplace)"
-fi
-
-# Check version sync between pyproject.toml and plugin.json
-echo "Checking version sync..."
-TOML_VER=$(grep -m1 '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
-PLUGIN_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "ERROR_READING")
-if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
-    echo -e "${RED}FAIL: Version mismatch — pyproject.toml=$TOML_VER, plugin.json=$PLUGIN_VER${NC}"
-    CHECKS=$((CHECKS + 1))
-    FAILED=$((FAILED + 1))
-else
-    echo -e "${GREEN}PASS: Versions in sync ($TOML_VER)${NC}"
-    CHECKS=$((CHECKS + 1))
-    PASSED=$((PASSED + 1))
 fi
 
 echo ""

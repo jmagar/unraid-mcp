@@ -89,11 +89,18 @@
 }
 ```
 
-## Version sync
+## Versioning
 
-All four manifest files must contain the same version string. This is enforced by:
-- CI `version-sync` job
-- `just publish` recipe (updates all files atomically)
+The Claude/Codex plugin manifests are **not** versioned — they carry no `version`
+field. The plugin is distributed from this git repo, so it is versioned by **commit
+SHA** (every commit to `main` is its own version). This is enforced by:
+- CI `no-plugin-version` job (`bin/check-no-plugin-version.sh`) — fails if a
+  `version` field reappears in `.claude-plugin/plugin.json` or `.codex-plugin/plugin.json`
+- `bin/validate-marketplace.sh` — asserts `.claude-plugin/plugin.json` has no version
+
+`gemini-extension.json` keeps a static `version` (the Gemini CLI requires it). Only
+`pyproject.toml` is actively versioned (for the Python package / Docker release),
+bumped via `just publish` when cutting a tagged release.
 
 ## See Also
 

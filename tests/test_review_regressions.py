@@ -39,3 +39,24 @@ def test_test_live_script_uses_safe_counters_and_resource_failures() -> None:
     assert "(( PASS++ ))" in script
     assert "(( FAIL++ ))" in script
     assert "(( SKIP++ ))" in script
+
+
+def test_claude_codex_manifests_declare_no_version() -> None:
+    """Claude/Codex manifests are versioned by git commit SHA — no `version` field.
+
+    Regression guard for the switch away from manual semver bumps. Excluded:
+    `gemini-extension.json` (the Gemini CLI requires a version) and `pyproject.toml`
+    (required by Python packaging).
+    """
+    for manifest in (
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+    ):
+        data = json.loads((PROJECT_ROOT / manifest).read_text())
+        assert "version" not in data, f"{manifest} must not declare a 'version' field"
+
+
+def test_gemini_manifest_keeps_version() -> None:
+    """The Gemini CLI requires a `version` field, so it keeps a static one."""
+    data = json.loads((PROJECT_ROOT / "gemini-extension.json").read_text())
+    assert "version" in data, "gemini-extension.json must declare a 'version' (Gemini requires it)"

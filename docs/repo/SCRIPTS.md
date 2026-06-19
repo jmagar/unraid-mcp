@@ -22,7 +22,7 @@ Run from the repo root (no arguments needed in that case). Exits 0 if all checks
 - `.claude-plugin/plugin.json` exists and is valid JSON with required fields
 - Required skill files (`skills/unraid/SKILL.md`, `README.md`, `scripts/`, `examples/`, `references/`)
 - Plugin is listed in the marketplace manifest
-- Version in `pyproject.toml` matches version in `.claude-plugin/plugin.json`
+- Plugin manifest has **no** `version` field (plugins are versioned by git commit SHA)
 
 ### `bin/generate_unraid_api_reference.py`
 
@@ -53,7 +53,7 @@ Requires `UNRAID_API_URL` and `UNRAID_API_KEY` environment variables (or `--api-
 ## CI usage
 
 Scripts are called by CI workflows:
-- `ci.yml` runs lint, typecheck, test, version-sync, mcp-integration, audit, and gitleaks jobs
+- `ci.yml` runs lint, typecheck, test, no-plugin-version, mcp-integration, audit, and gitleaks jobs
 
 ## See Also
 

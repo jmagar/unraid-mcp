@@ -60,14 +60,14 @@ jobs:
       - name: Run tests with coverage (excluding integration/slow)
         run: uv run pytest -m "not slow and not integration" --cov=unraid_mcp --cov-report=term-missing --tb=short -q
 
-  version-sync:
-    name: Version Sync Check
+  no-plugin-version:
+    name: No Plugin Version
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
-      - name: Check all version files are in sync
-        run: bash bin/check-version-sync.sh
+      - name: Plugin manifests must not declare a version (SHA-versioned)
+        run: bash bin/check-no-plugin-version.sh
 
   mcp-integration:
     name: MCP Integration Tests

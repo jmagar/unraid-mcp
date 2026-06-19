@@ -20,7 +20,7 @@ The individual plugin configuration for the Unraid MCP server.
 **Location:** `.claude-plugin/plugin.json`
 
 **Contents:**
-- Plugin name (`unraid`), version (`1.1.2`), author
+- Plugin name (`unraid`), author (no `version` — SHA-versioned)
 - Repository and homepage links
 - `mcpServers` block that configures the server to run via `uv run unraid-mcp-server` in stdio mode
 
@@ -127,7 +127,7 @@ Exits 0 on success, 1 if any check fails.
 ```text
 unraid-mcp/
 ├── .claude-plugin/          # Plugin manifest + marketplace manifest
-│   ├── plugin.json          # Plugin configuration (name, version, mcpServers)
+│   ├── plugin.json          # Plugin configuration (name, mcpServers; no version)
 │   └── marketplace.json     # Marketplace catalog
 ├── unraid_mcp/              # Python package (the actual MCP server)
 │   ├── main.py              # Entry point
@@ -158,10 +158,11 @@ unraid-mcp/
 
 Before publishing to GitHub:
 
-1. **Update Version Numbers** (must be in sync)
-   - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
-   - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
-   - `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
+1. **No version bump needed.** The plugin is versioned by git commit SHA —
+   `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` carry no `version`
+   field. Just commit and push; each commit to `main` is a new version.
+   (`gemini-extension.json` keeps a static `version` the Gemini CLI requires; only
+   `pyproject.toml` is actively versioned, for tagged PyPI/Docker releases.)
 
 3. **Test Locally**
    ```bash
@@ -212,8 +213,7 @@ After installation, users can:
 To release a new version:
 
 1. Make changes to the plugin code
-2. Update version in `pyproject.toml`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`
-3. Commit and push
+2. Commit and push — no version bump needed (the plugin is versioned by commit SHA)
 
 Users with the plugin installed will see the update available and can upgrade:
 ```bash

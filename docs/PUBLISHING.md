@@ -15,12 +15,19 @@ The package ships a FastMCP server exposing **3 MCP tools**:
 
 Tool call convention: `unraid(action="docker", subaction="list")`
 
-### Version Sync Requirement
+### Versioning
 
-When bumping the version, **all three files must be updated together**:
-- `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
-- `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
-- `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
+The Claude/Codex plugin manifests are **not** versioned — the plugin is distributed
+from this git repo, so Claude Code and Codex version it by **commit SHA** (every
+commit is a version). Do **not** add a `version` field to `.claude-plugin/plugin.json`
+or `.codex-plugin/plugin.json`; the `No Plugin Version` CI job
+(`bin/check-no-plugin-version.sh`) enforces this.
+
+`gemini-extension.json` keeps a static `version` because the Gemini CLI requires the
+field (it is not SHA-versioned). Only `pyproject.toml` is actively versioned, and it
+is bumped **only** when cutting a PyPI/Docker release — use
+`just publish [patch|minor|major]`, which updates `pyproject.toml`, commits, tags
+`vX.Y.Z`, and pushes (the tag triggers the publish workflow).
 
 ## Prerequisites
 

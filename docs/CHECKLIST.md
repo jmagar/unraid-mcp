@@ -49,7 +49,7 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 ## CI/CD
 
-- [ ] `ci.yml` lint, typecheck, test, version-sync, audit, gitleaks jobs pass
+- [ ] `ci.yml` lint, typecheck, test, no-plugin-version, audit, gitleaks jobs pass
 - [ ] `docker-publish.yml` builds multi-arch (amd64, arm64) images
 - [ ] `publish-pypi.yml` tag-version check, PyPI publish, GitHub release, MCP registry publish all configured
 - [ ] Trivy vulnerability scan runs on published images
