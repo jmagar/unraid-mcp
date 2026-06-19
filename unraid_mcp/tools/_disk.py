@@ -13,7 +13,12 @@ from ..core import client as _client
 from ..core.client import DISK_TIMEOUT
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import filter_log_lines, format_bytes, validate_subaction
+from ..core.utils import (
+    count_log_matches,
+    filter_log_lines,
+    format_bytes,
+    validate_subaction,
+)
 
 
 # ===========================================================================
@@ -202,7 +207,8 @@ async def _handle_disk(
                 lines = out["content"].split("\n")
                 filtered = filter_log_lines(lines, level=level, context=context)
                 out["content"] = "\n".join(filtered)
-                out["matchedLines"] = len(filtered)
+                out["matchedLines"] = count_log_matches(lines, level=level)
+                out["returnedLines"] = sum(1 for line in filtered if line != "---")
                 out["filter"] = {"level": level, "context": context}
             return out
 
