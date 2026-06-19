@@ -4,8 +4,8 @@
 # Sources the credentials file that the plugin's setup hook materializes from the
 # userConfig form. Claude Code injects CLAUDE_PLUGIN_OPTION_* only into plugin
 # subprocesses (hooks/MCP/LSP), NOT into the Bash tool that runs skill scripts —
-# so the hook reads those vars and writes ~/.unraid-mcp/.env, and the skill
-# sources that file.
+# so the hook reads those vars and writes ~/.unraid-mcp/.env, and this library
+# parses that file (without executing it) into the environment.
 #
 # In skill scripts, source as:
 #   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,10 +34,20 @@ load_env_file() {
         return 1
     fi
 
-    set -a
-    # shellcheck source=/dev/null
-    source "$env_file"
-    set +a
+    # Parse the file as data, not shell — export only UNRAID_* assignments. Avoids
+    # executing arbitrary code from a hand-edited or UNRAID_ENV_FILE-overridden file.
+    local line key val
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?(UNRAID_[A-Za-z0-9_]+)[[:space:]]*=(.*)$ ]] || continue
+        key="${BASH_REMATCH[2]}"
+        val="${BASH_REMATCH[3]}"
+        val="${val%"${val##*[![:space:]]}"}"  # trim trailing whitespace
+        # Strip one layer of matching surrounding quotes
+        if [[ ${#val} -ge 2 && ( "$val" == \"*\" || "$val" == \'*\' ) ]]; then
+            val="${val:1:${#val}-2}"
+        fi
+        export "$key=$val"
+    done < "$env_file"
 }
 
 # Validate that required environment variables are set and non-empty.

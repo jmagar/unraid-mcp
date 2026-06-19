@@ -27,7 +27,7 @@ startup, so after changing them you must restart the server / MCP client.
 
 To check whether credentials are configured and the connection works:
 
-```
+```text
 unraid(action="health", subaction="setup")            # read-only status + instructions
 unraid(action="health", subaction="test_connection")  # verify connectivity
 ```
@@ -37,12 +37,12 @@ and explains how to set them.
 
 ## Calling Convention
 
-```
+```text
 unraid(action="<domain>", subaction="<operation>", [additional params])
 ```
 
 **Examples:**
-```
+```text
 unraid(action="system",  subaction="overview")
 unraid(action="docker",  subaction="list")
 unraid(action="health",  subaction="check")
@@ -58,6 +58,7 @@ unraid(action="live",    subaction="cpu")
 ## All Domains and Subactions
 
 ### `system` — Server Information
+
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Complete system summary (recommended starting point) |
@@ -80,6 +81,7 @@ unraid(action="live",    subaction="cpu")
 | `ups_config` | UPS configuration |
 
 ### `health` — Diagnostics
+
 | Subaction | Description |
 |-----------|-------------|
 | `check` | Comprehensive health check — connectivity, array, disks, containers, VMs, resources |
@@ -88,6 +90,7 @@ unraid(action="live",    subaction="cpu")
 | `setup` | Report credential status + setup instructions (read-only; does not write or prompt) |
 
 ### `array` — Array & Parity
+
 | Subaction | Description |
 |-----------|-------------|
 | `parity_status` | Current parity check progress and status |
@@ -105,6 +108,7 @@ unraid(action="live",    subaction="cpu")
 | `clear_disk_stats` | ⚠️ Clear disk statistics (requires `confirm=True`) |
 
 ### `disk` — Storage & Logs
+
 | Subaction | Description |
 |-----------|-------------|
 | `shares` | List network shares |
@@ -115,6 +119,7 @@ unraid(action="live",    subaction="cpu")
 | `flash_backup` | ⚠️ Trigger a flash backup (requires `confirm=True`) |
 
 ### `docker` — Containers
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All containers with status, image, state |
@@ -128,6 +133,7 @@ unraid(action="live",    subaction="cpu")
 **Container Identification:** Name, ID, or partial name (fuzzy match supported).
 
 ### `vm` — Virtual Machines
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All VMs with state |
@@ -141,6 +147,7 @@ unraid(action="live",    subaction="cpu")
 | `reset` | ⚠️ Hard reset a VM (requires `vm_id`, `confirm=True`) |
 
 ### `notification` — Notifications
+
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Notification counts (unread, archived by type) |
@@ -157,6 +164,7 @@ unraid(action="live",    subaction="cpu")
 | `recalculate` | Recalculate notification counts |
 
 ### `key` — API Keys
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All API keys |
@@ -168,6 +176,7 @@ unraid(action="live",    subaction="cpu")
 | `remove_role` | Remove a role from a key (requires `key_id`, `roles`) |
 
 ### `plugin` — Plugins
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All installed plugins |
@@ -175,6 +184,7 @@ unraid(action="live",    subaction="cpu")
 | `remove` | ⚠️ Uninstall plugins (requires `names` — list of plugin names, `confirm=True`) |
 
 ### `rclone` — Cloud Storage
+
 | Subaction | Description |
 |-----------|-------------|
 | `list_remotes` | List configured rclone remotes |
@@ -183,12 +193,14 @@ unraid(action="live",    subaction="cpu")
 | `delete_remote` | ⚠️ Delete a remote (requires `name`, `confirm=True`) |
 
 ### `setting` — System Settings
+
 | Subaction | Description |
 |-----------|-------------|
 | `update` | Update system settings (requires `settings_input` object) |
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
 
 ### `customization` — Theme & Appearance
+
 | Subaction | Description |
 |-----------|-------------|
 | `theme` | Current theme settings |
@@ -198,6 +210,7 @@ unraid(action="live",    subaction="cpu")
 | `set_theme` | Update theme (requires theme parameters) |
 
 ### `oidc` — SSO / OpenID Connect
+
 | Subaction | Description |
 |-----------|-------------|
 | `providers` | List configured OIDC providers |
@@ -207,6 +220,7 @@ unraid(action="live",    subaction="cpu")
 | `validate_session` | Validate current SSO session (requires `token`) |
 
 ### `user` — Current User
+
 | Subaction | Description |
 |-----------|-------------|
 | `me` | Current authenticated user info |
@@ -254,46 +268,46 @@ All require `confirm=True` as an explicit parameter. Without it, the action is b
 ## Common Workflows
 
 ### Verify credentials
-```
+```text
 unraid(action="health", subaction="setup")            # status + instructions (read-only)
 unraid(action="health", subaction="test_connection")  # confirm connectivity
 ```
 
 ### System health overview
-```
+```text
 unraid(action="system", subaction="overview")
 unraid(action="health", subaction="check")
 ```
 
 ### Container management
-```
+```text
 unraid(action="docker", subaction="list")
 unraid(action="docker", subaction="details", container_id="plex")
 unraid(action="docker", subaction="restart", container_id="sonarr")
 ```
 
 ### Array and disk status
-```
+```text
 unraid(action="array",  subaction="parity_status")
 unraid(action="disk",   subaction="disks")
 unraid(action="system", subaction="array")
 ```
 
 ### Read logs
-```
+```text
 unraid(action="disk", subaction="log_files")
 unraid(action="disk", subaction="logs", log_path="/var/log/syslog", tail_lines=50)
 ```
 
 ### Live monitoring
-```
+```text
 unraid(action="live", subaction="cpu")
 unraid(action="live", subaction="memory")
 unraid(action="live", subaction="array_state")
 ```
 
 ### VM operations
-```
+```text
 unraid(action="vm", subaction="list")
 unraid(action="vm", subaction="start",      vm_id="<id>")
 unraid(action="vm", subaction="force_stop", vm_id="<id>", confirm=True)
