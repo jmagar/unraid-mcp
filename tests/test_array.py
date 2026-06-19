@@ -296,18 +296,14 @@ async def test_clear_disk_stats_with_confirm(_mock_graphql):
 
 class TestArrayAssignableDisks:
     async def test_assignable_disks(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "assignableDisks": [{"id": "d1", "name": "WDC", "size": 100}]
-        }
+        _mock_graphql.return_value = {"assignableDisks": [{"id": "d1", "name": "WDC", "size": 100}]}
         result = await _make_tool()(action="array", subaction="assignable_disks")
         assert result["success"] is True
         assert result["data"]["assignableDisks"][0]["name"] == "WDC"
         assert result["page"]["returned"] == 1
 
     async def test_assignable_disks_capped(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "assignableDisks": [{"id": f"d{i}"} for i in range(5)]
-        }
+        _mock_graphql.return_value = {"assignableDisks": [{"id": f"d{i}"} for i in range(5)]}
         result = await _make_tool()(action="array", subaction="assignable_disks", limit=2)
         assert len(result["data"]["assignableDisks"]) == 2
         assert result["page"]["truncated"] is True

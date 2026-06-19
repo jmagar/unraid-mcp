@@ -63,9 +63,7 @@ _ONBOARDING_RESULT_FIELD: dict[str, str] = {
 }
 
 _ONBOARDING_SUBACTIONS: set[str] = (
-    set(_ONBOARDING_QUERIES)
-    | set(_ONBOARDING_SIMPLE_MUTATIONS)
-    | set(_ONBOARDING_INPUT_MUTATIONS)
+    set(_ONBOARDING_QUERIES) | set(_ONBOARDING_SIMPLE_MUTATIONS) | set(_ONBOARDING_INPUT_MUTATIONS)
 )
 # reset wipes onboarding/setup state; create_internal_boot_pool formats devices and
 # can reboot the server.
@@ -97,9 +95,7 @@ async def _handle_onboarding(
         logger.info(f"Executing unraid action=onboarding subaction={subaction}")
 
         if subaction == "internal_boot_context":
-            data = await _client.make_graphql_request(
-                _ONBOARDING_QUERIES["internal_boot_context"]
-            )
+            data = await _client.make_graphql_request(_ONBOARDING_QUERIES["internal_boot_context"])
             return {
                 "success": True,
                 "subaction": subaction,

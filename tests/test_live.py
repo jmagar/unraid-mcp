@@ -264,7 +264,9 @@ async def test_log_tail_no_level_unchanged(_mock_subscribe_collect):
 
 @pytest.mark.asyncio
 async def test_display_returns_snapshot(_mock_subscribe_once):
-    _mock_subscribe_once.return_value = {"displaySubscription": {"theme": "white", "locale": "en_US"}}
+    _mock_subscribe_once.return_value = {
+        "displaySubscription": {"theme": "white", "locale": "en_US"}
+    }
     result = await _make_tool()(action="live", subaction="display")
     assert result["success"] is True
     assert result["data"]["displaySubscription"]["theme"] == "white"

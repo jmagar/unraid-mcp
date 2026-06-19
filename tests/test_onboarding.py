@@ -58,9 +58,7 @@ class TestOnboardingInputMutations:
         with pytest.raises(ToolError, match="onboarding_input is required"):
             await _make_tool()(action="onboarding", subaction="set_override")
 
-    async def test_create_internal_boot_pool_is_destructive(
-        self, _mock_graphql: AsyncMock
-    ) -> None:
+    async def test_create_internal_boot_pool_is_destructive(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="confirm=True"):
             await _make_tool()(
                 action="onboarding",
@@ -97,7 +95,9 @@ class TestOnboardingInputMutations:
 
 class TestOnboardingSuccessDerivation:
     @pytest.mark.parametrize("subaction", ["clear_override", "refresh_internal_boot_context"])
-    async def test_remaining_simple_mutations(self, _mock_graphql: AsyncMock, subaction: str) -> None:
+    async def test_remaining_simple_mutations(
+        self, _mock_graphql: AsyncMock, subaction: str
+    ) -> None:
         field = {
             "clear_override": "clearOnboardingOverride",
             "refresh_internal_boot_context": "refreshInternalBootContext",

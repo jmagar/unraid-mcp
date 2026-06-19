@@ -216,7 +216,14 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     (
         "onboarding",
         "create_internal_boot_pool",
-        {"onboarding_input": {"poolName": "p", "devices": ["sdb"], "bootSizeMiB": 1, "updateBios": False}},
+        {
+            "onboarding_input": {
+                "poolName": "p",
+                "devices": ["sdb"],
+                "bootSizeMiB": 1,
+                "updateBios": False,
+            }
+        },
     ),
 ]
 

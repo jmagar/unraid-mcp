@@ -87,7 +87,11 @@ async def _handle_connect(
 
         if subaction == "remote_access":
             data = await _client.make_graphql_request(_CONNECT_QUERIES["remote_access"])
-            return {"success": True, "subaction": subaction, "remoteAccess": data.get("remoteAccess")}
+            return {
+                "success": True,
+                "subaction": subaction,
+                "remoteAccess": data.get("remoteAccess"),
+            }
 
         if subaction == "cloud":
             data = await _client.make_graphql_request(_CONNECT_QUERIES["cloud"])
@@ -115,11 +119,7 @@ async def _handle_connect(
             # bare Boolean — `false` means the operation did not take effect (e.g.
             # sign-in rejected, remote access unchanged), so success must reflect it.
             # update_api_settings returns an object (ConnectSettingsValues).
-            success = (
-                bool(result)
-                if subaction in _CONNECT_BOOL_MUTATIONS
-                else result is not None
-            )
+            success = bool(result) if subaction in _CONNECT_BOOL_MUTATIONS else result is not None
             return {"success": success, "subaction": subaction, "result": result}
 
         raise ToolError(f"Unhandled connect subaction '{subaction}' — this is a bug")

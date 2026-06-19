@@ -66,6 +66,7 @@ _DOCKER_ROOT_MUTATIONS: dict[str, str] = {
     "reset_template_mappings": "mutation ResetDockerTemplateMappings { resetDockerTemplateMappings }",
 }
 
+
 # Docker "organizer" (folder/view) mutations. Each spec lists the required and
 # optional GraphQL variables (sourced from the `organizer_input` dict), the
 # mutation string, and the response field to read back. The return selection is

@@ -559,9 +559,7 @@ _FULL_ID = "a" * 64  # matches _DOCKER_ID_PATTERN so no resolve round-trip
 class TestDockerLifecycleAdditions:
     async def test_unpause(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"docker": {"unpause": {"id": _FULL_ID, "state": "RUNNING"}}}
-        result = await _make_tool()(
-            action="docker", subaction="unpause", container_id=_FULL_ID
-        )
+        result = await _make_tool()(action="docker", subaction="unpause", container_id=_FULL_ID)
         assert result["success"] is True
         assert result["container"]["state"] == "RUNNING"
 
@@ -586,9 +584,7 @@ class TestDockerLifecycleAdditions:
 
     async def test_remove_container_is_destructive(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="confirm=True"):
-            await _make_tool()(
-                action="docker", subaction="remove_container", container_id=_FULL_ID
-            )
+            await _make_tool()(action="docker", subaction="remove_container", container_id=_FULL_ID)
 
     async def test_remove_container_with_confirm(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"docker": {"removeContainer": True}}
@@ -628,9 +624,7 @@ class TestDockerTemplateMutations:
 class TestDockerOrganizerMutations:
     async def test_create_folder_requires_name(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="missing required field"):
-            await _make_tool()(
-                action="docker", subaction="create_folder", organizer_input={}
-            )
+            await _make_tool()(action="docker", subaction="create_folder", organizer_input={})
 
     async def test_create_folder(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"createDockerFolder": {"version": 2}}
@@ -692,7 +686,12 @@ class TestDockerSuccessDerivationAndCoverage:
 
     async def test_sync_template_paths_surfaces_errors(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "syncDockerTemplatePaths": {"scanned": 2, "matched": 0, "skipped": 0, "errors": ["boom"]}
+            "syncDockerTemplatePaths": {
+                "scanned": 2,
+                "matched": 0,
+                "skipped": 0,
+                "errors": ["boom"],
+            }
         }
         result = await _make_tool()(action="docker", subaction="sync_template_paths")
         assert result["success"] is False

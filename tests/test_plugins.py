@@ -89,9 +89,7 @@ async def test_installed_unraid(_mock_graphql):
 
 @pytest.mark.asyncio
 async def test_install_operations(_mock_graphql):
-    _mock_graphql.return_value = {
-        "pluginInstallOperations": [{"id": "op1", "status": "RUNNING"}]
-    }
+    _mock_graphql.return_value = {"pluginInstallOperations": [{"id": "op1", "status": "RUNNING"}]}
     result = await _make_tool()(action="plugin", subaction="install_operations")
     assert result["operations"][0]["status"] == "RUNNING"
 
