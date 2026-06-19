@@ -162,7 +162,14 @@ async def _handle_disk(
         )
 
         if subaction == "shares":
-            return {"shares": data.get("shares", [])}
+            shares = data.get("shares", []) or []
+            # `id` is no longer selected (see _DISK_QUERIES["shares"]); synthesize
+            # a stable id from `name` so downstream consumers expecting an `id`
+            # key still get one. `name` is the stable share identifier.
+            for share in shares:
+                if isinstance(share, dict) and not share.get("id"):
+                    share["id"] = share.get("name")
+            return {"shares": shares}
         if subaction == "disks":
             return {"disks": data.get("disks", [])}
         if subaction == "disk_details":
