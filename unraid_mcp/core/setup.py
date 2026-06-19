@@ -89,9 +89,7 @@ def run_plugin_hook() -> int:
         report["ran_repair"] = True
         logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
     else:
-        missing = [
-            name for name in ("UNRAID_API_URL", "UNRAID_API_KEY") if name not in resolved
-        ]
+        missing = [name for name in ("UNRAID_API_URL", "UNRAID_API_KEY") if name not in resolved]
         report["advisory_failures"] = [
             f"{name} not supplied via plugin userConfig — set it in the plugin "
             f"config form or edit {CREDENTIALS_ENV_PATH} directly."

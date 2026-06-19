@@ -27,9 +27,7 @@ def test_apply_plugin_options_maps_present_vars():
 def test_apply_plugin_options_skips_missing_and_empty():
     from unraid_mcp.core.setup import apply_plugin_options
 
-    with patch.dict(
-        os.environ, {"CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": ""}, clear=False
-    ):
+    with patch.dict(os.environ, {"CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": ""}, clear=False):
         os.environ.pop("CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY", None)
         resolved = apply_plugin_options()
 

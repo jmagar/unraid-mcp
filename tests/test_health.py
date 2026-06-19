@@ -248,8 +248,6 @@ class TestSafeDisplayUrl:
         assert result == "<unparseable>"
 
 
-
-
 @pytest.mark.asyncio
 async def test_health_setup_not_configured_returns_manual_instructions() -> None:
     """setup returns plugin + manual .env instructions when credentials are absent."""
