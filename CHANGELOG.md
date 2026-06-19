@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-06-19
+
+### Fixed
+
+- **`unraid` tool docstring subaction counts** now match the documented (user-facing) convention used across `CLAUDE.md`, `README.md`, and `docs/`: `docker` 7 → 8 (the `ports` subaction added in 1.4.0 was missed in the module docstring), `system` 20 → 18, `notification` 13 → 12, `key` 8 → 7. The higher numbers counted deprecated/internal subactions (`logs`, `server_time`, `timezones`, `notify_if_unique`, `possible_roles`) that the rest of the docs intentionally exclude, the same way `docker` already omits the deprecated `logs` subaction.
+
 ## [1.4.0] - 2026-04-28
 
 ### Added

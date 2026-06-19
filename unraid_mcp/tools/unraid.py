@@ -4,14 +4,14 @@ Provides the `unraid` tool with 15 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
-  system       - Server info, metrics, network, UPS (20 subactions)
+  system       - Server info, metrics, network, UPS (18 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
   array        - Parity checks, array state, disk operations (13 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
-  docker       - Container lifecycle and network inspection (7 subactions)
+  docker       - Container lifecycle and network inspection (8 subactions)
   vm           - Virtual machine lifecycle (9 subactions)
-  notification - System notifications CRUD (13 subactions)
-  key          - API key management (8 subactions)
+  notification - System notifications CRUD (12 subactions)
+  key          - API key management (7 subactions)
   plugin       - Plugin management (3 subactions)
   rclone       - Cloud storage remote management (4 subactions)
   setting      - System settings and UPS config (2 subactions)
