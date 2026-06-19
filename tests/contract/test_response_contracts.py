@@ -721,6 +721,32 @@ class TestStorageSharesContract:
         StorageSharesResult(**result)
         assert result["shares"] == []
 
+    async def test_shares_synthesizes_id_from_name(self, _storage_mock: AsyncMock) -> None:
+        """The shares query no longer selects `id`; the handler must synthesize
+        a stable `id` from `name` (issue #29)."""
+        _storage_mock.return_value = {
+            "shares": [
+                {"name": "media", "free": 500000, "used": 100000, "size": 600000},
+                {"name": "appdata", "free": 200000, "used": 50000, "size": 250000},
+            ]
+        }
+        result = await _storage_tool()(action="disk", subaction="shares")
+        validated = StorageSharesResult(**result)
+        for share in validated.shares:
+            # ShareEntry requires a non-null `id` — synthesis must satisfy it.
+            entry = ShareEntry(**share)
+            assert entry.id == entry.name
+
+    async def test_shares_tolerates_null_id_auto_share(self, _storage_mock: AsyncMock) -> None:
+        """Auto-created shares may carry an explicit null `id`; the handler must
+        backfill it from `name` rather than propagate the null (issue #29)."""
+        _storage_mock.return_value = {
+            "shares": [{"id": None, "name": "autoshare", "free": 1, "used": 2, "size": 3}]
+        }
+        result = await _storage_tool()(action="disk", subaction="shares")
+        assert result["shares"][0]["id"] == "autoshare"
+        ShareEntry(**result["shares"][0])
+
     async def test_shares_missing_name_fails_contract(self, _storage_mock: AsyncMock) -> None:
         """A share without required 'name' must fail contract validation."""
         _storage_mock.return_value = {"shares": [{"id": "share:1", "free": 100}]}

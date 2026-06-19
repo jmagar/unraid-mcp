@@ -347,6 +347,19 @@ class TestStorageQueries:
         errors = _validate_operation(schema, QUERIES["shares"])
         assert not errors, f"shares query validation failed: {errors}"
 
+    def test_shares_query_does_not_select_id(self) -> None:
+        """Auto-created user shares resolve Share.id to null, and the
+        non-nullable Share.id field rejects the whole response (issue #29).
+        The shares query must not select `id` — `name` is the stable id."""
+        from unraid_mcp.tools._disk import _DISK_QUERIES as QUERIES
+
+        query = QUERIES["shares"]
+        # `id` must not appear as a selected field inside the shares block.
+        assert " id " not in query and "{ id" not in query, (
+            f"shares query must not select `id` (issue #29): {query}"
+        )
+        assert "name" in query
+
     def test_disks_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._disk import _DISK_QUERIES as QUERIES
 
