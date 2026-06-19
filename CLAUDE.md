@@ -117,6 +117,18 @@ The server registers **3 MCP tools**:
 
 `*` = destructive, requires `confirm=True`
 
+### Log Filtering (`disk/logs`, `live/log_tail`)
+Both log-reading subactions accept optional `level` and `context` params to filter noisy
+streams down to relevant severity:
+- `level` — one of `debug|info|notice|warning|error|critical`. Keeps lines at-or-above the
+  requested severity when a structured level is detectable, else falls back to a
+  case-insensitive keyword match. Omit for unchanged output (backward compatible).
+- `context` — lines of surrounding context kept before/after each match (default `2`).
+  Non-contiguous matches are separated by a `---` marker.
+
+Filtered responses add `matchedLines` (count) and a `filter` echo. The pure helper is
+`filter_log_lines(lines, level=None, context=2)` in `unraid_mcp/core/utils.py`.
+
 ### Destructive Actions (require `confirm=True`)
 - **array**: stop_array, remove_disk, clear_disk_stats
 - **vm**: force_stop, reset

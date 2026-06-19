@@ -17,11 +17,36 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 # ===========================================================================
 
 
+def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[str, Any]:
+    """Apply severity/context filtering to a single log_tail event's content.
+
+    Each event is shaped ``{"logFile": {"content": "...", ...}}``. The ``content``
+    field is a newline-joined block of log lines. Returns a shallow-copied event
+    with the filtered content and a ``matchedLines`` count. Events lacking a
+    string ``content`` are returned unchanged.
+    """
+    from ..core.utils import filter_log_lines
+
+    log_file = event.get("logFile")
+    if not isinstance(log_file, dict):
+        return event
+    content = log_file.get("content")
+    if not isinstance(content, str):
+        return event
+
+    lines = content.split("\n")
+    filtered = filter_log_lines(lines, level=level, context=context)
+    new_log_file = {**log_file, "content": "\n".join(filtered), "matchedLines": len(filtered)}
+    return {**event, "logFile": new_log_file}
+
+
 async def _handle_live(
     subaction: str,
     path: str | None,
     collect_for: float,
     timeout: float,  # noqa: ASYNC109
+    level: str | None = None,
+    context: int = 2,
 ) -> dict[str, Any]:
     # IMPORTANT: Every key in COLLECT_ACTIONS must have an explicit handler in _handle_live below.
     # Adding to COLLECT_ACTIONS without updating this function causes a ToolError at runtime.
@@ -64,11 +89,14 @@ async def _handle_live(
                 collect_for=collect_for,
                 timeout=timeout,
             )
+            if level is not None:
+                events = [_filter_log_event(e, level, context) for e in events]
             return {
                 "success": True,
                 "subaction": subaction,
                 "path": path,
                 "collect_for": collect_for,
+                "filter": {"level": level, "context": context} if level is not None else None,
                 "event_count": len(events),
                 "events": events,
             }

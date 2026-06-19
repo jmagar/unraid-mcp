@@ -232,6 +232,8 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `name` | str | Name for create/update operations |
 | `path` | str | Log file path (for live/log_tail) |
 | `collect_for` | float | WebSocket collection duration in seconds (default: 5.0) |
+| `level` | str | Filter logs to this severity and above: one of debug, info, notice, warning, error, critical (for `disk/logs` and `live/log_tail`). Omit for no filtering. |
+| `context` | int | Lines of context kept before/after each matching log line (default: 2). Non-contiguous matches are separated by `---`. |
 | `limit` | int | Max items to return (default: 20) |
 | `offset` | int | Pagination offset (default: 0) |
 
@@ -249,6 +251,8 @@ unraid(action="notification", subaction="list", limit=10, list_type="UNREAD")
 unraid(action="disk", subaction="disks")
 unraid(action="live", subaction="cpu", collect_for=3.0)
 unraid(action="live", subaction="log_tail", path="/var/log/syslog", collect_for=5.0)
+unraid(action="live", subaction="log_tail", path="/var/log/syslog", level="warning", context=3)
+unraid(action="disk", subaction="logs", log_path="/var/log/syslog", level="error", context=2)
 unraid(action="array", subaction="stop_array", confirm=True)
 ```
 
@@ -343,6 +347,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         path: str | None = None,
         collect_for: float = 5.0,
         timeout: float = 10.0,  # noqa: ASYNC109
+        # log filtering (disk/logs + live/log_tail)
+        level: str | None = None,
+        context: int = 2,
     ) -> dict[str, Any] | str:
         """Interact with an Unraid server's GraphQL API.
 
@@ -397,6 +404,12 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         * Destructive — interactive clients are prompted for confirmation via
           elicitation. Agents and non-interactive callers must pass confirm=True
           to execute these subactions.
+
+        Log filtering (disk/logs, live/log_tail): pass level= to keep only lines
+        at-or-above a severity (debug|info|notice|warning|error|critical) and
+        context= (default 2) for lines of surrounding context around each match.
+        Non-contiguous matches are separated by a '---' marker. Omit level for
+        unchanged output.
         """
         if action == "system":
             return await _handle_system(subaction, device_id)
@@ -419,6 +432,8 @@ def register_unraid_tool(mcp: FastMCP) -> None:
                 backup_options,
                 ctx,
                 confirm,
+                level,
+                context,
             )
 
         if action == "docker":
@@ -466,7 +481,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_user(subaction)
 
         if action == "live":
-            return await _handle_live(subaction, path, collect_for, timeout)
+            return await _handle_live(subaction, path, collect_for, timeout, level, context)
 
         raise ToolError(
             f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"
