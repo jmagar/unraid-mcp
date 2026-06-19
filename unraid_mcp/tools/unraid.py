@@ -412,7 +412,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         unchanged output.
         """
         if action == "system":
-            return await _handle_system(subaction, device_id)
+            return await _handle_system(subaction, device_id, limit)
 
         if action == "health":
             return await _handle_health(subaction, ctx)

@@ -48,6 +48,7 @@ Copy `.env.example` to `.env` and configure:
 **Server:**
 - `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
 - `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
+- `UNRAID_MCP_MAX_RESPONSE_BYTES`: Max serialized tool-response size in bytes (default: 131072 = 128 KB). Responses over the cap are replaced with a structured, parseable JSON truncation marker (`{"error": "response_truncated", "truncated": true, ...}`) rather than hard-cut mid-JSON. See `unraid_mcp/core/response_limit.py`.
 
 **SSL/TLS:**
 - `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
@@ -172,7 +173,7 @@ The server loads environment variables from multiple locations in order:
 1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
 2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
 3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
-4. **ResponseLimitingMiddleware** — truncates responses > 512 KB with a clear suffix
+4. **StructuredResponseLimitingMiddleware** (`core/response_limit.py`) — replaces responses over the cap (default 128 KB, override via `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a complete, parseable JSON truncation marker instead of a lossy mid-JSON byte cut
 
 Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool mixes reads and mutations under one name, making per-subaction cache exclusion impossible.
 
