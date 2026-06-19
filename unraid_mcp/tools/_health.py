@@ -1,8 +1,9 @@
 """Health domain constants and helpers for the Unraid MCP tool.
 
-The _handle_health function lives in unraid.py (not here) because tests patch
-settings and client symbols at unraid_mcp.tools.unraid — keeping the handler
-there ensures patches resolve correctly without circular imports.
+The _handle_health function lives in unraid.py (not here) to avoid a circular
+import between the aggregator module and the _* domain helper modules. It reads
+settings/client symbols via local imports, so tests patch them at their source
+modules (unraid_mcp.config.settings, unraid_mcp.core.client).
 """
 
 import datetime

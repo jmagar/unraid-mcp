@@ -42,9 +42,18 @@ def main() -> None:
     """Main entry point for the Unraid MCP Server."""
     argv = sys.argv[1:]
     if argv and argv[0] == "setup":
-        # `setup` and `setup plugin-hook` both run the non-interactive plugin hook,
-        # which maps CLAUDE_PLUGIN_OPTION_* -> ~/.unraid-mcp/.env. Used by the
-        # plugin's SessionStart / ConfigChange hooks.
+        # `setup` (bare) and `setup plugin-hook` run the non-interactive plugin hook,
+        # which maps CLAUDE_PLUGIN_OPTION_* -> ~/.unraid-mcp/.env. Used by the plugin's
+        # SessionStart / ConfigChange hooks. Reject unknown subcommands so a typo
+        # (e.g. `setup plugin-hookk`) fails loudly instead of silently succeeding.
+        subcommand = argv[1] if len(argv) > 1 else "plugin-hook"
+        if subcommand != "plugin-hook":
+            print(
+                f"Unknown setup subcommand: {subcommand!r}. Valid: 'plugin-hook'.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+
         from .core.setup import run_plugin_hook
 
         sys.exit(run_plugin_hook())

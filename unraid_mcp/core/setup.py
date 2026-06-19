@@ -85,19 +85,45 @@ def run_plugin_hook() -> int:
     api_key = resolved.get("UNRAID_API_KEY")
 
     if api_url and api_key:
-        _write_env(api_url, api_key)
-        report["ran_repair"] = True
-        logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
+        try:
+            _write_env(api_url, api_key)
+            report["ran_repair"] = True
+            logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
+        except OSError as e:
+            # Record the write failure in the advisory channel rather than letting it
+            # escape — the documented contract is "always returns 0" so the hook never
+            # blocks a session. The server still reports unconfigured at request time.
+            report["advisory_failures"] = [
+                f"Failed to write {CREDENTIALS_ENV_PATH}: {type(e).__name__}: {e}"
+            ]
+            logger.error(
+                "Plugin setup hook failed to write %s: %s",
+                CREDENTIALS_ENV_PATH,
+                e,
+                exc_info=True,
+            )
     else:
-        missing = [name for name in ("UNRAID_API_URL", "UNRAID_API_KEY") if name not in resolved]
-        report["advisory_failures"] = [
-            f"{name} not supplied via plugin userConfig — set it in the plugin "
-            f"config form or edit {CREDENTIALS_ENV_PATH} directly."
-            for name in missing
-        ]
+        # Distinguish "not supplied" from "supplied but rejected as unsafe": a present
+        # env var that failed _safe_env_value is absent from `resolved` but should still
+        # be surfaced so the operator knows why it was dropped.
+        failures: list[str] = []
+        for option, canonical in PLUGIN_OPTION_MAP.items():
+            if canonical in resolved:
+                continue
+            if os.environ.get(option):
+                failures.append(
+                    f"{canonical} was supplied but rejected (empty or unsafe characters) — "
+                    "check the value in the plugin config form."
+                )
+            else:
+                failures.append(
+                    f"{canonical} not supplied via plugin userConfig — set it in the plugin "
+                    f"config form or edit {CREDENTIALS_ENV_PATH} directly."
+                )
+        report["advisory_failures"] = failures
         logger.info(
-            "Plugin setup hook: credentials not fully supplied (%s); no .env written.",
-            ", ".join(missing),
+            "Plugin setup hook: credentials not fully supplied; no .env written. %s",
+            " ".join(failures),
         )
 
     print(json.dumps(report, indent=2))
@@ -149,7 +175,10 @@ def _write_env(api_url: str, api_key: str) -> None:
         tmp_path.chmod(0o600)
         os.replace(tmp_path, CREDENTIALS_ENV_PATH)  # noqa: PTH105
     finally:
-        # Clean up tmp on failure (may not exist if os.replace succeeded)
-        if tmp_path.exists():
-            tmp_path.unlink()
+        # Clean up tmp on failure (may not exist if os.replace succeeded). Swallow any
+        # cleanup error so it can't mask the real write exception propagating from try.
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError as cleanup_err:
+            logger.warning("Could not remove temp env file %s: %s", tmp_path, cleanup_err)
     logger.info("Credentials written to %s (mode 600)", CREDENTIALS_ENV_PATH)

@@ -249,21 +249,42 @@ class TestSafeDisplayUrl:
 
 
 @pytest.mark.asyncio
-async def test_health_setup_not_configured_returns_manual_instructions() -> None:
-    """setup returns plugin + manual .env instructions when credentials are absent."""
-    from unraid_mcp.config.settings import CREDENTIALS_ENV_PATH
+async def test_health_setup_not_configured_returns_manual_instructions(tmp_path) -> None:
+    """setup returns plugin + manual .env instructions when no creds and no file exist."""
+    missing_env = tmp_path / "absent" / ".env"  # guaranteed not to exist
 
     tool_fn = _make_tool()
     with (
         patch("unraid_mcp.config.settings.UNRAID_API_URL", None),
         patch("unraid_mcp.config.settings.UNRAID_API_KEY", None),
+        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", missing_env),
     ):
         result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
 
     assert "not configured" in result.lower()
-    assert str(CREDENTIALS_ENV_PATH) in result
+    assert str(missing_env) in result
     assert "UNRAID_API_URL=" in result
     assert "UNRAID_API_KEY=" in result
+
+
+@pytest.mark.asyncio
+async def test_health_setup_file_exists_but_not_loaded(tmp_path) -> None:
+    """setup distinguishes a present-but-unloaded .env (e.g. just written) from missing config."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("UNRAID_API_URL=https://x\nUNRAID_API_KEY=y\n")
+
+    tool_fn = _make_tool()
+    with (
+        # is_configured() is False (globals captured at startup), but the file is on disk.
+        patch("unraid_mcp.config.settings.UNRAID_API_URL", None),
+        patch("unraid_mcp.config.settings.UNRAID_API_KEY", None),
+        patch("unraid_mcp.config.settings.CREDENTIALS_ENV_PATH", env_file),
+    ):
+        result = await tool_fn(action="health", subaction="setup", ctx=MagicMock())
+
+    assert "not loaded" in result.lower()
+    assert "restart" in result.lower()
+    assert str(env_file) in result
 
 
 @pytest.mark.asyncio

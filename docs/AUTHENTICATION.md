@@ -26,11 +26,9 @@ Add it to `~/.unraid-mcp/.env` (preferred) or the project `.env`:
 UNRAID_MCP_BEARER_TOKEN=a3f8c2d1e4b7...
 ```
 
-Or run the interactive setup tool:
-
-```
-unraid(action="health", subaction="setup")
-```
+(The server also auto-generates this token on first HTTP startup if it is absent —
+see [SETUP.md](SETUP.md). `unraid(action="health", subaction="setup")` reports
+credential status but does not set the bearer token.)
 
 ### 3. Configure your MCP client
 

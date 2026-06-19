@@ -106,6 +106,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                 await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
                 status = "and the connection test succeeded"
             except Exception as e:
+                logger.debug("health/setup connection probe failed: %s: %s", type(e).__name__, e)
                 status = (
                     f"but the connection test failed ({type(e).__name__}) — "
                     "this may be a transient outage or a misconfiguration"
@@ -117,6 +118,18 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
                 "To change them, update the plugin's userConfig form "
                 "(Unraid GraphQL API URL / Unraid API Key) or edit that file, "
                 "then restart the server."
+            )
+        # Not loaded in this session. Credentials load once at startup, so a .env that
+        # exists on disk (e.g. just written by the ConfigChange hook) is not active until
+        # the next restart — report that distinctly from a genuinely-missing config.
+        if CREDENTIALS_ENV_PATH.exists():
+            return (
+                f"⚠️ A credentials file exists (`{CREDENTIALS_ENV_PATH}`) but is not loaded "
+                "in this session — credentials are read once at startup.\n\n"
+                "Restart the server (or your MCP client), then run "
+                '`unraid(action="health", subaction="test_connection")` to verify. '
+                "If it still fails, check that the file contains non-empty "
+                "`UNRAID_API_URL` and `UNRAID_API_KEY` values."
             )
         return (
             "⚠️ Credentials are not configured.\n\n"
