@@ -12,54 +12,49 @@ Semantic versioning (MAJOR.MINOR.PATCH):
 
 ## Version files
 
-All must contain the same version string:
+**Do not edit version strings by hand** — release-please keeps these in sync from
+Conventional Commits (configured in `release-please-config.json`):
 
-| File | Format |
-|------|--------|
-| `pyproject.toml` | `version = "X.Y.Z"` in `[project]` |
-| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` |
-| `.codex-plugin/plugin.json` | `"version": "X.Y.Z"` |
-| `gemini-extension.json` | `"version": "X.Y.Z"` |
-| `server.json` | Updated by publish workflow at release time |
-| `CHANGELOG.md` | Entry under the new version header |
+| File | Format | Managed by |
+|------|--------|------------|
+| `pyproject.toml` | `version = "X.Y.Z"` in `[project]` | release-please |
+| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` | release-please (`extra-files`) |
+| `.codex-plugin/plugin.json` | `"version": "X.Y.Z"` | release-please (`extra-files`) |
+| `gemini-extension.json` | `"version": "X.Y.Z"` | release-please (`extra-files`) |
+| `CHANGELOG.md` | Entry generated from commits | release-please |
+| `server.json` | `0.0.0` placeholder in-repo; set from the tag at publish time | `publish-pypi.yml` |
+| `unraid_mcp/version.py` | reads `importlib.metadata` at runtime | not a file (auto) |
 
-CI enforces version sync across the first four files.
+`.release-please-manifest.json` tracks the last released version. The CI `version-sync`
+job is a safety net asserting the first four files agree.
 
 ## Release workflow
 
-### Automated (Justfile)
+Releases are driven by **release-please** + Conventional Commits — there is no manual
+`just publish`. Bump type is inferred from commit messages: `fix:` → patch, `feat:` →
+minor, `feat!:` / `BREAKING CHANGE` → major.
 
-```bash
-# Patch release (1.2.2 -> 1.2.3)
-just publish patch
+1. Land changes on `main` with Conventional Commit messages.
+2. `release-please.yml` opens/updates a `chore(main): release X.Y.Z` PR that bumps every
+   version file and updates `CHANGELOG.md`.
+3. **Merge the release PR.** release-please creates the `vX.Y.Z` tag and GitHub Release.
 
-# Minor release (1.2.3 -> 1.3.0)
-just publish minor
+> The release-please action authenticates with the `RELEASE_PLEASE_TOKEN` secret (a PAT or
+> GitHub App token). The default `GITHUB_TOKEN` cannot trigger the downstream publish
+> workflows, so this token is required for PyPI/Docker/registry publishing to fire.
 
-# Major release (1.3.0 -> 2.0.0)
-just publish major
-```
+### What happens after the release PR merges
 
-The `just publish` recipe:
-1. Verifies you are on `main` with a clean working tree
-2. Pulls latest from origin
-3. Bumps version in `pyproject.toml` and all plugin manifests
-4. Commits as `release: vX.Y.Z`
-5. Tags as `vX.Y.Z`
-6. Pushes to origin with tags
+The new tag + Release trigger two workflows:
 
-### What happens after push
-
-The tag push triggers two workflows:
-
-**`publish-pypi.yml`**:
-1. Verifies tag version matches `pyproject.toml`
+**`publish-pypi.yml`** (on `release: published`):
+1. Verifies the tag version matches `pyproject.toml`
 2. Builds sdist and wheel with `uv build`
 3. Publishes to PyPI with trusted publisher attestations
-4. Creates GitHub Release with auto-generated notes and dist artifacts
-5. Updates `server.json` version and publishes to MCP Registry via `mcp-publisher`
+4. Attaches the dist artifacts to the release created by release-please
+5. Sets `server.json` version from the tag and publishes to the MCP Registry via `mcp-publisher`
 
-**`docker-publish.yml`**:
+**`docker-publish.yml`** (on tag `v*`):
 1. Builds multi-arch Docker image (amd64, arm64)
 2. Tags with semver variants (`v1.2.3`, `v1.2`, `v1`, `latest`)
 3. Pushes to `ghcr.io/jmagar/unraid-mcp`

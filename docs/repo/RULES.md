@@ -64,9 +64,10 @@ Mutation handlers MUST return before the domain query dict lookup. This is the m
 
 ## Version rules
 
-- All four manifest files must have the same version
-- `CHANGELOG.md` must have an entry for every version
-- Use `just publish` to bump all files atomically
+- **Never bump versions by hand** — release-please does it from Conventional Commits
+- Use Conventional Commit messages (`fix:` → patch, `feat:` → minor, `feat!:` → major)
+- release-please keeps the four manifest files in sync and generates the `CHANGELOG.md` entry
+- Merge the release PR to tag `vX.Y.Z` and trigger publishing
 
 ## See Also
 

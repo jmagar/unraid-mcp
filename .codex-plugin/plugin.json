@@ -15,7 +15,6 @@
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
-  "apps": "./.app.json",
   "interface": {
     "displayName": "Unraid MCP",
     "shortDescription": "Monitor and manage Unraid servers",

@@ -143,7 +143,7 @@ just setup          # Create .env from .env.example
 just gen-token      # Generate a bearer token
 just check-contract # Run security checks
 just clean          # Remove build artifacts
-just publish patch  # Bump version and release
+just publish        # Release instructions (releases are automated via release-please)
 ```
 
 ## See Also

@@ -33,33 +33,50 @@ GitHub Actions configuration for unraid-mcp.
 
 **Registry**: `ghcr.io/jmagar/unraid-mcp`.
 
+### `release-please.yml` -- Versioning and Changelog
+
+**Triggers**: Push to `main`.
+
+Runs [release-please](https://github.com/googleapis/release-please), which maintains a
+"release PR" that bumps the version in `pyproject.toml` + the three plugin manifests and
+updates `CHANGELOG.md` from Conventional Commit messages. Merging that PR creates the
+`vX.Y.Z` tag and a GitHub Release. Config lives in `release-please-config.json` and
+`.release-please-manifest.json`.
+
+> Uses the `RELEASE_PLEASE_TOKEN` secret (PAT or GitHub App token). The default
+> `GITHUB_TOKEN` cannot trigger downstream workflows, so the tag/release it creates would
+> never reach `publish-pypi.yml` or `docker-publish.yml` without this token.
+
 ### `publish-pypi.yml` -- PyPI and Registry Release
 
-**Triggers**: Tags matching `v*.*.*`.
+**Triggers**: `release: published` (the Release that `release-please` creates on merge).
 
 | Step | Purpose |
 |------|---------|
 | Version verification | Tag must match `pyproject.toml` version |
 | Build | `uv build` produces sdist and wheel |
 | PyPI publish | Trusted publisher with attestations |
-| GitHub Release | Auto-generated release notes with dist artifacts |
-| MCP Registry publish | DNS-authenticated publish to `tv.tootie/unraid-mcp` via `mcp-publisher` |
+| Upload artifacts | Attaches sdist/wheel to the existing release |
+| MCP Registry publish | Sets `server.json` version from the tag, then DNS-authenticated publish to `tv.tootie/unraid-mcp` via `mcp-publisher` |
 
 ## Version sync enforcement
 
-The `version-sync` job ensures these files all contain the same version string:
+Versions are bumped automatically by `release-please.yml`. The CI `version-sync` job is a
+safety net that fails if these files drift apart:
 - `pyproject.toml`
 - `.claude-plugin/plugin.json`
 - `.codex-plugin/plugin.json`
 - `gemini-extension.json`
 
-Failure blocks the CI pipeline.
+`server.json` is a `0.0.0` placeholder in-repo (set from the tag at publish time) and is
+not checked here.
 
 ## Secrets required
 
 | Secret | Used by | Purpose |
 |--------|---------|---------|
-| `GITHUB_TOKEN` | All workflows | GHCR login, release creation |
+| `GITHUB_TOKEN` | Most workflows | GHCR login, artifact upload |
+| `RELEASE_PLEASE_TOKEN` | `release-please` | PAT/App token so tags + releases trigger downstream publish workflows |
 | `UNRAID_API_URL` | `mcp-integration` | Live test target |
 | `UNRAID_API_KEY` | `mcp-integration` | Live test auth |
 | `MCP_PRIVATE_KEY` | `publish-pypi` | DNS-authenticated MCP registry publish |
