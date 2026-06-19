@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/jmagar/unraid-mcp/compare/v1.4.1...v1.5.0) (2026-06-19)
+
+
+### Features
+
+* render API docs with graphql-markdown + GraphQL Inspector ([#34](https://github.com/jmagar/unraid-mcp/issues/34)) ([b88cdbb](https://github.com/jmagar/unraid-mcp/commit/b88cdbb5dd1de3fb85a85f5d84027640783249e9))
+
+
+### Bug Fixes
+
+* handle HEAD /health in HealthMiddleware for Docker healthcheck ([#32](https://github.com/jmagar/unraid-mcp/issues/32)) ([b062e31](https://github.com/jmagar/unraid-mcp/commit/b062e31e08738c40c691ef5b43c264f82a1bf75d)), closes [#31](https://github.com/jmagar/unraid-mcp/issues/31)
+
 ## [Unreleased]
 
 ### Fixed
