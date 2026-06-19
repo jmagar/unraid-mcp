@@ -1,9 +1,11 @@
 name: Publish to PyPI
 
+# Triggered by the GitHub Release that release-please creates when a release PR
+# is merged. release-please owns version bumps, tagging, the CHANGELOG, and the
+# Release itself — this workflow only builds and publishes the artifacts.
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -35,14 +37,10 @@ jobs:
         with:
           attestations: true
 
-      - name: Create GitHub Release
+      - name: Attach build artifacts to the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Release $GITHUB_REF_NAME" \
-            --generate-notes \
-            dist/*
+        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
 
       - name: Install mcp-publisher
         run: |

@@ -144,28 +144,17 @@ clean:
     find . -name '*.pyc' -not -path './.venv/*' -delete 2>/dev/null || true
     @echo "Cleaned build artifacts"
 
-# Publish: bump version, tag, push (triggers PyPI + Docker publish)
-publish bump="patch":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    [ "$(git branch --show-current)" = "main" ] || { echo "Switch to main first"; exit 1; }
-    [ -z "$(git status --porcelain)" ] || { echo "Commit or stash changes first"; exit 1; }
-    git pull origin main
-    CURRENT=$(grep -m1 "^version" pyproject.toml | sed "s/.*\"\(.*\)\".*/\1/")
-    IFS="." read -r major minor patch <<< "$CURRENT"
-    case "{{bump}}" in
-      major) major=$((major+1)); minor=0; patch=0 ;;
-      minor) minor=$((minor+1)); patch=0 ;;
-      patch) patch=$((patch+1)) ;;
-      *) echo "Usage: just publish [major|minor|patch]"; exit 1 ;;
-    esac
-    NEW="${major}.${minor}.${patch}"
-    echo "Version: ${CURRENT} → ${NEW}"
-    sed -i "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" pyproject.toml
-    for f in .claude-plugin/plugin.json .codex-plugin/plugin.json gemini-extension.json; do
-      [ -f "$f" ] && python3 -c "import json; d=json.load(open(\"$f\")); d[\"version\"]=\"${NEW}\"; json.dump(d,open(\"$f\",\"w\"),indent=2); open(\"$f\",\"a\").write(\"
-\")"
-    done
-    git add -A && git commit -m "release: v${NEW}" && git tag "v${NEW}" && git push origin main --tags
-    echo "Tagged v${NEW} — publish workflow will run automatically"
+# Releases are automated via release-please — DO NOT bump versions by hand.
+# Write Conventional Commits (feat: / fix: / feat!:) and merge to main;
+# release-please opens a release PR that bumps the version across pyproject.toml
+# and the plugin manifests, updates CHANGELOG.md, then tags + publishes on merge.
+publish:
+    @echo "Releases are automated via release-please (.github/workflows/release-please.yml)."
+    @echo ""
+    @echo "  1. Land changes on main using Conventional Commit messages:"
+    @echo "       fix: ...  -> patch     feat: ...  -> minor     feat!: ...  -> major"
+    @echo "  2. release-please opens/updates a 'chore(main): release X.Y.Z' PR."
+    @echo "  3. Merge that PR -- it tags vX.Y.Z and triggers publish-pypi + docker-publish."
+    @echo ""
+    @echo "Version is read at runtime from package metadata; never edit version strings by hand."
 

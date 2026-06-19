@@ -54,15 +54,12 @@
 
 | Recipe | Command | Description |
 |--------|---------|-------------|
-| `just publish patch` | Bump, tag, push | Patch release |
-| `just publish minor` | Bump, tag, push | Minor release |
-| `just publish major` | Bump, tag, push | Major release |
+| `just publish` | Prints release instructions | Releases are automated via release-please |
 
-The publish recipe:
-1. Verifies `main` branch with clean working tree
-2. Pulls latest from origin
-3. Bumps version in pyproject.toml and all manifest files
-4. Commits, tags, and pushes
+Releases are not bumped by hand. Land changes on `main` with Conventional Commit
+messages and release-please opens a release PR that bumps every version file and updates
+`CHANGELOG.md`; merging it tags `vX.Y.Z` and triggers PyPI + Docker + MCP-registry
+publishing. See [../mcp/PUBLISH.md](../mcp/PUBLISH.md).
 
 ## See Also
 

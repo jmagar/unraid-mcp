@@ -4,13 +4,11 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 ## Version and metadata
 
-- [ ] `pyproject.toml` version bumped
-- [ ] `.claude-plugin/plugin.json` version matches
-- [ ] `.codex-plugin/plugin.json` version matches
-- [ ] `gemini-extension.json` version matches
-- [ ] `server.json` version matches (updated by publish workflow)
-- [ ] `CHANGELOG.md` has entry for the new version
-- [ ] All four version files show the same version string
+- [ ] Changes use Conventional Commit messages (release-please infers the bump)
+- [ ] release-please's release PR is reviewed before merge (it bumps `pyproject.toml`,
+      `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `gemini-extension.json`,
+      and `CHANGELOG.md`)
+- [ ] Do NOT hand-edit version strings (`server.json` stays a `0.0.0` placeholder)
 
 ## Code quality
 

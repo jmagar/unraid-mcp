@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Release automation moved to [release-please](https://github.com/googleapis/release-please).**
+  Versions, tags, and this changelog are now generated from Conventional Commit messages —
+  version strings are no longer bumped by hand. release-please keeps `pyproject.toml` and the
+  three plugin manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+  `gemini-extension.json`) in sync via `release-please-config.json` / `.release-please-manifest.json`.
+  Merging the release PR tags `vX.Y.Z` and triggers PyPI, Docker, and MCP-registry publishing.
+- **`publish-pypi.yml`** now triggers on `release: published` (the Release that release-please
+  creates) instead of a tag push, and attaches artifacts to that release rather than creating
+  its own. Requires a `RELEASE_PLEASE_TOKEN` secret so the tag/release can trigger downstream
+  workflows (the default `GITHUB_TOKEN` cannot).
+- **`server.json`** is now a `0.0.0` placeholder in-repo; its version is set from the tag at
+  publish time. This removes a chronically out-of-sync version string from the repo.
+
+### Removed
+
+- **`.app.json`** and its `"apps"` reference in `.codex-plugin/plugin.json` — an orphaned,
+  never-synced version file.
+- **`bin/bump-version.sh`** (and its bats test) and the manual `just publish [patch|minor|major]`
+  recipe — superseded by release-please.
+
 ## [1.4.1] - 2026-06-19
 
 ### Fixed

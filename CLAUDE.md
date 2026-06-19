@@ -209,10 +209,24 @@ See `tests/mcporter/README.md` for transport differences and `docs/DESTRUCTIVE_A
 
 Use these when adding new queries/mutations.
 
-### Version Bumps
-When bumping the version, **always update both files** — they must stay in sync:
-- `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
-- `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
+### Versioning (release-please)
+**Do NOT bump version strings by hand.** Versioning, tagging, and the CHANGELOG are
+automated by [release-please](https://github.com/googleapis/release-please) driven by
+Conventional Commit messages:
+- `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE` → major.
+
+On every push to `main`, release-please maintains a "release PR" that bumps the version
+in `pyproject.toml` + the three plugin manifests (`.claude-plugin/plugin.json`,
+`.codex-plugin/plugin.json`, `gemini-extension.json`) and prepends a CHANGELOG entry.
+Merging that PR tags `vX.Y.Z` and triggers `publish-pypi.yml` + `docker-publish.yml`.
+
+Config: `release-please-config.json` (which files get bumped) and
+`.release-please-manifest.json` (last released version). `server.json` is **generated at
+publish time** from the tag (in-repo it is a `0.0.0` placeholder), and `unraid_mcp/version.py`
+reads from package metadata — neither is ever edited by hand.
+
+The release-please action needs a PAT/GitHub-App token (`RELEASE_PLEASE_TOKEN` secret); the
+default `GITHUB_TOKEN` cannot trigger the downstream publish workflows.
 
 ### Credential Storage (`~/.unraid-mcp/.env`)
 All runtimes (plugin, direct `uv run`) load credentials from `~/.unraid-mcp/.env`.
@@ -280,22 +294,20 @@ bd close <id>         # Complete work
 
 ## Version Bumping
 
-**Every feature branch push MUST bump the version in ALL version-bearing files.**
-
-Bump type is determined by the commit message prefix:
+**Do NOT bump versions by hand.** Versioning, tagging, and the CHANGELOG are automated
+by **release-please** (see "Versioning (release-please)" above). Feature branches must
+**not** edit version strings — instead, use Conventional Commit messages so release-please
+computes the bump when the work lands on `main`:
 - `feat!:` or `BREAKING CHANGE` → **major** (X+1.0.0)
-- `feat` or `feat(...)` → **minor** (X.Y+1.0)
+- `feat:` / `feat(...)` → **minor** (X.Y+1.0)
 - Everything else (`fix`, `chore`, `refactor`, `test`, `docs`, etc.) → **patch** (X.Y.Z+1)
 
-**Files to update (if they exist in this repo):**
-- `Cargo.toml` — `version = "X.Y.Z"` in `[package]`
-- `package.json` — `"version": "X.Y.Z"`
+release-please keeps these files in sync automatically (configured in `release-please-config.json`):
 - `pyproject.toml` — `version = "X.Y.Z"` in `[project]`
 - `.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `gemini-extension.json` — `"version": "X.Y.Z"`
-- `README.md` — version badge or header
-- `CHANGELOG.md` — new entry under the bumped version
+- `CHANGELOG.md` — new entry generated from commit messages
 
-All files MUST have the same version. Never bump only one file.
-CHANGELOG.md must have an entry for every version bump.
+`server.json` (placeholder `0.0.0` in-repo, set from the tag at publish time) and
+`unraid_mcp/version.py` (reads package metadata) are never edited by hand.

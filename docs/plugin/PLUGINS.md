@@ -38,7 +38,6 @@
   "version": "1.2.3",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
-  "apps": "./.app.json",
   "interface": {
     "displayName": "Unraid MCP",
     "category": "Infrastructure",
@@ -93,9 +92,9 @@
 
 ## Version sync
 
-All four manifest files must contain the same version string. This is enforced by:
-- CI `version-sync` job
-- `just publish` recipe (updates all files atomically)
+All four manifest files must contain the same version string. This is handled by:
+- `release-please` (bumps `pyproject.toml` + the three plugin manifests from Conventional Commits)
+- CI `version-sync` job (safety net that fails if they drift apart)
 
 ## See Also
 
