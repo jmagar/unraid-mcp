@@ -418,7 +418,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_health(subaction, ctx)
 
         if action == "array":
-            return await _handle_array(subaction, disk_id, correct, slot, ctx, confirm)
+            return await _handle_array(subaction, disk_id, correct, slot, ctx, confirm, limit)
 
         if action == "disk":
             return await _handle_disk(
@@ -434,10 +434,11 @@ def register_unraid_tool(mcp: FastMCP) -> None:
                 confirm,
                 level,
                 context,
+                limit,
             )
 
         if action == "docker":
-            return await _handle_docker(subaction, container_id, network_id)
+            return await _handle_docker(subaction, container_id, network_id, limit)
 
         if action == "vm":
             return await _handle_vm(subaction, vm_id, ctx, confirm)
@@ -481,7 +482,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_user(subaction)
 
         if action == "live":
-            return await _handle_live(subaction, path, collect_for, timeout, level, context)
+            return await _handle_live(subaction, path, collect_for, timeout, level, context, limit)
 
         raise ToolError(
             f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"

@@ -10,6 +10,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.pagination import cap_list
 from ..core.utils import safe_get, validate_subaction
 
 
@@ -19,7 +20,13 @@ from ..core.utils import safe_get, validate_subaction
 
 _DOCKER_QUERIES: dict[str, str] = {
     "list": "query ListDockerContainers { docker { containers { id names image state status autoStart } } }",
-    "details": "query GetContainerDetails { docker { containers { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
+    # Fetch a single container by id rather than the full list — avoids
+    # over-fetching heavy fields (networkSettings, mounts, labels, command)
+    # for every container on the host just to return one.
+    "details": "query GetContainerDetails($id: PrefixedID!) { docker { container(id: $id) { id names image imageId command created ports { ip privatePort publicPort type } sizeRootFs labels state status hostConfig { networkMode } networkSettings mounts autoStart } } }",
+    # The "ports" subaction still needs every running container's bindings, so
+    # it keeps a list-based query (trimmed to just ports + state + names).
+    "ports": "query GetContainerPorts { docker { containers { id names state ports { ip privatePort publicPort type } } } }",
     "networks": "query GetDockerNetworks { docker { networks { id name driver scope } } }",
     "network_details": "query GetDockerNetwork { docker { networks { id name driver scope enableIPv6 internal attachable containers options labels } } }",
 }
@@ -35,10 +42,8 @@ _DOCKER_MUTATIONS: dict[str, str] = {
 # "logs" has no GraphQL query (field removed in Unraid 7.2.x) but is still a
 # recognised subaction so validation passes and the informative ToolError below
 # is returned rather than a generic "Invalid action" message.
-# "ports" reuses the "details" query and aggregates host port bindings client-side.
-_DOCKER_SUBACTIONS: set[str] = (
-    set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs", "ports"}
-)
+# "ports" has a dedicated list query and aggregates host port bindings client-side.
+_DOCKER_SUBACTIONS: set[str] = set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs"}
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart"}
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 _DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
@@ -104,7 +109,10 @@ async def _resolve_container_id(container_id: str, *, strict: bool = False) -> s
 
 
 async def _handle_docker(
-    subaction: str, container_id: str | None, network_id: str | None
+    subaction: str,
+    container_id: str | None,
+    network_id: str | None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _DOCKER_SUBACTIONS, "docker")
     if subaction in _DOCKER_NEEDS_CONTAINER_ID and not container_id:
@@ -117,18 +125,20 @@ async def _handle_docker(
 
         if subaction == "list":
             data = await _client.make_graphql_request(_DOCKER_QUERIES["list"])
-            return {"containers": safe_get(data, "docker", "containers", default=[])}
+            containers = safe_get(data, "docker", "containers", default=[])
+            capped, meta = cap_list(containers, limit)
+            return {"containers": capped, "page": meta}
 
         if subaction == "details":
             actual_id = await _resolve_container_id(container_id or "")
-            data = await _client.make_graphql_request(_DOCKER_QUERIES["details"])
-            for c in safe_get(data, "docker", "containers", default=[]):
-                if c.get("id") == actual_id:
-                    return c
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["details"], {"id": actual_id})
+            container = safe_get(data, "docker", "container", default=None)
+            if container:
+                return container
             raise ToolError(f"Container '{container_id}' not found in details response.")
 
         if subaction == "ports":
-            data = await _client.make_graphql_request(_DOCKER_QUERIES["details"])
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["ports"])
             containers = safe_get(data, "docker", "containers", default=[])
             bindings: list[dict[str, Any]] = []
             for container in containers:

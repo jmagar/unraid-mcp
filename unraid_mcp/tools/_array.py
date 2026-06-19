@@ -13,6 +13,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import validate_subaction
 
 
@@ -50,6 +51,7 @@ async def _handle_array(
     slot: int | None,
     ctx: Context | None,
     confirm: bool,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _ARRAY_SUBACTIONS, "array")
 
@@ -70,6 +72,17 @@ async def _handle_array(
 
         if subaction in _ARRAY_QUERIES:
             data = await _client.make_graphql_request(_ARRAY_QUERIES[subaction])
+            if subaction == "parity_history" and isinstance(data, dict):
+                history = data.get("parityHistory") or []
+                if isinstance(history, list):
+                    capped, meta = cap_list(history, limit)
+                    data = {**data, "parityHistory": capped}
+                    return {
+                        "success": True,
+                        "subaction": subaction,
+                        "data": data,
+                        "page": meta,
+                    }
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "parity_start":

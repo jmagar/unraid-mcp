@@ -384,17 +384,15 @@ class TestDockerDetailsContract:
         cid = "a" * 64 + ":local"
         _docker_mock.return_value = {
             "docker": {
-                "containers": [
-                    {
-                        "id": cid,
-                        "names": ["plex"],
-                        "state": "running",
-                        "image": "plexinc/pms:latest",
-                        "status": "Up 3 hours",
-                        "ports": [],
-                        "autoStart": True,
-                    }
-                ]
+                "container": {
+                    "id": cid,
+                    "names": ["plex"],
+                    "state": "running",
+                    "image": "plexinc/pms:latest",
+                    "status": "Up 3 hours",
+                    "ports": [],
+                    "autoStart": True,
+                }
             }
         }
         result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
@@ -403,7 +401,7 @@ class TestDockerDetailsContract:
     async def test_details_has_required_fields(self, _docker_mock: AsyncMock) -> None:
         cid = "b" * 64 + ":local"
         _docker_mock.return_value = {
-            "docker": {"containers": [{"id": cid, "names": ["sonarr"], "state": "exited"}]}
+            "docker": {"container": {"id": cid, "names": ["sonarr"], "state": "exited"}}
         }
         result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
         assert "id" in result
