@@ -22,10 +22,12 @@ def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[s
 
     Each event is shaped ``{"logFile": {"content": "...", ...}}``. The ``content``
     field is a newline-joined block of log lines. Returns a shallow-copied event
-    with the filtered content and a ``matchedLines`` count. Events lacking a
+    with the filtered content, a ``matchedLines`` count (lines that actually
+    matched the severity filter) and a ``returnedLines`` count (real log lines
+    returned including context, excluding ``"---"`` separators). Events lacking a
     string ``content`` are returned unchanged.
     """
-    from ..core.utils import filter_log_lines
+    from ..core.utils import count_log_matches, filter_log_lines
 
     log_file = event.get("logFile")
     if not isinstance(log_file, dict):
@@ -36,7 +38,12 @@ def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[s
 
     lines = content.split("\n")
     filtered = filter_log_lines(lines, level=level, context=context)
-    new_log_file = {**log_file, "content": "\n".join(filtered), "matchedLines": len(filtered)}
+    new_log_file = {
+        **log_file,
+        "content": "\n".join(filtered),
+        "matchedLines": count_log_matches(lines, level=level),
+        "returnedLines": sum(1 for line in filtered if line != "---"),
+    }
     return {**event, "logFile": new_log_file}
 
 

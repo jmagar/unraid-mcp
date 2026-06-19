@@ -126,8 +126,15 @@ streams down to relevant severity:
 - `context` — lines of surrounding context kept before/after each match (default `2`).
   Non-contiguous matches are separated by a `---` marker.
 
-Filtered responses add `matchedLines` (count) and a `filter` echo. The pure helper is
-`filter_log_lines(lines, level=None, context=2)` in `unraid_mcp/core/utils.py`.
+Filtered responses add two counts plus a `filter` echo:
+- `matchedLines` — number of lines that actually matched the severity filter (excludes
+  context lines and `---` separators).
+- `returnedLines` — number of real log lines returned (matches + context, excluding `---`
+  separator markers). Expect `matchedLines <= returnedLines`.
+
+The pure helpers are `filter_log_lines(lines, level=None, context=2)` (returns matches +
+context + `---` separators) and `count_log_matches(lines, level=None)` (severity-match
+count only), both in `unraid_mcp/core/utils.py`.
 
 ### Destructive Actions (require `confirm=True`)
 - **array**: stop_array, remove_disk, clear_disk_stats

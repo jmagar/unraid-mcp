@@ -264,6 +264,64 @@ class TestStorageActions:
         result = await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
         assert result["content"] == "log line"
 
+    async def test_logs_level_filter_counts(self, _mock_graphql: AsyncMock) -> None:
+        """matchedLines counts only severity matches; returnedLines adds context (#48)."""
+        content = "\n".join(
+            [
+                "line0 info",
+                "line1 info",
+                "line2 [ERROR] boom",
+                "line3 info",
+                "line4 info",
+            ]
+        )
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": content, "totalLines": 5}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="disk",
+            subaction="logs",
+            log_path="/var/log/syslog",
+            level="error",
+            context=2,
+        )
+        # only the single [ERROR] line matched the severity filter
+        assert result["matchedLines"] == 1
+        # match + 2 lines context on each side → 5 real lines returned
+        assert result["returnedLines"] == 5
+        assert result["matchedLines"] < result["returnedLines"]
+        assert result["filter"] == {"level": "error", "context": 2}
+
+    async def test_logs_level_filter_excludes_separators(self, _mock_graphql: AsyncMock) -> None:
+        """returnedLines excludes the '---' markers between non-contiguous groups (#48)."""
+        content = "\n".join(
+            [
+                "[ERROR] a",
+                "b",
+                "c",
+                "d",
+                "e",
+                "f",
+                "[ERROR] g",
+            ]
+        )
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": content, "totalLines": 7}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="disk",
+            subaction="logs",
+            log_path="/var/log/syslog",
+            level="error",
+            context=1,
+        )
+        # two matching lines; groups [0..1] and [5..6] → 4 real lines + one "---"
+        assert result["matchedLines"] == 2
+        assert "---" in result["content"]
+        assert result["returnedLines"] == 4
+
 
 class TestStorageNetworkErrors:
     """Tests for network-level failures in storage operations."""
@@ -384,7 +442,9 @@ class TestLogsFiltering:
         )
         # match at line2, context 1 → lines 1..3
         assert result["content"] == "line1 info\nline2 [ERROR] boom\nline3 info"
-        assert result["matchedLines"] == 3
+        # only the single [ERROR] line matched the severity filter (#48)
+        assert result["matchedLines"] == 1
+        assert result["returnedLines"] == 3
         assert result["filter"] == {"level": "error", "context": 1}
 
     async def test_logs_level_no_match(self, _mock_graphql: AsyncMock) -> None:

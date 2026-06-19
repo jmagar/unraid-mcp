@@ -66,6 +66,52 @@ def _line_severity_rank(line: str) -> int | None:
     return best
 
 
+def _make_matcher(level: str):
+    """Build a predicate that decides whether a log line matches ``level``.
+
+    Shared by :func:`filter_log_lines` and :func:`count_log_matches` so the two
+    always agree on what "matches the severity filter" means. A line matches when
+    its detected structured level is at-or-above ``level``; lines with no
+    detectable level fall back to a case-insensitive keyword match against the
+    requested level name and its aliases.
+    """
+    canonical = _SEVERITY_ALIASES.get(level.lower(), level.lower())
+    threshold = _SEVERITY_RANK.get(canonical)
+
+    keywords = {level.lower(), canonical}
+    keywords.update(a for a, c in _SEVERITY_ALIASES.items() if c == canonical)
+
+    def _matches(line: str) -> bool:
+        rank = _line_severity_rank(line)
+        if rank is not None and threshold is not None:
+            return rank >= threshold
+        lowered = line.lower()
+        return any(kw in lowered for kw in keywords)
+
+    return _matches
+
+
+def count_log_matches(lines: list[str], level: str | None = None) -> int:
+    """Count log lines that actually match the severity filter.
+
+    Unlike :func:`filter_log_lines`, this counts ONLY the lines that match
+    ``level`` — it excludes the surrounding context lines and the ``"---"``
+    separators that ``filter_log_lines`` adds to its output.
+
+    Args:
+        lines: The raw log lines (without trailing newlines).
+        level: Minimum severity to match (see :func:`filter_log_lines`). When
+            None, every line is considered a match.
+
+    Returns:
+        The number of severity-matching lines.
+    """
+    if level is None:
+        return len(lines)
+    matcher = _make_matcher(level)
+    return sum(1 for line in lines if matcher(line))
+
+
 def filter_log_lines(
     lines: list[str],
     level: str | None = None,
@@ -99,22 +145,8 @@ def filter_log_lines(
     if context < 0:
         context = 0
 
-    canonical = _SEVERITY_ALIASES.get(level.lower(), level.lower())
-    threshold = _SEVERITY_RANK.get(canonical)
-
-    # Keyword fallback set: the requested level plus any aliases pointing at the
-    # same canonical level (so level="warning" also keyword-matches "warn").
-    keywords = {level.lower(), canonical}
-    keywords.update(a for a, c in _SEVERITY_ALIASES.items() if c == canonical)
-
-    def _matches(line: str) -> bool:
-        rank = _line_severity_rank(line)
-        if rank is not None and threshold is not None:
-            return rank >= threshold
-        lowered = line.lower()
-        return any(kw in lowered for kw in keywords)
-
-    match_indices = [i for i, line in enumerate(lines) if _matches(line)]
+    matches = _make_matcher(level)
+    match_indices = [i for i, line in enumerate(lines) if matches(line)]
     if not match_indices:
         return []
 
