@@ -27,6 +27,63 @@ DANGEROUS_KEY_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+def validate_input_mapping(
+    data: dict[str, Any],
+    label: str,
+    *,
+    max_keys: int = 100,
+    max_depth: int = 6,
+    _depth: int = 0,
+) -> dict[str, Any]:
+    """Validate a possibly-nested GraphQL input-object mapping.
+
+    Unlike ``validate_scalar_mapping`` (flat, scalar-only), this allows nested
+    dicts and lists so it can carry structured GraphQL input objects (e.g.
+    ``TemperatureConfigInput`` with nested ``sensors``/``thresholds``). It still
+    enforces a key cap, rejects dangerous key names, bounds nesting depth, and
+    caps scalar string length — so unvalidated bulk input can't reach a mutation.
+
+    Args:
+        data: The mapping to validate.
+        label: Human-readable label for error messages (e.g. "connect_input").
+        max_keys: Maximum number of keys allowed at any single level.
+        max_depth: Maximum nesting depth allowed.
+
+    Returns:
+        The validated mapping (values preserved, including nested structures).
+    """
+    if _depth > max_depth:
+        raise ToolError(f"{label} nesting exceeds max depth ({max_depth})")
+    if len(data) > max_keys:
+        raise ToolError(f"{label} has {len(data)} keys (max {max_keys})")
+
+    def _check_value(value: Any, path: str, depth: int) -> Any:
+        if isinstance(value, dict):
+            return validate_input_mapping(
+                value, path, max_keys=max_keys, max_depth=max_depth, _depth=depth + 1
+            )
+        if isinstance(value, list):
+            if depth > max_depth:
+                raise ToolError(f"{path} nesting exceeds max depth ({max_depth})")
+            return [_check_value(item, f"{path}[]", depth + 1) for item in value]
+        if value is None or isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str) and len(value) > MAX_VALUE_LENGTH:
+                raise ToolError(
+                    f"{path} value exceeds max length ({len(value)} > {MAX_VALUE_LENGTH})"
+                )
+            return value
+        raise ToolError(f"{path} must be a scalar, list, or object, got: {type(value).__name__}")
+
+    validated: dict[str, Any] = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or not key.strip():
+            raise ToolError(f"{label} keys must be non-empty strings, got: {type(key).__name__}")
+        if DANGEROUS_KEY_PATTERN.search(key):
+            raise ToolError(f"{label} key '{key}' contains disallowed characters")
+        validated[key] = _check_value(value, f"{label}['{key}']", _depth)
+    return validated
+
+
 def validate_scalar_mapping(
     data: dict[str, Any],
     label: str,

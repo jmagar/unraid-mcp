@@ -17,12 +17,22 @@ from unraid_mcp.core.exceptions import ToolError
 from unraid_mcp.tools.unraid import (
     _ARRAY_DESTRUCTIVE,
     _ARRAY_MUTATIONS,
+    _CONNECT_DESTRUCTIVE,
+    _CONNECT_MUTATIONS,
     _DISK_DESTRUCTIVE,
     _DISK_MUTATIONS,
+    _DOCKER_BULK_MUTATIONS,
+    _DOCKER_DESTRUCTIVE,
+    _DOCKER_MUTATIONS,
+    _DOCKER_ORGANIZER,
+    _DOCKER_ROOT_MUTATIONS,
     _KEY_DESTRUCTIVE,
     _KEY_MUTATIONS,
     _NOTIFICATION_DESTRUCTIVE,
     _NOTIFICATION_MUTATIONS,
+    _ONBOARDING_DESTRUCTIVE,
+    _ONBOARDING_INPUT_MUTATIONS,
+    _ONBOARDING_SIMPLE_MUTATIONS,
     _PLUGIN_DESTRUCTIVE,
     _PLUGIN_MUTATIONS,
     _RCLONE_DESTRUCTIVE,
@@ -32,6 +42,17 @@ from unraid_mcp.tools.unraid import (
     _VM_DESTRUCTIVE,
     _VM_MUTATIONS,
 )
+
+
+# Docker mutations are split across several dicts; the audit treats them as one
+# namespace. Same for onboarding (simple + input mutations).
+_DOCKER_ALL_MUTATIONS = {
+    **_DOCKER_MUTATIONS,
+    **_DOCKER_BULK_MUTATIONS,
+    **_DOCKER_ROOT_MUTATIONS,
+    **{k: v["mutation"] for k, v in _DOCKER_ORGANIZER.items()},
+}
+_ONBOARDING_ALL_MUTATIONS = {**_ONBOARDING_SIMPLE_MUTATIONS, **_ONBOARDING_INPUT_MUTATIONS}
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +91,7 @@ KNOWN_DESTRUCTIVE: dict[str, dict] = {
         "mutations": _DISK_MUTATIONS,
     },
     "setting": {
-        "actions": {"configure_ups"},
+        "actions": {"configure_ups", "update_ssh"},
         "runtime_set": _SETTING_DESTRUCTIVE,
         "mutations": _SETTING_MUTATIONS,
     },
@@ -78,6 +99,21 @@ KNOWN_DESTRUCTIVE: dict[str, dict] = {
         "actions": {"remove"},
         "runtime_set": _PLUGIN_DESTRUCTIVE,
         "mutations": _PLUGIN_MUTATIONS,
+    },
+    "docker": {
+        "actions": {"remove_container", "reset_template_mappings", "delete_entries"},
+        "runtime_set": _DOCKER_DESTRUCTIVE,
+        "mutations": _DOCKER_ALL_MUTATIONS,
+    },
+    "connect": {
+        "actions": {"sign_out", "setup_remote_access", "enable_dynamic_remote_access"},
+        "runtime_set": _CONNECT_DESTRUCTIVE,
+        "mutations": _CONNECT_MUTATIONS,
+    },
+    "onboarding": {
+        "actions": {"reset", "create_internal_boot_pool"},
+        "runtime_set": _ONBOARDING_DESTRUCTIVE,
+        "mutations": _ONBOARDING_ALL_MUTATIONS,
     },
 }
 
@@ -160,8 +196,28 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     ),
     # Settings
     ("setting", "configure_ups", {"ups_config": {"mode": "slave"}}),
+    ("setting", "update_ssh", {"config_input": {"enabled": True, "port": 22}}),
     # Plugins
     ("plugin", "remove", {"names": ["my-plugin"]}),
+    # Docker
+    ("docker", "remove_container", {"container_id": "abc"}),
+    ("docker", "reset_template_mappings", {}),
+    ("docker", "delete_entries", {"organizer_input": {"entryIds": ["e1"]}}),
+    # Connect
+    ("connect", "sign_out", {}),
+    ("connect", "setup_remote_access", {"connect_input": {"accessType": "DISABLED"}}),
+    (
+        "connect",
+        "enable_dynamic_remote_access",
+        {"connect_input": {"url": {"type": "WAN"}, "enabled": True}},
+    ),
+    # Onboarding
+    ("onboarding", "reset", {}),
+    (
+        "onboarding",
+        "create_internal_boot_pool",
+        {"onboarding_input": {"poolName": "p", "devices": ["sdb"], "bootSizeMiB": 1, "updateBios": False}},
+    ),
 ]
 
 _CASE_IDS = [f"{c[0]}/{c[1]}" for c in _DESTRUCTIVE_TEST_CASES]

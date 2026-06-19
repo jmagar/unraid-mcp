@@ -543,3 +543,114 @@ class TestDockerPortsAggregator:
         result = await tool_fn(action="docker", subaction="ports")
         assert result["count"] == 1, f"Expected 1 binding for state={state_value!r}"
         assert result["bindings"][0]["host_port"] == 5432
+
+
+# ---------------------------------------------------------------------------
+# New lifecycle / update / template / organizer subactions
+# ---------------------------------------------------------------------------
+
+_FULL_ID = "a" * 64  # matches _DOCKER_ID_PATTERN so no resolve round-trip
+
+
+class TestDockerLifecycleAdditions:
+    async def test_unpause(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"unpause": {"id": _FULL_ID, "state": "RUNNING"}}}
+        result = await _make_tool()(
+            action="docker", subaction="unpause", container_id=_FULL_ID
+        )
+        assert result["success"] is True
+        assert result["container"]["state"] == "RUNNING"
+
+    async def test_update_container(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {"updateContainer": {"id": _FULL_ID, "image": "img:2"}}
+        }
+        result = await _make_tool()(
+            action="docker", subaction="update_container", container_id=_FULL_ID
+        )
+        assert result["container"]["image"] == "img:2"
+
+    async def test_update_all_containers(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"updateAllContainers": [{"id": _FULL_ID}]}}
+        result = await _make_tool()(action="docker", subaction="update_all_containers")
+        assert result["success"] is True
+        assert len(result["containers"]) == 1
+
+    async def test_update_containers_requires_ids(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="container_ids is required"):
+            await _make_tool()(action="docker", subaction="update_containers")
+
+    async def test_remove_container_is_destructive(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="confirm=True"):
+            await _make_tool()(
+                action="docker", subaction="remove_container", container_id=_FULL_ID
+            )
+
+    async def test_remove_container_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"removeContainer": True}}
+        result = await _make_tool()(
+            action="docker",
+            subaction="remove_container",
+            container_id=_FULL_ID,
+            with_image=True,
+            confirm=True,
+        )
+        assert result["success"] is True
+        assert result["with_image"] is True
+
+    async def test_update_autostart_requires_entries(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="autostart_entries is required"):
+            await _make_tool()(action="docker", subaction="update_autostart")
+
+
+class TestDockerTemplateMutations:
+    async def test_refresh_digests(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"refreshDockerDigests": True}
+        result = await _make_tool()(action="docker", subaction="refresh_digests")
+        assert result["result"] is True
+
+    async def test_sync_template_paths(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "syncDockerTemplatePaths": {"scanned": 3, "matched": 2, "skipped": 1, "errors": []}
+        }
+        result = await _make_tool()(action="docker", subaction="sync_template_paths")
+        assert result["result"]["matched"] == 2
+
+    async def test_reset_template_mappings_is_destructive(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="confirm=True"):
+            await _make_tool()(action="docker", subaction="reset_template_mappings")
+
+
+class TestDockerOrganizerMutations:
+    async def test_create_folder_requires_name(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="missing required field"):
+            await _make_tool()(
+                action="docker", subaction="create_folder", organizer_input={}
+            )
+
+    async def test_create_folder(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"createDockerFolder": {"version": 2}}
+        result = await _make_tool()(
+            action="docker",
+            subaction="create_folder",
+            organizer_input={"name": "Media", "childrenIds": ["x"]},
+        )
+        assert result["organizer"]["version"] == 2
+
+    async def test_delete_entries_is_destructive(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="confirm=True"):
+            await _make_tool()(
+                action="docker",
+                subaction="delete_entries",
+                organizer_input={"entryIds": ["e1"]},
+            )
+
+    async def test_delete_entries_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"deleteDockerEntries": {"version": 3}}
+        result = await _make_tool()(
+            action="docker",
+            subaction="delete_entries",
+            organizer_input={"entryIds": ["e1"]},
+            confirm=True,
+        )
+        assert result["organizer"]["version"] == 3

@@ -1,6 +1,8 @@
 """Key domain handler for the Unraid MCP tool.
 
-Covers: list, get, possible_roles, create, update, delete*, add_role, remove_role (8 subactions).
+Covers: list, get, possible_roles, possible_permissions, permissions_for_roles,
+preview_permissions, auth_actions, creation_form_schema, create, update, delete*,
+add_role, remove_role (13 subactions).
 """
 
 from typing import Any
@@ -23,6 +25,11 @@ _KEY_QUERIES: dict[str, str] = {
     "list": "query ListApiKeys { apiKeys { id name roles permissions { resource actions } createdAt } }",
     "get": "query GetApiKey($id: PrefixedID!) { apiKey(id: $id) { id name roles permissions { resource actions } createdAt } }",
     "possible_roles": "query GetPossibleRoles { apiKeyPossibleRoles }",
+    "possible_permissions": "query GetPossiblePermissions { apiKeyPossiblePermissions { resource actions } }",
+    "permissions_for_roles": "query GetPermissionsForRoles($roles: [Role!]!) { getPermissionsForRoles(roles: $roles) { resource actions } }",
+    "preview_permissions": "query PreviewEffectivePermissions($roles: [Role!], $permissions: [AddPermissionInput!]) { previewEffectivePermissions(roles: $roles, permissions: $permissions) { resource actions } }",
+    "auth_actions": "query GetAvailableAuthActions { getAvailableAuthActions }",
+    "creation_form_schema": "query GetApiKeyCreationFormSchema { getApiKeyCreationFormSchema { id dataSchema uiSchema values } }",
 }
 
 _KEY_MUTATIONS: dict[str, str] = {
@@ -46,6 +53,7 @@ async def _handle_key(
     ctx: Context | None,
     confirm: bool,
     limit: int = 20,
+    permissions_input: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _KEY_SUBACTIONS, "key")
 
@@ -71,6 +79,48 @@ async def _handle_key(
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])
             roles_list = data.get("apiKeyPossibleRoles", [])
             return {"roles": list(roles_list) if isinstance(roles_list, list) else []}
+
+        if subaction == "possible_permissions":
+            data = await _client.make_graphql_request(_KEY_QUERIES["possible_permissions"])
+            perms = data.get("apiKeyPossiblePermissions", [])
+            return {"permissions": list(perms) if isinstance(perms, list) else []}
+
+        if subaction == "auth_actions":
+            data = await _client.make_graphql_request(_KEY_QUERIES["auth_actions"])
+            actions = data.get("getAvailableAuthActions", [])
+            return {"actions": list(actions) if isinstance(actions, list) else []}
+
+        if subaction == "creation_form_schema":
+            data = await _client.make_graphql_request(_KEY_QUERIES["creation_form_schema"])
+            return {"schema": data.get("getApiKeyCreationFormSchema")}
+
+        if subaction == "permissions_for_roles":
+            if not roles:
+                raise ToolError(
+                    "roles is required for key/permissions_for_roles (e.g. roles=['ADMIN'])"
+                )
+            data = await _client.make_graphql_request(
+                _KEY_QUERIES["permissions_for_roles"], {"roles": roles}
+            )
+            perms = data.get("getPermissionsForRoles", [])
+            return {"permissions": list(perms) if isinstance(perms, list) else []}
+
+        if subaction == "preview_permissions":
+            if not roles and not permissions_input:
+                raise ToolError(
+                    "key/preview_permissions requires roles and/or permissions_input "
+                    "(permissions_input is a list of {resource, actions})"
+                )
+            variables: dict[str, Any] = {}
+            if roles:
+                variables["roles"] = roles
+            if permissions_input:
+                variables["permissions"] = permissions_input
+            data = await _client.make_graphql_request(
+                _KEY_QUERIES["preview_permissions"], variables
+            )
+            perms = data.get("previewEffectivePermissions", [])
+            return {"permissions": list(perms) if isinstance(perms, list) else []}
 
         if subaction == "get":
             if not key_id:

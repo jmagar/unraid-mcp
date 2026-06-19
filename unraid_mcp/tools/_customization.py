@@ -1,6 +1,7 @@
 """Customization domain handler for the Unraid MCP tool.
 
-Covers: public_theme, is_initial_setup, sso_enabled, set_theme (4 subactions).
+Covers: public_theme, is_initial_setup, sso_enabled, set_theme, set_locale
+(5 subactions).
 
 Schema notes (Unraid 7.3 / unraid-api 4.35):
 - The old ``customization { theme partnerInfo }`` shape was removed upstream, so the
@@ -32,12 +33,15 @@ _CUSTOMIZATION_QUERIES: dict[str, str] = {
 
 _CUSTOMIZATION_MUTATIONS: dict[str, str] = {
     "set_theme": "mutation SetTheme($theme: ThemeName!) { customization { setTheme(theme: $theme) { name showBannerImage showBannerGradient showHeaderDescription } } }",
+    "set_locale": "mutation SetLocale($locale: String!) { customization { setLocale(locale: $locale) } }",
 }
 
 _CUSTOMIZATION_SUBACTIONS: set[str] = set(_CUSTOMIZATION_QUERIES) | set(_CUSTOMIZATION_MUTATIONS)
 
 
-async def _handle_customization(subaction: str, theme_name: str | None) -> dict[str, Any]:
+async def _handle_customization(
+    subaction: str, theme_name: str | None, locale: str | None = None
+) -> dict[str, Any]:
     validate_subaction(subaction, _CUSTOMIZATION_SUBACTIONS, "customization")
 
     with tool_error_handler("customization", subaction, logger):
@@ -61,6 +65,18 @@ async def _handle_customization(subaction: str, theme_name: str | None) -> dict[
                 "success": True,
                 "subaction": "set_theme",
                 "data": safe_get(data, "customization", "setTheme"),
+            }
+
+        if subaction == "set_locale":
+            if not locale:
+                raise ToolError("locale is required for customization/set_locale")
+            data = await _client.make_graphql_request(
+                _CUSTOMIZATION_MUTATIONS["set_locale"], {"locale": locale}
+            )
+            return {
+                "success": True,
+                "subaction": "set_locale",
+                "locale": safe_get(data, "customization", "setLocale"),
             }
 
         raise ToolError(f"Unhandled customization subaction '{subaction}' — this is a bug")

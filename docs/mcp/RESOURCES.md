@@ -53,8 +53,10 @@ These subscriptions only emit when state changes. A timeout does not indicate an
 | `unraid://live/parity_progress` | Parity check progress, speed, errors | `parityHistorySubscription` |
 | `unraid://live/ups_status` | UPS battery, power, model, status | `upsUpdates` |
 | `unraid://live/notifications_overview` | Unread/archive notification counts by type | `notificationsOverview` |
+| `unraid://live/notifications_warnings` | Live warnings/alerts feed (filtered) | `notificationsWarningsAndAlerts` |
 | `unraid://live/owner` | Server owner username, URL, avatar | `ownerSubscription` |
 | `unraid://live/server_status` | Server name, status, GUID, WAN/LAN IPs | `serversSubscription` |
+| `unraid://live/display` | Theme/display changes | `displaySubscription` |
 
 ## Response Format
 

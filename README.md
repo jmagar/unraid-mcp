@@ -70,7 +70,7 @@ Connection and system health diagnostics.
 | `diagnose` | Subscription system status, error counts, reconnect state | — |
 | `setup` | Report credential status and print plugin/`.env` setup instructions | — |
 
-#### `array` — 13 subactions
+#### `array` — 14 subactions
 
 Parity checks and array disk operations. Destructive subactions marked with *.
 
@@ -78,6 +78,7 @@ Parity checks and array disk operations. Destructive subactions marked with *.
 | --- | --- | --- | --- |
 | `parity_status` | Current parity check progress, speed, errors | — | — |
 | `parity_history` | Past parity check results | — | — |
+| `assignable_disks` | Physical disks not yet in the array (pairs with `add_disk`) | — | — |
 | `parity_start` | Start a parity check | `correct` (bool) | — |
 | `parity_pause` | Pause a running parity check | — | — |
 | `parity_resume` | Resume a paused parity check | — | — |
@@ -105,22 +106,39 @@ Shares, physical disks, log files, and flash backup. Destructive subactions mark
 
 **`flash_backup` details:** Calls the Unraid `initiateFlashBackup` GraphQL mutation, which triggers an rclone copy from the flash drive to a configured rclone remote. The destination on the remote is overwritten if it exists. Returns `{ status, jobId }`. To restore: use rclone to copy the backup back to the flash drive, or extract individual config files. Configure the rclone remote first via `rclone/create_remote`.
 
-#### `docker` — 8 subactions
+#### `docker` — 25 subactions
 
-Container lifecycle and network inspection. No destructive subactions.
+Container lifecycle, image updates, template/digest maintenance, organizer folders, and network inspection. Destructive subactions marked with *.
 
-| Subaction | Description | Required params |
-| --- | --- | --- |
-| `list` | All containers: ID, names, image, state, status, autoStart | — |
-| `details` | Full container detail: ports, mounts, labels, network settings | `container_id` |
-| `ports` | All host port bindings across running containers, sorted by `(host_port, protocol)`. One call replaces N `details` calls when answering "what's using port X". | — |
-| `start` | Start a container | `container_id` |
-| `stop` | Stop a container | `container_id` |
-| `restart` | Stop then start a container (stop + start in sequence) | `container_id` |
-| `networks` | All Docker networks: ID, name, driver, scope | — |
-| `network_details` | Single network with IPv6, containers, options, labels | `network_id` |
+| Subaction | Description | Required params | Destructive |
+| --- | --- | --- | --- |
+| `list` | All containers: ID, names, image, state, status, autoStart | — | — |
+| `details` | Full container detail: ports, mounts, labels, network settings | `container_id` | — |
+| `ports` | All host port bindings across running containers, sorted by `(host_port, protocol)`. | — | — |
+| `start` | Start a container | `container_id` | — |
+| `stop` | Stop a container | `container_id` | — |
+| `restart` | Stop then start a container (stop + start in sequence) | `container_id` | — |
+| `unpause` | Unpause a paused container | `container_id` | — |
+| `remove_container` | Remove a container (optionally its image via `with_image`) | `container_id`, `confirm=True` | * |
+| `update_container` | Apply a pending image update to one container | `container_id` | — |
+| `update_containers` | Apply image updates to several containers | `container_ids` | — |
+| `update_all_containers` | Apply all pending container image updates | — | — |
+| `update_autostart` | Set container autostart config | `autostart_entries` (`[{id, autoStart, wait?}]`) | — |
+| `refresh_digests` | Refresh image digests (recheck for updates) | — | — |
+| `sync_template_paths` | Sync Docker template paths | — | — |
+| `reset_template_mappings` | Reset template path mappings to defaults | `confirm=True` | * |
+| `create_folder` | Create an organizer folder | `organizer_input` (`{name, …}`) | — |
+| `create_folder_with_items` | Create a folder containing items | `organizer_input` | — |
+| `rename_folder` | Rename a folder | `organizer_input` (`{folderId, newName}`) | — |
+| `set_folder_children` | Set a folder's children | `organizer_input` (`{childrenIds, …}`) | — |
+| `delete_entries` | Delete organizer entries | `organizer_input` (`{entryIds}`), `confirm=True` | * |
+| `move_entries_to_folder` | Move entries into a folder | `organizer_input` | — |
+| `move_items_to_position` | Move items to a position | `organizer_input` | — |
+| `update_view_preferences` | Update organizer view preferences | `organizer_input` (`{prefs, …}`) | — |
+| `networks` | All Docker networks: ID, name, driver, scope | — | — |
+| `network_details` | Single network with IPv6, containers, options, labels | `network_id` | — |
 
-Container identifiers accept full ID, short ID prefix, exact name, or unambiguous name prefix. Mutations (`start`, `stop`, `restart`) require an exact name or full ID.
+Container identifiers accept full ID, short ID prefix, exact name, or unambiguous name prefix. Container mutations require an exact name or full ID. Organizer subactions read their fields from the `organizer_input` dict.
 
 #### `vm` — 9 subactions
 
@@ -159,29 +177,40 @@ System notification CRUD. Destructive subactions marked with *.
 | `delete` | Permanently delete a single notification | `notification_id`, `notification_type`, `confirm=True` | * |
 | `delete_archived` | Permanently delete all archived notifications | `confirm=True` | * |
 
-#### `key` — 7 subactions
+#### `key` — 13 subactions
 
-API key management. Destructive subactions marked with *.
+API key and permission management. Destructive subactions marked with *.
 
 | Subaction | Description | Required params | Destructive |
 | --- | --- | --- | --- |
 | `list` | All API keys with roles and permissions | — | — |
 | `get` | Single API key details | `key_id` | — |
+| `possible_roles` | All assignable roles | — | — |
+| `possible_permissions` | All grantable resource/action permissions | — | — |
+| `permissions_for_roles` | Permissions implied by given roles | `roles` | — |
+| `preview_permissions` | Effective permissions for roles and/or permissions | `roles` and/or `permissions_input` (`[{resource, actions}]`) | — |
+| `auth_actions` | All available auth actions | — | — |
+| `creation_form_schema` | JSON-schema form for key creation | — | — |
 | `create` | Create an API key | `name`; optional `roles`, `permissions` | — |
 | `update` | Update name, roles, or permissions | `key_id`; optional `name`, `roles`, `permissions` | — |
 | `delete` | Delete an API key (immediately revokes access) | `key_id`, `confirm=True` | * |
 | `add_role` | Add a role to an existing key | `key_id`, `roles` (first element used) | — |
 | `remove_role` | Remove a role from an existing key | `key_id`, `roles` (first element used) | — |
 
-#### `plugin` — 3 subactions
+#### `plugin` — 8 subactions
 
-Unraid plugin management. Destructive subactions marked with *.
+Unraid plugin management and async installs. Destructive subactions marked with *.
 
 | Subaction | Description | Required params | Destructive |
 | --- | --- | --- | --- |
 | `list` | All installed plugins with version and module flags | — | — |
+| `installed_unraid` | Raw installed `.plg` filenames | — | — |
+| `install_operations` | List async plugin-install operations | — | — |
+| `install_operation` | Status of one install operation | `operation_id` | — |
 | `add` | Install plugins by name | `names` (list); optional `bundled`, `restart` | — |
 | `remove` | Uninstall plugins by name (irreversible without re-install) | `names` (list), `confirm=True` | * |
+| `install` | Async-install a `.plg` URL (poll via `install_operation`) | `url`; optional `plugin_name`, `forced` | — |
+| `install_language` | Async-install a language pack | `url` | — |
 
 #### `rclone` — 4 subactions
 
@@ -194,26 +223,44 @@ Cloud storage remote management. Destructive subactions marked with *.
 | `create_remote` | Create a new rclone remote | `name`, `provider_type`, `config_data` (dict of string/number/bool; max 50 keys) | — |
 | `delete_remote` | Delete a rclone remote config (does not delete remote data) | `name`, `confirm=True` | * |
 
-#### `setting` — 2 subactions
+#### `setting` — 6 subactions
 
-System settings. Destructive subactions marked with *.
+System settings, UPS, SSH, time, and server identity. Destructive subactions marked with *.
 
 | Subaction | Description | Required params | Destructive |
 | --- | --- | --- | --- |
 | `update` | Update system settings (JSON key/value input) | `settings_input` (dict; max 100 keys, scalar values only) | — |
 | `configure_ups` | Overwrite UPS monitoring configuration | `ups_config` (dict), `confirm=True` | * |
+| `update_ssh` | Update SSH daemon settings (can cut off shell access) | `config_input` (`{enabled, port}`), `confirm=True` | * |
+| `update_temperature` | Update temperature sensor configuration | `config_input` | — |
+| `update_system_time` | Update timezone / NTP / manual time | `config_input` | — |
+| `update_server_identity` | Update server name, comment, and model | `name`; optional `comment`, `sys_model` | — |
+
+#### `connect` — 7 subactions
+
+Unraid Connect / remote-access state and control. Destructive subactions marked with *.
+
+| Subaction | Description | Required params | Destructive |
+| --- | --- | --- | --- |
+| `remote_access` | Current remote-access settings (type, forward, port) | — | — |
+| `cloud` | Unraid Connect / cloud status (relay, minigraph, key validity) | — | — |
+| `update_api_settings` | Update Connect API settings | `connect_input` (`{accessType?, forwardType?, port?}`) | — |
+| `sign_in` | Sign the server in to Unraid Connect | `connect_input` (`{apiKey, userInfo?}`) | — |
+| `sign_out` | Sign the server out of Unraid Connect | `confirm=True` | * |
+| `setup_remote_access` | Configure remote access — can expose the server to the internet | `connect_input`, `confirm=True` | * |
+| `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`), `confirm=True` | * |
 
 #### `customization` — 5 subactions
 
-UI theme and SSO state.
+UI theme, locale, and SSO state.
 
 | Subaction | Description | Required params |
 | --- | --- | --- |
-| `theme` | Full theme, partner info, and activation code | — |
-| `public_theme` | Public-facing theme and partner info (unauthenticated view) | — |
-| `is_initial_setup` | Whether initial setup wizard has been completed | — |
+| `public_theme` | Public-facing theme (also the server's current theme) | — |
+| `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) | — |
 | `sso_enabled` | Whether SSO is enabled | — |
 | `set_theme` | Set the active UI theme | `theme_name` |
+| `set_locale` | Set the UI locale | `locale` |
 
 #### `oidc` — 5 subactions
 
@@ -227,19 +274,37 @@ OpenID Connect / SSO provider management.
 | `public_providers` | Public provider list (button text, icon, style) | — |
 | `validate_session` | Validate an OIDC session token | `token` |
 
+#### `onboarding` — 11 subactions
+
+First-boot / onboarding state and the internal boot context. These operate on setup state and are rarely needed on a configured server; the dangerous ones are marked with *.
+
+| Subaction | Description | Required params | Destructive |
+| --- | --- | --- | --- |
+| `internal_boot_context` | Internal boot / first-boot context | — | — |
+| `complete` | Mark onboarding complete | — | — |
+| `open` | Open the onboarding flow | — | — |
+| `close` | Close the onboarding flow | — | — |
+| `resume` | Resume onboarding | — | — |
+| `bypass` | Bypass onboarding | — | — |
+| `reset` | Reset onboarding/setup state | `confirm=True` | * |
+| `set_override` | Set an onboarding override | `onboarding_input` | — |
+| `clear_override` | Clear the onboarding override | — | — |
+| `refresh_internal_boot_context` | Recompute the internal boot context | — | — |
+| `create_internal_boot_pool` | Create an internal boot pool — FORMATS devices, may REBOOT | `onboarding_input`, `confirm=True` | * |
+
 #### `user` — 1 subaction
 
 | Subaction | Description | Required params |
 | --- | --- | --- |
 | `me` | Authenticated user: ID, name, description, roles | — |
 
-#### `live` — 11 subactions (WebSocket subscriptions)
+#### `live` — 16 subactions (WebSocket subscriptions)
 
 The `live` action group reads from active WebSocket subscriptions to the Unraid GraphQL API. Instead of issuing HTTP queries, it opens a `graphql-transport-ws` connection and either waits for one snapshot or collects events over a window.
 
 Two delivery modes:
 
-- **Snapshot** (`SNAPSHOT_ACTIONS`): opens a subscription and returns the first message received within `timeout` seconds. For event-driven subactions (`parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`), a timeout means no recent state change — not an error.
+- **Snapshot** (`SNAPSHOT_ACTIONS`): opens a subscription and returns the first message received within `timeout` seconds. For event-driven subactions (`parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`), a timeout means no recent state change — not an error.
 - **Collect** (`COLLECT_ACTIONS`): opens a subscription and accumulates all events for `collect_for` seconds, then returns the full event list. Used for streaming data like log lines and notification feeds.
 
 | Subaction | Mode | Description | Required params |
@@ -251,10 +316,13 @@ Two delivery modes:
 | `parity_progress` | Snapshot (event-driven) | Parity check progress, speed, errors | — |
 | `ups_status` | Snapshot (event-driven) | UPS battery, charge, runtime, power load | — |
 | `notifications_overview` | Snapshot (event-driven) | Notification counts by importance | — |
+| `notifications_warnings` | Snapshot (event-driven) | Warnings/alerts feed (filtered) | — |
 | `owner` | Snapshot (event-driven) | Owner profile changes | — |
 | `server_status` | Snapshot (event-driven) | Server registration and connectivity | — |
+| `display` | Snapshot (event-driven) | Theme/display changes | — |
 | `log_tail` | Collect | Stream log file lines | `path` (must start with `/var/log/` or `/boot/logs/`) |
 | `notification_feed` | Collect | Stream incoming notifications | — |
+| `plugin_install_updates` | Collect | Stream plugin-install progress events | — |
 
 Optional parameters for `live`:
 
@@ -267,7 +335,7 @@ Returns a full diagnostic dump of the subscription system: auto-start status, re
 
 ### `test_subscription_query`
 
-Accepts a raw GraphQL subscription string and sends it directly over WebSocket. Validates the query first — must be a `subscription` operation targeting one of the whitelisted fields: `logFile`, `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`. Mutation and query keywords are rejected. Returns the first message received or a note that the subscription is waiting for events.
+Accepts a raw GraphQL subscription string and sends it directly over WebSocket. Validates the query first — must be a `subscription` operation targeting one of the whitelisted fields: `logFile`, `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`, `systemMetricsTemperature`, `displaySubscription`, `notificationsWarningsAndAlerts`, `pluginInstallUpdates`. Mutation and query keywords are rejected. Returns the first message received or a note that the subscription is waiting for events.
 
 ### Destructive actions summary
 
@@ -286,7 +354,16 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `key` | `delete` | Immediately revokes all clients using that key |
 | `disk` | `flash_backup` | Overwrites destination; configure a dedicated remote |
 | `setting` | `configure_ups` | Overwrites UPS daemon config |
+| `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
 | `plugin` | `remove` | Irreversible without re-install |
+| `docker` | `remove_container` | Removes a container (and optionally its image) |
+| `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
+| `docker` | `delete_entries` | Deletes Docker organizer entries |
+| `connect` | `sign_out` | Signs the server out of Unraid Connect |
+| `connect` | `setup_remote_access` | Reconfigures remote access; can expose the server |
+| `connect` | `enable_dynamic_remote_access` | Toggles dynamic remote access |
+| `onboarding` | `reset` | Resets onboarding/setup state |
+| `onboarding` | `create_internal_boot_pool` | Formats devices and may reboot the server |
 
 ### Tool parameters reference
 
@@ -306,6 +383,10 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `destination_path` | str | `disk/flash_backup` |
 | `backup_options` | dict | `disk/flash_backup` |
 | `container_id` | str | `docker` mutations and `details` |
+| `container_ids` | list[str] | `docker/update_containers` |
+| `with_image` | bool (default `False`) | `docker/remove_container` |
+| `autostart_entries` | list[dict] | `docker/update_autostart` |
+| `organizer_input` | dict | `docker` organizer subactions |
 | `network_id` | str | `docker/network_details` |
 | `vm_id` | str | `vm` (all except `list`) |
 | `notification_id` | str | `notification/archive`, `mark_unread`, `delete` |
@@ -322,14 +403,25 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `name` | str | `key/create`, `key/update`, `rclone` |
 | `roles` | list[str] | `key` subactions |
 | `permissions` | list[str] | `key` subactions |
+| `permissions_input` | list[dict] | `key/preview_permissions` |
 | `names` | list[str] | `plugin/add`, `plugin/remove` |
 | `bundled` | bool (default `False`) | `plugin/add`, `plugin/remove` |
 | `restart` | bool (default `True`) | `plugin/add`, `plugin/remove` |
+| `url` | str | `plugin/install`, `plugin/install_language` |
+| `plugin_name` | str | `plugin/install` |
+| `forced` | bool (default `False`) | `plugin/install` |
+| `operation_id` | str | `plugin/install_operation` |
 | `provider_type` | str | `rclone/config_form`, `rclone/create_remote` |
 | `config_data` | dict | `rclone/create_remote` |
 | `settings_input` | dict | `setting/update` |
 | `ups_config` | dict | `setting/configure_ups` |
+| `config_input` | dict | `setting/update_ssh`, `update_temperature`, `update_system_time` |
+| `comment` | str | `setting/update_server_identity` |
+| `sys_model` | str | `setting/update_server_identity` |
+| `connect_input` | dict | `connect` mutations |
+| `onboarding_input` | dict | `onboarding/set_override`, `create_internal_boot_pool` |
 | `theme_name` | str | `customization/set_theme` |
+| `locale` | str | `customization/set_locale` |
 | `provider_id` | str | `oidc/provider` |
 | `token` | str | `oidc/validate_session` |
 | `path` | str | `live/log_tail` |

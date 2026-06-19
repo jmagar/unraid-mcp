@@ -20,7 +20,10 @@ def _make_tool():
 
 
 # ---------------------------------------------------------------------------
-# Regression: removed subactions must raise Invalid subaction
+# Regression: wrong-domain / mis-named subactions must raise Invalid subaction.
+# update_ssh / update_temperature / update_system_time ARE valid setting
+# subactions; the Connect-related ones live under the `connect` action, and the
+# names below are deliberate near-misses that must NOT resolve under `setting`.
 # ---------------------------------------------------------------------------
 
 
@@ -28,14 +31,12 @@ def _make_tool():
 @pytest.mark.parametrize(
     "subaction",
     [
-        "update_temperature",
-        "update_time",
-        "update_api",
-        "connect_sign_in",
-        "connect_sign_out",
-        "setup_remote_access",
-        "enable_dynamic_remote_access",
-        "update_ssh",
+        "update_time",  # real name is update_system_time
+        "update_api",  # lives under connect as update_api_settings
+        "connect_sign_in",  # lives under connect as sign_in
+        "connect_sign_out",  # lives under connect as sign_out
+        "setup_remote_access",  # lives under connect
+        "enable_dynamic_remote_access",  # lives under connect
     ],
 )
 async def test_removed_settings_subactions_are_invalid(subaction: str) -> None:
@@ -139,3 +140,75 @@ class TestUpsConfig:
                 confirm=True,
                 ups_config={"mode": {"nested": "invalid"}},
             )
+
+
+# ---------------------------------------------------------------------------
+# System-config mutations (ssh / temperature / system time / identity)
+# ---------------------------------------------------------------------------
+
+
+class TestSettingsSystemConfig:
+    async def test_update_ssh_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="confirm=True"):
+            await _make_tool()(
+                action="setting",
+                subaction="update_ssh",
+                config_input={"enabled": True, "port": 22},
+            )
+
+    async def test_update_ssh_with_confirm(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateSshSettings": {"id": "vars", "version": "7.3"}}
+        result = await _make_tool()(
+            action="setting",
+            subaction="update_ssh",
+            config_input={"enabled": True, "port": 22},
+            confirm=True,
+        )
+        assert result["success"] is True
+        assert _mock_graphql.call_args.args[1] == {"input": {"enabled": True, "port": 22}}
+
+    async def test_update_temperature_requires_input(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="config_input is required"):
+            await _make_tool()(action="setting", subaction="update_temperature")
+
+    async def test_update_temperature(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateTemperatureConfig": True}
+        result = await _make_tool()(
+            action="setting",
+            subaction="update_temperature",
+            config_input={"enabled": True, "default_unit": "CELSIUS"},
+        )
+        assert result["result"] is True
+
+    async def test_update_system_time(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "updateSystemTime": {"currentTime": "x", "timeZone": "UTC", "useNtp": True}
+        }
+        result = await _make_tool()(
+            action="setting",
+            subaction="update_system_time",
+            config_input={"timeZone": "UTC", "useNtp": True},
+        )
+        assert result["result"]["timeZone"] == "UTC"
+
+    async def test_update_server_identity_requires_name(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="name is required"):
+            await _make_tool()(action="setting", subaction="update_server_identity")
+
+    async def test_update_server_identity(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "updateServerIdentity": {"id": "s", "name": "Tower", "comment": "hi"}
+        }
+        result = await _make_tool()(
+            action="setting",
+            subaction="update_server_identity",
+            name="Tower",
+            comment="hi",
+            sys_model="Custom",
+        )
+        assert result["server"]["name"] == "Tower"
+        assert _mock_graphql.call_args.args[1] == {
+            "name": "Tower",
+            "comment": "hi",
+            "sysModel": "Custom",
+        }

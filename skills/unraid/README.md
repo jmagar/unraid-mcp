@@ -6,7 +6,7 @@ with a `curl`-based HTTP fallback for when MCP tools are unavailable.
 ## What's Included
 
 The skill drives the single `unraid` MCP tool, which uses `action` (domain) +
-`subaction` (operation) routing across 15 domains and ~108 subactions — e.g.
+`subaction` (operation) routing across 17 domains and ~160 subactions — e.g.
 `unraid(action="docker", subaction="list")`. See `SKILL.md` for the full domain tables.
 
 ### Files

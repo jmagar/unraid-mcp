@@ -1,0 +1,108 @@
+"""Connect domain handler for the Unraid MCP tool.
+
+Covers Unraid Connect / remote-access state and control:
+remote_access, cloud, update_api_settings, sign_in, sign_out*,
+setup_remote_access*, enable_dynamic_remote_access* (7 subactions).
+"""
+
+from typing import Any
+
+from fastmcp import Context
+
+from ..config.logging import logger
+from ..core import client as _client
+from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
+from ..core.utils import validate_subaction
+from ..core.validation import validate_input_mapping
+
+
+# ===========================================================================
+# CONNECT (Unraid Connect / remote access)
+# ===========================================================================
+
+_CONNECT_QUERIES: dict[str, str] = {
+    "remote_access": "query GetRemoteAccess { remoteAccess { accessType forwardType port } }",
+    "cloud": "query GetCloud { cloud { error apiKey { valid error } relay { status timeout error } minigraphql { status timeout error } cloud { status ip error } allowedOrigins } }",
+}
+
+_CONNECT_MUTATIONS: dict[str, str] = {
+    "update_api_settings": "mutation UpdateApiSettings($input: ConnectSettingsInput!) { updateApiSettings(input: $input) { accessType forwardType port } }",
+    "sign_in": "mutation ConnectSignIn($input: ConnectSignInInput!) { connectSignIn(input: $input) }",
+    "sign_out": "mutation ConnectSignOut { connectSignOut }",
+    "setup_remote_access": "mutation SetupRemoteAccess($input: SetupRemoteAccessInput!) { setupRemoteAccess(input: $input) }",
+    "enable_dynamic_remote_access": "mutation EnableDynamicRemoteAccess($input: EnableDynamicRemoteAccessInput!) { enableDynamicRemoteAccess(input: $input) }",
+}
+
+_CONNECT_SUBACTIONS: set[str] = set(_CONNECT_QUERIES) | set(_CONNECT_MUTATIONS)
+# These change the server's remote-access / cloud security posture or sign the
+# server in/out of Unraid Connect — all gated behind explicit confirmation.
+_CONNECT_DESTRUCTIVE: set[str] = {
+    "sign_out",
+    "setup_remote_access",
+    "enable_dynamic_remote_access",
+}
+
+# Mutations whose input is supplied via the shared `connect_input` dict.
+_CONNECT_INPUT_MUTATIONS: set[str] = {
+    "update_api_settings",
+    "sign_in",
+    "setup_remote_access",
+    "enable_dynamic_remote_access",
+}
+
+
+async def _handle_connect(
+    subaction: str,
+    ctx: Context | None,
+    confirm: bool,
+    connect_input: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    validate_subaction(subaction, _CONNECT_SUBACTIONS, "connect")
+
+    await gate_destructive_action(
+        ctx,
+        subaction,
+        _CONNECT_DESTRUCTIVE,
+        confirm,
+        {
+            "sign_out": "Sign this server out of Unraid Connect. Remote access via "
+            "Connect will stop working until you sign back in.",
+            "setup_remote_access": "Reconfigure Unraid Connect remote access. This can "
+            "expose the server to the internet (UPnP/port forwarding).",
+            "enable_dynamic_remote_access": "Toggle dynamic remote access for Unraid "
+            "Connect, changing how/whether the server is reachable remotely.",
+        },
+    )
+
+    with tool_error_handler("connect", subaction, logger):
+        logger.info(f"Executing unraid action=connect subaction={subaction}")
+
+        if subaction == "remote_access":
+            data = await _client.make_graphql_request(_CONNECT_QUERIES["remote_access"])
+            return {"success": True, "subaction": subaction, "remoteAccess": data.get("remoteAccess")}
+
+        if subaction == "cloud":
+            data = await _client.make_graphql_request(_CONNECT_QUERIES["cloud"])
+            return {"success": True, "subaction": subaction, "cloud": data.get("cloud")}
+
+        if subaction == "sign_out":
+            data = await _client.make_graphql_request(_CONNECT_MUTATIONS["sign_out"])
+            return {"success": bool(data.get("connectSignOut")), "subaction": subaction}
+
+        if subaction in _CONNECT_INPUT_MUTATIONS:
+            if connect_input is None:
+                raise ToolError(f"connect_input is required for connect/{subaction}")
+            validated = validate_input_mapping(connect_input, "connect_input")
+            data = await _client.make_graphql_request(
+                _CONNECT_MUTATIONS[subaction], {"input": validated}
+            )
+            result_key = {
+                "update_api_settings": "updateApiSettings",
+                "sign_in": "connectSignIn",
+                "setup_remote_access": "setupRemoteAccess",
+                "enable_dynamic_remote_access": "enableDynamicRemoteAccess",
+            }[subaction]
+            return {"success": True, "subaction": subaction, "result": data.get(result_key)}
+
+        raise ToolError(f"Unhandled connect subaction '{subaction}' — this is a bug")

@@ -146,3 +146,53 @@ class TestKeysActions:
             action="key", subaction="remove_role", key_id="abc:local", roles=["VIEWER"]
         )
         assert result["success"] is True
+
+
+class TestKeyPermissionIntrospection:
+    async def test_possible_permissions(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "apiKeyPossiblePermissions": [{"resource": "DOCKER", "actions": ["READ_ANY"]}]
+        }
+        result = await _make_tool()(action="key", subaction="possible_permissions")
+        assert result["permissions"][0]["resource"] == "DOCKER"
+
+    async def test_auth_actions(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"getAvailableAuthActions": ["READ_ANY", "CREATE_ANY"]}
+        result = await _make_tool()(action="key", subaction="auth_actions")
+        assert "READ_ANY" in result["actions"]
+
+    async def test_creation_form_schema(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"getApiKeyCreationFormSchema": {"id": "x", "dataSchema": {}}}
+        result = await _make_tool()(action="key", subaction="creation_form_schema")
+        assert result["schema"]["id"] == "x"
+
+    async def test_permissions_for_roles_requires_roles(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="roles is required"):
+            await _make_tool()(action="key", subaction="permissions_for_roles")
+
+    async def test_permissions_for_roles(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "getPermissionsForRoles": [{"resource": "DOCKER", "actions": ["READ_ANY"]}]
+        }
+        result = await _make_tool()(
+            action="key", subaction="permissions_for_roles", roles=["VIEWER"]
+        )
+        assert result["permissions"][0]["actions"] == ["READ_ANY"]
+        assert _mock_graphql.call_args.args[1] == {"roles": ["VIEWER"]}
+
+    async def test_preview_permissions_requires_args(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="requires roles"):
+            await _make_tool()(action="key", subaction="preview_permissions")
+
+    async def test_preview_permissions_with_input(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"previewEffectivePermissions": []}
+        result = await _make_tool()(
+            action="key",
+            subaction="preview_permissions",
+            roles=["VIEWER"],
+            permissions_input=[{"resource": "DOCKER", "actions": ["READ_ANY"]}],
+        )
+        assert result["permissions"] == []
+        sent = _mock_graphql.call_args.args[1]
+        assert sent["roles"] == ["VIEWER"]
+        assert sent["permissions"][0]["resource"] == "DOCKER"

@@ -7,8 +7,10 @@ EVENT_DRIVEN_ACTIONS: frozenset[str] = frozenset(
         "parity_progress",
         "ups_status",
         "notifications_overview",
+        "notifications_warnings",
         "owner",
         "server_status",
+        "display",
     }
 )
 
@@ -46,6 +48,12 @@ SNAPSHOT_ACTIONS = {
     "temperature": """
         subscription { systemMetricsTemperature { id sensors { id name type location current { value unit status } } summary { average hottest { id name current { value unit status } } coolest { id name current { value unit status } } warningCount criticalCount } } }
     """,
+    "notifications_warnings": """
+        subscription { notificationsWarningsAndAlerts { id title subject description importance type timestamp } }
+    """,
+    "display": """
+        subscription { displaySubscription { id theme unit scale locale total usage warning critical hot max } }
+    """,
 }
 
 COLLECT_ACTIONS = {
@@ -54,5 +62,8 @@ COLLECT_ACTIONS = {
     """,
     "log_tail": """
         subscription LogTail($path: String!) { logFile(path: $path) { path content totalLines startLine } }
+    """,
+    "plugin_install_updates": """
+        subscription { pluginInstallUpdates { operationId status output timestamp } }
     """,
 }
