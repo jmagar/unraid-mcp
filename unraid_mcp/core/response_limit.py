@@ -63,7 +63,7 @@ class StructuredResponseLimitingMiddleware(Middleware):
     def __init__(
         self,
         *,
-        max_size: int = 131072,
+        max_size: int = 40000,
         tools: list[str] | None = None,
     ) -> None:
         if max_size <= 0:

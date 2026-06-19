@@ -116,9 +116,10 @@ UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lowe
 
 # Maximum serialized tool-response size in bytes. Responses larger than this are
 # replaced with a structured, still-parseable truncation marker (see
-# core/response_limit.py) rather than hard-cut mid-JSON. Default 128 KB keeps a
-# single response well under the client context window.
-UNRAID_MCP_MAX_RESPONSE_BYTES = _parse_positive_int("UNRAID_MCP_MAX_RESPONSE_BYTES", 131072)
+# core/response_limit.py) rather than hard-cut mid-JSON. Default 40 KB (~10K
+# tokens) keeps a single response a small fraction of the client context window;
+# the per-list cap_list defaults do the primary bounding, this is the backstop.
+UNRAID_MCP_MAX_RESPONSE_BYTES = _parse_positive_int("UNRAID_MCP_MAX_RESPONSE_BYTES", 40000)
 
 # HTTP Authentication
 # Bearer token for HTTP transport (streamable-http / sse).
