@@ -10,7 +10,7 @@ move_items_to_position, update_view_preferences (25 subactions, plus a deprecate
 """
 
 import re
-from typing import Any
+from typing import Any, TypedDict
 
 from fastmcp import Context
 
@@ -67,49 +67,66 @@ _DOCKER_ROOT_MUTATIONS: dict[str, str] = {
 }
 
 # Docker "organizer" (folder/view) mutations. Each spec lists the required and
-# optional GraphQL variables, sourced from the `organizer_input` dict. The return
-# selection is trimmed to `version` — enough to confirm the layout changed without
-# serialising the full resolved organizer tree.
-_DOCKER_ORGANIZER: dict[str, dict[str, Any]] = {
+# optional GraphQL variables (sourced from the `organizer_input` dict), the
+# mutation string, and the response field to read back. The return selection is
+# trimmed to `version` — enough to confirm the layout changed without serialising
+# the full resolved organizer tree. Using a TypedDict lets `ty` catch a missing or
+# misspelled spec key at check time rather than at runtime.
+class _OrganizerSpec(TypedDict):
+    mutation: str
+    required: list[str]
+    optional: list[str]
+    result_field: str
+
+
+_DOCKER_ORGANIZER: dict[str, _OrganizerSpec] = {
     "create_folder": {
         "mutation": "mutation CreateDockerFolder($name: String!, $parentId: String, $childrenIds: [String!]) { createDockerFolder(name: $name, parentId: $parentId, childrenIds: $childrenIds) { version } }",
         "required": ["name"],
         "optional": ["parentId", "childrenIds"],
+        "result_field": "createDockerFolder",
     },
     "create_folder_with_items": {
         "mutation": "mutation CreateDockerFolderWithItems($name: String!, $parentId: String, $sourceEntryIds: [String!], $position: Float) { createDockerFolderWithItems(name: $name, parentId: $parentId, sourceEntryIds: $sourceEntryIds, position: $position) { version } }",
         "required": ["name"],
         "optional": ["parentId", "sourceEntryIds", "position"],
+        "result_field": "createDockerFolderWithItems",
     },
     "rename_folder": {
         "mutation": "mutation RenameDockerFolder($folderId: String!, $newName: String!) { renameDockerFolder(folderId: $folderId, newName: $newName) { version } }",
         "required": ["folderId", "newName"],
         "optional": [],
+        "result_field": "renameDockerFolder",
     },
     "set_folder_children": {
         "mutation": "mutation SetDockerFolderChildren($folderId: String, $childrenIds: [String!]!) { setDockerFolderChildren(folderId: $folderId, childrenIds: $childrenIds) { version } }",
         "required": ["childrenIds"],
         "optional": ["folderId"],
+        "result_field": "setDockerFolderChildren",
     },
     "delete_entries": {
         "mutation": "mutation DeleteDockerEntries($entryIds: [String!]!) { deleteDockerEntries(entryIds: $entryIds) { version } }",
         "required": ["entryIds"],
         "optional": [],
+        "result_field": "deleteDockerEntries",
     },
     "move_entries_to_folder": {
         "mutation": "mutation MoveDockerEntries($sourceEntryIds: [String!]!, $destinationFolderId: String!) { moveDockerEntriesToFolder(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId) { version } }",
         "required": ["sourceEntryIds", "destinationFolderId"],
         "optional": [],
+        "result_field": "moveDockerEntriesToFolder",
     },
     "move_items_to_position": {
         "mutation": "mutation MoveDockerItems($sourceEntryIds: [String!]!, $destinationFolderId: String!, $position: Float!) { moveDockerItemsToPosition(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId, position: $position) { version } }",
         "required": ["sourceEntryIds", "destinationFolderId", "position"],
         "optional": [],
+        "result_field": "moveDockerItemsToPosition",
     },
     "update_view_preferences": {
         "mutation": "mutation UpdateDockerViewPreferences($viewId: String, $prefs: JSON!) { updateDockerViewPreferences(viewId: $viewId, prefs: $prefs) { version } }",
         "required": ["prefs"],
         "optional": ["viewId"],
+        "result_field": "updateDockerViewPreferences",
     },
 }
 
@@ -359,17 +376,7 @@ async def _handle_docker(
                 )
             variables = {k: v for k, v in supplied.items() if v is not None}
             data = await _client.make_graphql_request(spec["mutation"], variables)
-            field = {
-                "create_folder": "createDockerFolder",
-                "create_folder_with_items": "createDockerFolderWithItems",
-                "rename_folder": "renameDockerFolder",
-                "set_folder_children": "setDockerFolderChildren",
-                "delete_entries": "deleteDockerEntries",
-                "move_entries_to_folder": "moveDockerEntriesToFolder",
-                "move_items_to_position": "moveDockerItemsToPosition",
-                "update_view_preferences": "updateDockerViewPreferences",
-            }[subaction]
-            organizer = data.get(field)
+            organizer = data.get(spec["result_field"])
             return {
                 "success": organizer is not None,
                 "subaction": subaction,
