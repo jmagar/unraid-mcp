@@ -3,7 +3,7 @@
   "release-type": "python",
   "include-v-in-tag": true,
   "include-component-in-tag": false,
-  "bootstrap-sha": "454f346036af5354ba788b67c12945b7a1dda60d",
+  "bootstrap-sha": "074315f84feac865f6648d294c06f6f1095d8077",
   "packages": {
     ".": {
       "package-name": "unraid-mcp",
