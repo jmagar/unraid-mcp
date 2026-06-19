@@ -1,183 +1,69 @@
+"""Tests for the canonical Unraid GraphQL docs generator.
+
+The full reference and change report are rendered by external Node tools
+(graphql-markdown / GraphQL Inspector) invoked via ``npx``; those are exercised
+manually / in maintenance runs, not in the unit suite. These tests cover the
+pure-Python pieces: introspection→SDL conversion, the curated summary, and the
+no-op branches that need no network.
+"""
+
 from __future__ import annotations
 
-from bin.generate_unraid_api_reference import _build_changes_markdown
+import json
+from pathlib import Path
+
+from bin.generate_unraid_api_reference import (
+    _build_summary_markdown,
+    _doc_header,
+    _introspection_to_sdl,
+    _render_changes,
+)
 
 
-def _type_ref(
-    name: str | None = None, *, kind: str = "OBJECT", of_type: dict | None = None
-) -> dict:
-    return {"kind": kind, "name": name, "ofType": of_type}
+REPO_ROOT = Path(__file__).resolve().parents[1]
+INTROSPECTION_PATH = REPO_ROOT / "docs" / "unraid" / "UNRAID-API-INTROSPECTION.json"
 
 
-def _field(
-    name: str,
-    return_type: dict,
-    *,
-    args: list[dict] | None = None,
-    description: str | None = None,
-) -> dict:
-    return {
-        "name": name,
-        "description": description,
-        "isDeprecated": False,
-        "deprecationReason": None,
-        "args": args or [],
-        "type": return_type,
-    }
+def _load_schema() -> dict:
+    payload = json.loads(INTROSPECTION_PATH.read_text(encoding="utf-8"))
+    return payload["data"]["__schema"]
 
 
-def _arg(name: str, arg_type: dict, *, default: str | None = None) -> dict:
-    return {
-        "name": name,
-        "description": None,
-        "defaultValue": default,
-        "type": arg_type,
-    }
+def test_introspection_to_sdl_produces_schema_text() -> None:
+    payload = json.loads(INTROSPECTION_PATH.read_text(encoding="utf-8"))
+    sdl = _introspection_to_sdl(payload["data"])
+    assert "type Query" in sdl
+    # SDL should round-trip the root types declared in the introspection payload.
+    assert "type Mutation" in sdl
 
 
-def _schema(
-    *,
-    query_fields: list[dict],
-    mutation_fields: list[dict] | None = None,
-    subscription_fields: list[dict] | None = None,
-    extra_types: list[dict] | None = None,
-) -> dict:
-    types = [
-        {
-            "kind": "OBJECT",
-            "name": "Query",
-            "description": None,
-            "fields": query_fields,
-            "inputFields": None,
-            "interfaces": [],
-            "enumValues": None,
-            "possibleTypes": None,
-        },
-        {
-            "kind": "OBJECT",
-            "name": "Mutation",
-            "description": None,
-            "fields": mutation_fields or [],
-            "inputFields": None,
-            "interfaces": [],
-            "enumValues": None,
-            "possibleTypes": None,
-        },
-        {
-            "kind": "OBJECT",
-            "name": "Subscription",
-            "description": None,
-            "fields": subscription_fields or [],
-            "inputFields": None,
-            "interfaces": [],
-            "enumValues": None,
-            "possibleTypes": None,
-        },
-    ]
-    if extra_types:
-        types.extend(extra_types)
-    return {
-        "queryType": {"name": "Query"},
-        "mutationType": {"name": "Mutation"},
-        "subscriptionType": {"name": "Subscription"},
-        "directives": [],
-        "types": types,
-    }
+def test_doc_header_includes_source_and_timestamp() -> None:
+    header = _doc_header(
+        "My Doc", source="http://tower/graphql", generated_at="2026-01-01T00:00:00"
+    )
+    assert header.startswith("# My Doc")
+    assert "http://tower/graphql" in header
+    assert "2026-01-01T00:00:00" in header
 
 
-def test_changes_report_handles_missing_previous_snapshot() -> None:
-    current = _schema(query_fields=[_field("online", _type_ref("Boolean", kind="SCALAR"))])
-
-    report = _build_changes_markdown(
+def test_render_changes_without_previous_snapshot_needs_no_tool() -> None:
+    """With no previous schema there is nothing to diff — no npx call is made."""
+    out = _render_changes(
         None,
-        current,
-        source="https://tower.local/graphql",
-        generated_at="2026-04-05T18:00:00+00:00",
-        include_introspection=False,
+        Path("/nonexistent/current.graphql"),
+        source="test",
+        generated_at="2026-01-01T00:00:00",
     )
+    assert "# Unraid API Schema Changes" in out
+    assert "No previous introspection snapshot" in out
 
-    assert "No previous introspection snapshot was available" in report
-    assert "https://tower.local/graphql" in report
 
-
-def test_changes_report_lists_root_and_type_signature_deltas() -> None:
-    previous = _schema(
-        query_fields=[
-            _field("online", _type_ref("Boolean", kind="SCALAR")),
-            _field("server", _type_ref("Server")),
-        ],
-        mutation_fields=[_field("connectSignIn", _type_ref("Boolean", kind="SCALAR"))],
-        subscription_fields=[_field("ownerSubscription", _type_ref("Owner"))],
-        extra_types=[
-            {
-                "kind": "OBJECT",
-                "name": "Server",
-                "description": None,
-                "fields": [_field("id", _type_ref("ID", kind="SCALAR"))],
-                "inputFields": None,
-                "interfaces": [],
-                "enumValues": None,
-                "possibleTypes": None,
-            }
-        ],
+def test_build_summary_markdown_renders_root_tables() -> None:
+    schema = _load_schema()
+    summary = _build_summary_markdown(
+        schema, source="test", generated_at="2026-01-01T00:00:00", include_introspection=False
     )
-    current = _schema(
-        query_fields=[
-            _field("online", _type_ref("Boolean", kind="SCALAR")),
-            _field(
-                "server",
-                _type_ref("Server"),
-                args=[_arg("verbose", _type_ref("Boolean", kind="SCALAR"), default="false")],
-            ),
-            _field("cloud", _type_ref("Cloud")),
-        ],
-        mutation_fields=[],
-        subscription_fields=[
-            _field("ownerSubscription", _type_ref("Owner")),
-            _field("dockerContainerStats", _type_ref("DockerContainerStats")),
-        ],
-        extra_types=[
-            {
-                "kind": "OBJECT",
-                "name": "Server",
-                "description": None,
-                "fields": [
-                    _field("id", _type_ref("ID", kind="SCALAR")),
-                    _field("name", _type_ref("String", kind="SCALAR")),
-                ],
-                "inputFields": None,
-                "interfaces": [],
-                "enumValues": None,
-                "possibleTypes": None,
-            },
-            {
-                "kind": "OBJECT",
-                "name": "Cloud",
-                "description": None,
-                "fields": [],
-                "inputFields": None,
-                "interfaces": [],
-                "enumValues": None,
-                "possibleTypes": None,
-            },
-        ],
-    )
-
-    report = _build_changes_markdown(
-        previous,
-        current,
-        source="https://tower.local/graphql",
-        generated_at="2026-04-05T18:00:00+00:00",
-        include_introspection=False,
-    )
-
-    assert "## Query fields" in report
-    assert "`cloud`" in report
-    assert "## Mutation fields" in report
-    assert "`connectSignIn`" in report
-    assert "## Subscription fields" in report
-    assert "`dockerContainerStats`" in report
-    assert "### OBJECT" in report
-    assert "### `Server` (OBJECT)" in report
-    assert "`name(): String`" in report
-    assert "`server(verbose: Boolean = false): Server`" in report
+    assert "# Unraid API Introspection Summary" in summary
+    assert "## Schema Summary" in summary
+    assert "## Query Fields" in summary
+    assert "| Field | Return Type | Arguments |" in summary

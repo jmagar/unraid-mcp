@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`bin/generate_unraid_api_reference.py`**: replaced the hand-rolled Markdown
+  and schema-diff builders with official GraphQL tooling, invoked via `npx` on
+  demand (no committed JS dependencies):
+  - `UNRAID-API-COMPLETE-REFERENCE.md` is now rendered by
+    [graphql-markdown](https://github.com/exogen/graphql-markdown).
+  - `UNRAID-API-CHANGES.md` is now produced by
+    [GraphQL Inspector](https://the-guild.dev/graphql/inspector) `diff`.
+  - The condensed `UNRAID-API-SUMMARY.md` remains a curated, project-specific
+    table (no off-the-shelf tool produces that shape).
+  - Introspection is still fetched from a live API by default; a new
+    `--from-introspection PATH` flag regenerates the docs offline from a saved
+    payload (used by tests and for reproducible regeneration).
+  - Requires Node.js 18+ (`npx`) when rendering the reference/diff.
+- Regenerated the canonical `docs/unraid/` artifacts with the new pipeline.
+
 ## [1.5.1] - 2026-06-19
 
 ### Changed
