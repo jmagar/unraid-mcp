@@ -17,8 +17,6 @@
     }
   },
   "userConfig": {
-    "unraid_mcp_url": { "type": "string", "sensitive": false },
-    "unraid_mcp_token": { "type": "string", "sensitive": true },
     "unraid_api_url": { "type": "string", "sensitive": true },
     "unraid_api_key": { "type": "string", "sensitive": true }
   }
@@ -28,7 +26,7 @@
 ### Key fields
 
 - **mcpServers.unraid**: stdio transport via `uv run`. The `${CLAUDE_PLUGIN_ROOT}` variable resolves to the plugin installation directory.
-- **userConfig**: Four settings collected at install time. Sensitive values are stored encrypted and exposed as `$CLAUDE_PLUGIN_OPTION_*` environment variables in Bash subprocesses.
+- **userConfig**: Two settings collected at install time (`unraid_api_url`, `unraid_api_key`). Both are sensitive, stored encrypted, and exposed as `$CLAUDE_PLUGIN_OPTION_*` environment variables. `.mcp.json` wires them into the stdio server's `UNRAID_API_URL` / `UNRAID_API_KEY` env vars.
 
 ## Codex CLI (`.codex-plugin/plugin.json`)
 

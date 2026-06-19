@@ -2,24 +2,35 @@
 
 ## userConfig (Claude Code)
 
-The `.claude-plugin/plugin.json` defines four user-configurable settings:
+The `.claude-plugin/plugin.json` defines two user-configurable settings:
 
 | Key | Type | Sensitive | Default | Description |
 |-----|------|-----------|---------|-------------|
-| `unraid_mcp_url` | string | no | `https://unraid.tootie.tv/mcp` | URL of the MCP server |
-| `unraid_mcp_token` | string | yes | -- | Bearer token for MCP auth |
 | `unraid_api_url` | string | yes | -- | Unraid GraphQL API URL |
 | `unraid_api_key` | string | yes | -- | Unraid API key |
 
 ### How settings are used
 
-- **Non-sensitive**: Available as literal values in skill templates (`${user_config.unraid_mcp_url}`)
-- **Sensitive**: Available ONLY as `$CLAUDE_PLUGIN_OPTION_*` environment variables in Bash subprocesses
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_MCP_TOKEN`
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL`
-  - `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`
+Both values are sensitive and are exposed to plugin-spawned processes as
+`$CLAUDE_PLUGIN_OPTION_*` environment variables:
 
-Attempting `${user_config.unraid_api_key}` in a template will not work for sensitive values.
+- `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL`
+- `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`
+
+`.mcp.json` wires these into the stdio MCP server's environment so the server
+picks them up directly:
+
+```json
+"env": {
+  "UNRAID_API_URL": "${CLAUDE_PLUGIN_OPTION_UNRAID_API_URL}",
+  "UNRAID_API_KEY": "${CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY}"
+}
+```
+
+> The `${user_config.*}` placeholder form is **not** used here: referencing it
+> directly in a `.mcp.json` `env` block causes the MCP server to silently fail
+> to spawn (claude-code issue #51573). The `$CLAUDE_PLUGIN_OPTION_*` env-var
+> form is the reliable path.
 
 ## Settings (Gemini CLI)
 
