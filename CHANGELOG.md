@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-06-19
+
+### Fixed
+
+- **Test suite was fully broken on `main`.** `tests/test_generate_unraid_api_reference.py` imported from `scripts.` after the `scripts/` → `bin/` rename, causing a collection error that aborted the entire `pytest` run (so the `Test` CI job had been red and masking everything). Repointed the import to `bin.` and added `pythonpath = ["."]` to the pytest config so the top-level `bin` namespace package resolves.
+- Removed three obsolete tests in `tests/test_review_regressions.py` (`test_sync_env_rejects_multiline_values`, `test_sync_env_rejects_empty_bearer_token`, `test_ensure_gitignore_preserves_ignore_before_negation`) that invoked `hooks/scripts/sync-env.sh` and `ensure-gitignore.sh` — hook scripts that were intentionally deleted, so the tests failed with exit code 127.
+
+### Changed
+
+- **CI hardening** across `ci.yml`, `docker-publish.yml`, and `publish-pypi.yml`:
+  - Added least-privilege top-level `permissions: contents: read` to every workflow; jobs elevate only what they need.
+  - Added `concurrency` groups to cancel superseded runs (release publish uses `cancel-in-progress: false`).
+  - Pinned all GitHub Actions to commit SHAs (previously floating tags in `ci.yml`/`publish-pypi.yml`), matching the convention already used in `docker-publish.yml`.
+  - Added `timeout-minutes` to every job.
+  - CI now installs with `uv sync --locked` so a drifted `uv.lock` fails fast instead of being silently updated.
+  - The Trivy image scan now uploads its SARIF results to the GitHub Security tab (previously the report was generated and discarded); added `security-events: write` and `ignore-unfixed: true`.
+  - The `Version Sync Check` job now calls `bin/check-version-sync.sh` instead of duplicating the logic inline.
+
 ## [1.4.1] - 2026-06-19
 
 ### Fixed
