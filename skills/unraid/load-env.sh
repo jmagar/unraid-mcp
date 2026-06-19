@@ -25,6 +25,13 @@ load_env_file() {
     local default_file="$creds_dir/.env"
     local env_file="${1:-${UNRAID_ENV_FILE:-$default_file}}"
 
+    # Refuse a symlinked credentials file — it holds secrets and a planted symlink
+    # could redirect the read to attacker-controlled content (CWE-22). Mirrors the
+    # rmcp-template / axon convention.
+    if [[ -L "$env_file" ]]; then
+        echo "ERROR: refusing to read symlinked credentials file $env_file" >&2
+        return 1
+    fi
     if [[ ! -f "$env_file" ]]; then
         echo "ERROR: $env_file not found" >&2
         echo "Set the plugin's Unraid GraphQL API URL / API Key in the config form" >&2

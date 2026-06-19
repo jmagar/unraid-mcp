@@ -2,9 +2,39 @@ import json
 import os
 import stat
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def test_plugin_option_map_matches_manifest_userconfig():
+    """PLUGIN_OPTION_MAP, plugin.json userConfig, and .mcp.json must stay in sync.
+
+    Guards against a rename drifting the three apart and silently breaking
+    credential delivery (the plugin would collect a value the server never reads).
+    """
+    from unraid_mcp.core.setup import PLUGIN_OPTION_MAP
+
+    manifest = json.loads((_REPO_ROOT / ".claude-plugin" / "plugin.json").read_text())
+    user_keys = set(manifest["userConfig"])  # e.g. {"unraid_api_url", "unraid_api_key"}
+
+    expected = {f"CLAUDE_PLUGIN_OPTION_{k.upper()}": k.upper() for k in user_keys}
+    assert expected == PLUGIN_OPTION_MAP, (
+        "PLUGIN_OPTION_MAP is out of sync with plugin.json userConfig. "
+        f"expected {expected}, got {PLUGIN_OPTION_MAP}"
+    )
+
+    # .mcp.json must hand each canonical var the matching plugin option.
+    mcp = json.loads((_REPO_ROOT / ".mcp.json").read_text())
+    env = mcp["mcpServers"]["unraid-mcp"]["env"]
+    for option, canonical in PLUGIN_OPTION_MAP.items():
+        assert env.get(canonical) == f"${{{option}}}", (
+            f".mcp.json env[{canonical}] should be ${{{option}}}, got {env.get(canonical)!r}"
+        )
 
 
 # Both plugin-option env vars, so tests can clear them in one place. patch.dict
@@ -19,6 +49,22 @@ _OPTION_VARS = (
 def _clear_option_vars() -> None:
     for var in _OPTION_VARS:
         os.environ.pop(var, None)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://tower.local/graphql", "https://tower.local/graphql"),  # plain → unquoted
+        ("plainkey123", "plainkey123"),
+        ("has space", '"has space"'),  # whitespace → quoted
+        ("with#hash", '"with#hash"'),  # # would start a dotenv comment unquoted
+        ('a"b', '"a\\"b"'),  # embedded quote escaped
+    ],
+)
+def test_dotenv_value_quotes_only_when_needed(value, expected):
+    from unraid_mcp.core.setup import _dotenv_value
+
+    assert _dotenv_value(value) == expected
 
 
 def test_apply_plugin_options_maps_present_vars():

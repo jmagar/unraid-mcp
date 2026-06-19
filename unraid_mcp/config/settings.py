@@ -57,9 +57,20 @@ def _load_env_files() -> None:
     ]
 
     for dotenv_path in dotenv_paths:
-        if dotenv_path.exists():
-            load_dotenv(dotenv_path=dotenv_path)
-            break
+        if not dotenv_path.exists():
+            continue
+        # Refuse a symlinked credentials/env file — it holds secrets and a planted
+        # symlink could redirect the read to attacker-controlled content (CWE-22).
+        # Mirrors the rmcp-template / axon convention.
+        if dotenv_path.is_symlink():
+            print(
+                f"WARNING: refusing to load symlinked env file {dotenv_path} "
+                "(potential symlink attack); skipping.",
+                file=sys.stderr,
+            )
+            continue
+        load_dotenv(dotenv_path=dotenv_path)
+        break
 
 
 _load_env_files()

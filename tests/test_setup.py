@@ -129,6 +129,31 @@ def test_credentials_env_path_is_dot_env_inside_credentials_dir():
     assert s.CREDENTIALS_ENV_PATH == s.CREDENTIALS_DIR / ".env"
 
 
+def test_load_env_files_skips_symlinked_env(tmp_path):
+    """A symlinked credentials .env must not be loaded (planted-symlink defense)."""
+    import importlib
+
+    import unraid_mcp.config.settings as s
+
+    target = tmp_path / "real.env"
+    target.write_text("UNRAID_API_URL=https://symlinked-sentinel\nUNRAID_API_KEY=sentinelkey\n")
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    (creds / ".env").symlink_to(target)
+
+    os.environ.pop("UNRAID_API_URL", None)
+    os.environ.pop("UNRAID_API_KEY", None)
+    try:
+        with patch.dict(os.environ, {"UNRAID_CREDENTIALS_DIR": str(creds)}):
+            importlib.reload(s)
+            # The symlinked primary file is skipped, so the sentinel is never loaded.
+            assert s.UNRAID_API_URL != "https://symlinked-sentinel"
+            assert s.UNRAID_API_KEY != "sentinelkey"
+    finally:
+        os.environ.pop("UNRAID_CREDENTIALS_DIR", None)
+        importlib.reload(s)  # restore module state
+
+
 def test_write_env_creates_credentials_dir_with_700_permissions(tmp_path):
     """_write_env creates CREDENTIALS_DIR with mode 700 (owner-only)."""
     from unraid_mcp.core.setup import _write_env

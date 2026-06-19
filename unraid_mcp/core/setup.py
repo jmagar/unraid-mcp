@@ -133,6 +133,21 @@ def run_plugin_hook() -> int:
     return 0
 
 
+def _dotenv_value(value: str) -> str:
+    """Render a value for a .env assignment, quoting only when necessary.
+
+    Plain values (the common case — alphanumeric keys, scheme://host URLs) are
+    written unquoted. Values containing whitespace or characters that would break
+    unquoted parsing (`#`, quotes, backslash) are double-quoted with backslash and
+    double-quote escaped, so they round-trip through python-dotenv and the skill's
+    load-env.sh parser. Mirrors rmcp-template's dotenv_value.
+    """
+    if value and not any(ch in value for ch in (" ", "\t", "#", '"', "'", "\\")):
+        return value
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def _write_env(api_url: str, api_key: str) -> None:
     """Write or update credentials in CREDENTIALS_ENV_PATH.
 
@@ -156,19 +171,19 @@ def _write_env(api_url: str, api_key: str) -> None:
     for line in template_lines:
         stripped = line.strip()
         if stripped.startswith("UNRAID_API_URL="):
-            new_lines.append(f"UNRAID_API_URL={api_url}")
+            new_lines.append(f"UNRAID_API_URL={_dotenv_value(api_url)}")
             url_written = True
         elif stripped.startswith("UNRAID_API_KEY="):
-            new_lines.append(f"UNRAID_API_KEY={api_key}")
+            new_lines.append(f"UNRAID_API_KEY={_dotenv_value(api_key)}")
             key_written = True
         else:
             new_lines.append(line)
 
     # If not found in template (empty or missing keys), append at end
     if not url_written:
-        new_lines.append(f"UNRAID_API_URL={api_url}")
+        new_lines.append(f"UNRAID_API_URL={_dotenv_value(api_url)}")
     if not key_written:
-        new_lines.append(f"UNRAID_API_KEY={api_key}")
+        new_lines.append(f"UNRAID_API_KEY={_dotenv_value(api_key)}")
 
     # Atomic write: write to tmp file, set permissions, then rename into place.
     # os.replace is atomic on POSIX — prevents a crash from leaving a partial .env.

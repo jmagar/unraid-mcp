@@ -99,6 +99,19 @@ def test_missing_file_returns_nonzero_with_guidance(tmp_path: Path) -> None:
     assert ".unraid-mcp/.env" in result.stderr or "config form" in result.stderr.lower()
 
 
+def test_rejects_symlinked_env(tmp_path: Path) -> None:
+    """A symlinked credentials file must be refused (planted-symlink defense)."""
+    target = tmp_path / "real.env"
+    target.write_text("UNRAID_API_URL=https://x\nUNRAID_API_KEY=k\n")
+    (tmp_path / ".env").symlink_to(target)
+
+    result = _run('load_env_file && echo "loaded"', tmp_path)
+
+    assert result.returncode != 0
+    assert "loaded" not in result.stdout
+    assert "symlink" in result.stderr.lower()
+
+
 def test_load_unraid_credentials_validates(tmp_path: Path) -> None:
     """load_unraid_credentials fails when required keys are absent from the file."""
     (tmp_path / ".env").write_text("UNRAID_OTHER=x\n")  # no API_URL/API_KEY

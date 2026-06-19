@@ -9,7 +9,8 @@ SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../load-env.sh"
 
 QUERY_SCRIPT="$SCRIPT_DIR/unraid-query.sh"
-OUTPUT_FILE="$HOME/memory/bank/unraid-inventory.md"
+# Output path is overridable; defaults to the current directory (no hardcoded personal path).
+OUTPUT_FILE="${UNRAID_DASHBOARD_OUTPUT:-$PWD/unraid-inventory.md}"
 
 # Load credentials. Single-server installs use ~/.unraid-mcp/.env (UNRAID_API_URL /
 # UNRAID_API_KEY). Multi-server (fleet) installs additionally export UNRAID_<NAME>_URL /
