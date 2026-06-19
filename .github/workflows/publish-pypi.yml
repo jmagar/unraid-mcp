@@ -5,18 +5,27 @@ on:
     tags:
       - "v*.*.*"
 
+# Least-privilege default; the publish job elevates only what it needs.
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+
+# Never cancel an in-flight release.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: release
+    permissions:
+      contents: write   # create GitHub release
+      id-token: write   # PyPI trusted publishing + attestations
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
 
       - name: Verify tag matches pyproject.toml version
         run: |
@@ -31,7 +40,7 @@ jobs:
         run: uv build
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
         with:
           attestations: true
 

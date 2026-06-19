@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.generate_unraid_api_reference import _build_changes_markdown
+from bin.generate_unraid_api_reference import _build_changes_markdown
 
 
 def _type_ref(

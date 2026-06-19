@@ -6,17 +6,27 @@ on:
   pull_request:
     branches: ["main"]
 
+# Least-privilege default for GITHUB_TOKEN; jobs elevate only if they need to.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
       - name: Ruff check
         run: uv run ruff check unraid_mcp/ tests/
       - name: Ruff format
@@ -25,65 +35,54 @@ jobs:
   typecheck:
     name: Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
       - name: ty check
         run: uv run ty check unraid_mcp/
 
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
       - name: Run tests with coverage (excluding integration/slow)
         run: uv run pytest -m "not slow and not integration" --cov=unraid_mcp --cov-report=term-missing --tb=short -q
 
   version-sync:
     name: Version Sync Check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Check all version files are in sync
-        run: |
-          TOML_VER=$(grep '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
-          CLAUDE_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
-          CODEX_VER=$(python3 -c "import json; print(json.load(open('.codex-plugin/plugin.json'))['version'])")
-          GEMINI_VER=$(python3 -c "import json; print(json.load(open('gemini-extension.json'))['version'])")
-          echo "pyproject.toml:            $TOML_VER"
-          echo ".claude-plugin/plugin.json: $CLAUDE_VER"
-          echo ".codex-plugin/plugin.json:  $CODEX_VER"
-          echo "gemini-extension.json:      $GEMINI_VER"
-          FAIL=0
-          for VER in "$CLAUDE_VER" "$CODEX_VER" "$GEMINI_VER"; do
-            if [ "$TOML_VER" != "$VER" ]; then FAIL=1; fi
-          done
-          if [ "$FAIL" = "1" ]; then
-            echo "ERROR: Version mismatch — all four files must match pyproject.toml ($TOML_VER)"
-            exit 1
-          fi
-          echo "All versions in sync: $TOML_VER"
+        run: bash bin/check-version-sync.sh
 
   mcp-integration:
     name: MCP Integration Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [lint, typecheck, test]
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     env:
       UNRAID_API_URL: ${{ secrets.UNRAID_API_URL }}
       UNRAID_API_KEY: ${{ secrets.UNRAID_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
+        with:
+          version: "0.9.25"
       - name: Run integration tests
         if: env.UNRAID_API_URL != '' && env.UNRAID_API_KEY != ''
         continue-on-error: true
@@ -92,23 +91,25 @@ jobs:
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked
       - name: Dependency audit
         run: uvx pip-audit
 
   gitleaks:
     name: Secret Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc  # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
