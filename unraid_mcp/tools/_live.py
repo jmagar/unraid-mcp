@@ -9,6 +9,7 @@ from typing import Any
 
 from ..config.logging import logger
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.pagination import cap_list
 from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 
 
@@ -54,6 +55,7 @@ async def _handle_live(
     timeout: float,  # noqa: ASYNC109
     level: str | None = None,
     context: int = 2,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     # IMPORTANT: Every key in COLLECT_ACTIONS must have an explicit handler in _handle_live below.
     # Adding to COLLECT_ACTIONS without updating this function causes a ToolError at runtime.
@@ -98,26 +100,33 @@ async def _handle_live(
             )
             if level is not None:
                 events = [_filter_log_event(e, level, context) for e in events]
+            # Hard-cap the number of collected events so a noisy log over the
+            # window can't flood the agent's context.
+            capped, meta = cap_list(events, limit)
             return {
                 "success": True,
                 "subaction": subaction,
                 "path": path,
                 "collect_for": collect_for,
                 "filter": {"level": level, "context": context} if level is not None else None,
-                "event_count": len(events),
-                "events": events,
+                "event_count": len(capped),
+                "events": capped,
+                "page": meta,
             }
 
         if subaction == "notification_feed":
             events = await subscribe_collect(
                 COLLECT_ACTIONS["notification_feed"], collect_for=collect_for, timeout=timeout
             )
+            # Hard-cap the number of collected events (see log_tail above).
+            capped, meta = cap_list(events, limit)
             return {
                 "success": True,
                 "subaction": subaction,
                 "collect_for": collect_for,
-                "event_count": len(events),
-                "events": events,
+                "event_count": len(capped),
+                "events": capped,
+                "page": meta,
             }
 
         raise ToolError(f"Unhandled live subaction '{subaction}' — this is a bug")

@@ -78,6 +78,13 @@ Copy `.env.example` to `.env` and configure:
 ### Key Design Patterns
 - **Consolidated Action Pattern**: Each tool uses `action: Literal[...]` parameter to expose multiple operations via a single MCP tool, reducing context window usage
 - **Pre-built Query Dicts**: `QUERIES` and `MUTATIONS` dicts prevent GraphQL injection and organize operations
+- **List Capping**: List subactions bound output via `cap_list` (`core/pagination.py`) threaded
+  from the `limit` tool param. Capped responses carry a `page` meta dict
+  (`returned`/`total`/`truncated`, plus a `hint` when truncated). `limit<=0` returns everything;
+  omitting `limit` uses the tool default (20). Applies to `docker/list`, `disk/shares`,
+  `disk/disks`, `array/parity_history`, and the `live/log_tail` + `live/notification_feed`
+  event lists. `docker/details` fetches a single container via `docker.container(id:)` rather
+  than over-fetching the full container list.
 - **Destructive Action Safety**: `DESTRUCTIVE_ACTIONS` sets require `confirm=True` for dangerous operations
 - **Modular Architecture**: Clean separation of concerns across focused modules
 - **Error Handling**: Uses ToolError for user-facing errors, detailed logging for debugging

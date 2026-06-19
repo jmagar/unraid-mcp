@@ -13,6 +13,7 @@ from ..core import client as _client
 from ..core.client import DISK_TIMEOUT
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import (
     count_log_matches,
     filter_log_lines,
@@ -86,6 +87,7 @@ async def _handle_disk(
     confirm: bool,
     level: str | None = None,
     context: int = 2,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _DISK_SUBACTIONS, "disk")
 
@@ -176,9 +178,13 @@ async def _handle_disk(
             for share in shares:
                 if isinstance(share, dict) and not share.get("id"):
                     share["id"] = share.get("name")
-            return {"shares": shares}
+            # Cap AFTER id synthesis so synthesized ids are stable for the
+            # rows that are actually returned.
+            capped, meta = cap_list(shares, limit)
+            return {"shares": capped, "page": meta}
         if subaction == "disks":
-            return {"disks": data.get("disks", [])}
+            capped, meta = cap_list(data.get("disks", []), limit)
+            return {"disks": capped, "page": meta}
         if subaction == "disk_details":
             raw = data.get("disk", {})
             if not raw:
