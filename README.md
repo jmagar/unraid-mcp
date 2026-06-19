@@ -365,6 +365,13 @@ uv run python -m unraid_mcp
 docker compose up -d
 ```
 
+### Claude Desktop
+
+Newer Claude Desktop builds may reject the raw `streamable-http` URL config when the
+server runs in Docker. Connect through the `mcp-remote` proxy instead — see
+[docs/mcp/CONNECT.md](docs/mcp/CONNECT.md#claude-desktop-via-mcp-remote-proxy) for the
+macOS/Linux and Windows config snippets.
+
 ## Configuration
 
 Create `.env` from `.env.example`:
