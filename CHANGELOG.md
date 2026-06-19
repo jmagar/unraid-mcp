@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/jmagar/unraid-mcp/compare/v1.5.0...v1.6.0) (2026-06-19)
+
+
+### Features
+
+* replace credential elicitation with plugin userConfig + .env setup hook ([#47](https://github.com/jmagar/unraid-mcp/issues/47)) ([c6721c1](https://github.com/jmagar/unraid-mcp/commit/c6721c1d4c44216eaeeba2e242194f6536f0cf04))
+* severity + context filtering for live log subactions ([#26](https://github.com/jmagar/unraid-mcp/issues/26)) ([#46](https://github.com/jmagar/unraid-mcp/issues/46)) ([b97284c](https://github.com/jmagar/unraid-mcp/commit/b97284ca8b82231ef42294f4c4501fe11656e0a0))
+
+
+### Bug Fixes
+
+* **deps:** upgrade 6 packages to resolve all Dependabot security alerts ([#41](https://github.com/jmagar/unraid-mcp/issues/41)) ([5a74a1a](https://github.com/jmagar/unraid-mcp/commit/5a74a1a6965996bfc91754cd4754017a26d0d85d))
+* lower response-size backstop to 40KB (~10K tokens) ([#55](https://github.com/jmagar/unraid-mcp/issues/55)) ([176f9d7](https://github.com/jmagar/unraid-mcp/commit/176f9d77af5fea03e8a4e26de965866aae78e723))
+* matchedLines counts only severity matches; add returnedLines ([#48](https://github.com/jmagar/unraid-mcp/issues/48)) ([#49](https://github.com/jmagar/unraid-mcp/issues/49)) ([71cec32](https://github.com/jmagar/unraid-mcp/commit/71cec3231a9f4c03fba39e75ccf90f3c00c0b4a2))
+* structured response-size limit at 128KB with truncation marker ([#51](https://github.com/jmagar/unraid-mcp/issues/51)) ([f2c788c](https://github.com/jmagar/unraid-mcp/commit/f2c788c9a4d3e37c20209f084004845a5811fe1a))
+* tolerate null Share.id for auto-created shares ([#29](https://github.com/jmagar/unraid-mcp/issues/29)) ([#43](https://github.com/jmagar/unraid-mcp/issues/43)) ([f3bdcd4](https://github.com/jmagar/unraid-mcp/commit/f3bdcd4431c3fd7ce78842755a68bb0c85721fb2))
+* treat empty credential env vars as unset so ~/.unraid-mcp/.env loads ([#28](https://github.com/jmagar/unraid-mcp/issues/28)) ([#44](https://github.com/jmagar/unraid-mcp/issues/44)) ([e19c981](https://github.com/jmagar/unraid-mcp/commit/e19c981ec43d33ceb52cd2973d209acb810c8a52))
+
+
+### Performance Improvements
+
+* cap docker/disk/array/live lists; fetch single docker container ([#53](https://github.com/jmagar/unraid-mcp/issues/53)) ([d6cd7d3](https://github.com/jmagar/unraid-mcp/commit/d6cd7d338896600bc7e0c53059c8b37ed1ffb421))
+* scope rclone/config_form, trim oidc/rclone fields, cap key/plugin lists, clamp notification limit ([#54](https://github.com/jmagar/unraid-mcp/issues/54)) ([f80a41b](https://github.com/jmagar/unraid-mcp/commit/f80a41bf71cf38e01d44295614da062f9ee3336f))
+* trim system/array,overview echoes and cap timezones ([#52](https://github.com/jmagar/unraid-mcp/issues/52)) ([10cef5f](https://github.com/jmagar/unraid-mcp/commit/10cef5ffcacd916992a2cfe772f7d31566dc4834))
+
+
+### Documentation
+
+* document Claude Desktop mcp-remote proxy config ([#2](https://github.com/jmagar/unraid-mcp/issues/2)) ([#45](https://github.com/jmagar/unraid-mcp/issues/45)) ([71d3c16](https://github.com/jmagar/unraid-mcp/commit/71d3c16ace1b1b1baaaa7e8819ef101cad3f6601))
+
 ## [1.5.0](https://github.com/jmagar/unraid-mcp/compare/v1.4.1...v1.5.0) (2026-06-19)
 
 
