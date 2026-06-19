@@ -199,8 +199,9 @@ def run_server() -> None:
         is_valid, missing = validate_required_config()
         if not is_valid:
             logger.warning(
-                "Missing configuration: %s. "
-                "Server will prompt for credentials on first tool call via elicitation.",
+                "Missing configuration: %s. Set the plugin's userConfig fields "
+                "(or UNRAID_API_URL / UNRAID_API_KEY in ~/.unraid-mcp/.env), then restart. "
+                "Tools will return a setup message until configured.",
                 ", ".join(missing),
             )
 

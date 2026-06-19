@@ -64,9 +64,10 @@ def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
             assert e.code == 0, f"Unexpected sys.exit({e.code}) — server crashed on missing creds"
         mock_logger.warning.assert_called()
         warning_msgs = [call[0][0] for call in mock_logger.warning.call_args_list]
-        assert any("elicitation" in msg for msg in warning_msgs), (
-            f"Expected a warning containing 'elicitation', got: {warning_msgs}"
+        assert any("restart" in msg.lower() for msg in warning_msgs), (
+            f"Expected a missing-config warning mentioning restart, got: {warning_msgs}"
         )
+        assert not any("elicitation" in msg.lower() for msg in warning_msgs)
 
 
 @pytest.mark.asyncio
