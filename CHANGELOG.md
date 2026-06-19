@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1](https://github.com/jmagar/unraid-mcp/compare/v1.6.0...v1.6.1) (2026-06-19)
+
+
+### Bug Fixes
+
+* **ci:** sync uv.lock self-version to 1.6.0 ([#58](https://github.com/jmagar/unraid-mcp/issues/58)) ([6e262f2](https://github.com/jmagar/unraid-mcp/commit/6e262f2cff7d0506a61268cd49e07d69a0ec6371))
+
+
+### Documentation
+
+* add 2026-06-19 session log (issue/PR triage + output audit) ([#56](https://github.com/jmagar/unraid-mcp/issues/56)) ([cfc390c](https://github.com/jmagar/unraid-mcp/commit/cfc390cda29306d9040cdb4b4a4c4924a447b9a4))
+
 ## [1.6.0](https://github.com/jmagar/unraid-mcp/compare/v1.5.0...v1.6.0) (2026-06-19)
 
 
