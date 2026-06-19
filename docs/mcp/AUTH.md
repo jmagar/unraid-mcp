@@ -40,7 +40,7 @@ UNRAID_MCP_BEARER_TOKEN=<your-token>
 ### Client configuration
 
 #### Claude Code plugin
-The `userConfig` in `.claude-plugin/plugin.json` includes `unraid_mcp_token` (sensitive: true). Claude Code prompts the user for this value during plugin installation.
+The bundled plugin runs the server over **stdio**, so no inbound bearer token is needed — the `userConfig` collects only `unraid_api_url` / `unraid_api_key` (the outbound Unraid GraphQL credentials), which `.mcp.json` wires into the server's environment. A bearer token applies only to direct HTTP deployments below.
 
 #### Direct HTTP
 ```bash

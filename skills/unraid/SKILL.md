@@ -12,9 +12,8 @@ description: "This skill should be used when the user mentions Unraid, asks to c
 **HTTP fallback**: Use when MCP tools are unavailable. Credentials are in Bash subprocesses
 as `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL` and `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`.
 Do NOT attempt `${user_config.unraid_api_key}` in curl — sensitive values only work
-as `$CLAUDE_PLUGIN_OPTION_*` in Bash subprocesses.
-
-**MCP URL**: `${user_config.unraid_mcp_url}`
+as `$CLAUDE_PLUGIN_OPTION_*` in Bash subprocesses. The fallback queries the Unraid
+GraphQL API directly with these credentials.
 
 ---
 

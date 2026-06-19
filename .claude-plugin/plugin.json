@@ -1,7 +1,7 @@
 {
   "name": "unraid-mcp",
   "displayName": "Unraid MCP",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "description": "Query, monitor, and manage Unraid servers via GraphQL API through MCP tools. Supports system info, Docker, VMs, array/parity, notifications, plugins, rclone, and live telemetry.",
   "author": {
     "name": "Jacob Magar",
@@ -33,19 +33,6 @@
     ]
   },
   "userConfig": {
-    "unraid_mcp_url": {
-      "type": "string",
-      "title": "Unraid MCP Server URL",
-      "description": "URL of the MCP server. Default works if running locally via uv or docker compose.",
-      "default": "https://unraid.tootie.tv/mcp",
-      "sensitive": false
-    },
-    "unraid_mcp_token": {
-      "type": "string",
-      "title": "MCP Server Bearer Token",
-      "description": "Bearer token for authenticating with the MCP server. Must match UNRAID_MCP_BEARER_TOKEN in the server's .env. Generate with: openssl rand -hex 32",
-      "sensitive": true
-    },
     "unraid_api_url": {
       "type": "string",
       "title": "Unraid GraphQL API URL",

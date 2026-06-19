@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-19
+
+### Added
+
+- **Claude Code plugin `userConfig` is now actually wired to the server.** `.mcp.json` maps the `unraid_api_url` / `unraid_api_key` plugin options into the stdio server's environment via `${CLAUDE_PLUGIN_OPTION_UNRAID_API_URL}` / `${CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY}` (previously these env vars were hardcoded to empty strings, so the configured values never reached the server). The reliable `$CLAUDE_PLUGIN_OPTION_*` env-var form is used rather than the `${user_config.*}` placeholder, which silently breaks MCP server spawn (claude-code #51573).
+
+### Removed
+
+- **HTTP-transport `userConfig` fields** (`unraid_mcp_url`, `unraid_mcp_token`) from `.claude-plugin/plugin.json`. The bundled plugin runs the server over stdio, so the remote MCP URL and bearer-token options were vestigial and never consumed.
+
 ## [1.4.2] - 2026-06-19
 
 ### Fixed
