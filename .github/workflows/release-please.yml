@@ -11,6 +11,12 @@ name: release-please
 # `pull-requests: write`. The default GITHUB_TOKEN deliberately does NOT trigger
 # downstream workflows, so tags/releases it creates would never reach publish-pypi
 # or docker-publish. Store the token as the RELEASE_PLEASE_TOKEN secret.
+#
+# release-please bumps the version in pyproject.toml + the plugin manifests but NOT
+# in uv.lock (which records the project's own version). Left unsynced, the release
+# PR's `uv sync --locked` jobs (Test, Lint, Type Check, Security Audit) fail. The
+# "Sync uv.lock" step below regenerates uv.lock on the release PR branch so those
+# checks pass.
 
 on:
   push:
@@ -25,7 +31,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # When a release PR was opened/updated, sync uv.lock to the bumped version on
+      # that branch. Runs only for release PRs (not when a release is tagged).
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          ref: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+      - name: Sync uv.lock with the version bump
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: |
+          set -euo pipefail
+          uv lock
+          if git diff --quiet -- uv.lock; then
+            echo "uv.lock already in sync; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add uv.lock
+          git commit -m "chore: sync uv.lock with release version bump"
+          git push
