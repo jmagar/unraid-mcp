@@ -234,11 +234,13 @@ class BearerAuthMiddleware:
 
 
 class HealthMiddleware:
-    """ASGI middleware that responds 200 to GET /health without authentication.
+    """ASGI middleware that responds 200 to GET/HEAD /health without authentication.
 
     Place this OUTSIDE BearerAuthMiddleware (first in the middleware list) so it
-    intercepts GET /health before auth — no bypass needed in BearerAuthMiddleware.
-    Only GET is handled; other methods fall through to the auth layer.
+    intercepts /health before auth — no bypass needed in BearerAuthMiddleware.
+    Both GET and HEAD are handled (HEAD is what ``wget --spider`` sends, and many
+    health probes use it); other methods fall through to the auth layer. Per HTTP
+    semantics, HEAD returns the same status/headers as GET but with no body.
     """
 
     _BODY: bytes = b'{"status":"ok"}'
@@ -258,10 +260,13 @@ class HealthMiddleware:
         if (
             scope["type"] == "http"
             and posixpath.normpath(scope["path"]) == "/health"
-            and scope["method"] == "GET"
+            and scope["method"] in ("GET", "HEAD")
         ):
+            # HEAD shares GET's status and headers (incl. content-length) but
+            # carries no body, per RFC 9110.
+            body = b"" if scope["method"] == "HEAD" else self._BODY
             await send({"type": "http.response.start", "status": 200, "headers": self._HEADERS})
-            await send({"type": "http.response.body", "body": self._BODY, "more_body": False})
+            await send({"type": "http.response.body", "body": body, "more_body": False})
             return
         await self.app(scope, receive, send)
 

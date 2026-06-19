@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`HealthMiddleware`**: now handles `HEAD /health` in addition to `GET /health`
+  without bearer auth. Docker's image healthcheck uses `wget --spider`, which
+  sends a `HEAD` request that previously fell through to bearer auth and returned
+  `401 Unauthorized`, marking the container `unhealthy` whenever
+  `UNRAID_MCP_BEARER_TOKEN` was configured. HEAD returns the same status/headers
+  as GET with an empty body per RFC 9110. (#31)
+
 ### Changed
 - **`bin/generate_unraid_api_reference.py`**: replaced the hand-rolled Markdown
   and schema-diff builders with official GraphQL tooling, invoked via `npx` on

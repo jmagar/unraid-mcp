@@ -23,6 +23,7 @@ from unraid_mcp.core.auth import (
     _RATE_MAX_FAILURES,
     _RATE_WINDOW_SECS,
     BearerAuthMiddleware,
+    HealthMiddleware,
     WellKnownMiddleware,
 )
 
@@ -448,6 +449,72 @@ class TestStartupGuard:
             s.UNRAID_MCP_TRANSPORT = orig_transport
             s.UNRAID_MCP_BEARER_TOKEN = orig_token
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
+
+
+# ---------------------------------------------------------------------------
+# HealthMiddleware — unauthenticated GET/HEAD /health (regression for #31)
+#
+# Docker's image healthcheck uses `wget --spider`, which sends HEAD /health.
+# The middleware previously only handled GET, so HEAD fell through to bearer
+# auth and returned 401, marking the container unhealthy.
+# ---------------------------------------------------------------------------
+
+
+async def _run_health(method: str, path: str = "/health"):
+    """Run HealthMiddleware over BearerAuth and return (status, headers, body, app_called)."""
+    inner, called = _app_called_flag()
+    authed = BearerAuthMiddleware(inner, token="secret", disabled=False)
+    mw = HealthMiddleware(authed)
+    scope = {
+        "type": "http",
+        "method": method,
+        "path": path,
+        "headers": [],  # no Authorization header
+        "client": ("127.0.0.1", 9999),
+    }
+    received: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg: dict):
+        received.append(msg)
+
+    await mw(scope, receive, send)
+    start = next(m for m in received if m["type"] == "http.response.start")
+    body_msg = next(m for m in received if m["type"] == "http.response.body")
+    headers = {k.decode(): v.decode() for k, v in start["headers"]}
+    return start["status"], headers, body_msg["body"], called["value"]
+
+
+class TestHealthMiddleware:
+    def _run(self, method, path="/health"):
+        return asyncio.get_event_loop().run_until_complete(_run_health(method, path))
+
+    def test_get_health_returns_200_without_auth(self):
+        status, _, body, called = self._run("GET")
+        assert status == 200
+        assert body == b'{"status":"ok"}'
+        assert not called  # never reached the auth layer
+
+    def test_head_health_returns_200_without_auth(self):
+        """Regression for #31: `wget --spider` sends HEAD and must not 401."""
+        status, headers, body, called = self._run("HEAD")
+        assert status == 200
+        # HEAD carries no body but keeps GET's content-length header.
+        assert body == b""
+        assert headers["content-length"] == str(len(b'{"status":"ok"}'))
+        assert not called
+
+    def test_normalized_path_still_matches(self):
+        status, _, _, _ = self._run("HEAD", path="/health/")
+        assert status == 200
+
+    def test_post_health_falls_through_to_auth(self):
+        """Other methods are not health probes — they hit the auth layer (401)."""
+        status, _, _, called = self._run("POST")
+        assert status == 401
+        assert not called
 
 
 # ---------------------------------------------------------------------------
