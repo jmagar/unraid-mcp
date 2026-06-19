@@ -6,7 +6,7 @@ Complete listing of all plugin components.
 
 | Tool | Type | Module | Description |
 | --- | --- | --- | --- |
-| `unraid` | Primary | `tools/unraid.py` | Unified action router: 15 domains, 107 subactions |
+| `unraid` | Primary | `tools/unraid.py` | Unified action router: 15 domains, 108 subactions |
 | `unraid_help` | Helper | `tools/unraid.py` | Returns markdown reference for all actions |
 | `diagnose_subscriptions` | Diagnostic | `subscriptions/diagnostics.py` | Inspect subscription states, errors, WebSocket URLs |
 | `test_subscription_query` | Diagnostic | `subscriptions/diagnostics.py` | Test a GraphQL subscription query (allowlisted fields) |

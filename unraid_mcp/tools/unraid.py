@@ -202,7 +202,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `health` | `check`, `test_connection`, `diagnose`, `setup` | |
 | `array` | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
 | `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
-| `docker` | `list`, `details`, `start`, `stop`, `restart`, `networks`, `network_details` | |
+| `docker` | `list`, `details`, `ports`, `start`, `stop`, `restart`, `networks`, `network_details` | |
 | `vm` | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`*, `reboot`, `reset`* | |
 | `notification` | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`*, `delete_archived`* | |
 | `key` | `list`, `get`, `create`, `update`, `delete`*, `add_role`, `remove_role` | |
@@ -364,7 +364,8 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ disk            │ shares, disks, disk_details, log_files, logs, flash_backup*          │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ docker          │ list, details, start, stop, restart, networks, network_details       │
+        │ docker          │ list, details, ports, start, stop, restart, networks,                │
+        │                 │ network_details                                                      │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ vm              │ list, details, start, stop, pause, resume,                           │
         │                 │ force_stop*, reboot, reset*                                          │

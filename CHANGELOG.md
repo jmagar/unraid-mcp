@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-04-28
+
+### Added
+
+- **`docker/ports`**: New aggregator subaction returning all host port bindings across running containers in a single call. Sorted by `(host_port, protocol)`, includes `host_port`, `host_ip`, `container`, `container_port`, and `protocol` for each binding. Skips exited containers and internal-only ports (`publicPort=null`). Reuses the existing `details` GraphQL query — no schema changes. Replaces the N-call pattern of iterating `docker/details` per container when answering "what's using host port X" or "what ports are taken before deploying a new container."
+- **Unit tests** for `docker/ports` covering: aggregation across multiple running containers (sorted), skipping exited containers, skipping internal-only ports, host-network containers (empty `ports[]`), multi-port containers emitting one binding each, empty container list, unnamed-container fallback, query-reuse verification, case-insensitive state matching (parametrized over multiple casings), and protocol tie-break ordering when two bindings share a host port.
+
+### Changed
+
+- Docker subaction count updated from 7 → 8 across docs (`README.md`, `docs/README.md`, `CLAUDE.md`, `.claude-plugin/README.md`, `docs/mcp/TOOLS.md`, `docs/stack/ARCH.md`) and the `unraid` tool's inline help table.
+- Top-level subaction count updated from 107 → 108 across all referenced docs (`CLAUDE.md`, `docs/mcp/CLAUDE.md`, `docs/README.md`, `docs/INVENTORY.md`, `docs/MARKETPLACE.md`, `docs/PUBLISHING.md`, `docs/repo/MEMORY.md`, `docs/mcp/TOOLS.md`, `.claude-plugin/README.md`, `unraid_mcp/tools/__init__.py`).
+- `tests/test_docker.py` per-file-ignores in `pyproject.toml` extended with `S104` to permit `"0.0.0.0"` literals in mock Docker port fixtures (narrowed from `tests/**/*.py` to the only file that needs it after PR review).
+
+### Fixed
+
+- **`docker/ports` state check** is now case-insensitive (`(state or "").upper() == "RUNNING"`), matching the defensive pattern in `_health.py`. Prevents silent zero-binding returns if the Unraid GraphQL API ever returns lowercase state values.
+
 ## [1.3.8] - 2026-04-15
 
 ### Changed

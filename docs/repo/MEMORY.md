@@ -8,7 +8,7 @@ This project uses `bd` (beads) for persistent knowledge instead of MEMORY.md fil
 
 ### Architecture
 
-- FastMCP server with consolidated `unraid` tool (15 action domains, 107 subactions)
+- FastMCP server with consolidated `unraid` tool (15 action domains, 108 subactions)
 - 4-layer MCP middleware chain: logging, error handling, rate limiting, response limiting
 - 3-layer ASGI middleware: health bypass, well-known discovery, bearer auth
 - WebSocket subscription manager for 10 live data streams

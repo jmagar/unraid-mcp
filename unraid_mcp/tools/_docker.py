@@ -1,6 +1,7 @@
 """Docker domain handler for the Unraid MCP tool.
 
-Covers: list, details, start, stop, restart, networks, network_details (7 subactions).
+Covers: list, details, ports, start, stop, restart, networks, network_details
+(8 subactions).
 """
 
 import re
@@ -34,7 +35,10 @@ _DOCKER_MUTATIONS: dict[str, str] = {
 # "logs" has no GraphQL query (field removed in Unraid 7.2.x) but is still a
 # recognised subaction so validation passes and the informative ToolError below
 # is returned rather than a generic "Invalid action" message.
-_DOCKER_SUBACTIONS: set[str] = set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs"}
+# "ports" reuses the "details" query and aggregates host port bindings client-side.
+_DOCKER_SUBACTIONS: set[str] = (
+    set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs", "ports"}
+)
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart"}
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 _DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
@@ -122,6 +126,33 @@ async def _handle_docker(
                 if c.get("id") == actual_id:
                     return c
             raise ToolError(f"Container '{container_id}' not found in details response.")
+
+        if subaction == "ports":
+            data = await _client.make_graphql_request(_DOCKER_QUERIES["details"])
+            containers = safe_get(data, "docker", "containers", default=[])
+            bindings: list[dict[str, Any]] = []
+            for container in containers:
+                # Case-insensitive state check — matches the defensive pattern in _health.py
+                # since Docker state values appear in both upper- and lower-case across the API.
+                if (container.get("state") or "").upper() != "RUNNING":
+                    continue
+                names = container.get("names") or []
+                container_name = names[0].lstrip("/") if names else "<unnamed>"
+                for port in container.get("ports") or []:
+                    public_port = port.get("publicPort")
+                    if public_port is None:
+                        continue
+                    bindings.append(
+                        {
+                            "host_port": public_port,
+                            "host_ip": port.get("ip") or "0.0.0.0",  # noqa: S104 — Docker reports "0.0.0.0" for any-interface bindings
+                            "container": container_name,
+                            "container_port": port.get("privatePort"),
+                            "protocol": port.get("type"),
+                        }
+                    )
+            bindings.sort(key=lambda b: (b["host_port"], b.get("protocol") or ""))
+            return {"bindings": bindings, "count": len(bindings)}
 
         if subaction == "networks":
             data = await _client.make_graphql_request(_DOCKER_QUERIES["networks"])

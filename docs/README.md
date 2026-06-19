@@ -4,7 +4,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/unraid-mcp)](https://pypi.org/project/unraid-mcp/) [![ghcr.io](https://img.shields.io/badge/ghcr.io-jmagar%2Funraid--mcp-blue?logo=docker)](https://github.com/jmagar/unraid-mcp/pkgs/container/unraid-mcp)
 
-MCP server for Unraid NAS management. Exposes a unified `unraid` action router with 15 action domains and 107 subactions, plus `unraid_help` and two diagnostic tools, all backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
+MCP server for Unraid NAS management. Exposes a unified `unraid` action router with 15 action domains and 108 subactions, plus `unraid_help` and two diagnostic tools, all backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
 
 ## Overview
 
@@ -12,7 +12,7 @@ Four MCP tools are exposed:
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action router for all Unraid operations (15 domains, 107 subactions) |
+| `unraid` | Unified action router for all Unraid operations (15 domains, 108 subactions) |
 | `unraid_help` | Returns markdown documentation for all actions and parameters |
 | `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
 | `test_subscription_query` | Test a specific GraphQL subscription query against allowlisted fields |
@@ -44,7 +44,7 @@ Single entry point for all Unraid operations. Select the operation with `action`
 | `health` (4) | `check`, `test_connection`, `diagnose`, `setup` | Health checks, connection test, credential setup |
 | `array` (13) | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`\*, `add_disk`, `remove_disk`\*, `mount_disk`, `unmount_disk`, `clear_disk_stats`\* | Parity checks, array lifecycle, disk operations |
 | `disk` (6) | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`\* | Shares, physical disks, log files |
-| `docker` (7) | `list`, `details`, `start`, `stop`, `restart`, `networks`, `network_details` | Container lifecycle and network inspection |
+| `docker` (8) | `list`, `details`, `ports`, `start`, `stop`, `restart`, `networks`, `network_details` | Container lifecycle and network inspection |
 | `vm` (9) | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`\*, `reboot`, `reset`\* | Virtual machine lifecycle |
 | `notification` (12) | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`\*, `delete_archived`\* | Notification CRUD |
 | `key` (7) | `list`, `get`, `create`, `update`, `delete`\*, `add_role`, `remove_role` | API key management |
