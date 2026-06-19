@@ -40,6 +40,15 @@ def _run_shutdown_cleanup() -> None:
 
 def main() -> None:
     """Main entry point for the Unraid MCP Server."""
+    argv = sys.argv[1:]
+    if argv and argv[0] == "setup":
+        # `setup` and `setup plugin-hook` both run the non-interactive plugin hook,
+        # which maps CLAUDE_PLUGIN_OPTION_* -> ~/.unraid-mcp/.env. Used by the
+        # plugin's SessionStart / ConfigChange hooks.
+        from .core.setup import run_plugin_hook
+
+        sys.exit(run_plugin_hook())
+
     try:
         from .server import run_server
 
