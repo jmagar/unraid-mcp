@@ -21,7 +21,12 @@ from ..core.utils import filter_log_lines, format_bytes, validate_subaction
 # ===========================================================================
 
 _DISK_QUERIES: dict[str, str] = {
-    "shares": "query GetSharesInfo { shares { id name free used size include exclude cache nameOrig comment allocator splitLevel floor cow color luksStatus } }",
+    # NOTE: `id` is intentionally omitted. Auto-created user shares (top-level
+    # folders with no /boot/config/shares/<name>.cfg) resolve Share.id to null,
+    # and the non-nullable Share.id field rejects the entire response — so no
+    # shares could be listed while any auto-share existed (issue #29). `name` is
+    # the stable identifier; the handler synthesizes `id` from `name`.
+    "shares": "query GetSharesInfo { shares { name free used size include exclude cache nameOrig comment allocator splitLevel floor cow color luksStatus } }",
     "disks": "query ListPhysicalDisks { disks { id device name } }",
     "disk_details": "query GetDiskDetails($id: PrefixedID!) { disk(id: $id) { id device name serialNum size temperature } }",
     "log_files": "query ListLogFiles { logFiles { name path size modifiedAt } }",
@@ -159,7 +164,14 @@ async def _handle_disk(
         )
 
         if subaction == "shares":
-            return {"shares": data.get("shares", [])}
+            shares = data.get("shares", []) or []
+            # `id` is no longer selected (see _DISK_QUERIES["shares"]); synthesize
+            # a stable id from `name` so downstream consumers expecting an `id`
+            # key still get one. `name` is the stable share identifier.
+            for share in shares:
+                if isinstance(share, dict) and not share.get("id"):
+                    share["id"] = share.get("name")
+            return {"shares": shares}
         if subaction == "disks":
             return {"disks": data.get("disks", [])}
         if subaction == "disk_details":

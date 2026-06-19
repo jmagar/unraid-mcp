@@ -37,6 +37,39 @@ If running the server separately (Docker, remote host):
 }
 ```
 
+## Claude Desktop (via mcp-remote proxy)
+
+Newer Claude Desktop builds may reject the raw `streamable-http` URL config
+(`{ "url": "...", "transport": "streamable-http" }`), especially when the server runs
+in Docker. The reliable workaround is to proxy the connection locally with the
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote) npm package, which speaks stdio
+to Claude Desktop and forwards to the HTTP endpoint.
+
+Add one of the following to your `claude_desktop_config.json` under `mcpServers`.
+Replace `<SERVER>` with your Unraid (or MCP server) host.
+
+**macOS / Linux:**
+
+```json
+"unraid": {
+  "command": "npx",
+  "args": ["-y", "mcp-remote", "http://<SERVER>:6970/mcp", "--allow-http"]
+}
+```
+
+**Windows:**
+
+```json
+"unraid": {
+  "command": "wsl",
+  "args": ["npx", "-y", "mcp-remote", "http://<SERVER>:6970/mcp", "--allow-http"]
+}
+```
+
+`--allow-http` permits a plain `http://` endpoint; omit it if the server is reachable
+over `https://`. If the server requires a Bearer token, append
+`--header "Authorization: Bearer <token>"`.
+
 ## Codex CLI
 
 The `.codex-plugin/plugin.json` provides Codex integration:
