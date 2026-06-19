@@ -6,6 +6,21 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/bin/sync-uv.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "matcher": "user_settings",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
           }
         ]
       }

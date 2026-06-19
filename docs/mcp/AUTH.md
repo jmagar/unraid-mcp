@@ -99,9 +99,9 @@ x-api-key: <UNRAID_API_KEY>
 
 ### Credential sources
 
-1. **Elicitation**: The `health/setup` subaction collects credentials interactively and writes them to `~/.unraid-mcp/.env`
+1. **Plugin userConfig**: The plugin config form supplies `CLAUDE_PLUGIN_OPTION_*` env vars; the `setup plugin-hook` (run on SessionStart / ConfigChange) persists them to `~/.unraid-mcp/.env`
 2. **Environment file**: Loaded from the `.env` priority chain at startup
-3. **Runtime update**: `apply_runtime_config()` updates module globals without touching `os.environ`
+3. **Hand-edited `.env`**: Create `~/.unraid-mcp/.env` directly (mode 600); the server reads it at startup
 
 ### SSL/TLS
 
@@ -126,5 +126,6 @@ These endpoints are handled before `BearerAuthMiddleware` in the ASGI middleware
 
 - [ENV.md](ENV.md) -- Environment variables for auth configuration
 - [TRANSPORT.md](TRANSPORT.md) -- Transport-specific auth requirements
-- [ELICITATION.md](ELICITATION.md) -- Interactive credential setup flow
+- [../SETUP.md](../SETUP.md) -- Credential setup (plugin userConfig + `.env`)
+- [ELICITATION.md](ELICITATION.md) -- Destructive action confirmation flow
 - [../GUARDRAILS.md](../GUARDRAILS.md) -- Security patterns

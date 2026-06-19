@@ -1,7 +1,7 @@
 import os
 import stat
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -44,25 +44,6 @@ def test_settings_is_configured_false_when_missing():
         assert settings.is_configured() is False
 
 
-def test_settings_apply_runtime_config_updates_module_globals():
-    import os
-
-    from unraid_mcp.config import settings
-
-    original_url = settings.UNRAID_API_URL
-    original_key = settings.UNRAID_API_KEY
-    try:
-        settings.apply_runtime_config("https://newurl.com/graphql", "newkey")
-        assert settings.UNRAID_API_URL == "https://newurl.com/graphql"
-        assert settings.UNRAID_API_KEY == "newkey"
-        # Credentials must NOT leak to os.environ (security fix: unraid-mcp-cbc)
-        assert os.environ.get("UNRAID_API_URL") != "https://newurl.com/graphql"
-        assert os.environ.get("UNRAID_API_KEY") != "newkey"
-    finally:
-        settings.UNRAID_API_URL = original_url
-        settings.UNRAID_API_KEY = original_key
-
-
 def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
     """Server should not sys.exit(1) when credentials are absent."""
     import unraid_mcp.config.settings as settings_mod
@@ -83,75 +64,16 @@ def test_run_server_does_not_exit_when_creds_missing(monkeypatch):
             assert e.code == 0, f"Unexpected sys.exit({e.code}) — server crashed on missing creds"
         mock_logger.warning.assert_called()
         warning_msgs = [call[0][0] for call in mock_logger.warning.call_args_list]
-        assert any("elicitation" in msg for msg in warning_msgs), (
-            f"Expected a warning containing 'elicitation', got: {warning_msgs}"
+        assert any("restart" in msg.lower() for msg in warning_msgs), (
+            f"Expected a missing-config warning mentioning restart, got: {warning_msgs}"
         )
-
-
-@pytest.mark.asyncio
-async def test_elicit_and_configure_writes_env_file(tmp_path):
-    """elicit_and_configure writes a .env file and calls apply_runtime_config."""
-    from unraid_mcp.core.setup import elicit_and_configure
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "accept"
-    mock_result.data = MagicMock()
-    mock_result.data.api_url = "https://myunraid.example.com/graphql"
-    mock_result.data.api_key = "abc123secret"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    creds_dir = tmp_path / "creds"
-    creds_file = creds_dir / ".env"
-
-    with (
-        patch("unraid_mcp.core.setup.CREDENTIALS_DIR", creds_dir),
-        patch("unraid_mcp.core.setup.CREDENTIALS_ENV_PATH", creds_file),
-        patch("unraid_mcp.core.setup.PROJECT_ROOT", tmp_path),
-        patch("unraid_mcp.core.setup.apply_runtime_config") as mock_apply,
-    ):
-        result = await elicit_and_configure(mock_ctx)
-
-    assert result is True
-    assert creds_file.exists()
-    content = creds_file.read_text()
-    assert "UNRAID_API_URL=https://myunraid.example.com/graphql" in content
-    assert "UNRAID_API_KEY=abc123secret" in content
-    mock_apply.assert_called_once_with("https://myunraid.example.com/graphql", "abc123secret")
-
-
-@pytest.mark.asyncio
-async def test_elicit_and_configure_returns_false_on_decline():
-
-    from unraid_mcp.core.setup import elicit_and_configure
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "decline"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_and_configure(mock_ctx)
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_and_configure_returns_false_on_cancel():
-
-    from unraid_mcp.core.setup import elicit_and_configure
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "cancel"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_and_configure(mock_ctx)
-    assert result is False
+        assert not any("elicitation" in msg.lower() for msg in warning_msgs)
 
 
 @pytest.mark.asyncio
 async def test_make_graphql_request_raises_sentinel_when_unconfigured():
     """make_graphql_request raises CredentialsNotConfiguredError (not ToolError) when
-    credentials are absent, so callers can trigger elicitation."""
+    credentials are absent, so callers can surface setup instructions."""
     from unraid_mcp.config import settings as settings_mod
     from unraid_mcp.core.client import make_graphql_request
     from unraid_mcp.core.exceptions import CredentialsNotConfiguredError
@@ -205,6 +127,31 @@ def test_credentials_env_path_is_dot_env_inside_credentials_dir():
     import unraid_mcp.config.settings as s
 
     assert s.CREDENTIALS_ENV_PATH == s.CREDENTIALS_DIR / ".env"
+
+
+def test_load_env_files_skips_symlinked_env(tmp_path):
+    """A symlinked credentials .env must not be loaded (planted-symlink defense)."""
+    import importlib
+
+    import unraid_mcp.config.settings as s
+
+    target = tmp_path / "real.env"
+    target.write_text("UNRAID_API_URL=https://symlinked-sentinel\nUNRAID_API_KEY=sentinelkey\n")
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    (creds / ".env").symlink_to(target)
+
+    os.environ.pop("UNRAID_API_URL", None)
+    os.environ.pop("UNRAID_API_KEY", None)
+    try:
+        with patch.dict(os.environ, {"UNRAID_CREDENTIALS_DIR": str(creds)}):
+            importlib.reload(s)
+            # The symlinked primary file is skipped, so the sentinel is never loaded.
+            assert s.UNRAID_API_URL != "https://symlinked-sentinel"
+            assert s.UNRAID_API_KEY != "sentinelkey"
+    finally:
+        os.environ.pop("UNRAID_CREDENTIALS_DIR", None)
+        importlib.reload(s)  # restore module state
 
 
 def test_write_env_creates_credentials_dir_with_700_permissions(tmp_path):
@@ -320,19 +267,6 @@ def test_write_env_updates_existing_credentials_in_place(tmp_path):
     assert "old" not in content
 
 
-@pytest.mark.asyncio
-async def test_elicit_and_configure_returns_false_when_client_not_supported():
-    """elicit_and_configure returns False when client raises NotImplementedError."""
-
-    from unraid_mcp.core.setup import elicit_and_configure
-
-    mock_ctx = MagicMock()
-    mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
-
-    result = await elicit_and_configure(mock_ctx)
-    assert result is False
-
-
 def test_tool_error_handler_converts_credentials_not_configured_to_tool_error():
     """tool_error_handler wraps CredentialsNotConfiguredError in a ToolError."""
     import logging
@@ -365,118 +299,6 @@ def test_tool_error_handler_credentials_error_message_includes_path():
 
     assert str(CREDENTIALS_ENV_PATH) in str(exc_info.value)
     assert "setup" in str(exc_info.value).lower()
-
-
-# ---------------------------------------------------------------------------
-# elicit_reset_confirmation
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_ctx_none():
-    """Returns False immediately when no MCP context is available."""
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    result = await elicit_reset_confirmation(None, "https://example.com")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_true_when_user_confirms():
-    """Returns True when the user accepts and answers True."""
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "accept"
-    mock_result.data = True
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is True
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_user_answers_false():
-    """Returns False when the user accepts but answers False (does not want to reset)."""
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "accept"
-    mock_result.data = False
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_declined():
-    """Returns False when the user declines via action (dismisses the prompt)."""
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "decline"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_cancelled():
-    """Returns False when the user cancels the prompt."""
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "cancel"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_returns_false_when_not_implemented():
-    """Returns False (decline reset) when the MCP client does not support elicitation.
-
-    Auto-approving a destructive credential reset on non-interactive clients would
-    silently overwrite working credentials. Callers must use a client that supports
-    elicitation or configure credentials directly via the .env file.
-    """
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_ctx.elicit = AsyncMock(side_effect=NotImplementedError("elicitation not supported"))
-
-    result = await elicit_reset_confirmation(mock_ctx, "https://example.com")
-    assert result is False
-
-
-@pytest.mark.asyncio
-async def test_elicit_reset_confirmation_includes_current_url_in_prompt():
-    """The elicitation message includes the current URL so the user knows what they're replacing."""
-
-    from unraid_mcp.core.setup import elicit_reset_confirmation
-
-    mock_ctx = MagicMock()
-    mock_result = MagicMock()
-    mock_result.action = "decline"
-    mock_ctx.elicit = AsyncMock(return_value=mock_result)
-
-    await elicit_reset_confirmation(mock_ctx, "https://my-unraid.example.com:31337")
-
-    call_kwargs = mock_ctx.elicit.call_args
-    message = call_kwargs.kwargs.get("message") or call_kwargs.args[0]
-    assert "https://my-unraid.example.com:31337" in message
 
 
 @pytest.mark.asyncio

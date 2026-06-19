@@ -42,7 +42,8 @@ tests/
 +-- test_resources.py              # MCP resource tests
 +-- test_review_regressions.py     # Regression tests
 +-- test_settings.py               # Settings domain tests
-+-- test_setup.py                  # Elicitation setup flow tests
++-- test_setup.py                  # Credential .env write + sentinel error tests
++-- test_plugin_setup.py           # Plugin-option mapping + setup plugin-hook tests
 +-- test_snapshot.py               # WebSocket snapshot tests
 +-- test_storage.py                # Storage/disk domain tests
 +-- test_subscription_manager.py   # Subscription manager tests

@@ -24,7 +24,7 @@ The server supports streamable-http (default), SSE (deprecated), and stdio trans
 - `unraid_mcp/server.py`: FastMCP server with 4-layer middleware chain and ASGI bearer auth
 - `unraid_mcp/tools/`: 16 domain modules (array, customization, disk, docker, health, key, live, notification, oidc, plugin, rclone, setting, system, user, vm) plus the consolidated `unraid.py` router
 - `unraid_mcp/subscriptions/`: WebSocket subscription manager, resource registration, diagnostics, and snapshot queries
-- `unraid_mcp/core/`: GraphQL client, elicitation-based setup, destructive action guards, auth middleware
+- `unraid_mcp/core/`: GraphQL client, plugin-option credential setup, destructive action guards, auth middleware
 - `unraid_mcp/config/`: Settings management and structured logging
 - `skills/unraid/SKILL.md`: Client-facing skill documentation
 - `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `gemini-extension.json`: Client manifests
@@ -130,7 +130,9 @@ cp .env.example ~/.unraid-mcp/.env
 chmod 600 ~/.unraid-mcp/.env
 ```
 
-Or use the interactive setup wizard:
+Or, as a Claude Code plugin, set the *Unraid GraphQL API URL* / *Unraid API Key*
+fields in the plugin config form — the setup hook persists them to `~/.unraid-mcp/.env`.
+Check status any time with:
 
 ```python
 unraid(action="health", subaction="setup")

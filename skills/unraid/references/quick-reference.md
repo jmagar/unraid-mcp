@@ -7,7 +7,7 @@ All operations use: `unraid(action="<domain>", subaction="<operation>", [params]
 ### Health & Status
 
 ```python
-unraid(action="health",  subaction="setup")            # First-time credential setup
+unraid(action="health",  subaction="setup")            # Credential status + instructions (read-only)
 unraid(action="health",  subaction="check")            # Full health check
 unraid(action="health",  subaction="test_connection")  # Quick connectivity test
 unraid(action="system",  subaction="overview")         # Complete server summary

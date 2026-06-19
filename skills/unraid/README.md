@@ -1,160 +1,101 @@
-# Unraid API Skill
+# Unraid Skill
 
-Query and monitor Unraid servers via the GraphQL API.
+Query, monitor, and manage Unraid servers through the consolidated `unraid` MCP tool,
+with a `curl`-based HTTP fallback for when MCP tools are unavailable.
 
 ## What's Included
 
-This skill provides complete access to all 27 read-only Unraid GraphQL API endpoints.
+The skill drives the single `unraid` MCP tool, which uses `action` (domain) +
+`subaction` (operation) routing across 15 domains and ~108 subactions — e.g.
+`unraid(action="docker", subaction="list")`. See `SKILL.md` for the full domain tables.
 
 ### Files
 
 ```text
 skills/unraid/
-├── SKILL.md                           # Main skill documentation
-├── README.md                          # This file
+├── SKILL.md                       # Main skill documentation (domains, subactions, examples)
+├── README.md                      # This file
+├── load-env.sh                    # Parses ~/.unraid-mcp/.env for the HTTP fallback (this library is sourced, not run)
 ├── scripts/
-│   └── unraid-query.sh               # GraphQL query helper script
+│   ├── unraid-query.sh            # GraphQL query helper (sources load-env.sh)
+│   └── dashboard.sh               # System dashboard (single server, or a multi-server fleet)
 ├── examples/
-│   ├── monitoring-dashboard.sh       # Complete system dashboard
-│   ├── disk-health.sh                # Disk temperature & health check
-│   └── read-logs.sh                  # Log file reader
+│   ├── disk-health.sh             # Disk temperature & health check
+│   └── read-logs.sh               # Log file reader
 └── references/
-    ├── api-reference.md              # Complete API documentation
-    └── quick-reference.md            # Common queries cheat sheet
+    ├── quick-reference.md         # Common operations cheat sheet
+    ├── troubleshooting.md         # Error → fix guide
+    ├── api-reference.md           # GraphQL API reference
+    ├── endpoints.md               # Endpoint catalog
+    ├── introspection-schema.md    # Introspection notes
+    └── schema.graphql             # Raw GraphQL schema
 ```
 
 ## Installation
 
-This skill is part of the Unraid MCP plugin. Install via the Claude Code marketplace:
+This skill ships with the Unraid MCP plugin. Install via the Claude Code marketplace:
 
 ```bash
 /plugin marketplace add jmagar/unraid-mcp
-/plugin install unraid @unraid-mcp
+/plugin install unraid-mcp @unraid-mcp
 ```
 
-The plugin includes both the MCP server and this skill at `skills/unraid/`.
+## Credentials
+
+Configuration comes from the plugin's **userConfig** form (*Unraid GraphQL API URL* /
+*Unraid API Key*). Claude Code injects those values as `CLAUDE_PLUGIN_OPTION_*` only into
+plugin subprocesses (hooks/MCP), **not** the Bash tool — so the plugin's setup hook reads
+them and writes `~/.unraid-mcp/.env`, and the skill's scripts read that file via
+`load-env.sh` (which parses it, not sources it). For manual/Docker installs, create
+`~/.unraid-mcp/.env` directly:
+
+```bash
+UNRAID_API_URL=https://your-unraid-server/graphql
+UNRAID_API_KEY=your-api-key
+```
+
+Credentials are read once at server startup — restart the server after changing them.
+Check status any time (read-only) with `unraid(action="health", subaction="setup")`.
 
 ## Quick Start
 
-1. **Set your credentials:**
-   ```bash
-   export UNRAID_URL="https://your-unraid-server/graphql"
-   export UNRAID_API_KEY="your-api-key"
-   ```
+Preferred — use the MCP tool:
 
-2. **Run a query:**
-   ```bash
-   cd skills/unraid
-   ./scripts/unraid-query.sh -q "{ online }"
-   ```
+```python
+unraid(action="system", subaction="overview")
+unraid(action="health", subaction="check")
+unraid(action="docker", subaction="list")
+```
 
-3. **Run examples:**
-   ```bash
-   ./examples/monitoring-dashboard.sh
-   ./examples/disk-health.sh
-   ```
+HTTP fallback (when MCP tools are unavailable) — the helper sources `load-env.sh` for you:
+
+```bash
+"$CLAUDE_PLUGIN_ROOT/skills/unraid/scripts/unraid-query.sh" -q "{ online }"
+"$CLAUDE_PLUGIN_ROOT/skills/unraid/examples/disk-health.sh"
+```
 
 ## Triggers
 
-This skill activates when you mention:
-- "check Unraid"
-- "monitor Unraid"
-- "Unraid API"
-- "Unraid disk temperatures"
-- "Unraid array status"
-- "read Unraid logs"
-- And more Unraid-related monitoring tasks
-
-## Features
-
-- **27 working endpoints** - All read-only queries documented
-- **Helper script** - Easy CLI interface for GraphQL queries
-- **Example scripts** - Ready-to-use monitoring scripts
-- **Complete reference** - Detailed documentation with examples
-- **Quick reference** - Common queries cheat sheet
-
-## Endpoints Covered
-
-### System & Monitoring
-- System info (CPU, OS, hardware)
-- Real-time metrics (CPU %, memory %)
-- Configuration & settings
-- Log files (list & read)
-
-### Storage
-- Array status & disks
-- All physical disks (including cache/USB)
-- Network shares
-- Parity check status
-
-### Virtualization
-- Docker containers
-- Virtual machines
-
-### Power & Alerts
-- UPS devices
-- System notifications
-
-### Administration
-- API key management
-- User & authentication
-- Server registration
-- UI customization
+Activates on Unraid-related requests: check server health, array/parity status, disk
+temperatures, Docker container list/restart, VM start/stop, system logs, notifications,
+UPS/power status, live CPU/memory, API keys, and rclone remotes.
 
 ## Requirements
 
-- **Unraid 7.2+** (GraphQL API)
-- **API Key** with Viewer role
-- **jq** for JSON parsing (usually pre-installed)
-- **curl** for HTTP requests
-
-## Getting an API Key
-
-1. Log in to Unraid WebGUI
-2. Settings → Management Access → API Keys
-3. Click "Create API Key"
-4. Name: "monitoring" (or whatever you like)
-5. Role: Select "Viewer" (read-only)
-6. Copy the generated key
+- Unraid server with the GraphQL API enabled, and an API key (Settings → Management
+  Access → API Keys)
+- `curl` and `jq` for the HTTP fallback scripts (usually pre-installed)
 
 ## Documentation
 
-- **SKILL.md** - Start here for task-oriented guidance
-- **references/api-reference.md** - Complete endpoint reference
-- **references/quick-reference.md** - Quick query examples
-
-## Examples
-
-### System Status
-```bash
-./scripts/unraid-query.sh -q "{ online metrics { cpu { percentTotal } } }"
-```
-
-### Disk Health
-```bash
-./examples/disk-health.sh
-```
-
-### Complete Dashboard
-```bash
-./examples/monitoring-dashboard.sh
-```
-
-### Read Logs
-```bash
-./examples/read-logs.sh syslog 20
-```
+- `SKILL.md` — task-oriented guidance and the full domain/subaction tables
+- `references/quick-reference.md` — common operations cheat sheet
+- `references/troubleshooting.md` — error → fix guide
+- `references/api-reference.md` / `schema.graphql` — GraphQL API reference
 
 ## Notes
 
-- Disk/array sizes are in **kilobytes**; memory values (from `info.memory` and `metrics.memory`) are in **bytes**
-- Temperatures are in **Celsius**
-- Docker container logs are **not accessible** via API (use SSH)
-- Poll no faster than every **5 seconds** to avoid server load
-
-## Version
-
-- **Skill Version:** 0.2.0
-- **API Version:** Unraid 7.2 GraphQL
-- **Tested:** 2026-01-21
-- **Endpoints:** 27 working read-only queries
+- Array/disk sizes are in **kilobytes**; memory values are in **bytes**; temperatures in **Celsius**.
+- Docker container logs are **not** available via the API — use SSH + `docker logs`.
+- Destructive subactions require `confirm=True` (see the Destructive Actions table in `SKILL.md`).
+- Rate limit: 100 requests / 10 seconds.

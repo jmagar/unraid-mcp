@@ -1,50 +1,20 @@
-# MCP Elicitation
+# MCP Elicitation (Destructive Action Confirmation)
 
-Interactive credential and configuration entry via the MCP elicitation protocol.
+Interactive confirmation of destructive operations via the MCP elicitation protocol.
+
+> **Credential setup is not elicitation-based.** Credentials come from the plugin's
+> `userConfig` form (persisted to `~/.unraid-mcp/.env` by the `setup plugin-hook`)
+> or a hand-edited `.env`. See [../SETUP.md](../SETUP.md) and [ENV.md](ENV.md).
 
 ## What is elicitation
 
-Elicitation is an MCP protocol capability that allows servers to request information from users interactively through the client. Instead of requiring pre-configured environment variables, the server can prompt the user for missing values at runtime.
+Elicitation is an MCP protocol capability that lets the server request explicit
+confirmation from the user through the client before executing a destructive action.
 
 ## When elicitation is used
 
-- **First-run setup**: Server detects missing `UNRAID_API_URL` or `UNRAID_API_KEY` and prompts the user via `health/setup`.
-- **Credential rotation**: User triggers `health/setup` to reconfigure credentials, even when existing credentials are working.
-- **Destructive operation confirmation**: All 12 destructive subactions gate execution behind explicit user acknowledgment.
-
-## Credential setup flow
-
-### Implementation (`core/setup.py`)
-
-The `elicit_and_configure()` function handles first-run and reconfiguration:
-
-1. Client calls `unraid(action="health", subaction="setup")`
-2. If credentials exist:
-   - Server tests the connection (GraphQL query for `online` status)
-   - Reports whether connection is working, failing, or uncertain
-   - Asks via `elicit_reset_confirmation()` whether to overwrite (uses `bool` response type)
-   - If user declines, returns current status without changes
-3. Server sends elicitation request with `_UnraidCredentials` schema:
-   ```
-   Fields:
-     api_url: str  -- Unraid GraphQL endpoint (e.g. https://10-1-0-2.xxx.myunraid.net:31337)
-     api_key: str  -- API key from Unraid Settings > Management Access > API Keys
-   ```
-4. Client renders an interactive form
-5. User fills in values and submits
-6. Server writes to `~/.unraid-mcp/.env` (atomic: tmp file + `os.replace`)
-7. Sets directory to mode 700, file to mode 600
-8. Applies credentials to running process via `apply_runtime_config()`
-9. Returns success message
-
-### Connection probe behavior
-
-The setup wizard always prompts for confirmation before overwriting, even if the current connection is failing. This prevents a transient outage from silently triggering a credential reset.
-
-Status messages:
-- "Credentials already configured (and working)" -- connection test passed
-- "Credentials already configured (but the connection test failed -- may be a transient outage)" -- connection test failed
-- "Credentials not configured" -- no `.env` file found
+- **Destructive operation confirmation only**: the 12 destructive subactions gate
+  execution behind explicit user acknowledgment.
 
 ## Destructive operation confirmation
 
@@ -89,29 +59,20 @@ _ARRAY_DESTRUCTIVE = {"stop_array", "remove_disk", "clear_disk_stats"}
 | Codex CLI | Partial | Text-based prompts |
 | Gemini CLI | Partial | Text-based prompts |
 | MCP Inspector | Full | Form rendering in web UI |
-| Non-interactive | None | Falls back to `ToolError` with instructions |
+| Non-interactive | None | Falls back to `ToolError` instructing `confirm=True` |
 
 ## Fallback for unsupported clients
 
-When the client does not support elicitation (`NotImplementedError`):
+When the client does not support elicitation (`NotImplementedError`), destructive
+actions return a `ToolError`:
 
-**Credential setup**: Returns a `ToolError` with manual instructions:
-```
-Missing required configuration. Create ~/.unraid-mcp/.env with:
-  UNRAID_API_URL=https://your-unraid-server:port
-  UNRAID_API_KEY=your-api-key
-```
-
-**Destructive actions**: Returns a `ToolError` instructing:
-```
+```text
 Action 'stop_array' was not confirmed. Re-run with confirm=True to bypass elicitation.
 ```
 
-**Reset confirmation**: Silently declines the reset (returns False). Overwriting working credentials on a non-interactive client could be destructive.
-
 ## See Also
 
+- [../SETUP.md](../SETUP.md) -- credential setup (plugin userConfig + .env)
 - [AUTH.md](AUTH.md) -- How credentials are used after setup
-- [ENV.md](ENV.md) -- Environment variables set by elicitation
 - [TOOLS.md](TOOLS.md) -- Destructive action list
 - [../GUARDRAILS.md](../GUARDRAILS.md) -- Security patterns

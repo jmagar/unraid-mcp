@@ -26,7 +26,7 @@ class ToolError(FastMCPToolError):
 class CredentialsNotConfiguredError(Exception):
     """Raised when UNRAID_API_URL or UNRAID_API_KEY are not set.
 
-    Used as a sentinel to trigger elicitation rather than a hard crash.
+    Used as a sentinel so callers can surface setup instructions rather than crashing.
     """
 
     def __str__(self) -> str:

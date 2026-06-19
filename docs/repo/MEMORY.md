@@ -12,7 +12,7 @@ This project uses `bd` (beads) for persistent knowledge instead of MEMORY.md fil
 - 4-layer MCP middleware chain: logging, error handling, rate limiting, response limiting
 - 3-layer ASGI middleware: health bypass, well-known discovery, bearer auth
 - WebSocket subscription manager for 10 live data streams
-- Elicitation-based credential setup and destructive action gating
+- Plugin-option credential setup (setup plugin-hook -> .env) and elicitation-based destructive action gating
 
 ### Critical gotchas
 

@@ -44,7 +44,7 @@ unraid-mcp/
 |   |   +-- exceptions.py              # ToolError, CredentialsNotConfiguredError
 |   |   +-- guards.py                  # Destructive action gating via elicitation
 |   |   +-- middleware_refs.py         # Circular import breaker for error middleware
-|   |   +-- setup.py                   # Elicitation-based credential setup
+|   |   +-- setup.py                   # Plugin-option credential persistence (setup plugin-hook)
 |   |   +-- types.py                   # Shared type definitions
 |   |   +-- utils.py                   # safe_get, safe_display_url, path validation
 |   |   +-- validation.py             # Input validation helpers

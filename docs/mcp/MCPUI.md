@@ -30,11 +30,8 @@ Clients that support markdown rendering display this as formatted documentation.
 
 ## Elicitation forms
 
-### Credential setup form
-
-The `_UnraidCredentials` dataclass generates a two-field form:
-- `api_url` (string): "Your Unraid GraphQL endpoint"
-- `api_key` (string): "Found in Unraid > Settings > Management Access > API Keys"
+Elicitation is used only for destructive action confirmation. Credential setup is
+handled by the plugin's `userConfig` form — see [../SETUP.md](../SETUP.md).
 
 ### Destructive confirmation form
 
@@ -45,10 +42,6 @@ The confirmation message includes:
 - Bold action name
 - Human-readable description of the impact
 - "Are you sure you want to proceed?"
-
-### Reset confirmation
-
-Uses a simple `bool` response type, rendering as a yes/no prompt.
 
 ## Response formatting
 
@@ -69,5 +62,5 @@ Tool responses are formatted for LLM consumption:
 ## See Also
 
 - [TOOLS.md](TOOLS.md) -- Tool interface details
-- [ELICITATION.md](ELICITATION.md) -- Interactive form patterns
+- [ELICITATION.md](ELICITATION.md) -- Destructive confirmation form patterns
 - [RESOURCES.md](RESOURCES.md) -- Resource data formats

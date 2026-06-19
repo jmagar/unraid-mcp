@@ -9,9 +9,9 @@ Step-by-step instructions to get unraid-mcp running locally, in Docker, or as a 
 - An Unraid server with the API enabled (Settings > Management Access > API Keys)
 - Docker and Docker Compose (for container deployment)
 
-## Option 1: Interactive setup (recommended)
+## Option 1: Claude Code plugin (recommended)
 
-The server includes an elicitation-based setup wizard that collects credentials interactively.
+Configuration is collected by the plugin's config form — no interactive wizard.
 
 1. Install as a Claude Code plugin:
    ```bash
@@ -19,16 +19,18 @@ The server includes an elicitation-based setup wizard that collects credentials 
    /plugin install unraid-mcp @jmagar-claude-homelab
    ```
 
-2. Run the setup wizard:
+2. In the plugin's configuration form, set:
+   - **Unraid GraphQL API URL**: Your Unraid GraphQL endpoint (e.g. `https://10-1-0-2.xxx.myunraid.net:31337`)
+   - **Unraid API Key**: Found in Unraid > Settings > Management Access > API Keys
+
+3. On the next session start (and whenever you change these fields), a setup hook
+   persists them to `~/.unraid-mcp/.env` with mode 600 — so the server, CLI, and
+   Docker all share one source of truth. No manual file editing required.
+
+4. Check status / get help any time:
    ```python
    unraid(action="health", subaction="setup")
    ```
-
-3. The wizard prompts for:
-   - **API URL**: Your Unraid GraphQL endpoint (e.g. `https://10-1-0-2.xxx.myunraid.net:31337`)
-   - **API Key**: Found in Unraid > Settings > Management Access > API Keys
-
-4. Credentials are written to `~/.unraid-mcp/.env` with mode 600.
 
 5. Verify the connection:
    ```python
@@ -114,8 +116,10 @@ unraid(action="system", subaction="overview")
 ## Troubleshooting
 
 **"Credentials not configured"**
-- Run `unraid(action="health", subaction="setup")` to configure interactively
+- Set the plugin's *Unraid GraphQL API URL* / *Unraid API Key* fields (the setup
+  hook persists them to `~/.unraid-mcp/.env`), then restart the server
 - Or create `~/.unraid-mcp/.env` manually from `.env.example`
+- Run `unraid(action="health", subaction="setup")` to see current status + the exact path
 
 **"Connection refused"**
 - Verify `UNRAID_API_URL` is correct and accessible from the server host
