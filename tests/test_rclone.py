@@ -46,13 +46,12 @@ class TestRcloneActions:
         result = await tool_fn(action="rclone", subaction="list_remotes")
         assert len(result["remotes"]) == 1
 
-    async def test_config_form(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "rclone": {"configForm": {"id": "form:1", "dataSchema": {}, "uiSchema": {}}}
-        }
+    async def test_config_form_requires_provider_type(self, _mock_graphql: AsyncMock) -> None:
+        """Unscoped config_form is the largest payload; provider_type is required."""
         tool_fn = _make_tool()
-        result = await tool_fn(action="rclone", subaction="config_form")
-        assert result["id"] == "form:1"
+        with pytest.raises(ToolError, match="requires provider_type"):
+            await tool_fn(action="rclone", subaction="config_form")
+        _mock_graphql.assert_not_awaited()
 
     async def test_config_form_with_provider(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -191,3 +190,31 @@ class TestRcloneConfigDataValidation:
             config_data={"port": 22},
         )
         assert result["success"] is True
+
+
+class TestRcloneListCapping:
+    async def test_list_query_drops_parameters_and_config(self) -> None:
+        """LIST query must not over-select per-remote parameters/config (secrets)."""
+        from unraid_mcp.tools._rclone import _RCLONE_QUERIES
+
+        query = _RCLONE_QUERIES["list_remotes"]
+        assert "parameters" not in query
+        assert "config" not in query
+        assert "name" in query and "type" in query
+
+    async def test_list_remotes_caps_and_surfaces_page(self, _mock_graphql: AsyncMock) -> None:
+        remotes = [{"name": f"r{i}", "type": "s3"} for i in range(10)]
+        _mock_graphql.return_value = {"rclone": {"remotes": remotes}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="rclone", subaction="list_remotes", limit=3)
+        assert len(result["remotes"]) == 3
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == 10
+
+    async def test_list_remotes_limit_zero_returns_all(self, _mock_graphql: AsyncMock) -> None:
+        remotes = [{"name": f"r{i}", "type": "s3"} for i in range(10)]
+        _mock_graphql.return_value = {"rclone": {"remotes": remotes}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="rclone", subaction="list_remotes", limit=0)
+        assert len(result["remotes"]) == 10
+        assert result["page"]["truncated"] is False

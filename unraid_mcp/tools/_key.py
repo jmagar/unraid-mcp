@@ -11,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import safe_get, validate_subaction
 
 
@@ -44,6 +45,7 @@ async def _handle_key(
     permissions: list[str] | None,
     ctx: Context | None,
     confirm: bool,
+    limit: int = 20,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _KEY_SUBACTIONS, "key")
 
@@ -61,7 +63,9 @@ async def _handle_key(
         if subaction == "list":
             data = await _client.make_graphql_request(_KEY_QUERIES["list"])
             keys = data.get("apiKeys", [])
-            return {"keys": list(keys) if isinstance(keys, list) else []}
+            keys = list(keys) if isinstance(keys, list) else []
+            capped, page = cap_list(keys, limit)
+            return {"keys": capped, "page": page}
 
         if subaction == "possible_roles":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])

@@ -28,7 +28,24 @@ async def test_list_returns_plugins(_mock_graphql):
     }
     result = await _make_tool()(action="plugin", subaction="list")
     assert result["success"] is True
-    assert len(result["data"]["plugins"]) == 1
+    assert len(result["plugins"]) == 1
+    assert result["page"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_caps_and_surfaces_page(_mock_graphql):
+    _mock_graphql.return_value = {
+        "plugins": [
+            {"name": f"p{i}", "version": "1.0.0", "hasApiModule": True, "hasCliModule": False}
+            for i in range(10)
+        ]
+    }
+    result = await _make_tool()(action="plugin", subaction="list", limit=3)
+    assert len(result["plugins"]) == 3
+    assert result["page"]["truncated"] is True
+    assert result["page"]["total"] == 10
+    # Response must be a clean dict, not a raw GraphQL envelope.
+    assert "data" not in result
 
 
 @pytest.mark.asyncio

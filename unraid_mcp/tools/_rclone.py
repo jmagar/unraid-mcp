@@ -11,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import safe_get, validate_subaction
 from ..core.validation import DANGEROUS_KEY_PATTERN, validate_scalar_mapping
 
@@ -20,7 +21,9 @@ from ..core.validation import DANGEROUS_KEY_PATTERN, validate_scalar_mapping
 # ===========================================================================
 
 _RCLONE_QUERIES: dict[str, str] = {
-    "list_remotes": "query ListRCloneRemotes { rclone { remotes { name type parameters config } } }",
+    # List stays lean: full per-remote `parameters`/`config` (endpoints, secrets)
+    # are intentionally omitted — they bloat the payload and leak config on a LIST.
+    "list_remotes": "query ListRCloneRemotes { rclone { remotes { name type } } }",
     "config_form": "query GetRCloneConfigForm($formOptions: RCloneConfigFormInput) { rclone { configForm(formOptions: $formOptions) { id dataSchema uiSchema } } }",
 }
 
@@ -50,6 +53,7 @@ async def _handle_rclone(
     config_data: dict[str, Any] | None,
     ctx: Context | None,
     confirm: bool,
+    limit: int = 20,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _RCLONE_SUBACTIONS, "rclone")
 
@@ -67,15 +71,24 @@ async def _handle_rclone(
         if subaction == "list_remotes":
             data = await _client.make_graphql_request(_RCLONE_QUERIES["list_remotes"])
             remotes = safe_get(data, "rclone", "remotes", default=[])
-            return {"remotes": list(remotes) if isinstance(remotes, list) else []}
+            remotes = list(remotes) if isinstance(remotes, list) else []
+            capped, page = cap_list(remotes, limit)
+            # Full per-remote config (parameters/config) is intentionally dropped
+            # here; a per-remote detail subaction could expose it if ever needed.
+            return {"remotes": capped, "page": page}
 
         if subaction == "config_form":
-            variables: dict[str, Any] = {}
-            if provider_type:
-                variables["formOptions"] = {"providerType": provider_type}
-            data = await _client.make_graphql_request(
-                _RCLONE_QUERIES["config_form"], variables or None
-            )
+            # Unscoped, configForm can return JSON-Schema blobs for every provider —
+            # the single largest payload in the server. Require a provider_type so
+            # the response stays bounded to one provider's schema.
+            if not provider_type:
+                raise ToolError(
+                    "rclone/config_form requires provider_type (e.g. provider_type='s3'). "
+                    "Pass the rclone backend type to scope the returned config schema."
+                )
+            _validate_rclone_name(provider_type, "provider_type")
+            variables: dict[str, Any] = {"formOptions": {"providerType": provider_type}}
+            data = await _client.make_graphql_request(_RCLONE_QUERIES["config_form"], variables)
             form = safe_get(data, "rclone", "configForm", default={})
             if not form:
                 raise ToolError("No RClone config form data received")

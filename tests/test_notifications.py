@@ -146,6 +146,25 @@ class TestNotificationsActions:
         assert filter_var["limit"] == 10
         assert filter_var["offset"] == 5
 
+    async def test_list_limit_clamped_to_max(self, _mock_graphql: AsyncMock) -> None:
+        """A huge caller limit must be clamped so it can't dump thousands of rows."""
+        from unraid_mcp.tools._notification import _MAX_NOTIFICATION_LIMIT
+
+        _mock_graphql.return_value = {"notifications": {"list": []}}
+        tool_fn = _make_tool()
+        await tool_fn(action="notification", subaction="list", limit=5000)
+        filter_var = _mock_graphql.call_args[0][1]["filter"]
+        assert filter_var["limit"] == _MAX_NOTIFICATION_LIMIT
+
+    async def test_list_limit_zero_uses_max(self, _mock_graphql: AsyncMock) -> None:
+        from unraid_mcp.tools._notification import _MAX_NOTIFICATION_LIMIT
+
+        _mock_graphql.return_value = {"notifications": {"list": []}}
+        tool_fn = _make_tool()
+        await tool_fn(action="notification", subaction="list", limit=0)
+        filter_var = _mock_graphql.call_args[0][1]["filter"]
+        assert filter_var["limit"] == _MAX_NOTIFICATION_LIMIT
+
     async def test_delete_archived(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "deleteArchivedNotifications": {
