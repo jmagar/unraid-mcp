@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (3 Tools: 1 Primary + 2 Diagnostic)
 
 The server registers **3 MCP tools**:
-- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 108 subactions. Call it as `unraid(action="docker", subaction="list")`.
+- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 107 subactions. Call it as `unraid(action="docker", subaction="list")`.
 - **`diagnose_subscriptions`** — inspect subscription connection states, errors, and WebSocket URLs.
 - **`test_subscription_query`** — test a specific GraphQL subscription query (allowlisted fields only).
 
@@ -118,7 +118,7 @@ The server registers **3 MCP tools**:
 | **plugin** (3) | list, add, remove* |
 | **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
 | **setting** (2) | update, configure_ups* |
-| **customization** (5) | theme, public_theme, is_initial_setup, sso_enabled, set_theme |
+| **customization** (4) | public_theme, is_initial_setup, sso_enabled, set_theme |
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
 | **user** (1) | me |
 | **live** (11) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status |

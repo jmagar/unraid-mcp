@@ -15,7 +15,7 @@ Actions:
   plugin       - Plugin management (3 subactions)
   rclone       - Cloud storage remote management (4 subactions)
   setting      - System settings and UPS config (2 subactions)
-  customization - Theme and UI customization (5 subactions)
+  customization - Theme and UI customization (4 subactions)
   oidc         - OIDC/SSO provider management (5 subactions)
   user         - Current authenticated user (1 subaction)
   live         - Real-time WebSocket subscription snapshots (11 subactions)
@@ -215,7 +215,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `plugin` | `list`, `add`, `remove`* | |
 | `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote`* | |
 | `setting` | `update`, `configure_ups`* | |
-| `customization` | `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` | |
+| `customization` | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` | |
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `user` | `me` | |
 | `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`, `log_tail` (requires `path=`), `notification_feed` | |
@@ -395,7 +395,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ setting         │ update, configure_ups*                                               │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ customization   │ theme, public_theme, is_initial_setup, sso_enabled, set_theme        │
+        │ customization   │ public_theme, is_initial_setup, sso_enabled, set_theme               │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ oidc            │ providers, provider, configuration, public_providers,                │
         │                 │ validate_session                                                     │

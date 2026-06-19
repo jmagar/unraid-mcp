@@ -849,20 +849,24 @@ class TestHealthQueries:
 
 
 # ============================================================================
-# Customization Tool (4 queries + 1 mutation)
+# Customization Tool (3 queries + 1 mutation)
 # ============================================================================
 class TestCustomizationQueries:
-    """Validate queries from unraid_mcp/tools/customization.py."""
+    """Validate queries from unraid_mcp/tools/_customization.py."""
 
     def test_public_theme_query(self, schema: GraphQLSchema) -> None:
-        # publicPartnerInfo not in schema; validate only publicTheme
-        errors = _validate_operation(schema, "query { publicTheme { name } }")
-        assert not errors, f"public_theme (publicTheme) query validation failed: {errors}"
+        # publicPartnerInfo was removed from Query upstream; query is publicTheme-only.
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["public_theme"])
+        assert not errors, f"public_theme query validation failed: {errors}"
 
     def test_is_initial_setup_query(self, schema: GraphQLSchema) -> None:
-        # isInitialSetup not in schema; isFreshInstall is the equivalent field
-        errors = _validate_operation(schema, "query { isFreshInstall }")
-        assert not errors, f"is_initial_setup (isFreshInstall) query validation failed: {errors}"
+        # isInitialSetup was renamed to isFreshInstall upstream.
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["is_initial_setup"])
+        assert not errors, f"is_initial_setup query validation failed: {errors}"
 
     def test_sso_enabled_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
@@ -870,14 +874,15 @@ class TestCustomizationQueries:
         errors = _validate_operation(schema, QUERIES["sso_enabled"])
         assert not errors, f"sso_enabled query validation failed: {errors}"
 
-    def test_customization_activation_code_query(self, schema: GraphQLSchema) -> None:
-        # Customization.theme not in schema; use activationCode which is present
-        errors = _validate_operation(schema, "query { customization { activationCode { code } } }")
-        assert not errors, f"customization activationCode query validation failed: {errors}"
+    def test_all_customization_queries_covered(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        # `theme` was removed: `customization { theme partnerInfo }` no longer exists.
+        assert set(QUERIES.keys()) == {"public_theme", "is_initial_setup", "sso_enabled"}
 
 
 class TestCustomizationMutations:
-    """Validate mutations from unraid_mcp/tools/customization.py."""
+    """Validate mutations from unraid_mcp/tools/_customization.py."""
 
     def test_set_theme_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_MUTATIONS as MUTATIONS
@@ -997,14 +1002,7 @@ class TestSchemaCompleteness:
 
         # Known schema mismatches — bugs in tool implementation, not in tests.
         # Remove entries as they are fixed.
-        KNOWN_SCHEMA_ISSUES: set[str] = {  # noqa: N806
-            # customization: Customization.theme field does not exist
-            "customization/QUERIES/theme",
-            # customization: publicPartnerInfo not in Query type
-            "customization/QUERIES/public_theme",
-            # customization: isInitialSetup not in Query type (use isFreshInstall)
-            "customization/QUERIES/is_initial_setup",
-        }
+        KNOWN_SCHEMA_ISSUES: set[str] = set()  # noqa: N806
 
         failures: list[str] = []
         unexpected_passes: list[str] = []

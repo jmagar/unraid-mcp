@@ -204,11 +204,10 @@ unraid(action="live",    subaction="cpu")
 
 | Subaction | Description |
 |-----------|-------------|
-| `theme` | Current theme settings |
-| `public_theme` | Public-facing theme |
-| `is_initial_setup` | Check if initial setup is complete |
+| `public_theme` | Public-facing theme (also the server's current theme; or use `system/display`) |
+| `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) |
 | `sso_enabled` | Check SSO status |
-| `set_theme` | Update theme (requires theme parameters) |
+| `set_theme` | Update theme (requires `theme_name`) |
 
 ### `oidc` — SSO / OpenID Connect
 

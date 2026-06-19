@@ -1,6 +1,15 @@
 """Customization domain handler for the Unraid MCP tool.
 
-Covers: theme, public_theme, is_initial_setup, sso_enabled, set_theme (5 subactions).
+Covers: public_theme, is_initial_setup, sso_enabled, set_theme (4 subactions).
+
+Schema notes (Unraid 7.3 / unraid-api 4.35):
+- The old ``customization { theme partnerInfo }`` shape was removed upstream, so the
+  former ``theme`` subaction is gone. Theme info now lives on ``publicTheme`` (see
+  ``public_theme``) and ``system/display`` (``info { display { theme } }``).
+- ``isInitialSetup`` was renamed to ``isFreshInstall``; ``is_initial_setup`` keeps its
+  name but queries the new field and surfaces it as ``isFreshInstall``.
+- ``publicPartnerInfo`` was removed from the ``Query`` type; ``public_theme`` now
+  returns ``publicTheme`` only.
 """
 
 from typing import Any
@@ -16,9 +25,8 @@ from ..core.utils import safe_get, validate_subaction
 # ===========================================================================
 
 _CUSTOMIZATION_QUERIES: dict[str, str] = {
-    "theme": "query GetCustomization { customization { theme { name showBannerImage showBannerGradient showHeaderDescription headerBackgroundColor headerPrimaryTextColor headerSecondaryTextColor } partnerInfo { partnerName hasPartnerLogo partnerUrl partnerLogoUrl } activationCode { code partnerName serverName sysModel comment header theme } } }",
-    "public_theme": "query GetPublicTheme { publicTheme { name showBannerImage showBannerGradient showHeaderDescription headerBackgroundColor headerPrimaryTextColor headerSecondaryTextColor } publicPartnerInfo { partnerName hasPartnerLogo partnerUrl partnerLogoUrl } }",
-    "is_initial_setup": "query IsInitialSetup { isInitialSetup }",
+    "public_theme": "query GetPublicTheme { publicTheme { name showBannerImage showBannerGradient showHeaderDescription headerBackgroundColor headerPrimaryTextColor headerSecondaryTextColor } }",
+    "is_initial_setup": "query IsFreshInstall { isFreshInstall }",
     "sso_enabled": "query IsSSOEnabled { isSSOEnabled }",
 }
 
@@ -38,7 +46,7 @@ async def _handle_customization(subaction: str, theme_name: str | None) -> dict[
         if subaction in _CUSTOMIZATION_QUERIES:
             data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES[subaction])
             if subaction == "is_initial_setup":
-                return {"isInitialSetup": data.get("isInitialSetup")}
+                return {"isFreshInstall": data.get("isFreshInstall")}
             if subaction == "sso_enabled":
                 return {"isSSOEnabled": data.get("isSSOEnabled")}
             return dict(data)

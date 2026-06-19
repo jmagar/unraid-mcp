@@ -21,12 +21,14 @@ def _make_tool() -> Any:
 
 
 @pytest.mark.asyncio
-async def test_theme_returns_customization(_mock_graphql):
-    _mock_graphql.return_value = {
-        "customization": {"theme": {"name": "azure"}, "partnerInfo": None, "activationCode": None}
-    }
-    result = await _make_tool()(action="customization", subaction="theme")
-    assert result["customization"]["theme"]["name"] == "azure"
+async def test_theme_subaction_removed(_mock_graphql):
+    # The upstream `customization { theme partnerInfo }` shape was removed in
+    # unraid-api 4.35; the `theme` subaction no longer exists. Theme info is now
+    # served by `public_theme` and `system/display`.
+    from unraid_mcp.core.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="theme"):
+        await _make_tool()(action="customization", subaction="theme")
 
 
 @pytest.mark.asyncio
@@ -38,9 +40,11 @@ async def test_public_theme(_mock_graphql):
 
 @pytest.mark.asyncio
 async def test_is_initial_setup(_mock_graphql):
-    _mock_graphql.return_value = {"isInitialSetup": False}
+    # `isInitialSetup` was renamed to `isFreshInstall` upstream; the subaction
+    # name is unchanged but the response surfaces the new field.
+    _mock_graphql.return_value = {"isFreshInstall": False}
     result = await _make_tool()(action="customization", subaction="is_initial_setup")
-    assert result["isInitialSetup"] is False
+    assert result["isFreshInstall"] is False
 
 
 @pytest.mark.asyncio
