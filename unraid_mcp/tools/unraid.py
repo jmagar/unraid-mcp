@@ -460,13 +460,17 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             )
 
         if action == "key":
-            return await _handle_key(subaction, key_id, name, roles, permissions, ctx, confirm)
+            return await _handle_key(
+                subaction, key_id, name, roles, permissions, ctx, confirm, limit
+            )
 
         if action == "plugin":
-            return await _handle_plugin(subaction, names, bundled, restart, ctx, confirm)
+            return await _handle_plugin(subaction, names, bundled, restart, ctx, confirm, limit)
 
         if action == "rclone":
-            return await _handle_rclone(subaction, name, provider_type, config_data, ctx, confirm)
+            return await _handle_rclone(
+                subaction, name, provider_type, config_data, ctx, confirm, limit
+            )
 
         if action == "setting":
             return await _handle_setting(subaction, settings_input, ups_config, ctx, confirm)
@@ -475,7 +479,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_customization(subaction, theme_name)
 
         if action == "oidc":
-            return await _handle_oidc(subaction, provider_id, token)
+            return await _handle_oidc(subaction, provider_id, token, limit)
 
         if action == "user":
             return await _handle_user(subaction)

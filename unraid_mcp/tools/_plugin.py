@@ -11,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import validate_subaction
 
 
@@ -38,6 +39,7 @@ async def _handle_plugin(
     restart: bool,
     ctx: Context | None,
     confirm: bool,
+    limit: int = 20,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _PLUGIN_SUBACTIONS, "plugin")
 
@@ -54,7 +56,15 @@ async def _handle_plugin(
 
         if subaction == "list":
             data = await _client.make_graphql_request(_PLUGIN_QUERIES["list"])
-            return {"success": True, "subaction": subaction, "data": data}
+            plugins = data.get("plugins") or []
+            plugins = list(plugins) if isinstance(plugins, list) else []
+            capped, page = cap_list(plugins, limit)
+            return {
+                "success": True,
+                "subaction": subaction,
+                "plugins": capped,
+                "page": page,
+            }
 
         if subaction in ("add", "remove"):
             if not names:

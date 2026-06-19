@@ -8,6 +8,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.pagination import cap_list
 from ..core.utils import validate_subaction
 
 
@@ -16,8 +17,11 @@ from ..core.utils import validate_subaction
 # ===========================================================================
 
 _OIDC_QUERIES: dict[str, str] = {
-    "providers": "query GetOidcProviders { oidcProviders { id name clientId issuer authorizationEndpoint tokenEndpoint jwksUri scopes authorizationRules { claim operator value } authorizationRuleMode buttonText buttonIcon buttonVariant buttonStyle } }",
-    "provider": "query GetOidcProvider($id: PrefixedID!) { oidcProvider(id: $id) { id name clientId issuer scopes authorizationRules { claim operator value } authorizationRuleMode buttonText buttonIcon } }",
+    # LIST stays lean: endpoint URLs (authorizationEndpoint/tokenEndpoint/jwksUri)
+    # and the pure-presentation button fields are dropped here — they live on the
+    # `provider` (singular) detail query below.
+    "providers": "query GetOidcProviders { oidcProviders { id name clientId issuer scopes authorizationRules { claim operator value } authorizationRuleMode } }",
+    "provider": "query GetOidcProvider($id: PrefixedID!) { oidcProvider(id: $id) { id name clientId issuer authorizationEndpoint tokenEndpoint jwksUri scopes authorizationRules { claim operator value } authorizationRuleMode buttonText buttonIcon buttonVariant buttonStyle } }",
     "configuration": "query GetOidcConfiguration { oidcConfiguration { providers { id name clientId scopes } defaultAllowedOrigins } }",
     "public_providers": "query GetPublicOidcProviders { publicOidcProviders { id name buttonText buttonIcon buttonVariant buttonStyle } }",
     "validate_session": "query ValidateOidcSession($token: String!) { validateOidcSession(token: $token) { valid username } }",
@@ -27,7 +31,7 @@ _OIDC_SUBACTIONS: set[str] = set(_OIDC_QUERIES)
 
 
 async def _handle_oidc(
-    subaction: str, provider_id: str | None, token: str | None
+    subaction: str, provider_id: str | None, token: str | None, limit: int = 20
 ) -> dict[str, Any]:
     validate_subaction(subaction, _OIDC_SUBACTIONS, "oidc")
 
@@ -47,7 +51,9 @@ async def _handle_oidc(
         data = await _client.make_graphql_request(_OIDC_QUERIES[subaction], variables)
 
         if subaction == "providers":
-            return {"providers": data.get("oidcProviders", [])}
+            providers = data.get("oidcProviders") or []
+            capped, page = cap_list(providers, limit)
+            return {"providers": capped, "page": page}
         if subaction == "provider":
             result = data.get("oidcProvider")
             if result is None:

@@ -29,6 +29,41 @@ async def test_providers_returns_list(_mock_graphql):
     result = await _make_tool()(action="oidc", subaction="providers")
     assert "providers" in result
     assert len(result["providers"]) == 1
+    assert result["page"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_providers_caps_and_surfaces_page(_mock_graphql):
+    _mock_graphql.return_value = {
+        "oidcProviders": [
+            {"id": f"{i}:p", "name": f"p{i}", "clientId": "abc", "scopes": []} for i in range(10)
+        ]
+    }
+    result = await _make_tool()(action="oidc", subaction="providers", limit=3)
+    assert len(result["providers"]) == 3
+    assert result["page"]["truncated"] is True
+    assert result["page"]["total"] == 10
+
+
+def test_providers_list_query_trims_ui_and_endpoints():
+    """LIST query drops endpoint URLs + button fields; detail query keeps them."""
+    from unraid_mcp.tools._oidc import _OIDC_QUERIES
+
+    list_q = _OIDC_QUERIES["providers"]
+    for field in (
+        "authorizationEndpoint",
+        "tokenEndpoint",
+        "jwksUri",
+        "buttonText",
+        "buttonIcon",
+        "buttonVariant",
+        "buttonStyle",
+    ):
+        assert field not in list_q, f"{field} must not be in the providers LIST query"
+
+    detail_q = _OIDC_QUERIES["provider"]
+    for field in ("authorizationEndpoint", "tokenEndpoint", "jwksUri", "buttonText"):
+        assert field in detail_q, f"{field} should remain on the provider detail query"
 
 
 @pytest.mark.asyncio

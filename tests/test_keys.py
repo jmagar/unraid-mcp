@@ -55,6 +55,17 @@ class TestKeysActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="key", subaction="list")
         assert len(result["keys"]) == 1
+        assert result["page"]["truncated"] is False
+
+    async def test_list_caps_and_surfaces_page(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "apiKeys": [{"id": f"k:{i}", "name": f"key{i}", "roles": []} for i in range(10)]
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="key", subaction="list", limit=4)
+        assert len(result["keys"]) == 4
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == 10
 
     async def test_get(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {

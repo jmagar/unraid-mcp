@@ -42,6 +42,9 @@ _NOTIFICATION_SUBACTIONS: set[str] = set(_NOTIFICATION_QUERIES) | set(_NOTIFICAT
 _NOTIFICATION_DESTRUCTIVE: set[str] = {"delete", "delete_archived"}
 _VALID_IMPORTANCE = frozenset({"ALERT", "WARNING", "INFO"})
 _VALID_LIST_TYPES = frozenset({"UNREAD", "ARCHIVE"})
+# Upper clamp on the server-side `limit` so e.g. limit=5000 can't dump thousands
+# of rows into the agent's context. The good default (20) is set by the caller.
+_MAX_NOTIFICATION_LIMIT = 200
 
 
 async def _handle_notification(
@@ -93,10 +96,15 @@ async def _handle_notification(
             return dict(safe_get(data, "notifications", "overview", default={}))
 
         if subaction == "list":
+            # limit<=0 means "as many as the clamp allows"; otherwise clamp the
+            # caller value down to the max so it can't request thousands of rows.
+            effective_limit = (
+                _MAX_NOTIFICATION_LIMIT if limit <= 0 else min(limit, _MAX_NOTIFICATION_LIMIT)
+            )
             filter_vars: dict[str, Any] = {
                 "type": list_type.upper(),
                 "offset": offset,
-                "limit": limit,
+                "limit": effective_limit,
             }
             if importance:
                 filter_vars["importance"] = importance.upper()
