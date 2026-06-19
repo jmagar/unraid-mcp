@@ -94,3 +94,6 @@ CLAUDE.md.local
 logs/
 backups/
 data/
+
+# mcporter local test server definitions (may contain personal endpoints/tokens)
+/config/mcporter.json
