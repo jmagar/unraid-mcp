@@ -21,7 +21,12 @@ from ..core.utils import format_bytes, validate_subaction
 # ===========================================================================
 
 _DISK_QUERIES: dict[str, str] = {
-    "shares": "query GetSharesInfo { shares { id name free used size include exclude cache nameOrig comment allocator splitLevel floor cow color luksStatus } }",
+    # NOTE: `id` is intentionally omitted. Auto-created user shares (top-level
+    # folders with no /boot/config/shares/<name>.cfg) resolve Share.id to null,
+    # and the non-nullable Share.id field rejects the entire response — so no
+    # shares could be listed while any auto-share existed (issue #29). `name` is
+    # the stable identifier; the handler synthesizes `id` from `name`.
+    "shares": "query GetSharesInfo { shares { name free used size include exclude cache nameOrig comment allocator splitLevel floor cow color luksStatus } }",
     "disks": "query ListPhysicalDisks { disks { id device name } }",
     "disk_details": "query GetDiskDetails($id: PrefixedID!) { disk(id: $id) { id device name serialNum size temperature } }",
     "log_files": "query ListLogFiles { logFiles { name path size modifiedAt } }",
