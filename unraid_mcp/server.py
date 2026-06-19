@@ -14,7 +14,6 @@ from fastmcp import FastMCP
 from fastmcp.server.middleware.error_handling import ErrorHandlingMiddleware
 from fastmcp.server.middleware.logging import LoggingMiddleware
 from fastmcp.server.middleware.rate_limiting import SlidingWindowRateLimitingMiddleware
-from fastmcp.server.middleware.response_limiting import ResponseLimitingMiddleware
 from starlette.middleware import Middleware as ASGIMiddleware
 
 from .config import settings as _settings
@@ -24,6 +23,7 @@ from .config.settings import (
     CREDENTIALS_ENV_PATH,
     LOG_LEVEL_STR,
     UNRAID_MCP_HOST,
+    UNRAID_MCP_MAX_RESPONSE_BYTES,
     UNRAID_MCP_PORT,
     UNRAID_VERIFY_SSL,
     VERSION,
@@ -32,6 +32,7 @@ from .config.settings import (
 )
 from .core import middleware_refs as _middleware_refs
 from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
+from .core.response_limit import StructuredResponseLimitingMiddleware
 from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
@@ -78,9 +79,13 @@ _middleware_refs.error_middleware = _error_middleware
 #    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
 _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
 
-# 4. Cap tool responses at 512 KB to protect the client context window.
-#    Oversized responses are truncated with a clear suffix rather than erroring.
-_response_limiter = ResponseLimitingMiddleware(max_size=512_000)
+# 4. Cap tool responses (default 128 KB, override via UNRAID_MCP_MAX_RESPONSE_BYTES)
+#    to protect the client context window. Unlike fastmcp's stock limiter — which
+#    hard-cuts the UTF-8 byte string mid-JSON and appends a plain-text suffix,
+#    yielding invalid JSON — oversized responses are replaced wholesale with a
+#    complete, parseable JSON marker ({"error": "response_truncated", ...}) that
+#    signals the agent to narrow its query. See core/response_limit.py.
+_response_limiter = StructuredResponseLimitingMiddleware(max_size=UNRAID_MCP_MAX_RESPONSE_BYTES)
 
 # Note: ResponseCachingMiddleware was removed because all caching was disabled for
 # the `unraid` tool. The consolidated tool mixes reads and mutations under one name,
