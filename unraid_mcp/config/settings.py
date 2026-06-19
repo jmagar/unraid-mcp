@@ -24,21 +24,45 @@ PROJECT_ROOT = UNRAID_MCP_DIR.parent  # /home/user/code/unraid-mcp/
 CREDENTIALS_DIR = Path(os.getenv("UNRAID_CREDENTIALS_DIR", str(Path.home() / ".unraid-mcp")))
 CREDENTIALS_ENV_PATH = CREDENTIALS_DIR / ".env"
 
-# Load environment variables from .env file
-# Priority: canonical ~/.unraid-mcp/.env first, then dev/container fallbacks.
-dotenv_paths = [
-    CREDENTIALS_ENV_PATH,  # primary — ~/.unraid-mcp/.env (all runtimes)
-    CREDENTIALS_DIR / ".env.local",  # only used if ~/.unraid-mcp/.env absent
-    Path("/app/.env.local"),  # Docker compat mount
-    PROJECT_ROOT / ".env.local",  # dev overrides
-    PROJECT_ROOT / ".env",  # dev fallback
-    UNRAID_MCP_DIR / ".env",  # last resort
-]
+# Credential env vars that an empty string must NOT shadow. The bundled
+# `.mcp.json` passes `${CLAUDE_PLUGIN_OPTION_UNRAID_API_URL}` (and key), which
+# resolves to "" when the plugin option is unset. With load_dotenv's default
+# override=False, those empty values would otherwise take precedence over every
+# .env on the search path — including the canonical ~/.unraid-mcp/.env — so the
+# credentials silently never load. See GitHub issue #28.
+_EMPTY_AS_UNSET_KEYS = ("UNRAID_API_URL", "UNRAID_API_KEY")
 
-for dotenv_path in dotenv_paths:
-    if dotenv_path.exists():
-        load_dotenv(dotenv_path=dotenv_path)
-        break
+
+def _load_env_files() -> None:
+    """Load environment variables from the first existing .env on the search path.
+
+    Priority: canonical ~/.unraid-mcp/.env first, then dev/container fallbacks.
+
+    Before loading, empty-string entries for the credential keys are removed from
+    os.environ so that ``load_dotenv(override=False)`` can populate them from the
+    .env file. A genuinely-set (non-empty) shell export is still respected.
+    """
+    # Treat empty-string credential env vars as unset (issue #28).
+    for key in _EMPTY_AS_UNSET_KEYS:
+        if os.environ.get(key, "").strip() == "":
+            os.environ.pop(key, None)
+
+    dotenv_paths = [
+        CREDENTIALS_ENV_PATH,  # primary — ~/.unraid-mcp/.env (all runtimes)
+        CREDENTIALS_DIR / ".env.local",  # only used if ~/.unraid-mcp/.env absent
+        Path("/app/.env.local"),  # Docker compat mount
+        PROJECT_ROOT / ".env.local",  # dev overrides
+        PROJECT_ROOT / ".env",  # dev fallback
+        UNRAID_MCP_DIR / ".env",  # last resort
+    ]
+
+    for dotenv_path in dotenv_paths:
+        if dotenv_path.exists():
+            load_dotenv(dotenv_path=dotenv_path)
+            break
+
+
+_load_env_files()
 
 # Core API Configuration
 # IMPORTANT: UNRAID_API_URL and UNRAID_API_KEY are mutated at runtime by apply_runtime_config().
