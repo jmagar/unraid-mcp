@@ -10,10 +10,11 @@ description: "This skill should be used when the user mentions Unraid, asks to c
 **MCP mode** (preferred): Use when `mcp__unraid-mcp__unraid` tool is available.
 
 **HTTP fallback**: Use when MCP tools are unavailable. Credentials live in the file
-`~/.unraid-mcp/.env`; source it before running `curl` (see "HTTP Fallback Mode" below).
+`~/.unraid-mcp/.env`; load it before running `curl` (see "HTTP Fallback Mode" below).
 Do NOT use `$CLAUDE_PLUGIN_OPTION_*` in the Bash tool — Claude Code injects those vars
 only into plugin subprocesses (hooks/MCP/LSP), not the Bash tool. The plugin's setup
-hook reads them and materializes `~/.unraid-mcp/.env`; the skill sources that file.
+hook reads them and materializes `~/.unraid-mcp/.env`; the skill loads that file via
+`load-env.sh` (which parses it, never executes it).
 
 ---
 
@@ -327,10 +328,10 @@ unraid(action="vm", subaction="force_stop", vm_id="<id>", confirm=True)
 
 ## HTTP Fallback Mode
 
-When MCP tools are unavailable, query the GraphQL API directly with `curl`. Source the
-credentials file first — `$CLAUDE_PLUGIN_OPTION_*` is **not** set in the Bash tool, so
-read `~/.unraid-mcp/.env` (which the plugin's setup hook materializes) instead. The
-bundled `load-env.sh` does this for you:
+When MCP tools are unavailable, query the GraphQL API directly with `curl`. Load the
+credentials first — `$CLAUDE_PLUGIN_OPTION_*` is **not** set in the Bash tool, so read
+`~/.unraid-mcp/.env` (which the plugin's setup hook materializes) instead. Source the
+bundled `load-env.sh` library and call its loader (it parses the `.env`, never executes it):
 
 ```bash
 # Load UNRAID_API_URL / UNRAID_API_KEY from ~/.unraid-mcp/.env

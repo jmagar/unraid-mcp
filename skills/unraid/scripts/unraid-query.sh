@@ -2,9 +2,9 @@
 # Unraid GraphQL API Query Helper
 # Makes it easy to query the Unraid API from the command line.
 #
-# Credentials default to UNRAID_API_URL / UNRAID_API_KEY, sourced from
-# ~/.unraid-mcp/.env via the co-located load-env.sh when not already in the
-# environment. Override per-call with -u/-k.
+# Credentials default to UNRAID_API_URL / UNRAID_API_KEY, loaded from
+# ~/.unraid-mcp/.env via the co-located load-env.sh (which parses the file) when
+# not already in the environment. Override per-call with -u/-k.
 
 set -e
 
@@ -35,7 +35,7 @@ ENVIRONMENT VARIABLES:
     UNRAID_URL             Legacy alias for UNRAID_API_URL
 
 EXAMPLES:
-    # Use credentials from ~/.unraid-mcp/.env (sourced automatically)
+    # Use credentials from ~/.unraid-mcp/.env (loaded automatically)
     $0 -q "{ online }"
 
     # Override credentials per-call
@@ -94,21 +94,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 # If credentials weren't supplied via flags or environment, load them from
-# ~/.unraid-mcp/.env (load_env_file is provided by load-env.sh).
-if [[ ( -z "$URL" || -z "$API_KEY" ) ]] && declare -f load_env_file >/dev/null; then
-    load_env_file >/dev/null 2>&1 || true
+# ~/.unraid-mcp/.env (load_env_file is provided by load-env.sh). Capture its
+# diagnostics so we can surface the specific reason if creds are still missing.
+LOAD_ERR=""
+if [[ -z "$URL" || -z "$API_KEY" ]] && declare -f load_env_file >/dev/null; then
+    LOAD_ERR="$(load_env_file 2>&1)" || true
     URL="${URL:-${UNRAID_API_URL:-${UNRAID_URL:-}}}"
     API_KEY="${API_KEY:-${UNRAID_API_KEY:-}}"
 fi
 
 # Validate required arguments
-if [[ -z "$URL" ]]; then
-    echo "Error: Unraid URL is required (use -u, set UNRAID_API_URL, or configure ~/.unraid-mcp/.env)"
-    exit 1
-fi
-
-if [[ -z "$API_KEY" ]]; then
-    echo "Error: API key is required (use -k, set UNRAID_API_KEY, or configure ~/.unraid-mcp/.env)"
+if [[ -z "$URL" || -z "$API_KEY" ]]; then
+    [[ -n "$LOAD_ERR" ]] && echo "$LOAD_ERR" >&2
+    [[ -z "$URL" ]] && echo "Error: Unraid URL is required (use -u, set UNRAID_API_URL, or configure ~/.unraid-mcp/.env)" >&2
+    [[ -z "$API_KEY" ]] && echo "Error: API key is required (use -k, set UNRAID_API_KEY, or configure ~/.unraid-mcp/.env)" >&2
     exit 1
 fi
 

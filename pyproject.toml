@@ -196,7 +196,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "D104"]
-"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "PLR2004", "N815"]  # Allow test-only patterns; N815 permits camelCase Pydantic fields that mirror GraphQL response keys
+"tests/**/*.py" = ["D", "S101", "S105", "S106", "S107", "S603", "S607", "PLR2004", "N815"]  # Allow test-only patterns; S603/S607 permit subprocess-driven shell tests; N815 permits camelCase Pydantic fields that mirror GraphQL response keys
 "tests/test_docker.py" = ["D", "S101", "S104", "S105", "S106", "S107", "PLR2004", "N815"]  # docker port mock fixtures use literal "0.0.0.0"
 
 [tool.ruff.lint.pydocstyle]

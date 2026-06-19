@@ -15,7 +15,7 @@ The skill drives the single `unraid` MCP tool, which uses `action` (domain) +
 skills/unraid/
 ├── SKILL.md                       # Main skill documentation (domains, subactions, examples)
 ├── README.md                      # This file
-├── load-env.sh                    # Sources ~/.unraid-mcp/.env for the HTTP fallback (sourced, not run)
+├── load-env.sh                    # Parses ~/.unraid-mcp/.env for the HTTP fallback (this library is sourced, not run)
 ├── scripts/
 │   ├── unraid-query.sh            # GraphQL query helper (sources load-env.sh)
 │   └── dashboard.sh               # System dashboard (single server, or a multi-server fleet)
@@ -45,8 +45,9 @@ This skill ships with the Unraid MCP plugin. Install via the Claude Code marketp
 Configuration comes from the plugin's **userConfig** form (*Unraid GraphQL API URL* /
 *Unraid API Key*). Claude Code injects those values as `CLAUDE_PLUGIN_OPTION_*` only into
 plugin subprocesses (hooks/MCP), **not** the Bash tool — so the plugin's setup hook reads
-them and writes `~/.unraid-mcp/.env`, and the skill's scripts source that file via
-`load-env.sh`. For manual/Docker installs, create `~/.unraid-mcp/.env` directly:
+them and writes `~/.unraid-mcp/.env`, and the skill's scripts read that file via
+`load-env.sh` (which parses it, not sources it). For manual/Docker installs, create
+`~/.unraid-mcp/.env` directly:
 
 ```bash
 UNRAID_API_URL=https://your-unraid-server/graphql

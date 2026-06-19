@@ -1,13 +1,14 @@
 #!/bin/bash
 # Environment Loading Library for the Unraid skill.
 #
-# Sources the credentials file that the plugin's setup hook materializes from the
-# userConfig form. Claude Code injects CLAUDE_PLUGIN_OPTION_* only into plugin
-# subprocesses (hooks/MCP/LSP), NOT into the Bash tool that runs skill scripts —
-# so the hook reads those vars and writes ~/.unraid-mcp/.env, and this library
-# parses that file (without executing it) into the environment.
+# Loads (parses, does not execute) the credentials file that the plugin's setup
+# hook materializes from the userConfig form. Claude Code injects
+# CLAUDE_PLUGIN_OPTION_* only into plugin subprocesses (hooks/MCP/LSP), NOT into
+# the Bash tool that runs skill scripts — so the hook reads those vars and writes
+# ~/.unraid-mcp/.env, and this library parses that file into the environment.
 #
-# In skill scripts, source as:
+# In skill scripts, source THIS LIBRARY (it defines functions; it is sourced, the
+# credentials file is not):
 #   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #   source "$SCRIPT_DIR/../load-env.sh"
 
@@ -17,16 +18,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     exit 1
 fi
 
-# Load ~/.unraid-mcp/.env (honoring UNRAID_CREDENTIALS_DIR), with a legacy
-# ~/.lab/.env fallback. Usage: load_env_file [/optional/override/path]
+# Parse ~/.unraid-mcp/.env (honoring UNRAID_CREDENTIALS_DIR, or UNRAID_ENV_FILE to
+# override the path). Usage: load_env_file [/optional/override/path]
 load_env_file() {
     local creds_dir="${UNRAID_CREDENTIALS_DIR:-$HOME/.unraid-mcp}"
     local default_file="$creds_dir/.env"
     local env_file="${1:-${UNRAID_ENV_FILE:-$default_file}}"
 
-    if [[ ! -f "$env_file" && "$env_file" == "$default_file" && -f "$HOME/.lab/.env" ]]; then
-        env_file="$HOME/.lab/.env"
-    fi
     if [[ ! -f "$env_file" ]]; then
         echo "ERROR: $env_file not found" >&2
         echo "Set the plugin's Unraid GraphQL API URL / API Key in the config form" >&2

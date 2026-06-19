@@ -20,7 +20,9 @@ load_env_file || exit 1
 # Falls back to a single "default" server using UNRAID_API_URL / UNRAID_API_KEY.
 SERVERS=()
 while IFS='=' read -r var_name _; do
-    if [[ "$var_name" =~ ^UNRAID_(.+)_URL$ ]]; then
+    # Discover fleet pairs UNRAID_<NAME>_URL, but exclude the canonical single-server
+    # UNRAID_API_URL (whose "API" capture is not a fleet instance).
+    if [[ "$var_name" =~ ^UNRAID_(.+)_URL$ && "${BASH_REMATCH[1]}" != "API" ]]; then
         SERVERS+=("${BASH_REMATCH[1]}")
     fi
 done < <(env)
@@ -40,11 +42,20 @@ if [ ${#SERVERS[@]} -eq 0 ]; then
     fi
 fi
 
+# Drop servers missing their API key (warn, don't abort the whole fleet).
+VALID_SERVERS=()
 for server in "${SERVERS[@]}"; do
-    url_var="UNRAID_${server}_URL"
-    key_var="UNRAID_${server}_API_KEY"
-    validate_env_vars "$url_var" "$key_var" || exit 1
+    if validate_env_vars "UNRAID_${server}_URL" "UNRAID_${server}_API_KEY" 2>/dev/null; then
+        VALID_SERVERS+=("$server")
+    else
+        echo "Skipping $server: missing UNRAID_${server}_URL or UNRAID_${server}_API_KEY" >&2
+    fi
 done
+SERVERS=("${VALID_SERVERS[@]}")
+if [ ${#SERVERS[@]} -eq 0 ]; then
+    echo "Error: no fully-configured servers to query." >&2
+    exit 1
+fi
 
 # Ensure output directory exists
 mkdir -p "$(dirname "$OUTPUT_FILE")"
@@ -62,10 +73,12 @@ process_server() {
 
     echo "Querying server: $NAME..."
     
-    UNRAID_URL="$URL"
+    # Set the canonical names so unraid-query.sh targets THIS server (a stale
+    # UNRAID_API_URL from the initial load would otherwise win the fallback chain).
+    UNRAID_API_URL="$URL"
     UNRAID_API_KEY="$API_KEY"
     IGNORE_ERRORS="true"
-    export UNRAID_URL UNRAID_API_KEY IGNORE_ERRORS
+    export UNRAID_API_URL UNRAID_API_KEY IGNORE_ERRORS
 
     QUERY='query Dashboard {
       info {
@@ -98,8 +111,22 @@ process_server() {
       isSSOEnabled
     }'
 
-    RESPONSE=$("$QUERY_SCRIPT" -q "$QUERY" -f json)
-    
+    # Don't let one server's failure abort the whole fleet (script runs under set -e).
+    if ! RESPONSE=$("$QUERY_SCRIPT" -q "$QUERY" -f json 2>"/tmp/${NAME}_query.err"); then
+        echo "Error querying $NAME (details in /tmp/${NAME}_query.err)"
+        {
+            echo "## Server: $NAME (⚠️ Error)"
+            echo "Query failed:"
+            echo '```'
+            cat "/tmp/${NAME}_query.err"
+            echo '```'
+            echo ""
+            echo "---"
+            echo ""
+        } >> "$OUTPUT_FILE"
+        return 0
+    fi
+
     # Debug output (only when DEBUG is set)
     if [ "${DEBUG:-}" = "true" ]; then
         echo "$RESPONSE" > "/tmp/${NAME}_debug.json"
