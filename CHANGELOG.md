@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **HTTP-transport `userConfig` fields** (`unraid_mcp_url`, `unraid_mcp_token`) from `.claude-plugin/plugin.json`. The bundled plugin runs the server over stdio, so the remote MCP URL and bearer-token options were vestigial and never consumed.
 
+### Fixed
+
+- **Test suite collection error.** `tests/test_generate_unraid_api_reference.py` imported the generator from the old `scripts.` package; it now loads `bin/generate_unraid_api_reference.py` by file path. This import error was aborting the entire `Test` CI job at collection.
+- **Removed stale regression tests** in `tests/test_review_regressions.py` that exercised `hooks/scripts/sync-env.sh` and `hooks/scripts/ensure-gitignore.sh` — scripts deleted in the earlier `hooks/scripts/` → `bin/`/lefthook migration. They could only fail (script not found) and were masked by the collection error above.
+
 ## [1.4.1] - 2026-06-19
 
 ### Fixed

@@ -1,10 +1,8 @@
-"""Regression coverage for packaging, manifests, and hook scripts."""
+"""Regression coverage for packaging and manifests."""
 
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 from pathlib import Path
 
 
@@ -41,60 +39,3 @@ def test_test_live_script_uses_safe_counters_and_resource_failures() -> None:
     assert "(( PASS++ ))" in script
     assert "(( FAIL++ ))" in script
     assert "(( SKIP++ ))" in script
-
-
-def test_sync_env_rejects_multiline_values(tmp_path: Path) -> None:
-    env = os.environ.copy()
-    env["CLAUDE_PLUGIN_ROOT"] = str(tmp_path)
-    env["CLAUDE_PLUGIN_OPTION_UNRAID_API_URL"] = "https://tower.local\nINJECT=1"
-
-    result = subprocess.run(  # noqa: S603
-        ["/usr/bin/bash", str(PROJECT_ROOT / "hooks" / "scripts" / "sync-env.sh")],
-        cwd=PROJECT_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode != 0
-    assert "control characters" in result.stderr
-
-
-def test_sync_env_rejects_empty_bearer_token(tmp_path: Path) -> None:
-    """sync-env must fail when no bearer token is provided — auto-generation was removed."""
-    env_file = tmp_path / ".env"
-    env_file.write_text("UNRAID_MCP_BEARER_TOKEN=\n")
-
-    env = os.environ.copy()
-    env["CLAUDE_PLUGIN_ROOT"] = str(tmp_path)
-
-    result = subprocess.run(  # noqa: S603
-        ["/usr/bin/bash", str(PROJECT_ROOT / "hooks" / "scripts" / "sync-env.sh")],
-        cwd=PROJECT_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode != 0
-    assert "UNRAID_MCP_BEARER_TOKEN is not set" in result.stderr
-
-
-def test_ensure_gitignore_preserves_ignore_before_negation(tmp_path: Path) -> None:
-    gitignore = tmp_path / ".gitignore"
-    gitignore.write_text("!backups/.gitkeep\n")
-
-    env = os.environ.copy()
-    env["CLAUDE_PLUGIN_ROOT"] = str(tmp_path)
-
-    result = subprocess.run(  # noqa: S603
-        ["/usr/bin/bash", str(PROJECT_ROOT / "hooks" / "scripts" / "ensure-gitignore.sh")],
-        cwd=PROJECT_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    lines = gitignore.read_text().splitlines()
-    assert lines.index("backups/*") < lines.index("!backups/.gitkeep")
