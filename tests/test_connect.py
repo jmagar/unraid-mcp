@@ -83,3 +83,40 @@ class TestConnectMutations:
     async def test_invalid_subaction(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="Invalid subaction"):
             await _make_tool()(action="connect", subaction="nope")
+
+
+class TestConnectSuccessDerivation:
+    async def test_sign_in_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"connectSignIn": True}
+        result = await _make_tool()(
+            action="connect", subaction="sign_in", connect_input={"apiKey": "k"}
+        )
+        assert result["success"] is True
+        assert result["result"] is True
+
+    async def test_sign_in_false_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"connectSignIn": False}
+        result = await _make_tool()(
+            action="connect", subaction="sign_in", connect_input={"apiKey": "bad"}
+        )
+        assert result["success"] is False
+
+    async def test_enable_dynamic_remote_access_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"enableDynamicRemoteAccess": True}
+        result = await _make_tool()(
+            action="connect",
+            subaction="enable_dynamic_remote_access",
+            connect_input={"url": {"type": "WAN"}, "enabled": True},
+            confirm=True,
+        )
+        assert result["success"] is True
+
+    async def test_setup_remote_access_false_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"setupRemoteAccess": False}
+        result = await _make_tool()(
+            action="connect",
+            subaction="setup_remote_access",
+            connect_input={"accessType": "DISABLED"},
+            confirm=True,
+        )
+        assert result["success"] is False

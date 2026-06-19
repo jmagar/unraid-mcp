@@ -445,11 +445,11 @@ class TestDockerMutationContract:
     """docker start/stop return {"success": bool, "action": str, "container": ...}."""
 
     async def test_start_mutation_result_shape(self, _docker_mock: AsyncMock) -> None:
+        # Full 64-hex id skips name resolution, so a single mutation response is made.
         cid = "c" * 64 + ":local"
-        _docker_mock.side_effect = [
-            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
-            {"docker": {"start": {"id": cid, "names": ["plex"], "state": "running"}}},
-        ]
+        _docker_mock.return_value = {
+            "docker": {"start": {"id": cid, "names": ["plex"], "state": "running"}}
+        }
         result = await _docker_tool()(action="docker", subaction="start", container_id=cid)
         validated = DockerMutationResult(**result)
         assert validated.success is True
@@ -457,10 +457,9 @@ class TestDockerMutationContract:
 
     async def test_stop_mutation_result_shape(self, _docker_mock: AsyncMock) -> None:
         cid = "d" * 64 + ":local"
-        _docker_mock.side_effect = [
-            {"docker": {"containers": [{"id": cid, "names": ["nginx"]}]}},
-            {"docker": {"stop": {"id": cid, "names": ["nginx"], "state": "exited"}}},
-        ]
+        _docker_mock.return_value = {
+            "docker": {"stop": {"id": cid, "names": ["nginx"], "state": "exited"}}
+        }
         result = await _docker_tool()(action="docker", subaction="stop", container_id=cid)
         validated = DockerMutationResult(**result)
         assert validated.success is True

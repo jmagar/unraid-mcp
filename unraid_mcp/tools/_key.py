@@ -15,6 +15,7 @@ from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
 from ..core.utils import safe_get, validate_subaction
+from ..core.validation import validate_input_mapping
 
 
 # ===========================================================================
@@ -115,7 +116,10 @@ async def _handle_key(
             if roles:
                 variables["roles"] = roles
             if permissions_input:
-                variables["permissions"] = permissions_input
+                # Validate like every other structured input before it reaches GraphQL.
+                variables["permissions"] = [
+                    validate_input_mapping(p, "permissions_input[]") for p in permissions_input
+                ]
             data = await _client.make_graphql_request(
                 _KEY_QUERIES["preview_permissions"], variables
             )

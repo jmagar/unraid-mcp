@@ -73,10 +73,12 @@ async def _handle_customization(
             data = await _client.make_graphql_request(
                 _CUSTOMIZATION_MUTATIONS["set_locale"], {"locale": locale}
             )
+            # setLocale returns the applied locale string; a null means it was not set.
+            locale_result = safe_get(data, "customization", "setLocale")
             return {
-                "success": True,
+                "success": locale_result is not None,
                 "subaction": "set_locale",
-                "locale": safe_get(data, "customization", "setLocale"),
+                "locale": locale_result,
             }
 
         raise ToolError(f"Unhandled customization subaction '{subaction}' — this is a bug")

@@ -109,10 +109,11 @@ async def _handle_onboarding(
         if subaction in _ONBOARDING_SIMPLE_MUTATIONS:
             data = await _client.make_graphql_request(_ONBOARDING_SIMPLE_MUTATIONS[subaction])
             field = _ONBOARDING_RESULT_FIELD[subaction]
+            result = (data.get("onboarding") or {}).get(field)
             return {
-                "success": True,
+                "success": result is not None,
                 "subaction": subaction,
-                "onboarding": (data.get("onboarding") or {}).get(field),
+                "onboarding": result,
             }
 
         if subaction in _ONBOARDING_INPUT_MUTATIONS:
@@ -123,10 +124,21 @@ async def _handle_onboarding(
                 _ONBOARDING_INPUT_MUTATIONS[subaction], {"input": validated}
             )
             field = _ONBOARDING_RESULT_FIELD[subaction]
+            result = (data.get("onboarding") or {}).get(field)
+            if subaction == "create_internal_boot_pool":
+                # Returns {ok, code, output}; `ok=false` means the pool was NOT
+                # created — surface that (and the diagnostic output) instead of
+                # reporting a clean success.
+                return {
+                    "success": bool((result or {}).get("ok")),
+                    "subaction": subaction,
+                    "result": result,
+                    "output": (result or {}).get("output"),
+                }
             return {
-                "success": True,
+                "success": result is not None,
                 "subaction": subaction,
-                "result": (data.get("onboarding") or {}).get(field),
+                "result": result,
             }
 
         raise ToolError(f"Unhandled onboarding subaction '{subaction}' — this is a bug")

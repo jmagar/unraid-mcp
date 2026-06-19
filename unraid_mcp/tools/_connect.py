@@ -51,6 +51,13 @@ _CONNECT_INPUT_MUTATIONS: set[str] = {
     "enable_dynamic_remote_access",
 }
 
+# Mutations that return a bare Boolean (false => operation did not take effect).
+_CONNECT_BOOL_MUTATIONS: set[str] = {
+    "sign_in",
+    "setup_remote_access",
+    "enable_dynamic_remote_access",
+}
+
 
 async def _handle_connect(
     subaction: str,
@@ -103,6 +110,16 @@ async def _handle_connect(
                 "setup_remote_access": "setupRemoteAccess",
                 "enable_dynamic_remote_access": "enableDynamicRemoteAccess",
             }[subaction]
-            return {"success": True, "subaction": subaction, "result": data.get(result_key)}
+            result = data.get(result_key)
+            # sign_in / setup_remote_access / enable_dynamic_remote_access return a
+            # bare Boolean — `false` means the operation did not take effect (e.g.
+            # sign-in rejected, remote access unchanged), so success must reflect it.
+            # update_api_settings returns an object (ConnectSettingsValues).
+            success = (
+                bool(result)
+                if subaction in _CONNECT_BOOL_MUTATIONS
+                else result is not None
+            )
+            return {"success": success, "subaction": subaction, "result": result}
 
         raise ToolError(f"Unhandled connect subaction '{subaction}' — this is a bug")

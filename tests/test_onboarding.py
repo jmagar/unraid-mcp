@@ -93,3 +93,54 @@ class TestOnboardingInputMutations:
     async def test_invalid_subaction(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="Invalid subaction"):
             await _make_tool()(action="onboarding", subaction="nope")
+
+
+class TestOnboardingSuccessDerivation:
+    @pytest.mark.parametrize("subaction", ["clear_override", "refresh_internal_boot_context"])
+    async def test_remaining_simple_mutations(self, _mock_graphql: AsyncMock, subaction: str) -> None:
+        field = {
+            "clear_override": "clearOnboardingOverride",
+            "refresh_internal_boot_context": "refreshInternalBootContext",
+        }[subaction]
+        _mock_graphql.return_value = {"onboarding": {field: {"status": "INCOMPLETE"}}}
+        result = await _make_tool()(action="onboarding", subaction=subaction)
+        assert result["success"] is True
+
+    async def test_simple_mutation_null_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"onboarding": {"completeOnboarding": None}}
+        result = await _make_tool()(action="onboarding", subaction="complete")
+        assert result["success"] is False
+
+    async def test_set_override_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "onboarding": {"setOnboardingOverride": {"status": "COMPLETED"}}
+        }
+        result = await _make_tool()(
+            action="onboarding",
+            subaction="set_override",
+            onboarding_input={"registrationState": "PRO"},
+        )
+        assert result["success"] is True
+        assert result["result"]["status"] == "COMPLETED"
+
+    async def test_create_internal_boot_pool_ok_false_is_not_success(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {
+            "onboarding": {
+                "createInternalBootPool": {"ok": False, "code": 1, "output": "device busy"}
+            }
+        }
+        result = await _make_tool()(
+            action="onboarding",
+            subaction="create_internal_boot_pool",
+            onboarding_input={
+                "poolName": "p",
+                "devices": ["sdb"],
+                "bootSizeMiB": 1,
+                "updateBios": False,
+            },
+            confirm=True,
+        )
+        assert result["success"] is False
+        assert result["output"] == "device busy"

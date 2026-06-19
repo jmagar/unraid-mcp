@@ -125,7 +125,12 @@ async def _handle_setting(
                 "update_temperature": "updateTemperatureConfig",
                 "update_system_time": "updateSystemTime",
             }[subaction]
-            return {"success": True, "subaction": subaction, "result": data.get(result_key)}
+            result = data.get(result_key)
+            # updateTemperatureConfig returns a bare Boolean — `false` means the
+            # config was not applied, so success must reflect that, not be hardcoded.
+            # The other two return objects (Vars / SystemTime); a null means failure.
+            success = bool(result) if subaction == "update_temperature" else result is not None
+            return {"success": success, "subaction": subaction, "result": result}
 
         if subaction == "update_server_identity":
             if not name:

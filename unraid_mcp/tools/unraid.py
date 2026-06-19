@@ -243,7 +243,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `onboarding` | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`* | inputs via `onboarding_input` |
 | `user` | `me` | |
-| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`, `log_tail` (requires `path=`), `notification_feed`, `plugin_install_updates` | |
+| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `log_tail` (requires `path=`), `notification_feed`, `plugin_install_updates` | |
 
 \\* Destructive — requires `confirm=True`
 
@@ -482,8 +482,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ live            │ cpu, memory, cpu_telemetry, array_state, parity_progress,            │
         │                 │ ups_status, notifications_overview, notifications_warnings,          │
-        │                 │ owner, server_status, display, log_tail (requires path=),            │
-        │                 │ notification_feed, plugin_install_updates                           │
+        │                 │ owner, server_status, display, docker_container_stats,               │
+        │                 │ temperature, log_tail (requires path=), notification_feed,           │
+        │                 │ plugin_install_updates                                              │
         └─────────────────┴──────────────────────────────────────────────────────────────────────┘
 
         * Destructive — interactive clients are prompted for confirmation via
@@ -618,7 +619,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_user(subaction)
 
         if action == "live":
-            return await _handle_live(subaction, path, collect_for, timeout, level, context, limit)
+            return await _handle_live(
+                subaction, path, collect_for, timeout, level, context, limit, operation_id
+            )
 
         raise ToolError(
             f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"

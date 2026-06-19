@@ -64,6 +64,6 @@ COLLECT_ACTIONS = {
         subscription LogTail($path: String!) { logFile(path: $path) { path content totalLines startLine } }
     """,
     "plugin_install_updates": """
-        subscription { pluginInstallUpdates { operationId status output timestamp } }
+        subscription PluginInstallUpdates($operationId: ID!) { pluginInstallUpdates(operationId: $operationId) { operationId status output timestamp } }
     """,
 }

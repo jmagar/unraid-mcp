@@ -306,9 +306,11 @@ These use persistent WebSocket connections. Returns a "connecting" placeholder o
 | `owner` | Live owner info |
 | `server_status` | Live server status |
 | `display` | Live theme/display changes |
+| `docker_container_stats` | Live per-container CPU/memory/IO stats |
+| `temperature` | Live temperature sensor readings |
 | `log_tail` | Live log tail stream |
 | `notification_feed` | Live notification feed |
-| `plugin_install_updates` | Live plugin-install progress stream |
+| `plugin_install_updates` | Live plugin-install progress stream (requires `operation_id`) |
 
 ---
 

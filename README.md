@@ -320,9 +320,11 @@ Two delivery modes:
 | `owner` | Snapshot (event-driven) | Owner profile changes | — |
 | `server_status` | Snapshot (event-driven) | Server registration and connectivity | — |
 | `display` | Snapshot (event-driven) | Theme/display changes | — |
+| `docker_container_stats` | Snapshot | Per-container CPU/memory/IO stats | — |
+| `temperature` | Snapshot | Temperature sensor readings | — |
 | `log_tail` | Collect | Stream log file lines | `path` (must start with `/var/log/` or `/boot/logs/`) |
 | `notification_feed` | Collect | Stream incoming notifications | — |
-| `plugin_install_updates` | Collect | Stream plugin-install progress events | — |
+| `plugin_install_updates` | Collect | Stream plugin-install progress events | `operation_id` |
 
 Optional parameters for `live`:
 

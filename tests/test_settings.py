@@ -212,3 +212,14 @@ class TestSettingsSystemConfig:
             "comment": "hi",
             "sysModel": "Custom",
         }
+
+
+class TestSettingsSuccessDerivation:
+    async def test_update_temperature_false_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"updateTemperatureConfig": False}
+        result = await _make_tool()(
+            action="setting",
+            subaction="update_temperature",
+            config_input={"enabled": False},
+        )
+        assert result["success"] is False

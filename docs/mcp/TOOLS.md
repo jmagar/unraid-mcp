@@ -329,9 +329,11 @@ Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder o
 | `owner` | Live owner info | `collect_for` |
 | `server_status` | Live server status | `collect_for` |
 | `display` | Live theme/display changes | `collect_for` |
+| `docker_container_stats` | Live per-container CPU/memory/IO stats | `collect_for` |
+| `temperature` | Live temperature sensor readings | `collect_for` |
 | `log_tail` | Live log tail stream | `path` (required), `collect_for` |
 | `notification_feed` | Live notification feed | `collect_for` |
-| `plugin_install_updates` | Live plugin-install progress stream | `collect_for` |
+| `plugin_install_updates` | Live plugin-install progress stream | `operation_id` (required), `collect_for` |
 
 ## Destructive Operations
 

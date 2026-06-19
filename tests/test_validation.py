@@ -56,3 +56,70 @@ class TestDangerousKeyPattern:
         assert not DANGEROUS_KEY_PATTERN.search(key), (
             f"Expected DANGEROUS_KEY_PATTERN NOT to match {key!r} but it did"
         )
+
+
+class TestValidateInputMapping:
+    """validate_input_mapping bounds nested GraphQL inputs and rejects unsafe shapes."""
+
+    def test_preserves_nested_structure(self) -> None:
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        payload = {
+            "enabled": True,
+            "thresholds": {"cpu_warning": 70, "cpu_critical": 90},
+            "servers": ["a", "b"],
+            "optional": None,
+        }
+        assert validate_input_mapping(payload, "x") == payload
+
+    def test_rejects_dangerous_key(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="disallowed characters"):
+            validate_input_mapping({"bad;key": 1}, "x")
+
+    def test_rejects_dangerous_key_when_nested(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="disallowed characters"):
+            validate_input_mapping({"outer": {"in/ner": 1}}, "x")
+
+    def test_rejects_too_many_keys(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="max"):
+            validate_input_mapping({f"k{i}": i for i in range(11)}, "x", max_keys=10)
+
+    def test_rejects_excessive_depth(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        deep: dict = {"v": 1}
+        for _ in range(5):
+            deep = {"v": deep}
+        with pytest.raises(ToolError, match="depth"):
+            validate_input_mapping(deep, "x", max_depth=2)
+
+    def test_rejects_oversized_string(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import MAX_VALUE_LENGTH, validate_input_mapping
+
+        with pytest.raises(ToolError, match="max length"):
+            validate_input_mapping({"k": "x" * (MAX_VALUE_LENGTH + 1)}, "x")
+
+    def test_rejects_non_scalar_leaf(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="must be a scalar"):
+            validate_input_mapping({"k": {1, 2, 3}}, "x")
+
+    def test_non_string_key_rejected(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="non-empty strings"):
+            validate_input_mapping({1: "v"}, "x")

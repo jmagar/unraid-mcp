@@ -5,7 +5,8 @@ network_details, remove_container*, update_container, update_containers,
 update_all_containers, update_autostart, refresh_digests, sync_template_paths,
 reset_template_mappings*, create_folder, create_folder_with_items, rename_folder,
 set_folder_children, delete_entries*, move_entries_to_folder,
-move_items_to_position, update_view_preferences (25 subactions).
+move_items_to_position, update_view_preferences (25 subactions, plus a deprecated
+`logs` stub that returns an informative ToolError — not counted).
 """
 
 import re
@@ -322,7 +323,20 @@ async def _handle_docker(
                 "sync_template_paths": "syncDockerTemplatePaths",
                 "reset_template_mappings": "resetDockerTemplateMappings",
             }[subaction]
-            return {"success": True, "subaction": subaction, "result": data.get(field)}
+            result = data.get(field)
+            if subaction == "sync_template_paths":
+                # Returns {scanned, matched, skipped, errors}; surface a non-empty
+                # errors list rather than reporting a partial sync as a clean success.
+                errors = (result or {}).get("errors") or []
+                return {
+                    "success": not errors,
+                    "subaction": subaction,
+                    "result": result,
+                    "errors": errors,
+                }
+            # refresh_digests / reset_template_mappings return a bare Boolean —
+            # `false` means the operation did not take effect.
+            return {"success": bool(result), "subaction": subaction, "result": result}
 
         # Organizer (folder/view) mutations driven by organizer_input.
         if subaction in _DOCKER_ORGANIZER:
@@ -335,7 +349,15 @@ async def _handle_docker(
                     f"{', '.join(missing)}"
                 )
             allowed = set(spec["required"]) | set(spec["optional"])
-            variables = {k: v for k, v in supplied.items() if k in allowed and v is not None}
+            # Reject unknown keys rather than silently dropping them — a typo'd
+            # field name would otherwise vanish and the mutation run with defaults.
+            unknown = set(supplied) - allowed
+            if unknown:
+                raise ToolError(
+                    f"organizer_input has unknown field(s) for docker/{subaction}: "
+                    f"{', '.join(sorted(unknown))}. Allowed: {', '.join(sorted(allowed))}"
+                )
+            variables = {k: v for k, v in supplied.items() if v is not None}
             data = await _client.make_graphql_request(spec["mutation"], variables)
             field = {
                 "create_folder": "createDockerFolder",
@@ -347,7 +369,12 @@ async def _handle_docker(
                 "move_items_to_position": "moveDockerItemsToPosition",
                 "update_view_preferences": "updateDockerViewPreferences",
             }[subaction]
-            return {"success": True, "subaction": subaction, "organizer": data.get(field)}
+            organizer = data.get(field)
+            return {
+                "success": organizer is not None,
+                "subaction": subaction,
+                "organizer": organizer,
+            }
 
         # Bulk / image-update lifecycle mutations.
         if subaction == "remove_container":
@@ -423,8 +450,9 @@ async def _handle_docker(
             "unpause": "unpause",
             "update_container": "updateContainer",
         }[subaction]
+        container = (data.get("docker") or {}).get(field)
         return {
-            "success": True,
+            "success": container is not None,
             "subaction": subaction,
-            "container": (data.get("docker") or {}).get(field),
+            "container": container,
         }

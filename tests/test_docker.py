@@ -195,7 +195,11 @@ class TestDockerMutationFailures:
     """Tests for mutation responses that indicate failure or unexpected shapes."""
 
     async def test_start_mutation_empty_docker_response(self, _mock_graphql: AsyncMock) -> None:
-        """docker field returning empty object (missing the action sub-field)."""
+        """docker field returning empty object (missing the action sub-field).
+
+        An empty/unexpected mutation response must NOT be reported as success — the
+        container state was never confirmed changed.
+        """
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
@@ -203,7 +207,7 @@ class TestDockerMutationFailures:
         ]
         tool_fn = _make_tool()
         result = await tool_fn(action="docker", subaction="start", container_id="plex")
-        assert result["success"] is True
+        assert result["success"] is False
         assert result["container"] is None
 
     async def test_stop_mutation_returns_false_state(self, _mock_graphql: AsyncMock) -> None:
@@ -654,3 +658,72 @@ class TestDockerOrganizerMutations:
             confirm=True,
         )
         assert result["organizer"]["version"] == 3
+
+
+class TestDockerSuccessDerivationAndCoverage:
+    """Success must be derived from the GraphQL result, not hardcoded."""
+
+    async def test_update_autostart_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"updateAutostartConfiguration": True}}
+        result = await _make_tool()(
+            action="docker",
+            subaction="update_autostart",
+            autostart_entries=[{"id": _FULL_ID, "autoStart": True, "wait": 5}],
+        )
+        assert result["success"] is True
+        assert result["entry_count"] == 1
+        # entries forwarded, persist hardcoded True
+        sent = _mock_graphql.call_args.args[1]
+        assert sent["persist"] is True
+        assert sent["entries"][0]["autoStart"] is True
+
+    async def test_update_containers_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"docker": {"updateContainers": [{"id": _FULL_ID}]}}
+        result = await _make_tool()(
+            action="docker", subaction="update_containers", container_ids=[_FULL_ID]
+        )
+        assert result["success"] is True
+        assert _mock_graphql.call_args.args[1] == {"ids": [_FULL_ID]}
+
+    async def test_refresh_digests_false_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"refreshDockerDigests": False}
+        result = await _make_tool()(action="docker", subaction="refresh_digests")
+        assert result["success"] is False
+
+    async def test_sync_template_paths_surfaces_errors(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "syncDockerTemplatePaths": {"scanned": 2, "matched": 0, "skipped": 0, "errors": ["boom"]}
+        }
+        result = await _make_tool()(action="docker", subaction="sync_template_paths")
+        assert result["success"] is False
+        assert result["errors"] == ["boom"]
+
+    async def test_organizer_rejects_unknown_keys(self, _mock_graphql: AsyncMock) -> None:
+        with pytest.raises(ToolError, match="unknown field"):
+            await _make_tool()(
+                action="docker",
+                subaction="create_folder",
+                organizer_input={"name": "Media", "bogusField": 1},
+            )
+
+    async def test_move_items_to_position_forwards_required(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"moveDockerItemsToPosition": {"version": 4}}
+        result = await _make_tool()(
+            action="docker",
+            subaction="move_items_to_position",
+            organizer_input={
+                "sourceEntryIds": ["e1"],
+                "destinationFolderId": "f1",
+                "position": 2,
+            },
+        )
+        assert result["success"] is True
+        sent = _mock_graphql.call_args.args[1]
+        assert sent == {"sourceEntryIds": ["e1"], "destinationFolderId": "f1", "position": 2}
+
+    async def test_organizer_empty_result_is_not_success(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {"createDockerFolder": None}
+        result = await _make_tool()(
+            action="docker", subaction="create_folder", organizer_input={"name": "X"}
+        )
+        assert result["success"] is False
