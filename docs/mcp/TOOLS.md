@@ -81,7 +81,7 @@ Health checks, connection testing, diagnostics, and credential setup.
 | `check` | Comprehensive health check (connectivity, array, disks, containers, VMs, resources) | -- |
 | `test_connection` | Test API connectivity and authentication, returns latency | -- |
 | `diagnose` | Detailed diagnostic report with subscription status and middleware error stats | -- |
-| `setup` | Configure credentials interactively via elicitation (stores to `~/.unraid-mcp/.env`) | -- |
+| `setup` | Report credential status and print plugin/`.env` setup instructions (creds persist to `~/.unraid-mcp/.env`) | -- |
 
 #### `array` (13 subactions)
 
@@ -286,7 +286,7 @@ All destructive operations require `confirm=True`. Without it, interactive clien
 Errors use FastMCP's `ToolError` for user-facing messages:
 
 - **ToolError** -- invalid action, subaction, or missing required parameter
-- **CredentialsNotConfiguredError** -- triggers elicitation or setup instructions
+- **CredentialsNotConfiguredError** -- surfaces setup instructions (plugin userConfig + `.env`)
 - **TimeoutError** -- upstream Unraid API did not respond in time
 - **GraphQL errors** -- converted to ToolError with descriptive messages
 
@@ -323,4 +323,4 @@ unraid(action="notification", subaction="list", limit=10, list_type="UNREAD")
 - [SCHEMA.md](SCHEMA.md) -- Schema definitions behind these tools
 - [AUTH.md](AUTH.md) -- Authentication required before tool calls
 - [ENV.md](ENV.md) -- Environment variable configuration
-- [ELICITATION.md](ELICITATION.md) -- Interactive credential and confirmation flows
+- [ELICITATION.md](ELICITATION.md) -- Destructive action confirmation flows

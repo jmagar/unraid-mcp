@@ -112,22 +112,19 @@ The factory function handles:
 - Falling back to `subscribe_once` when auto-start is disabled
 - Surfacing terminal errors
 
-## Elicitation pattern
+## Elicitation pattern (destructive confirmation only)
+
+Elicitation is used solely to confirm destructive operations (`core/guards.py`).
+Credential setup is **not** elicitation-based — see [../SETUP.md](../SETUP.md).
 
 ```python
-# Credential collection
+# Boolean confirmation for a destructive action
 result = await ctx.elicit(
-    message="Prompt text with **markdown** formatting",
-    response_type=_UnraidCredentials,  # dataclass with typed fields
+    message="Are you sure?",
+    response_type=_ConfirmAction,  # dataclass with a `confirmed: bool` field
 )
 if result.action != "accept":
     return  # User cancelled
-
-# Boolean confirmation
-result = await ctx.elicit(
-    message="Are you sure?",
-    response_type=bool,
-)
 ```
 
 ## See Also

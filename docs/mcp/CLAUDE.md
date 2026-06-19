@@ -21,7 +21,7 @@ Documentation for the unraid-mcp MCP server.
 | [PUBLISH.md](PUBLISH.md) | Versioning, PyPI, Docker, and MCP registry publishing |
 | [CONNECT.md](CONNECT.md) | Client connection guides for Claude Code, Codex, Gemini, and direct HTTP |
 | [DEV.md](DEV.md) | Day-to-day development workflow with uv and Justfile recipes |
-| [ELICITATION.md](ELICITATION.md) | Interactive credential setup and destructive action confirmation |
+| [ELICITATION.md](ELICITATION.md) | Destructive action confirmation (credential setup is in SETUP.md) |
 | [PATTERNS.md](PATTERNS.md) | Common code patterns: action routing, GraphQL queries, error handling |
 | [WEBMCP.md](WEBMCP.md) | Health endpoint, well-known discovery, and CORS configuration |
 | [MCPUI.md](MCPUI.md) | Protocol-level UI hints for tool rendering |
@@ -34,7 +34,7 @@ Documentation for the unraid-mcp MCP server.
 3. TRANSPORT.md -- choose a transport and connect
 4. TOOLS.md -- learn available operations (15 domains, 108 subactions)
 5. RESOURCES.md -- discover live subscription data endpoints
-6. ELICITATION.md -- understand the setup wizard and destructive action gates
+6. ELICITATION.md -- understand the destructive action gates
 
 **Experienced developers:**
 - TOOLS.md and RESOURCES.md for the API surface

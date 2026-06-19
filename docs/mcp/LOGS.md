@@ -43,7 +43,7 @@ The `LoggingMiddleware` (outermost MCP middleware) logs:
 Exception
   +-- ToolError (FastMCP)
   |     +-- ToolError (unraid_mcp) -- user-facing MCP errors
-  +-- CredentialsNotConfiguredError -- triggers elicitation flow
+  +-- CredentialsNotConfiguredError -- surfaces setup instructions
 ```
 
 ### Error handling chain

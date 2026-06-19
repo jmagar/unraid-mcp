@@ -193,11 +193,13 @@ After installation, users can:
    unraid(action="health", subaction="check")
    ```
 
-2. **Use the credential setup tool on first run**
+2. **Check credential status on first run**
    ```
    unraid(action="health", subaction="setup")
    ```
-   This triggers elicitation to collect and persist credentials to `~/.unraid-mcp/.env`.
+   Reports whether credentials are configured and prints setup instructions. Set the
+   plugin's *Unraid GraphQL API URL* / *Unraid API Key* fields in the config form — the
+   setup hook persists them to `~/.unraid-mcp/.env` on the next session.
 
 3. **Monitor live data via subscriptions**
    ```

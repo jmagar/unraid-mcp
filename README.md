@@ -68,7 +68,7 @@ Connection and system health diagnostics.
 | `check` | Comprehensive health: API latency, array state, alerts, Docker container summary | — |
 | `test_connection` | Ping the Unraid API and return latency in ms | — |
 | `diagnose` | Subscription system status, error counts, reconnect state | — |
-| `setup` | Interactive credential setup (supports MCP elicitation) | — |
+| `setup` | Report credential status and print plugin/`.env` setup instructions | — |
 
 #### `array` — 13 subactions
 

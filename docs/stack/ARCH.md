@@ -98,15 +98,17 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 6. If failed (terminal state): return error message
 7. If auto-start disabled: fall back to `subscribe_once` one-shot query
 
-### Credential setup (elicitation)
+### Credential setup (plugin userConfig + setup hook)
 
-1. Client calls `unraid(action="health", subaction="setup")`
-2. If credentials exist: probe connection, ask to reset via elicitation
-3. If resetting or first run: send `_UnraidCredentials` elicitation form
-4. User fills in API URL and key
-5. Write to `~/.unraid-mcp/.env` (atomic: tmp + `os.replace`)
-6. Apply to running process via `apply_runtime_config()`
-7. Return success message
+1. User sets *Unraid GraphQL API URL* / *Unraid API Key* in the plugin's config form
+2. Claude Code injects them as `CLAUDE_PLUGIN_OPTION_*` env vars and fires the
+   SessionStart / ConfigChange hooks, which run `unraid-mcp setup plugin-hook`
+3. `run_plugin_hook()` maps the plugin options to canonical names (`apply_plugin_options()`),
+   rejecting empty/newline-injected values
+4. If both URL and key are present: write to `~/.unraid-mcp/.env` (atomic: tmp + `os.replace`, mode 600)
+5. The server, CLI, and Docker read those credentials from `.env`/env at startup
+6. `unraid(action="health", subaction="setup")` reports status and prints instructions —
+   it never prompts interactively
 
 ## Key design decisions
 

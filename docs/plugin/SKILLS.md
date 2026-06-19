@@ -47,4 +47,4 @@ Credentials are available as `$CLAUDE_PLUGIN_OPTION_*` environment variables (fr
 
 - [PLUGINS.md](PLUGINS.md) -- Plugin manifests that register the skill
 - [../mcp/TOOLS.md](../mcp/TOOLS.md) -- Tool definitions the skill documents
-- [../mcp/ELICITATION.md](../mcp/ELICITATION.md) -- Setup wizard referenced by the skill
+- [../mcp/ELICITATION.md](../mcp/ELICITATION.md) -- Destructive action confirmation referenced by the skill

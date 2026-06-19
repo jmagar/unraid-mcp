@@ -7,7 +7,7 @@ Safety and security patterns enforced across the unraid-mcp server.
 ### Storage
 
 - Credentials live in `~/.unraid-mcp/.env` (mode 600, directory mode 700)
-- The elicitation setup wizard writes credentials atomically (tmp file + `os.replace`)
+- The plugin setup hook writes credentials atomically (tmp file + `os.replace`)
 - Credentials are never written to `os.environ` after startup -- all internal consumers read from module globals via `from ..config import settings`
 - Bearer tokens are removed from `os.environ` immediately after being applied to prevent subprocess inheritance
 

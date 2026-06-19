@@ -72,4 +72,5 @@ The server loads the first `.env` file found:
 
 - [AUTH.md](AUTH.md) -- Authentication details
 - [../CONFIG.md](../CONFIG.md) -- Full configuration reference with timeouts and middleware
-- [ELICITATION.md](ELICITATION.md) -- Interactive credential setup
+- [../SETUP.md](../SETUP.md) -- Credential setup (plugin userConfig + `.env`)
+- [ELICITATION.md](ELICITATION.md) -- Destructive action confirmation

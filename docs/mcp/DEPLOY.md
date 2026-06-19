@@ -15,7 +15,7 @@ uv run unraid-mcp-server
 just dev
 ```
 
-The server reads credentials from `~/.unraid-mcp/.env`. Create this file from `.env.example` or use the setup wizard.
+The server reads credentials from `~/.unraid-mcp/.env`. Create this file from `.env.example`, or (as a Claude Code plugin) set the credential fields in the plugin config form so the setup hook writes them for you.
 
 ## Docker Compose (recommended for production)
 

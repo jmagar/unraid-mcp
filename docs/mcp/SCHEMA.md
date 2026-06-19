@@ -84,16 +84,8 @@ async def unraid(
 
 ## Elicitation Models
 
-### Credential setup
-
-```python
-@dataclass
-class _UnraidCredentials:
-    api_url: str
-    api_key: str
-```
-
-Used by `elicit_and_configure()` to collect Unraid server credentials interactively.
+Elicitation is used only for destructive action confirmation. Credential setup is
+handled by the plugin's `userConfig` form + `setup plugin-hook` (no elicitation model).
 
 ### Destructive action confirmation
 
@@ -103,10 +95,6 @@ class _ConfirmAction(BaseModel):
 ```
 
 Used by `elicit_destructive_confirmation()` to gate destructive operations.
-
-### Reset confirmation
-
-The reset flow uses a simple `bool` response type to ask whether to overwrite existing credentials.
 
 ## GraphQL Query Organization
 
