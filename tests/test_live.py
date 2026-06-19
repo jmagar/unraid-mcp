@@ -74,6 +74,67 @@ async def test_notification_feed_collects_events(_mock_subscribe_collect):
 
 
 @pytest.mark.asyncio
+async def test_log_tail_caps_events_default(_mock_subscribe_collect):
+    # Tool param default is 20 — a noisy log window must not flood context.
+    _mock_subscribe_collect.return_value = [
+        {"logFile": {"path": "/var/log/syslog", "content": f"line{i}"}} for i in range(60)
+    ]
+    result = await _make_tool()(
+        action="live", subaction="log_tail", path="/var/log/syslog", collect_for=1.0
+    )
+    assert result["event_count"] == 20
+    assert len(result["events"]) == 20
+    assert result["page"]["truncated"] is True
+    assert result["page"]["total"] == 60
+
+
+@pytest.mark.asyncio
+async def test_log_tail_limit_zero_returns_all(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"logFile": {"path": "/var/log/syslog", "content": f"line{i}"}} for i in range(60)
+    ]
+    result = await _make_tool()(
+        action="live", subaction="log_tail", path="/var/log/syslog", collect_for=1.0, limit=0
+    )
+    assert result["event_count"] == 60
+    assert result["page"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_notification_feed_caps_events_default(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"notificationAdded": {"id": str(i)}} for i in range(60)
+    ]
+    result = await _make_tool()(action="live", subaction="notification_feed", collect_for=2.0)
+    assert result["event_count"] == 20
+    assert len(result["events"]) == 20
+    assert result["page"]["truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_notification_feed_limit_narrows(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"notificationAdded": {"id": str(i)}} for i in range(60)
+    ]
+    result = await _make_tool()(
+        action="live", subaction="notification_feed", collect_for=2.0, limit=5
+    )
+    assert result["event_count"] == 5
+
+
+@pytest.mark.asyncio
+async def test_notification_feed_limit_zero_returns_all(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"notificationAdded": {"id": str(i)}} for i in range(60)
+    ]
+    result = await _make_tool()(
+        action="live", subaction="notification_feed", collect_for=2.0, limit=0
+    )
+    assert result["event_count"] == 60
+    assert result["page"]["truncated"] is False
+
+
+@pytest.mark.asyncio
 async def test_invalid_subaction_raises():
     from unraid_mcp.core.exceptions import ToolError
 

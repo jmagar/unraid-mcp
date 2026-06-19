@@ -102,8 +102,9 @@ class InfoOverviewSummary(BaseModel):
 class InfoOverviewResult(BaseModel):
     """Top-level shape of info/overview."""
 
+    model_config = {"extra": "forbid"}
+
     summary: dict[str, Any]
-    details: dict[str, Any]
 
 
 class ArraySummary(BaseModel):
@@ -119,8 +120,9 @@ class ArraySummary(BaseModel):
 class InfoArrayResult(BaseModel):
     """Top-level shape of info/array."""
 
+    model_config = {"extra": "forbid"}
+
     summary: dict[str, Any]
-    details: dict[str, Any]
 
 
 class CpuMetrics(BaseModel):
@@ -384,17 +386,15 @@ class TestDockerDetailsContract:
         cid = "a" * 64 + ":local"
         _docker_mock.return_value = {
             "docker": {
-                "containers": [
-                    {
-                        "id": cid,
-                        "names": ["plex"],
-                        "state": "running",
-                        "image": "plexinc/pms:latest",
-                        "status": "Up 3 hours",
-                        "ports": [],
-                        "autoStart": True,
-                    }
-                ]
+                "container": {
+                    "id": cid,
+                    "names": ["plex"],
+                    "state": "running",
+                    "image": "plexinc/pms:latest",
+                    "status": "Up 3 hours",
+                    "ports": [],
+                    "autoStart": True,
+                }
             }
         }
         result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
@@ -403,7 +403,7 @@ class TestDockerDetailsContract:
     async def test_details_has_required_fields(self, _docker_mock: AsyncMock) -> None:
         cid = "b" * 64 + ":local"
         _docker_mock.return_value = {
-            "docker": {"containers": [{"id": cid, "names": ["sonarr"], "state": "exited"}]}
+            "docker": {"container": {"id": cid, "names": ["sonarr"], "state": "exited"}}
         }
         result = await _docker_tool()(action="docker", subaction="details", container_id=cid)
         assert "id" in result
@@ -473,7 +473,7 @@ class TestDockerMutationContract:
 
 
 class TestInfoOverviewContract:
-    """info/overview returns {"summary": {...}, "details": {...}}."""
+    """info/overview returns {"summary": {...}} with no raw details echo."""
 
     async def test_overview_has_summary_and_details(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {
@@ -498,7 +498,7 @@ class TestInfoOverviewContract:
         result = await _info_tool()(action="system", subaction="overview")
         validated = InfoOverviewResult(**result)
         assert isinstance(validated.summary, dict)
-        assert isinstance(validated.details, dict)
+        assert "details" not in result
 
     async def test_overview_summary_contains_hostname(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {
@@ -519,7 +519,8 @@ class TestInfoOverviewContract:
         InfoOverviewSummary(**result["summary"])
         assert result["summary"]["hostname"] == "myserver"
 
-    async def test_overview_details_mirrors_raw_info(self, _info_mock: AsyncMock) -> None:
+    async def test_overview_omits_raw_details_echo(self, _info_mock: AsyncMock) -> None:
+        """The full raw info object must not be echoed back as `details`."""
         raw_info = {
             "os": {
                 "hostname": "srv",
@@ -530,14 +531,20 @@ class TestInfoOverviewContract:
             },
             "cpu": {"manufacturer": "Intel", "brand": "Xeon", "cores": 16, "threads": 32},
             "memory": {"layout": []},
+            "versions": {"core": {"unraid": "6.12.0", "api": "4.0", "kernel": "6.1"}},
+            "machineId": "mid-123",
+            "time": "2026-01-01T00:00:00Z",
         }
         _info_mock.return_value = {"info": raw_info}
         result = await _info_tool()(action="system", subaction="overview")
-        assert result["details"] == raw_info
+        assert "details" not in result
+        # Genuinely-useful scalar fields are folded into the curated summary.
+        assert result["summary"]["machine_id"] == "mid-123"
+        assert result["summary"]["versions"] == raw_info["versions"]["core"]
 
 
 class TestInfoArrayContract:
-    """info/array returns {"summary": {...}, "details": {...}} with health analysis."""
+    """info/array returns {"summary": {...}} with health analysis, no raw echo."""
 
     async def test_array_result_shape(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {
@@ -554,7 +561,7 @@ class TestInfoArrayContract:
         result = await _info_tool()(action="system", subaction="array")
         validated = InfoArrayResult(**result)
         assert isinstance(validated.summary, dict)
-        assert isinstance(validated.details, dict)
+        assert "details" not in result
 
     async def test_array_summary_contains_required_fields(self, _info_mock: AsyncMock) -> None:
         _info_mock.return_value = {

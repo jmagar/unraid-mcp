@@ -48,6 +48,7 @@ Copy `.env.example` to `.env` and configure:
 **Server:**
 - `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
 - `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
+- `UNRAID_MCP_MAX_RESPONSE_BYTES`: Max serialized tool-response size in bytes (default: 131072 = 128 KB). Responses over the cap are replaced with a structured, parseable JSON truncation marker (`{"error": "response_truncated", "truncated": true, ...}`) rather than hard-cut mid-JSON. See `unraid_mcp/core/response_limit.py`.
 
 **SSL/TLS:**
 - `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
@@ -77,6 +78,13 @@ Copy `.env.example` to `.env` and configure:
 ### Key Design Patterns
 - **Consolidated Action Pattern**: Each tool uses `action: Literal[...]` parameter to expose multiple operations via a single MCP tool, reducing context window usage
 - **Pre-built Query Dicts**: `QUERIES` and `MUTATIONS` dicts prevent GraphQL injection and organize operations
+- **List Capping**: List subactions bound output via `cap_list` (`core/pagination.py`) threaded
+  from the `limit` tool param. Capped responses carry a `page` meta dict
+  (`returned`/`total`/`truncated`, plus a `hint` when truncated). `limit<=0` returns everything;
+  omitting `limit` uses the tool default (20). Applies to `docker/list`, `disk/shares`,
+  `disk/disks`, `array/parity_history`, and the `live/log_tail` + `live/notification_feed`
+  event lists. `docker/details` fetches a single container via `docker.container(id:)` rather
+  than over-fetching the full container list.
 - **Destructive Action Safety**: `DESTRUCTIVE_ACTIONS` sets require `confirm=True` for dangerous operations
 - **Modular Architecture**: Clean separation of concerns across focused modules
 - **Error Handling**: Uses ToolError for user-facing errors, detailed logging for debugging
@@ -165,7 +173,7 @@ The server loads environment variables from multiple locations in order:
 1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
 2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
 3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
-4. **ResponseLimitingMiddleware** — truncates responses > 512 KB with a clear suffix
+4. **StructuredResponseLimitingMiddleware** (`core/response_limit.py`) — replaces responses over the cap (default 128 KB, override via `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a complete, parseable JSON truncation marker instead of a lossy mid-JSON byte cut
 
 Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool mixes reads and mutations under one name, making per-subaction cache exclusion impossible.
 

@@ -85,6 +85,61 @@ class TestUnraidInfoTool:
         assert "summary" in result
         _mock_graphql.assert_called_once()
 
+    async def test_overview_omits_raw_details(self, _mock_graphql: AsyncMock) -> None:
+        """overview no longer echoes the full raw info object as `details`."""
+        _mock_graphql.return_value = {
+            "info": {
+                "os": {"distro": "Unraid", "release": "7.2", "hostname": "t"},
+                "cpu": {"manufacturer": "Intel", "brand": "i7", "cores": 4, "threads": 8},
+                "baseboard": {"manufacturer": "ASUS", "model": "X", "version": "1"},
+                "versions": {"core": {"unraid": "7.2.0"}},
+                "machineId": "mid-1",
+                "time": "2026-01-01T00:00:00Z",
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="overview")
+        assert "details" not in result
+        assert result["summary"]["machine_id"] == "mid-1"
+        assert result["summary"]["versions"] == {"unraid": "7.2.0"}
+
+    async def test_array_omits_raw_details(self, _mock_graphql: AsyncMock) -> None:
+        """array returns the computed summary without the raw disk object echo."""
+        _mock_graphql.return_value = {
+            "array": {
+                "state": "STARTED",
+                "capacity": {"kilobytes": {"free": 1000, "used": 500, "total": 1500}},
+                "parities": [{"id": "p1", "status": "DISK_OK"}],
+                "disks": [{"id": "d1", "status": "DISK_OK"}],
+                "caches": [],
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="array")
+        assert "details" not in result
+        assert result["summary"]["state"] == "STARTED"
+        assert result["summary"]["overall_health"] == "HEALTHY"
+
+    async def test_timezones_capped_with_meta(self, _mock_graphql: AsyncMock) -> None:
+        """timezones is capped to the limit and surfaces truncation meta."""
+        opts = [{"value": f"Zone/{i}", "label": f"Zone {i}"} for i in range(100)]
+        _mock_graphql.return_value = {"timeZoneOptions": opts}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="timezones", limit=5)
+        assert len(result["timezones"]) == 5
+        assert result["page"]["returned"] == 5
+        assert result["page"]["total"] == 100
+        assert result["page"]["truncated"] is True
+
+    async def test_timezones_limit_zero_returns_all(self, _mock_graphql: AsyncMock) -> None:
+        """limit=0 disables capping (give-me-all escape hatch)."""
+        opts = [{"value": f"Zone/{i}", "label": f"Zone {i}"} for i in range(30)]
+        _mock_graphql.return_value = {"timeZoneOptions": opts}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="timezones", limit=0)
+        assert len(result["timezones"]) == 30
+        assert result["page"]["truncated"] is False
+
     async def test_ups_device_requires_device_id(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="device_id is required"):

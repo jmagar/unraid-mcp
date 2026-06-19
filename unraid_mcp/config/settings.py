@@ -88,9 +88,37 @@ def _parse_port(env_var: str, default: int) -> int:
     return port
 
 
+def _parse_positive_int(env_var: str, default: int) -> int:
+    """Parse a positive integer from an environment variable, falling back on error."""
+    raw = os.getenv(env_var)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        print(
+            f"WARNING: {env_var}={raw!r} is not a valid integer; using default {default}",
+            file=sys.stderr,
+        )
+        return default
+    if value <= 0:
+        print(
+            f"WARNING: {env_var}={value} must be positive; using default {default}",
+            file=sys.stderr,
+        )
+        return default
+    return value
+
+
 UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
 UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
 UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
+
+# Maximum serialized tool-response size in bytes. Responses larger than this are
+# replaced with a structured, still-parseable truncation marker (see
+# core/response_limit.py) rather than hard-cut mid-JSON. Default 128 KB keeps a
+# single response well under the client context window.
+UNRAID_MCP_MAX_RESPONSE_BYTES = _parse_positive_int("UNRAID_MCP_MAX_RESPONSE_BYTES", 131072)
 
 # HTTP Authentication
 # Bearer token for HTTP transport (streamable-http / sse).
