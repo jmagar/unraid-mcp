@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-19
+
+### Changed
+
+- **Upgraded FastMCP `3.2.0` → `3.4.2`** (latest). Picks up the v3.3.x/v3.4.x
+  line: hardened OAuth Proxy silent-consent flow, OTEL semantic-convention
+  coverage for all list operations, `ToolResult` structured errors, proactive
+  OAuth token refresh, and JWT compatibility fixes (joserfc migration, Clerk
+  `cat` header support). Transitive bumps include **Starlette `0.52.1` → `1.3.1`**
+  (enforced floor for CVE-2026-48710), `authlib 1.6.9 → 1.7.2`, and
+  `python-multipart 0.0.22 → 0.0.32`. No code changes required — the project's
+  ASGI auth middleware references Starlette only under `TYPE_CHECKING`, and the
+  full test suite passes against the new stack.
+
 ## [1.5.0] - 2026-06-19
 
 ### Added
