@@ -26,27 +26,35 @@ Run from the repo root (no arguments needed in that case). Exits 0 if all checks
 
 ### `bin/generate_unraid_api_reference.py`
 
-Generates canonical Unraid GraphQL documentation from live API introspection. Connects to the Unraid GraphQL endpoint, runs a full introspection query, and writes several output files under `docs/unraid/`:
+Generates canonical Unraid GraphQL documentation from API introspection. Connects to the Unraid GraphQL endpoint, runs a full introspection query, and writes several output files under `docs/unraid/`:
 
-- `UNRAID-API-COMPLETE-REFERENCE.md` — Full human-readable type/field reference
-- `UNRAID-API-SUMMARY.md` — Condensed root operations summary with tables
+- `UNRAID-API-COMPLETE-REFERENCE.md` — Full type/field reference, rendered by [graphql-markdown](https://github.com/exogen/graphql-markdown)
+- `UNRAID-API-SUMMARY.md` — Condensed root operations summary with tables (curated)
 - `UNRAID-API-INTROSPECTION.json` — Raw introspection JSON snapshot
 - `UNRAID-SCHEMA.graphql` — SDL schema output
-- `UNRAID-API-CHANGES.md` — Diff of type/field changes vs. the previous snapshot
+- `UNRAID-API-CHANGES.md` — Schema diff vs. the previous snapshot, produced by [GraphQL Inspector](https://the-guild.dev/graphql/inspector)
+
+The reference and change report are rendered by official GraphQL tooling invoked via `npx` on demand, so **Node.js 18+ is required** when generating docs (no JS dependencies are committed). The condensed summary is generated in pure Python.
 
 **Usage:**
 ```bash
+# From a live API (default)
 uv run python bin/generate_unraid_api_reference.py
+
+# Offline, from a saved introspection payload (reproducible; used by tests)
+uv run python bin/generate_unraid_api_reference.py \
+  --from-introspection docs/unraid/UNRAID-API-INTROSPECTION.json
 ```
 
-Requires `UNRAID_API_URL` and `UNRAID_API_KEY` environment variables (or `--api-url` / `--api-key` flags). SSL verification is disabled by default for self-signed certificates; pass `--verify-ssl` to enable.
+Live mode requires `UNRAID_API_URL` and `UNRAID_API_KEY` environment variables (or `--api-url` / `--api-key` flags). SSL verification is disabled by default for self-signed certificates; pass `--verify-ssl` to enable.
 
 **Key flags:**
 ```
 --api-url URL          GraphQL endpoint (default: $UNRAID_API_URL)
 --api-key KEY          API key (default: $UNRAID_API_KEY)
+--from-introspection P Read introspection from a saved JSON payload (offline)
 --verify-ssl           Enable SSL cert verification
---include-introspection-types  Include __Schema/__Type etc. in output
+--include-introspection-types  Include __Schema/__Type etc. in summary
 --timeout-seconds N    HTTP timeout (default: 90)
 ```
 
