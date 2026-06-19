@@ -65,10 +65,10 @@ def _load_env_files() -> None:
 _load_env_files()
 
 # Core API Configuration
-# IMPORTANT: UNRAID_API_URL and UNRAID_API_KEY are mutated at runtime by apply_runtime_config().
-# Never import these names at module level in code that runs after startup.
-# Instead, use a local import: from ..config import settings as _settings; _settings.UNRAID_API_URL
-# Or call get_api_credentials() which always returns the current values.
+# Loaded once at startup from the .env hierarchy / process env. Consumers should
+# read the current value via a local import (from ..config import settings as
+# _settings; _settings.UNRAID_API_URL) or get_api_credentials(), so a future
+# reload picks up the latest binding rather than a stale module-import snapshot.
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
 UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
 
@@ -153,21 +153,8 @@ def is_configured() -> bool:
     return bool(UNRAID_API_URL and UNRAID_API_KEY)
 
 
-def apply_runtime_config(api_url: str, api_key: str) -> None:
-    """Update module-level credential globals at runtime (post-elicitation).
-
-    Credentials are intentionally NOT written to os.environ to prevent
-    leaking secrets to subprocesses or error reporters that capture
-    environment snapshots.  All internal consumers read from this module's
-    globals via ``from ..config import settings as _settings``.
-    """
-    global UNRAID_API_URL, UNRAID_API_KEY
-    UNRAID_API_URL = api_url
-    UNRAID_API_KEY = api_key
-
-
 def get_api_credentials() -> tuple[str | None, str | None]:
-    """Return current (UNRAID_API_URL, UNRAID_API_KEY) — safe to call after apply_runtime_config."""
+    """Return the current (UNRAID_API_URL, UNRAID_API_KEY) module globals."""
     return UNRAID_API_URL, UNRAID_API_KEY
 
 

@@ -302,8 +302,8 @@ async def make_graphql_request(
         CredentialsNotConfiguredError: When UNRAID_API_URL or UNRAID_API_KEY are absent at call time
         ToolError: For HTTP errors, network errors, or non-idempotent GraphQL errors
     """
-    # Local import to get current runtime values — module-level names are captured at import time
-    # and won't reflect runtime changes (e.g., after elicitation sets them via apply_runtime_config).
+    # Local import to read the current values — module-level names are captured at import time
+    # and would not reflect a settings reload.
     from ..config import settings as _settings
 
     if not _settings.UNRAID_API_URL or not _settings.UNRAID_API_KEY:
