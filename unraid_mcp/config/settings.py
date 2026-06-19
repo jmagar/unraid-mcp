@@ -78,8 +78,8 @@ _load_env_files()
 # Core API Configuration
 # Loaded once at startup from the .env hierarchy / process env. Consumers should
 # read the current value via a local import (from ..config import settings as
-# _settings; _settings.UNRAID_API_URL) or get_api_credentials(), so a future
-# reload picks up the latest binding rather than a stale module-import snapshot.
+# _settings; _settings.UNRAID_API_URL), so a future reload picks up the latest
+# binding rather than a stale module-import snapshot.
 UNRAID_API_URL = os.getenv("UNRAID_API_URL")
 UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
 
@@ -162,11 +162,6 @@ def validate_required_config() -> tuple[bool, list[str]]:
 def is_configured() -> bool:
     """Return True if both required credentials are present."""
     return bool(UNRAID_API_URL and UNRAID_API_KEY)
-
-
-def get_api_credentials() -> tuple[str | None, str | None]:
-    """Return the current (UNRAID_API_URL, UNRAID_API_KEY) module globals."""
-    return UNRAID_API_URL, UNRAID_API_KEY
 
 
 def apply_bearer_token(token: str) -> None:
