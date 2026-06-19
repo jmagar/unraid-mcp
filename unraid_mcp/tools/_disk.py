@@ -13,7 +13,7 @@ from ..core import client as _client
 from ..core.client import DISK_TIMEOUT
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import format_bytes, validate_subaction
+from ..core.utils import filter_log_lines, format_bytes, validate_subaction
 
 
 # ===========================================================================
@@ -74,6 +74,8 @@ async def _handle_disk(
     backup_options: dict[str, Any] | None,
     ctx: Context | None,
     confirm: bool,
+    level: str | None = None,
+    context: int = 2,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _DISK_SUBACTIONS, "disk")
 
@@ -183,6 +185,13 @@ async def _handle_disk(
             result = data.get("logFile")
             if not result:
                 raise ToolError(f"Log file not found or inaccessible: {log_path}")
-            return dict(result)
+            out = dict(result)
+            if level is not None and isinstance(out.get("content"), str):
+                lines = out["content"].split("\n")
+                filtered = filter_log_lines(lines, level=level, context=context)
+                out["content"] = "\n".join(filtered)
+                out["matchedLines"] = len(filtered)
+                out["filter"] = {"level": level, "context": context}
+            return out
 
         raise ToolError(f"Unhandled disk subaction '{subaction}' — this is a bug")

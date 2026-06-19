@@ -354,3 +354,46 @@ class TestStorageFlashBackup:
             backup_options={"dryRun": True},
         )
         assert _mock_graphql.call_args[0][1]["input"]["options"] == {"dryRun": True}
+
+
+class TestLogsFiltering:
+    """Severity/context filtering on disk/logs (issue #26)."""
+
+    _CONTENT = "line0 info\nline1 info\nline2 [ERROR] boom\nline3 info\nline4 info"
+
+    async def test_logs_no_level_returns_full_content(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": self._CONTENT}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="disk", subaction="logs", log_path="/var/log/syslog")
+        assert result["content"] == self._CONTENT
+        assert "matchedLines" not in result
+
+    async def test_logs_level_filters_content(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": self._CONTENT}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="disk",
+            subaction="logs",
+            log_path="/var/log/syslog",
+            level="error",
+            context=1,
+        )
+        # match at line2, context 1 → lines 1..3
+        assert result["content"] == "line1 info\nline2 [ERROR] boom\nline3 info"
+        assert result["matchedLines"] == 3
+        assert result["filter"] == {"level": "error", "context": 1}
+
+    async def test_logs_level_no_match(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "logFile": {"path": "/var/log/syslog", "content": "info: a\ninfo: b"}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(
+            action="disk", subaction="logs", log_path="/var/log/syslog", level="error"
+        )
+        assert result["content"] == ""
+        assert result["matchedLines"] == 0

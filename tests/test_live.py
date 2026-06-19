@@ -150,3 +150,43 @@ def test_collect_actions_all_handled():
         f"COLLECT_ACTIONS keys without handlers in _handle_live: {unhandled}. "
         "Add an if-branch in unraid_mcp/tools/_live.py."
     )
+
+
+@pytest.mark.asyncio
+async def test_log_tail_level_filters_events(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {
+            "logFile": {
+                "path": "/var/log/syslog",
+                "content": "a info\nb [ERROR] boom\nc info\nd info",
+                "totalLines": 4,
+            }
+        }
+    ]
+    result = await _make_tool()(
+        action="live",
+        subaction="log_tail",
+        path="/var/log/syslog",
+        collect_for=1.0,
+        level="error",
+        context=1,
+    )
+    assert result["filter"] == {"level": "error", "context": 1}
+    log_file = result["events"][0]["logFile"]
+    # match at idx1, context 1 → idx 0..2
+    assert log_file["content"] == "a info\nb [ERROR] boom\nc info"
+    assert log_file["matchedLines"] == 3
+    # original fields preserved
+    assert log_file["path"] == "/var/log/syslog"
+
+
+@pytest.mark.asyncio
+async def test_log_tail_no_level_unchanged(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"logFile": {"path": "/var/log/syslog", "content": "a info\nb [ERROR] boom"}}
+    ]
+    result = await _make_tool()(
+        action="live", subaction="log_tail", path="/var/log/syslog", collect_for=1.0
+    )
+    assert result["filter"] is None
+    assert result["events"][0]["logFile"]["content"] == "a info\nb [ERROR] boom"

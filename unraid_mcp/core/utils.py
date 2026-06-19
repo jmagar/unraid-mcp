@@ -39,9 +39,10 @@ _SEVERITY_ALIASES: dict[str, str] = {
 # Matches a structured level token inside a log line. Tolerant of several common
 # shapes: bracketed ([ERROR]), key=value (level=warn), and bare priority words
 # surrounded by separators (... err: ...). Case-insensitive.
-_LEVEL_TOKEN = "|".join(
-    sorted(set(_SEVERITY_ORDER) | set(_SEVERITY_ALIASES), key=len, reverse=True)
+_LEVEL_TOKENS: list[str] = sorted(
+    set(_SEVERITY_ORDER) | set(_SEVERITY_ALIASES), key=lambda t: len(t), reverse=True
 )
+_LEVEL_TOKEN = "|".join(_LEVEL_TOKENS)
 _LEVEL_RE = re.compile(
     r"(?:^|[\[\(<\s:=|/])(" + _LEVEL_TOKEN + r")(?:[\]\)>\s:=|/.,]|$)",
     re.IGNORECASE,
