@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from unraid_mcp.core.utils import filter_log_lines
+from unraid_mcp.core.utils import count_log_matches, filter_log_lines
 
 
 def test_no_level_returns_unchanged():
@@ -140,3 +140,47 @@ def test_tolerant_level_shapes(fmt):
     lines = ["ok info", fmt]
     result = filter_log_lines(lines, level="error", context=0)
     assert result == [fmt]
+
+
+# --- count_log_matches (issue #48) ---
+
+
+def test_count_no_level_counts_all_lines():
+    lines = ["a", "b", "c"]
+    assert count_log_matches(lines) == 3
+    assert count_log_matches(lines, level=None) == 3
+
+
+def test_count_only_matches_excludes_context_and_separators():
+    # Two non-contiguous error lines among info lines. With context, filter_log_lines
+    # returns extra context lines plus a "---" separator, but the match count is 2.
+    lines = [
+        "line0 info",
+        "line1 info",
+        "line2 [ERROR] boom",
+        "line3 info",
+        "line4 info",
+        "line5 info",
+        "line6 info",
+        "line7 [ERROR] kaboom",
+        "line8 info",
+    ]
+    assert count_log_matches(lines, level="error") == 2
+
+    filtered = filter_log_lines(lines, level="error", context=1)
+    # filtered pulls in surrounding context + a "---" separator between the
+    # two non-contiguous groups; returned-line count excludes "---".
+    returned = sum(1 for line in filtered if line != "---")
+    assert "---" in filtered
+    assert returned > count_log_matches(lines, level="error")
+
+
+def test_count_respects_severity_threshold():
+    lines = ["info x", "warning y", "error z", "critical w"]
+    # warning threshold matches warning, error, critical
+    assert count_log_matches(lines, level="warning") == 3
+    assert count_log_matches(lines, level="error") == 2
+
+
+def test_count_no_match_is_zero():
+    assert count_log_matches(["info a", "debug b"], level="error") == 0

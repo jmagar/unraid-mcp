@@ -175,7 +175,11 @@ async def test_log_tail_level_filters_events(_mock_subscribe_collect):
     log_file = result["events"][0]["logFile"]
     # match at idx1, context 1 → idx 0..2
     assert log_file["content"] == "a info\nb [ERROR] boom\nc info"
-    assert log_file["matchedLines"] == 3
+    # only the single [ERROR] line actually matched the severity filter (#48)
+    assert log_file["matchedLines"] == 1
+    # 3 real lines returned (match + 2 context), no "---" separator
+    assert log_file["returnedLines"] == 3
+    assert log_file["matchedLines"] < log_file["returnedLines"]
     # original fields preserved
     assert log_file["path"] == "/var/log/syslog"
 
