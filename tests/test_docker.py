@@ -54,6 +54,35 @@ class TestDockerActions:
         result = await tool_fn(action="docker", subaction="list")
         assert len(result["containers"]) == 1
 
+    async def test_list_caps_default(self, _mock_graphql: AsyncMock) -> None:
+        # Tool param default is 20.
+        _mock_graphql.return_value = {
+            "docker": {"containers": [{"id": f"c{i}", "names": [f"ct{i}"]} for i in range(80)]}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="list")
+        assert len(result["containers"]) == 20
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == 80
+        assert "hint" in result["page"]
+
+    async def test_list_limit_widens(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {"containers": [{"id": f"c{i}", "names": [f"ct{i}"]} for i in range(80)]}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="list", limit=50)
+        assert len(result["containers"]) == 50
+
+    async def test_list_limit_zero_returns_all(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "docker": {"containers": [{"id": f"c{i}", "names": [f"ct{i}"]} for i in range(80)]}
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="list", limit=0)
+        assert len(result["containers"]) == 80
+        assert result["page"]["truncated"] is False
+
     async def test_start_container(self, _mock_graphql: AsyncMock) -> None:
         # First call resolves ID, second performs start
         cid = "a" * 64 + ":local"

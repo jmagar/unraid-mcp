@@ -183,6 +183,71 @@ class TestStorageActions:
         result = await tool_fn(action="disk", subaction="disks")
         assert len(result["disks"]) == 1
 
+
+class TestStorageListCaps:
+    """disk/shares and disk/disks cap large lists via cap_list and surface page meta."""
+
+    @staticmethod
+    def _shares(n: int) -> dict:
+        return {"shares": [{"name": f"share{i}"} for i in range(n)]}
+
+    @staticmethod
+    def _disks(n: int) -> dict:
+        return {"disks": [{"id": f"d:{i}", "device": f"sd{i}"} for i in range(n)]}
+
+    async def test_shares_default_cap(self, _mock_graphql: AsyncMock) -> None:
+        # Tool param default is 20.
+        _mock_graphql.return_value = self._shares(75)
+        result = await _make_tool()(action="disk", subaction="shares")
+        assert len(result["shares"]) == 20
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == 75
+        assert result["page"]["returned"] == 20
+
+    async def test_shares_caps_after_id_synthesis(self, _mock_graphql: AsyncMock) -> None:
+        # The synthesized id must be present on the returned (capped) rows.
+        _mock_graphql.return_value = self._shares(75)
+        result = await _make_tool()(action="disk", subaction="shares", limit=3)
+        assert len(result["shares"]) == 3
+        assert [s["id"] for s in result["shares"]] == ["share0", "share1", "share2"]
+
+    async def test_shares_limit_widens(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._shares(75)
+        result = await _make_tool()(action="disk", subaction="shares", limit=60)
+        assert len(result["shares"]) == 60
+        assert result["page"]["truncated"] is True
+
+    async def test_shares_limit_zero_returns_all(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._shares(75)
+        result = await _make_tool()(action="disk", subaction="shares", limit=0)
+        assert len(result["shares"]) == 75
+        assert result["page"]["truncated"] is False
+
+    async def test_disks_default_cap(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._disks(40)
+        result = await _make_tool()(action="disk", subaction="disks")
+        assert len(result["disks"]) == 20
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == 40
+
+    async def test_disks_limit_narrows(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._disks(40)
+        result = await _make_tool()(action="disk", subaction="disks", limit=5)
+        assert len(result["disks"]) == 5
+
+    async def test_disks_limit_zero_returns_all(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._disks(40)
+        result = await _make_tool()(action="disk", subaction="disks", limit=0)
+        assert len(result["disks"]) == 40
+        assert result["page"]["truncated"] is False
+
+    async def test_disks_small_list_not_truncated(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = self._disks(3)
+        result = await _make_tool()(action="disk", subaction="disks")
+        assert len(result["disks"]) == 3
+        assert result["page"]["truncated"] is False
+        assert "hint" not in result["page"]
+
     async def test_disk_details(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "disk": {

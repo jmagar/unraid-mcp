@@ -161,6 +161,44 @@ async def test_parity_history_returns_history(_mock_graphql):
     assert len(result["data"]["parityHistory"]) == 1
 
 
+def _parity_history(n: int) -> dict:
+    return {"parityHistory": [{"date": f"2026-03-{i:02d}T00:00:00Z"} for i in range(n)]}
+
+
+@pytest.mark.asyncio
+async def test_parity_history_caps_default(_mock_graphql):
+    # Tool param default is 20.
+    _mock_graphql.return_value = _parity_history(40)
+    result = await _make_tool()(action="array", subaction="parity_history")
+    assert len(result["data"]["parityHistory"]) == 20
+    assert result["page"]["truncated"] is True
+    assert result["page"]["total"] == 40
+
+
+@pytest.mark.asyncio
+async def test_parity_history_limit_narrows(_mock_graphql):
+    _mock_graphql.return_value = _parity_history(40)
+    result = await _make_tool()(action="array", subaction="parity_history", limit=5)
+    assert len(result["data"]["parityHistory"]) == 5
+    assert result["page"]["truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_parity_history_limit_zero_returns_all(_mock_graphql):
+    _mock_graphql.return_value = _parity_history(40)
+    result = await _make_tool()(action="array", subaction="parity_history", limit=0)
+    assert len(result["data"]["parityHistory"]) == 40
+    assert result["page"]["truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_parity_history_small_not_truncated(_mock_graphql):
+    _mock_graphql.return_value = _parity_history(3)
+    result = await _make_tool()(action="array", subaction="parity_history")
+    assert len(result["data"]["parityHistory"]) == 3
+    assert result["page"]["truncated"] is False
+
+
 # Array state mutations
 
 
