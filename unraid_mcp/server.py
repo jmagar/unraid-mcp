@@ -79,7 +79,7 @@ _middleware_refs.error_middleware = _error_middleware
 #    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
 _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
 
-# 4. Cap tool responses (default 128 KB, override via UNRAID_MCP_MAX_RESPONSE_BYTES)
+# 4. Cap tool responses (default 40 KB / ~10K tokens, override via UNRAID_MCP_MAX_RESPONSE_BYTES)
 #    to protect the client context window. Unlike fastmcp's stock limiter — which
 #    hard-cuts the UTF-8 byte string mid-JSON and appends a plain-text suffix,
 #    yielding invalid JSON — oversized responses are replaced wholesale with a
