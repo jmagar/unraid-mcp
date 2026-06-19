@@ -10,6 +10,7 @@ from typing import Any
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.pagination import cap_list
 from ..core.utils import format_kb, safe_get, validate_subaction
 
 
@@ -79,6 +80,8 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "config": "query GetConfig { config { valid error } }",
     "online": "query GetOnline { online }",
     "owner": "query GetOwner { owner { username avatar url } }",
+    # settings.unified.values is an opaque JSON! scalar in the GraphQL schema
+    # (no selectable subfields), so field-level narrowing is not possible here.
     "settings": "query GetSettings { settings { unified { values } } }",
     "server": """
         query GetServer {
@@ -126,7 +129,7 @@ def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any]:
+async def _handle_system(subaction: str, device_id: str | None, limit: int = 20) -> dict[str, Any]:
     validate_subaction(subaction, _SYSTEM_SUBACTIONS, "system")
 
     if subaction == "ups_device" and not device_id:
@@ -161,7 +164,25 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
                     f"Bank {s.get('bank')}: {s.get('type')}, {s.get('clockSpeed')}MHz, {s.get('manufacturer')}, {s.get('partNum')}"
                     for s in raw["memory"]["layout"]
                 ]
-            return {"summary": summary, "details": raw}
+            # Fold the genuinely-useful scalar fields that only appear in the raw
+            # object into the summary rather than echoing the entire raw payload.
+            if raw.get("baseboard"):
+                bb = raw["baseboard"]
+                summary["baseboard"] = (
+                    f"{bb.get('manufacturer')} {bb.get('model')} ({bb.get('version')})"
+                )
+            if raw.get("system"):
+                sysinfo = raw["system"]
+                summary["system"] = (
+                    f"{sysinfo.get('manufacturer')} {sysinfo.get('model')} ({sysinfo.get('version')})"
+                )
+            if raw.get("versions") and raw["versions"].get("core"):
+                summary["versions"] = raw["versions"]["core"]
+            if raw.get("machineId"):
+                summary["machine_id"] = raw["machineId"]
+            if raw.get("time"):
+                summary["time"] = raw["time"]
+            return {"summary": summary}
 
         if subaction == "array":
             raw = data.get("array") or {}
@@ -198,7 +219,7 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
                 else "HEALTHY"
             )
             summary["health_summary"] = health
-            return {"summary": summary, "details": raw}
+            return {"summary": summary}
 
         if subaction == "display":
             return dict(safe_get(data, "info", "display", default={}))
@@ -280,7 +301,13 @@ async def _handle_system(subaction: str, device_id: str | None) -> dict[str, Any
         }
         if subaction in list_actions:
             response_key, output_key = list_actions[subaction]
-            items = data.get(response_key) or []
-            return {output_key: list(items) if isinstance(items, list) else []}
+            raw_items = data.get(response_key) or []
+            items = list(raw_items) if isinstance(raw_items, list) else []
+            # timezones returns 400+ unbounded IANA entries — cap it and surface
+            # truncation meta so the agent can widen the window when needed.
+            if subaction == "timezones":
+                capped, meta = cap_list(items, limit)
+                return {output_key: capped, "page": meta}
+            return {output_key: items}
 
         raise ToolError(f"Unhandled system subaction '{subaction}' — this is a bug")
