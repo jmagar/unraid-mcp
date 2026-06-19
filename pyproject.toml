@@ -222,6 +222,10 @@ respect-type-ignore-comments = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 cache_dir = ".cache/.pytest_cache"
+# Put the repo root on sys.path so tests can import the top-level `scripts`
+# package (a namespace package with no __init__.py), e.g.
+# tests/test_generate_unraid_api_reference.py.
+pythonpath = ["."]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]

@@ -1,17 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
-
-
-# The generator script lives in bin/ (renamed from scripts/) and bin/ is not an
-# importable package, so load the module directly by file path.
-_GEN_PATH = Path(__file__).resolve().parents[1] / "bin" / "generate_unraid_api_reference.py"
-_spec = importlib.util.spec_from_file_location("generate_unraid_api_reference", _GEN_PATH)
-assert _spec is not None and _spec.loader is not None
-_gen = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_gen)
-_build_changes_markdown = _gen._build_changes_markdown
+from bin.generate_unraid_api_reference import _build_changes_markdown
 
 
 def _type_ref(
