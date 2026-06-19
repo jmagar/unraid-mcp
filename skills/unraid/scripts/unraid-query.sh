@@ -1,8 +1,17 @@
 #!/bin/bash
 # Unraid GraphQL API Query Helper
-# Makes it easy to query the Unraid API from the command line
+# Makes it easy to query the Unraid API from the command line.
+#
+# Credentials default to UNRAID_API_URL / UNRAID_API_KEY, sourced from
+# ~/.unraid-mcp/.env via the co-located load-env.sh when not already in the
+# environment. Override per-call with -u/-k.
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_LOAD_ENV="$SCRIPT_DIR/../load-env.sh"
+# shellcheck source=/dev/null
+[[ -f "$_LOAD_ENV" ]] && source "$_LOAD_ENV"
 
 # Usage function
 usage() {
@@ -21,17 +30,16 @@ OPTIONS:
     -h, --help             Show this help message
 
 ENVIRONMENT VARIABLES:
-    UNRAID_URL             Default Unraid server URL
-    UNRAID_API_KEY         Default API key
+    UNRAID_API_URL         Default Unraid GraphQL URL (from ~/.unraid-mcp/.env)
+    UNRAID_API_KEY         Default API key (from ~/.unraid-mcp/.env)
+    UNRAID_URL             Legacy alias for UNRAID_API_URL
 
 EXAMPLES:
-    # Get system status
-    $0 -u https://unraid.local/graphql -k YOUR_KEY -q "{ online }"
+    # Use credentials from ~/.unraid-mcp/.env (sourced automatically)
+    $0 -q "{ online }"
 
-    # Use environment variables
-    export UNRAID_URL="https://unraid.local/graphql"
-    export UNRAID_API_KEY="your-api-key"
-    $0 -q "{ metrics { cpu { percentTotal } } }"
+    # Override credentials per-call
+    $0 -u https://unraid.local/graphql -k YOUR_KEY -q "{ online }"
 
     # Pretty print output
     $0 -q "{ array { state } }" -f pretty
@@ -40,8 +48,8 @@ EOF
     exit 1
 }
 
-# Default values
-URL="${UNRAID_URL:-}"
+# Default values — prefer canonical UNRAID_API_URL, accept legacy UNRAID_URL.
+URL="${UNRAID_API_URL:-${UNRAID_URL:-}}"
 API_KEY="${UNRAID_API_KEY:-}"
 QUERY=""
 FORMAT="json"
@@ -85,14 +93,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# If credentials weren't supplied via flags or environment, load them from
+# ~/.unraid-mcp/.env (load_env_file is provided by load-env.sh).
+if [[ ( -z "$URL" || -z "$API_KEY" ) ]] && declare -f load_env_file >/dev/null; then
+    load_env_file >/dev/null 2>&1 || true
+    URL="${URL:-${UNRAID_API_URL:-${UNRAID_URL:-}}}"
+    API_KEY="${API_KEY:-${UNRAID_API_KEY:-}}"
+fi
+
 # Validate required arguments
 if [[ -z "$URL" ]]; then
-    echo "Error: Unraid URL is required (use -u or set UNRAID_URL)"
+    echo "Error: Unraid URL is required (use -u, set UNRAID_API_URL, or configure ~/.unraid-mcp/.env)"
     exit 1
 fi
 
 if [[ -z "$API_KEY" ]]; then
-    echo "Error: API key is required (use -k or set UNRAID_API_KEY)"
+    echo "Error: API key is required (use -k, set UNRAID_API_KEY, or configure ~/.unraid-mcp/.env)"
     exit 1
 fi
 

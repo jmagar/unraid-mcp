@@ -5,16 +5,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-source "$REPO_ROOT/lib/load-env.sh"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../load-env.sh"
 
 QUERY_SCRIPT="$SCRIPT_DIR/unraid-query.sh"
 OUTPUT_FILE="$HOME/memory/bank/unraid-inventory.md"
 
-# Load credentials from .env for all servers
+# Load credentials. Single-server installs use ~/.unraid-mcp/.env (UNRAID_API_URL /
+# UNRAID_API_KEY). Multi-server (fleet) installs additionally export UNRAID_<NAME>_URL /
+# UNRAID_<NAME>_API_KEY pairs in that file, one per server.
 load_env_file || exit 1
 
-# Discover configured servers dynamically from UNRAID_<NAME>_URL env vars
+# Discover configured servers dynamically from UNRAID_<NAME>_URL env vars.
+# Falls back to a single "default" server using UNRAID_API_URL / UNRAID_API_KEY.
 SERVERS=()
 while IFS='=' read -r var_name _; do
     if [[ "$var_name" =~ ^UNRAID_(.+)_URL$ ]]; then
@@ -23,8 +26,18 @@ while IFS='=' read -r var_name _; do
 done < <(env)
 
 if [ ${#SERVERS[@]} -eq 0 ]; then
-    echo "Error: No servers found. Set UNRAID_<NAME>_URL and UNRAID_<NAME>_API_KEY env vars."
-    exit 1
+    # No multi-server pairs — fall back to the single default server.
+    if [ -n "${UNRAID_API_URL:-}" ] && [ -n "${UNRAID_API_KEY:-}" ]; then
+        UNRAID_DEFAULT_URL="$UNRAID_API_URL"
+        UNRAID_DEFAULT_API_KEY="$UNRAID_API_KEY"
+        UNRAID_DEFAULT_NAME="${UNRAID_DEFAULT_NAME:-unraid}"
+        export UNRAID_DEFAULT_URL UNRAID_DEFAULT_API_KEY UNRAID_DEFAULT_NAME
+        SERVERS=("DEFAULT")
+    else
+        echo "Error: No servers found. Configure ~/.unraid-mcp/.env (UNRAID_API_URL /" >&2
+        echo "UNRAID_API_KEY), or set UNRAID_<NAME>_URL / UNRAID_<NAME>_API_KEY pairs for a fleet." >&2
+        exit 1
+    fi
 fi
 
 for server in "${SERVERS[@]}"; do

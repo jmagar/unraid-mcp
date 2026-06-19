@@ -9,11 +9,11 @@ description: "This skill should be used when the user mentions Unraid, asks to c
 
 **MCP mode** (preferred): Use when `mcp__unraid-mcp__unraid` tool is available.
 
-**HTTP fallback**: Use when MCP tools are unavailable. Credentials are in Bash subprocesses
-as `$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL` and `$CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY`.
-Do NOT attempt `${user_config.unraid_api_key}` in curl — sensitive values only work
-as `$CLAUDE_PLUGIN_OPTION_*` in Bash subprocesses. The fallback queries the Unraid
-GraphQL API directly with these credentials.
+**HTTP fallback**: Use when MCP tools are unavailable. Credentials live in the file
+`~/.unraid-mcp/.env`; source it before running `curl` (see "HTTP Fallback Mode" below).
+Do NOT use `$CLAUDE_PLUGIN_OPTION_*` in the Bash tool — Claude Code injects those vars
+only into plugin subprocesses (hooks/MCP/LSP), not the Bash tool. The plugin's setup
+hook reads them and materializes `~/.unraid-mcp/.env`; the skill sources that file.
 
 ---
 
@@ -21,13 +21,19 @@ Use the single `unraid` MCP tool with `action` (domain) + `subaction` (operation
 
 ## Setup
 
-First time? Run setup to configure credentials:
+Credentials come from the plugin's configuration form (*Unraid GraphQL API URL* /
+*Unraid API Key*) or a hand-edited `~/.unraid-mcp/.env`. They are read once at server
+startup, so after changing them you must restart the server / MCP client.
+
+To check whether credentials are configured and the connection works:
 
 ```
-unraid(action="health", subaction="setup")
+unraid(action="health", subaction="setup")            # read-only status + instructions
+unraid(action="health", subaction="test_connection")  # verify connectivity
 ```
 
-Credentials are stored at `~/.unraid-mcp/.env`. Re-run `setup` any time to update or verify.
+`setup` does not prompt for or write credentials — it only reports the current status
+and explains how to set them.
 
 ## Calling Convention
 
@@ -79,14 +85,14 @@ unraid(action="live",    subaction="cpu")
 | `check` | Comprehensive health check — connectivity, array, disks, containers, VMs, resources |
 | `test_connection` | Test API connectivity and authentication |
 | `diagnose` | Detailed diagnostic report with troubleshooting recommendations |
-| `setup` | Configure credentials interactively (stores to `~/.unraid-mcp/.env`) |
+| `setup` | Report credential status + setup instructions (read-only; does not write or prompt) |
 
 ### `array` — Array & Parity
 | Subaction | Description |
 |-----------|-------------|
 | `parity_status` | Current parity check progress and status |
 | `parity_history` | Historical parity check results |
-| `parity_start` | Start a parity check |
+| `parity_start` | Start a parity check (requires `correct` — `True` writes corrections, `False` checks only) |
 | `parity_pause` | Pause a running parity check |
 | `parity_resume` | Resume a paused parity check |
 | `parity_cancel` | Cancel a running parity check |
@@ -138,7 +144,7 @@ unraid(action="live",    subaction="cpu")
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Notification counts (unread, archived by type) |
-| `list` | List notifications (optional `filter`, `limit`, `offset`) |
+| `list` | List notifications (requires `list_type`: `UNREAD`/`ARCHIVE`; optional `importance`, `limit`, `offset`) |
 | `mark_unread` | Mark a notification as unread (requires `notification_id`) |
 | `create` | Create a notification (requires `title`, `subject`, `description`, `importance`) |
 | `archive` | Archive a notification (requires `notification_id`) |
@@ -226,7 +232,7 @@ These use persistent WebSocket connections. Returns a "connecting" placeholder o
 
 ## Destructive Actions
 
-All require `confirm=True` as an explicit parameter. Without it, the action is blocked and elicitation is triggered.
+All require `confirm=True` as an explicit parameter. Without it, the action is blocked: interactive MCP clients are asked to confirm (elicitation), and non-interactive callers get a `ToolError` — re-run with `confirm=True`.
 
 | Domain | Subaction | Risk |
 |--------|-----------|------|
@@ -247,10 +253,10 @@ All require `confirm=True` as an explicit parameter. Without it, the action is b
 
 ## Common Workflows
 
-### First-time setup
+### Verify credentials
 ```
-unraid(action="health", subaction="setup")
-unraid(action="health", subaction="check")
+unraid(action="health", subaction="setup")            # status + instructions (read-only)
+unraid(action="health", subaction="test_connection")  # confirm connectivity
 ```
 
 ### System health overview
@@ -307,25 +313,37 @@ unraid(action="vm", subaction="force_stop", vm_id="<id>", confirm=True)
 
 ## HTTP Fallback Mode
 
-When MCP tools are unavailable, use direct GraphQL queries via curl. Credentials are
-available as `$CLAUDE_PLUGIN_OPTION_*` environment variables in Bash subprocesses.
+When MCP tools are unavailable, query the GraphQL API directly with `curl`. Source the
+credentials file first — `$CLAUDE_PLUGIN_OPTION_*` is **not** set in the Bash tool, so
+read `~/.unraid-mcp/.env` (which the plugin's setup hook materializes) instead. The
+bundled `load-env.sh` does this for you:
 
 ```bash
+# Load UNRAID_API_URL / UNRAID_API_KEY from ~/.unraid-mcp/.env
+source "$CLAUDE_PLUGIN_ROOT/skills/unraid/load-env.sh"
+load_unraid_credentials || exit 1
+
 # System overview
-curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
-  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+curl -s "$UNRAID_API_URL" \
+  -H "x-api-key: $UNRAID_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ info { os { hostname uptime } } }"}'
 
 # List Docker containers
-curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
-  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+curl -s "$UNRAID_API_URL" \
+  -H "x-api-key: $UNRAID_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ docker { containers { names state status } } }"}'
 
 # Array status
-curl -s "$CLAUDE_PLUGIN_OPTION_UNRAID_API_URL" \
-  -H "x-api-key: $CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY" \
+curl -s "$UNRAID_API_URL" \
+  -H "x-api-key: $UNRAID_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query":"{ array { state capacity { kilobytes { free used total } } disks { name status temp } } }"}'
+```
+
+Or use the helper script, which sources `load-env.sh` automatically:
+
+```bash
+"$CLAUDE_PLUGIN_ROOT/skills/unraid/scripts/unraid-query.sh" -q "{ online }"
 ```

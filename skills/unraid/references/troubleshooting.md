@@ -4,13 +4,17 @@
 
 **Error:** `CredentialsNotConfiguredError` or message containing `~/.unraid-mcp/.env`
 
-**Fix:** Run setup to configure credentials interactively:
+**Fix:** Set credentials, then restart the server (they are read once at startup):
+
+1. **Claude Code plugin:** set *Unraid GraphQL API URL* and *Unraid API Key* in the plugin's
+   configuration form. The setup hook writes them to `~/.unraid-mcp/.env` on the next session.
+2. **Manual / Docker:** create `~/.unraid-mcp/.env` with `UNRAID_API_URL` and `UNRAID_API_KEY`.
+
+Check status any time (read-only — does not prompt or write):
 
 ```python
 unraid(action="health", subaction="setup")
 ```
-
-This writes `UNRAID_API_URL` and `UNRAID_API_KEY` to `~/.unraid-mcp/.env`. Re-run at any time to update or rotate credentials.
 
 ---
 
