@@ -1,6 +1,6 @@
 """Single consolidated Unraid tool.
 
-Provides the `unraid` tool with 15 actions, each routing to domain-specific
+Provides the `unraid` tool with 17 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
@@ -19,6 +19,8 @@ Actions:
   oidc         - OIDC/SSO provider management (5 subactions)
   user         - Current authenticated user (1 subaction)
   live         - Real-time WebSocket subscription snapshots (11 subactions)
+  subscriptions - WebSocket subscription diagnostics (2 subactions)
+  help         - Return the full Markdown action/subaction reference (no subaction)
 """
 
 import datetime
@@ -219,6 +221,8 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `user` | `me` | |
 | `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`, `log_tail` (requires `path=`), `notification_feed` | |
+| `subscriptions` | `diagnose`, `test_query` (requires `subscription_query=`) | WebSocket subscription diagnostics |
+| `help` | _(no subaction)_ | Returns this reference |
 
 \\* Destructive — requires `confirm=True`
 
@@ -237,6 +241,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `key_id` | str | API key identifier |
 | `name` | str | Name for create/update operations |
 | `path` | str | Log file path (for live/log_tail) |
+| `subscription_query` | str | Raw GraphQL subscription string (for `subscriptions/test_query`) |
 | `collect_for` | float | WebSocket collection duration in seconds (default: 5.0) |
 | `level` | str | Filter logs to this severity and above: one of debug, info, notice, warning, error, critical (for `disk/logs` and `live/log_tail`). Omit for no filtering. |
 | `context` | int | Lines of context kept before/after each matching log line (default: 2). Non-contiguous matches are separated by `---`. |
@@ -260,11 +265,23 @@ unraid(action="live", subaction="log_tail", path="/var/log/syslog", collect_for=
 unraid(action="live", subaction="log_tail", path="/var/log/syslog", level="warning", context=3)
 unraid(action="disk", subaction="logs", log_path="/var/log/syslog", level="error", context=2)
 unraid(action="array", subaction="stop_array", confirm=True)
+unraid(action="subscriptions", subaction="diagnose")
+unraid(action="subscriptions", subaction="test_query", subscription_query="subscription { cpu { used idle system } }")
+unraid(action="help")
 ```
 
-## Tool: `unraid_help`
+## `subscriptions` action
 
-Returns this help document.
+- `diagnose` — full diagnostic dump of the WebSocket subscription system
+  (connection states, error counts, reconnect status, troubleshooting hints).
+- `test_query` — send a raw GraphQL subscription string directly over the
+  WebSocket to debug schema/field issues. Requires `subscription_query=`. Only
+  whitelisted subscription fields are permitted; mutation/query keywords are
+  rejected.
+
+## `help` action
+
+`unraid(action="help")` returns this document.
 """
 
 
@@ -278,6 +295,7 @@ UNRAID_ACTIONS = Literal[
     "disk",
     "docker",
     "health",
+    "help",
     "key",
     "live",
     "notification",
@@ -285,6 +303,7 @@ UNRAID_ACTIONS = Literal[
     "plugin",
     "rclone",
     "setting",
+    "subscriptions",
     "system",
     "user",
     "vm",
@@ -297,7 +316,7 @@ def register_unraid_tool(mcp: FastMCP) -> None:
     @mcp.tool(timeout=120)
     async def unraid(
         action: UNRAID_ACTIONS,
-        subaction: str,
+        subaction: str = "",
         ctx: Context | None = None,
         confirm: bool = False,
         # system
@@ -349,6 +368,8 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         # oidc
         provider_id: str | None = None,
         token: str | None = None,
+        # subscriptions
+        subscription_query: str | None = None,
         # live
         path: str | None = None,
         collect_for: float = 5.0,
@@ -405,6 +426,10 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │ live            │ cpu, memory, cpu_telemetry, array_state, parity_progress,            │
         │                 │ ups_status, notifications_overview, owner, server_status,            │
         │                 │ log_tail (requires path=), notification_feed                         │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ subscriptions   │ diagnose, test_query (requires subscription_query=)                  │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ help            │ (no subaction — returns the full Markdown reference)                 │
         └─────────────────┴──────────────────────────────────────────────────────────────────────┘
 
         * Destructive — interactive clients are prompted for confirmation via
@@ -417,6 +442,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         Non-contiguous matches are separated by a '---' marker. Omit level for
         unchanged output.
         """
+        if action == "help":
+            return _HELP_TEXT
+
         if action == "system":
             return await _handle_system(subaction, device_id, limit)
 
@@ -494,13 +522,15 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         if action == "live":
             return await _handle_live(subaction, path, collect_for, timeout, level, context, limit)
 
+        if action == "subscriptions":
+            # Lazy import to keep tool import-time free of the subscription stack
+            # (mirrors the health/diagnose pattern above).
+            from ..subscriptions.diagnostics import _handle_subscriptions
+
+            return await _handle_subscriptions(subaction, subscription_query)
+
         raise ToolError(
             f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"
         )
-
-    @mcp.tool()
-    async def unraid_help() -> str:
-        """Returns markdown help for all Unraid MCP actions and subactions."""
-        return _HELP_TEXT
 
     logger.info("Unraid tool registered successfully")

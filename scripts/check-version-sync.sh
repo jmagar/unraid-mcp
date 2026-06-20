@@ -25,19 +25,19 @@ if [ -f "pyproject.toml" ]; then
   [ -n "$v" ] && versions+=("pyproject.toml=$v") && files_checked+=("pyproject.toml")
 fi
 
-if [ -f ".claude-plugin/plugin.json" ]; then
-  v=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json')).get('version',''))" 2>/dev/null)
-  [ -n "$v" ] && versions+=(".claude-plugin/plugin.json=$v") && files_checked+=(".claude-plugin/plugin.json")
+if [ -f "plugins/unraid/.claude-plugin/plugin.json" ]; then
+  v=$(python3 -c "import json; print(json.load(open('plugins/unraid/.claude-plugin/plugin.json')).get('version',''))" 2>/dev/null)
+  [ -n "$v" ] && versions+=("plugins/unraid/.claude-plugin/plugin.json=$v") && files_checked+=("plugins/unraid/.claude-plugin/plugin.json")
 fi
 
-if [ -f ".codex-plugin/plugin.json" ]; then
-  v=$(python3 -c "import json; print(json.load(open('.codex-plugin/plugin.json')).get('version',''))" 2>/dev/null)
-  [ -n "$v" ] && versions+=(".codex-plugin/plugin.json=$v") && files_checked+=(".codex-plugin/plugin.json")
+if [ -f "plugins/unraid/.codex-plugin/plugin.json" ]; then
+  v=$(python3 -c "import json; print(json.load(open('plugins/unraid/.codex-plugin/plugin.json')).get('version',''))" 2>/dev/null)
+  [ -n "$v" ] && versions+=("plugins/unraid/.codex-plugin/plugin.json=$v") && files_checked+=("plugins/unraid/.codex-plugin/plugin.json")
 fi
 
-if [ -f "gemini-extension.json" ]; then
-  v=$(python3 -c "import json; print(json.load(open('gemini-extension.json')).get('version',''))" 2>/dev/null)
-  [ -n "$v" ] && versions+=("gemini-extension.json=$v") && files_checked+=("gemini-extension.json")
+if [ -f "plugins/unraid/gemini-extension.json" ]; then
+  v=$(python3 -c "import json; print(json.load(open('plugins/unraid/gemini-extension.json')).get('version',''))" 2>/dev/null)
+  [ -n "$v" ] && versions+=("plugins/unraid/gemini-extension.json=$v") && files_checked+=("plugins/unraid/gemini-extension.json")
 fi
 
 # Need at least one version source

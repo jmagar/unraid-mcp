@@ -14,7 +14,26 @@
     "monitoring"
   ],
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": {
+    "unraid-mcp": {
+      "command": "uvx",
+      "args": [
+        "unraid-mcp"
+      ],
+      "env": {
+        "UNRAID_MCP_TRANSPORT": "stdio",
+        "UNRAID_VERIFY_SSL": "true",
+        "UNRAID_MCP_LOG_LEVEL": "INFO",
+        "UNRAID_MCP_LOG_FILE": "unraid-mcp.log",
+        "UNRAID_AUTO_START_SUBSCRIPTIONS": "true",
+        "UNRAID_MAX_RECONNECT_ATTEMPTS": "10"
+      },
+      "env_vars": [
+        "UNRAID_API_URL",
+        "UNRAID_API_KEY"
+      ]
+    }
+  },
   "interface": {
     "displayName": "Unraid MCP",
     "shortDescription": "Monitor and manage Unraid servers",
@@ -31,9 +50,7 @@
       "List Docker containers on Unraid.",
       "Inspect Unraid notifications and system health."
     ],
-    "brandColor": "#F59E0B",
-    "composerIcon": "./assets/icon.png",
-    "logo": "./assets/logo.svg"
+    "brandColor": "#F59E0B"
   },
   "author": {
     "name": "Jacob Magar",

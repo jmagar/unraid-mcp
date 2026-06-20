@@ -10,7 +10,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_plugin_manifest_restores_stdio_server_definition() -> None:
-    plugin = json.loads((PROJECT_ROOT / ".claude-plugin" / "plugin.json").read_text())
+    plugin = json.loads(
+        (PROJECT_ROOT / "plugins" / "unraid" / ".claude-plugin" / "plugin.json").read_text()
+    )
     assert plugin["userConfig"]["unraid_api_key"]["sensitive"] is True
     assert "mcpServers" in plugin
     assert plugin["mcpServers"] == "./.mcp.json"

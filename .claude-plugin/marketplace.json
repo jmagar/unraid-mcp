@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "unraid-mcp",
+  "description": "Marketplace for the Unraid MCP plugin — query, monitor, and manage Unraid servers from Claude Code.",
+  "owner": {
+    "name": "Jacob Magar",
+    "email": "jmagar@users.noreply.github.com",
+    "url": "https://github.com/jmagar"
+  },
+  "metadata": {
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "unraid-mcp",
+      "source": "./plugins/unraid",
+      "description": "Query, monitor, and manage Unraid servers via GraphQL API through MCP tools. Supports system info, Docker, VMs, array/parity, notifications, plugins, rclone, and live telemetry.",
+      "author": {
+        "name": "Jacob Magar",
+        "email": "jmagar@users.noreply.github.com",
+        "url": "https://github.com/jmagar"
+      },
+      "homepage": "https://github.com/jmagar/unraid-mcp",
+      "repository": "https://github.com/jmagar/unraid-mcp",
+      "license": "MIT",
+      "category": "infrastructure",
+      "keywords": [
+        "unraid",
+        "homelab",
+        "mcp",
+        "graphql",
+        "docker",
+        "nas",
+        "monitoring"
+      ]
+    }
+  ]
+}

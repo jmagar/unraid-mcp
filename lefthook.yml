@@ -15,4 +15,4 @@ pre-commit:
     skills:
       run: just validate-skills
     env_guard:
-      run: bash bin/block-env-commits.sh
+      run: bash scripts/block-env-commits.sh

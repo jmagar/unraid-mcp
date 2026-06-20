@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
       - name: Check all version files are in sync
-        run: bash bin/check-version-sync.sh
+        run: bash scripts/check-version-sync.sh
 
   mcp-integration:
     name: MCP Integration Tests
