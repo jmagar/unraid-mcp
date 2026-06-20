@@ -111,9 +111,7 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
             ws_url = build_ws_url()
         except ValueError as e:
             logger.error("[TEST_SUBSCRIPTION] Invalid WebSocket URL configuration: %s", e)
-            raise ToolError(
-                "Subscription test failed: invalid WebSocket URL configuration."
-            ) from e
+            raise ToolError("Subscription test failed: invalid WebSocket URL configuration.") from e
 
         ssl_context = build_ws_ssl_context(ws_url)
 
@@ -290,9 +288,7 @@ async def diagnose_subscriptions() -> dict[str, Any]:
 _SUBSCRIPTIONS_SUBACTIONS: set[str] = {"diagnose", "test_query"}
 
 
-async def _handle_subscriptions(
-    subaction: str, subscription_query: str | None
-) -> dict[str, Any]:
+async def _handle_subscriptions(subaction: str, subscription_query: str | None) -> dict[str, Any]:
     """Route `action="subscriptions"` subactions to their handlers.
 
     Subactions:
