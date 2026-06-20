@@ -103,11 +103,30 @@ async def test_install_operation_requires_id(_mock_graphql):
 
 
 @pytest.mark.asyncio
+async def test_install_requires_confirm(_mock_graphql):
+    from unraid_mcp.core.exceptions import ToolError
+
+    # install is destructive (runs a .plg as root) — gated before the url check.
+    with pytest.raises(ToolError, match="confirm=True"):
+        await _make_tool()(action="plugin", subaction="install", url="https://example.com/x.plg")
+
+
+@pytest.mark.asyncio
 async def test_install_requires_url(_mock_graphql):
     from unraid_mcp.core.exceptions import ToolError
 
     with pytest.raises(ToolError, match="url is required"):
-        await _make_tool()(action="plugin", subaction="install")
+        await _make_tool()(action="plugin", subaction="install", confirm=True)
+
+
+@pytest.mark.asyncio
+async def test_install_rejects_bad_url_scheme(_mock_graphql):
+    from unraid_mcp.core.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="http or https"):
+        await _make_tool()(
+            action="plugin", subaction="install", url="file:///etc/passwd", confirm=True
+        )
 
 
 @pytest.mark.asyncio
@@ -121,6 +140,7 @@ async def test_install_passes_input(_mock_graphql):
         url="https://example.com/x.plg",
         plugin_name="x",
         forced=True,
+        confirm=True,
     )
     assert result["operation"]["status"] == "QUEUED"
     sent = _mock_graphql.call_args.args[1]

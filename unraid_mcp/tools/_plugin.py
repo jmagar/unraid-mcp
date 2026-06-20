@@ -5,6 +5,7 @@ remove*, install, install_language (8 subactions).
 """
 
 from typing import Any
+from urllib.parse import urlparse
 
 from fastmcp import Context
 
@@ -13,7 +14,7 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import coerce_list, validate_subaction
+from ..core.utils import coerce_list, mutation_success, validate_subaction
 
 
 # ===========================================================================
@@ -37,7 +38,27 @@ _PLUGIN_MUTATIONS: dict[str, str] = {
 }
 
 _PLUGIN_SUBACTIONS: set[str] = set(_PLUGIN_QUERIES) | set(_PLUGIN_MUTATIONS)
-_PLUGIN_DESTRUCTIVE: set[str] = {"remove"}
+# install / install_language fetch and run a .plg from a caller-supplied URL as
+# root — gated like remove.
+_PLUGIN_DESTRUCTIVE: set[str] = {"remove", "install", "install_language"}
+
+
+def _validate_plugin_url(url: str) -> str:
+    """Reject non-http(s) / hostless plugin URLs before forwarding to the API.
+
+    Defence-in-depth against a delegated-SSRF / `file://` install vector — the
+    Unraid API performs the actual fetch, but the MCP layer should not pass
+    obviously-abusive schemes through.
+    """
+    try:
+        parsed = urlparse(url)
+    except ValueError as exc:
+        raise ToolError(f"plugin url is not a valid URL: {exc}") from exc
+    if parsed.scheme not in ("http", "https"):
+        raise ToolError(f"plugin url must use http or https, got '{parsed.scheme or '(none)'}'")
+    if not parsed.netloc:
+        raise ToolError("plugin url must include a hostname")
+    return url
 
 
 async def _handle_plugin(
@@ -60,7 +81,14 @@ async def _handle_plugin(
         subaction,
         _PLUGIN_DESTRUCTIVE,
         confirm,
-        f"Remove plugin(s) **{names}** from the Unraid API. This cannot be undone without re-installing.",
+        {
+            "remove": f"Remove plugin(s) **{names}** from the Unraid API. This cannot be "
+            "undone without re-installing.",
+            "install": f"Install a plugin from **{url}**. This fetches and runs a .plg file "
+            "as root on the Unraid host.",
+            "install_language": f"Install a language pack from **{url}**. This fetches and runs "
+            "a .plg file as root on the Unraid host.",
+        },
     )
 
     with tool_error_handler("plugin", subaction, logger):
@@ -111,17 +139,18 @@ async def _handle_plugin(
         if subaction in ("install", "install_language"):
             if not url:
                 raise ToolError(f"url is required for plugin/{subaction}")
-            input_data: dict[str, Any] = {"url": url, "forced": forced}
+            input_data: dict[str, Any] = {"url": _validate_plugin_url(url), "forced": forced}
             if plugin_name:
                 input_data["name"] = plugin_name
             data = await _client.make_graphql_request(
                 _PLUGIN_MUTATIONS[subaction], {"input": input_data}
             )
             result_key = "installPlugin" if subaction == "install" else "installLanguage"
+            operation = (data.get("unraidPlugins") or {}).get(result_key)
             return {
-                "success": True,
+                "success": mutation_success(operation, boolean=False),
                 "subaction": subaction,
-                "operation": (data.get("unraidPlugins") or {}).get(result_key),
+                "operation": operation,
             }
 
         if subaction in ("add", "remove"):

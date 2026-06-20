@@ -51,6 +51,8 @@ def validate_input_mapping(
     Returns:
         The validated mapping (values preserved, including nested structures).
     """
+    if not isinstance(data, dict):
+        raise ToolError(f"{label} must be an object, got: {type(data).__name__}")
 
     def _check(value: Any, path: str, depth: int) -> Any:
         if depth > max_depth:
@@ -84,12 +86,26 @@ def validate_input_mapping(
 def validate_input_mapping_list(
     items: list[Any], label: str, **kwargs: Any
 ) -> list[dict[str, Any]]:
-    """Validate a list of GraphQL input-object mappings (per-item ``label[]``).
+    """Validate a list of GraphQL input-object mappings (per-item ``label[i]``).
 
     Convenience wrapper around :func:`validate_input_mapping` for mutation inputs
     that take a list of objects (e.g. ``permissions``, autostart ``entries``).
+    Each item must itself be an object (dict); a non-dict item is rejected with a
+    clear per-index message rather than a confusing scalar-type error.
     """
-    return [validate_input_mapping(item, f"{label}[]", **kwargs) for item in items]
+    return [validate_input_mapping(item, f"{label}[{i}]", **kwargs) for i, item in enumerate(items)]
+
+
+def validate_str_param(value: str, label: str) -> str:
+    """Bound a single string parameter to MAX_VALUE_LENGTH.
+
+    For bare scalar tool params (e.g. ``name``, ``comment``, ``locale``) that go
+    straight into GraphQL variables without passing through one of the mapping
+    validators — keeps the length cap consistent with the dict-input paths.
+    """
+    if len(value) > MAX_VALUE_LENGTH:
+        raise ToolError(f"{label} exceeds max length ({len(value)} > {MAX_VALUE_LENGTH})")
+    return value
 
 
 def validate_scalar_mapping(

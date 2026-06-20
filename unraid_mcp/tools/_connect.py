@@ -35,10 +35,13 @@ _CONNECT_MUTATIONS: dict[str, str] = {
 }
 
 _CONNECT_SUBACTIONS: set[str] = set(_CONNECT_QUERIES) | set(_CONNECT_MUTATIONS)
-# These change the server's remote-access / cloud security posture or sign the
-# server in/out of Unraid Connect — all gated behind explicit confirmation.
+# Every Connect mutation changes the server's remote-access / cloud security
+# posture (signing in/out, registering with the cloud, or changing internet
+# reachability), so all are gated behind explicit confirmation.
 _CONNECT_DESTRUCTIVE: set[str] = {
+    "sign_in",
     "sign_out",
+    "update_api_settings",
     "setup_remote_access",
     "enable_dynamic_remote_access",
 }
@@ -81,8 +84,12 @@ async def _handle_connect(
         _CONNECT_DESTRUCTIVE,
         confirm,
         {
+            "sign_in": "Sign this server in to Unraid Connect. This registers the server "
+            "with the cloud service and enables remote management.",
             "sign_out": "Sign this server out of Unraid Connect. Remote access via "
             "Connect will stop working until you sign back in.",
+            "update_api_settings": "Change the Unraid Connect remote-access configuration "
+            "(access type / forward type / port). This affects internet reachability.",
             "setup_remote_access": "Reconfigure Unraid Connect remote access. This can "
             "expose the server to the internet (UPnP/port forwarding).",
             "enable_dynamic_remote_access": "Toggle dynamic remote access for Unraid "

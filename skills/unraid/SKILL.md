@@ -210,8 +210,8 @@ unraid(action="live",    subaction="cpu")
 | `install_operation` | Status of one install operation (requires `operation_id`) |
 | `add` | Install plugins (requires `names` — list of plugin names) |
 | `remove` | ⚠️ Uninstall plugins (requires `names` — list of plugin names, `confirm=True`) |
-| `install` | Async-install a `.plg` (requires `url`; optional `plugin_name`, `forced`) — poll via `install_operation` |
-| `install_language` | Async-install a language pack (requires `url`) |
+| `install` | ⚠️ Async-install a `.plg` — runs code as root (requires `url`, `confirm=True`; optional `plugin_name`, `forced`) — poll via `install_operation` |
+| `install_language` | ⚠️ Async-install a language pack — runs code as root (requires `url`, `confirm=True`) |
 
 ### `rclone` — Cloud Storage
 
@@ -230,17 +230,19 @@ unraid(action="live",    subaction="cpu")
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
 | `update_ssh` | ⚠️ Update SSH daemon settings (requires `config_input`: `{enabled, port}`, `confirm=True`) |
 | `update_temperature` | Update temperature sensor config (requires `config_input`) |
-| `update_system_time` | Update timezone / NTP / manual time (requires `config_input`) |
+| `update_system_time` | ⚠️ Update timezone / NTP / manual time — can invalidate TLS certs (requires `config_input`, `confirm=True`) |
 | `update_server_identity` | Update server name/comment/model (requires `name`; optional `comment`, `sys_model`) |
 
 ### `connect` — Unraid Connect / Remote Access
+
+All mutations change the server's cloud/remote-access posture and require `confirm=True`.
 
 | Subaction | Description |
 |-----------|-------------|
 | `remote_access` | Current remote-access settings (access/forward type, port) |
 | `cloud` | Unraid Connect / cloud status (relay, minigraph, API key validity) |
-| `update_api_settings` | Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`) |
-| `sign_in` | Sign the server in to Unraid Connect (requires `connect_input`: `{apiKey, userInfo?}`) |
+| `update_api_settings` | ⚠️ Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`, `confirm=True`) |
+| `sign_in` | ⚠️ Sign the server in to Unraid Connect — registers with the cloud (requires `connect_input`: `{apiKey, userInfo?}`, `confirm=True`) |
 | `sign_out` | ⚠️ Sign the server out of Unraid Connect (requires `confirm=True`) |
 | `setup_remote_access` | ⚠️ Configure remote access — can expose the server (requires `connect_input`, `confirm=True`) |
 | `enable_dynamic_remote_access` | ⚠️ Toggle dynamic remote access (requires `connect_input`: `{url, enabled}`, `confirm=True`) |
@@ -332,7 +334,10 @@ All require `confirm=True` as an explicit parameter. Without it, the action is b
 | `disk` | `flash_backup` | Triggers flash backup operation |
 | `setting` | `configure_ups` | Modifies UPS configuration |
 | `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
+| `setting` | `update_system_time` | Clock changes can invalidate TLS certs / break time-sensitive services |
 | `plugin` | `remove` | Uninstalls a plugin |
+| `plugin` | `install` / `install_language` | Fetches and runs a `.plg` from a URL as root |
+| `connect` | `sign_in` / `update_api_settings` | Registers with the cloud / changes internet reachability |
 | `docker` | `remove_container` | Removes a container (and optionally its image) |
 | `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
 | `docker` | `delete_entries` | Deletes Docker organizer entries |

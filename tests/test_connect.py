@@ -35,8 +35,11 @@ class TestConnectQueries:
 
 class TestConnectMutations:
     async def test_update_api_settings_requires_input(self, _mock_graphql: AsyncMock) -> None:
-        with pytest.raises(ToolError, match="connect_input is required"):
+        # update_api_settings is destructive — gated before the input check.
+        with pytest.raises(ToolError, match="confirm=True"):
             await _make_tool()(action="connect", subaction="update_api_settings")
+        with pytest.raises(ToolError, match="connect_input is required"):
+            await _make_tool()(action="connect", subaction="update_api_settings", confirm=True)
 
     async def test_update_api_settings_passes_input(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"updateApiSettings": {"accessType": "DYNAMIC"}}
@@ -44,14 +47,18 @@ class TestConnectMutations:
             action="connect",
             subaction="update_api_settings",
             connect_input={"accessType": "DYNAMIC", "port": 8443},
+            confirm=True,
         )
         assert result["success"] is True
         sent_vars = _mock_graphql.call_args.args[1]
         assert sent_vars == {"input": {"accessType": "DYNAMIC", "port": 8443}}
 
     async def test_sign_in_requires_input(self, _mock_graphql: AsyncMock) -> None:
-        with pytest.raises(ToolError, match="connect_input is required"):
+        # sign_in is destructive (registers with the cloud) — gated before input check.
+        with pytest.raises(ToolError, match="confirm=True"):
             await _make_tool()(action="connect", subaction="sign_in")
+        with pytest.raises(ToolError, match="connect_input is required"):
+            await _make_tool()(action="connect", subaction="sign_in", confirm=True)
 
     async def test_sign_out_is_destructive(self, _mock_graphql: AsyncMock) -> None:
         with pytest.raises(ToolError, match="confirm=True"):
@@ -89,7 +96,7 @@ class TestConnectSuccessDerivation:
     async def test_sign_in_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"connectSignIn": True}
         result = await _make_tool()(
-            action="connect", subaction="sign_in", connect_input={"apiKey": "k"}
+            action="connect", subaction="sign_in", connect_input={"apiKey": "k"}, confirm=True
         )
         assert result["success"] is True
         assert result["result"] is True
@@ -97,7 +104,7 @@ class TestConnectSuccessDerivation:
     async def test_sign_in_false_is_not_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"connectSignIn": False}
         result = await _make_tool()(
-            action="connect", subaction="sign_in", connect_input={"apiKey": "bad"}
+            action="connect", subaction="sign_in", connect_input={"apiKey": "bad"}, confirm=True
         )
         assert result["success"] is False
 

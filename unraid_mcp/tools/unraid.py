@@ -235,10 +235,10 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `vm` | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`*, `reboot`, `reset`* | |
 | `notification` | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`*, `delete_archived`* | |
 | `key` | `list`, `get`, `possible_roles`, `possible_permissions`, `permissions_for_roles`, `preview_permissions`, `auth_actions`, `creation_form_schema`, `create`, `update`, `delete`*, `add_role`, `remove_role` | |
-| `plugin` | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`*, `install`, `install_language` | |
+| `plugin` | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`*, `install`*, `install_language`* | install runs a .plg as root |
 | `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote`* | |
-| `setting` | `update`, `configure_ups`*, `update_ssh`*, `update_temperature`, `update_system_time`, `update_server_identity` | |
-| `connect` | `remote_access`, `cloud`, `update_api_settings`, `sign_in`, `sign_out`*, `setup_remote_access`*, `enable_dynamic_remote_access`* | Unraid Connect; inputs via `connect_input` |
+| `setting` | `update`, `configure_ups`*, `update_ssh`*, `update_temperature`, `update_system_time`*, `update_server_identity` | |
+| `connect` | `remote_access`, `cloud`, `update_api_settings`*, `sign_in`*, `sign_out`*, `setup_remote_access`*, `enable_dynamic_remote_access`* | Unraid Connect; all mutations destructive; inputs via `connect_input` |
 | `customization` | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`, `set_locale` | |
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `onboarding` | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`* | inputs via `onboarding_input` |
@@ -270,7 +270,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `url` | str | Plugin .plg URL (plugin/install, plugin/install_language) |
 | `plugin_name` | str | Optional plugin name (plugin/install) |
 | `forced` | bool | Force plugin install (plugin/install) |
-| `operation_id` | str | Plugin install operation ID (plugin/install_operation) |
+| `operation_id` | str | Plugin install operation ID (plugin/install_operation, live/plugin_install_updates) |
 | `config_input` | dict | Input object for setting/update_ssh, update_temperature, update_system_time |
 | `comment` | str | Server comment (setting/update_server_identity) |
 | `sys_model` | str | Server model string (setting/update_server_identity) |
@@ -459,14 +459,14 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │                 │ creation_form_schema, create, update, delete*, add_role, remove_role │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ plugin          │ list, installed_unraid, install_operations, install_operation,       │
-        │                 │ add, remove*, install, install_language                              │
+        │                 │ add, remove*, install*, install_language*                            │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ rclone          │ list_remotes, config_form, create_remote, delete_remote*             │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ setting         │ update, configure_ups*, update_ssh*, update_temperature,             │
-        │                 │ update_system_time, update_server_identity                          │
+        │                 │ update_system_time*, update_server_identity                         │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ connect         │ remote_access, cloud, update_api_settings, sign_in, sign_out*,        │
+        │ connect         │ remote_access, cloud, update_api_settings*, sign_in*, sign_out*,      │
         │                 │ setup_remote_access*, enable_dynamic_remote_access*                  │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ customization   │ public_theme, is_initial_setup, sso_enabled, set_theme, set_locale   │

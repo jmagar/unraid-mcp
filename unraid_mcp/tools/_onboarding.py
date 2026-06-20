@@ -18,7 +18,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import validate_subaction
+from ..core.utils import mutation_success, validate_subaction
 from ..core.validation import validate_input_mapping
 
 
@@ -107,7 +107,7 @@ async def _handle_onboarding(
             field = _ONBOARDING_RESULT_FIELD[subaction]
             result = (data.get("onboarding") or {}).get(field)
             return {
-                "success": result is not None,
+                "success": mutation_success(result, boolean=False),
                 "subaction": subaction,
                 "onboarding": result,
             }
@@ -132,7 +132,7 @@ async def _handle_onboarding(
                     "output": (result or {}).get("output"),
                 }
             return {
-                "success": result is not None,
+                "success": mutation_success(result, boolean=False),
                 "subaction": subaction,
                 "result": result,
             }

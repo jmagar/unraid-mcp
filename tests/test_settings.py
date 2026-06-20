@@ -180,6 +180,15 @@ class TestSettingsSystemConfig:
         )
         assert result["result"] is True
 
+    async def test_update_system_time_requires_confirm(self, _mock_graphql: AsyncMock) -> None:
+        # update_system_time is destructive (clock changes break TLS/services).
+        with pytest.raises(ToolError, match="confirm=True"):
+            await _make_tool()(
+                action="setting",
+                subaction="update_system_time",
+                config_input={"timeZone": "UTC"},
+            )
+
     async def test_update_system_time(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "updateSystemTime": {"currentTime": "x", "timeZone": "UTC", "useNtp": True}
@@ -188,6 +197,7 @@ class TestSettingsSystemConfig:
             action="setting",
             subaction="update_system_time",
             config_input={"timeZone": "UTC", "useNtp": True},
+            confirm=True,
         )
         assert result["result"]["timeZone"] == "UTC"
 
@@ -221,5 +231,16 @@ class TestSettingsSuccessDerivation:
             action="setting",
             subaction="update_temperature",
             config_input={"enabled": False},
+        )
+        assert result["success"] is False
+
+
+class TestSettingsServerIdentitySuccess:
+    async def test_update_server_identity_null_is_not_success(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"updateServerIdentity": None}
+        result = await _make_tool()(
+            action="setting", subaction="update_server_identity", name="Tower"
         )
         assert result["success"] is False

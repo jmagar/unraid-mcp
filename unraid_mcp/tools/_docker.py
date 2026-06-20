@@ -10,6 +10,7 @@ move_items_to_position, update_view_preferences (25 subactions, plus a deprecate
 """
 
 import re
+from collections.abc import Sequence
 from typing import Any, TypedDict
 
 from fastmcp import Context
@@ -19,7 +20,7 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import safe_get, validate_subaction
+from ..core.utils import mutation_success, safe_get, validate_subaction
 from ..core.validation import validate_input_mapping, validate_input_mapping_list
 
 
@@ -50,8 +51,9 @@ _DOCKER_MUTATIONS: dict[str, str] = {
     "update_container": "mutation UpdateContainer($id: PrefixedID!) { docker { updateContainer(id: $id) { id names image state status } } }",
 }
 
-# Mutations that take an id but return a Boolean / list rather than a single
-# container, plus the bulk/no-arg lifecycle ops handled with bespoke branches.
+# Lifecycle mutations not handled by the single-id path: a Boolean-returning
+# remove, the image-update bulk ops (one/many/all containers), and the autostart
+# config mutation. Each is routed by a bespoke branch in _handle_docker.
 _DOCKER_BULK_MUTATIONS: dict[str, str] = {
     "remove_container": "mutation RemoveContainer($id: PrefixedID!, $withImage: Boolean) { docker { removeContainer(id: $id, withImage: $withImage) } }",
     "update_containers": "mutation UpdateContainers($ids: [PrefixedID!]!) { docker { updateContainers(ids: $ids) { id names image state status } } }",
@@ -88,8 +90,8 @@ _DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
 # misspelled spec key at check time rather than at runtime.
 class _OrganizerSpec(TypedDict):
     mutation: str
-    required: list[str]
-    optional: list[str]
+    required: Sequence[str]  # read-only lookup tables — not meant to be mutated
+    optional: Sequence[str]
     result_field: str
 
 
@@ -370,7 +372,11 @@ async def _handle_docker(
                 }
             # refresh_digests / reset_template_mappings return a bare Boolean —
             # `false` means the operation did not take effect.
-            return {"success": bool(result), "subaction": subaction, "result": result}
+            return {
+                "success": mutation_success(result, boolean=True),
+                "subaction": subaction,
+                "result": result,
+            }
 
         # Organizer (folder/view) mutations driven by organizer_input.
         if subaction in _DOCKER_ORGANIZER:
@@ -395,7 +401,7 @@ async def _handle_docker(
             data = await _client.make_graphql_request(spec["mutation"], variables)
             organizer = data.get(spec["result_field"])
             return {
-                "success": organizer is not None,
+                "success": mutation_success(organizer, boolean=False),
                 "subaction": subaction,
                 "organizer": organizer,
             }
@@ -479,7 +485,7 @@ async def _handle_docker(
             }
         container = (data.get("docker") or {}).get(_DOCKER_LIFECYCLE_RESULT_FIELD[subaction])
         return {
-            "success": container is not None,
+            "success": mutation_success(container, boolean=False),
             "subaction": subaction,
             "container": container,
         }

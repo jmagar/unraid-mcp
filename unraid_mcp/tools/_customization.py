@@ -19,6 +19,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.utils import safe_get, validate_subaction
+from ..core.validation import validate_str_param
 
 
 # ===========================================================================
@@ -71,7 +72,8 @@ async def _handle_customization(
             if not locale:
                 raise ToolError("locale is required for customization/set_locale")
             data = await _client.make_graphql_request(
-                _CUSTOMIZATION_MUTATIONS["set_locale"], {"locale": locale}
+                _CUSTOMIZATION_MUTATIONS["set_locale"],
+                {"locale": validate_str_param(locale, "locale")},
             )
             # setLocale returns the applied locale string; a null means it was not set.
             locale_result = safe_get(data, "customization", "setLocale")

@@ -91,12 +91,12 @@ KNOWN_DESTRUCTIVE: dict[str, dict] = {
         "mutations": _DISK_MUTATIONS,
     },
     "setting": {
-        "actions": {"configure_ups", "update_ssh"},
+        "actions": {"configure_ups", "update_ssh", "update_system_time"},
         "runtime_set": _SETTING_DESTRUCTIVE,
         "mutations": _SETTING_MUTATIONS,
     },
     "plugin": {
-        "actions": {"remove"},
+        "actions": {"remove", "install", "install_language"},
         "runtime_set": _PLUGIN_DESTRUCTIVE,
         "mutations": _PLUGIN_MUTATIONS,
     },
@@ -106,7 +106,13 @@ KNOWN_DESTRUCTIVE: dict[str, dict] = {
         "mutations": _DOCKER_ALL_MUTATIONS,
     },
     "connect": {
-        "actions": {"sign_out", "setup_remote_access", "enable_dynamic_remote_access"},
+        "actions": {
+            "sign_in",
+            "sign_out",
+            "update_api_settings",
+            "setup_remote_access",
+            "enable_dynamic_remote_access",
+        },
         "runtime_set": _CONNECT_DESTRUCTIVE,
         "mutations": _CONNECT_MUTATIONS,
     },
@@ -197,14 +203,19 @@ _DESTRUCTIVE_TEST_CASES: list[tuple[str, str, dict]] = [
     # Settings
     ("setting", "configure_ups", {"ups_config": {"mode": "slave"}}),
     ("setting", "update_ssh", {"config_input": {"enabled": True, "port": 22}}),
+    ("setting", "update_system_time", {"config_input": {"timeZone": "UTC"}}),
     # Plugins
     ("plugin", "remove", {"names": ["my-plugin"]}),
+    ("plugin", "install", {"url": "https://example.com/x.plg"}),
+    ("plugin", "install_language", {"url": "https://example.com/lang.plg"}),
     # Docker
     ("docker", "remove_container", {"container_id": "abc"}),
     ("docker", "reset_template_mappings", {}),
     ("docker", "delete_entries", {"organizer_input": {"entryIds": ["e1"]}}),
     # Connect
+    ("connect", "sign_in", {"connect_input": {"apiKey": "k"}}),
     ("connect", "sign_out", {}),
+    ("connect", "update_api_settings", {"connect_input": {"accessType": "DYNAMIC"}}),
     ("connect", "setup_remote_access", {"connect_input": {"accessType": "DISABLED"}}),
     (
         "connect",

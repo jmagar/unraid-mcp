@@ -123,3 +123,38 @@ class TestValidateInputMapping:
 
         with pytest.raises(ToolError, match="non-empty strings"):
             validate_input_mapping({1: "v"}, "x")
+
+
+class TestValidateInputMappingNonDict:
+    def test_top_level_non_dict_rejected(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping
+
+        with pytest.raises(ToolError, match="must be an object"):
+            validate_input_mapping("not-a-dict", "x")  # type: ignore[arg-type]
+
+    def test_list_item_non_dict_rejected_with_index(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import validate_input_mapping_list
+
+        with pytest.raises(ToolError, match=r"x\[1\] must be an object"):
+            validate_input_mapping_list([{"ok": 1}, "bad"], "x")
+
+    def test_list_of_objects_passes(self) -> None:
+        from unraid_mcp.core.validation import validate_input_mapping_list
+
+        assert validate_input_mapping_list([{"a": 1}, {"b": 2}], "x") == [{"a": 1}, {"b": 2}]
+
+
+class TestValidateStrParam:
+    def test_within_limit_passthrough(self) -> None:
+        from unraid_mcp.core.validation import validate_str_param
+
+        assert validate_str_param("Tower", "name") == "Tower"
+
+    def test_over_limit_rejected(self) -> None:
+        from unraid_mcp.core.exceptions import ToolError
+        from unraid_mcp.core.validation import MAX_VALUE_LENGTH, validate_str_param
+
+        with pytest.raises(ToolError, match="max length"):
+            validate_str_param("x" * (MAX_VALUE_LENGTH + 1), "name")

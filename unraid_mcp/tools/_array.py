@@ -14,7 +14,7 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import validate_subaction
+from ..core.utils import coerce_list, validate_subaction
 
 
 # ===========================================================================
@@ -85,16 +85,14 @@ async def _handle_array(
                         "data": data,
                         "page": meta,
                     }
-            if subaction == "assignable_disks" and isinstance(data, dict):
-                disks = data.get("assignableDisks") or []
-                if isinstance(disks, list):
-                    capped, meta = cap_list(disks, limit)
-                    return {
-                        "success": True,
-                        "subaction": subaction,
-                        "data": {"assignableDisks": capped},
-                        "page": meta,
-                    }
+            if subaction == "assignable_disks":
+                capped, meta = cap_list(coerce_list(data.get("assignableDisks")), limit)
+                return {
+                    "success": True,
+                    "subaction": subaction,
+                    "data": {"assignableDisks": capped},
+                    "page": meta,
+                }
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "parity_start":

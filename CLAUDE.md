@@ -115,10 +115,10 @@ The server registers **3 MCP tools**:
 | **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
 | **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
 | **key** (13) | list, get, possible_roles, possible_permissions, permissions_for_roles, preview_permissions, auth_actions, creation_form_schema, create, update, delete*, add_role, remove_role |
-| **plugin** (8) | list, installed_unraid, install_operations, install_operation, add, remove*, install, install_language |
+| **plugin** (8) | list, installed_unraid, install_operations, install_operation, add, remove*, install*, install_language* |
 | **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
-| **setting** (6) | update, configure_ups*, update_ssh*, update_temperature, update_system_time, update_server_identity |
-| **connect** (7) | remote_access, cloud, update_api_settings, sign_in, sign_out*, setup_remote_access*, enable_dynamic_remote_access* |
+| **setting** (6) | update, configure_ups*, update_ssh*, update_temperature, update_system_time*, update_server_identity |
+| **connect** (7) | remote_access, cloud, update_api_settings*, sign_in*, sign_out*, setup_remote_access*, enable_dynamic_remote_access* |
 | **customization** (5) | public_theme, is_initial_setup, sso_enabled, set_theme, set_locale |
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
 | **onboarding** (11) | internal_boot_context, complete, open, close, resume, bypass, reset*, set_override, clear_override, refresh_internal_boot_context, create_internal_boot_pool* |
@@ -155,10 +155,10 @@ count only), both in `unraid_mcp/core/utils.py`.
 - **rclone**: delete_remote
 - **key**: delete
 - **disk**: flash_backup
-- **setting**: configure_ups, update_ssh
-- **plugin**: remove
+- **setting**: configure_ups, update_ssh, update_system_time
+- **plugin**: remove, install, install_language
 - **docker**: remove_container, reset_template_mappings, delete_entries
-- **connect**: sign_out, setup_remote_access, enable_dynamic_remote_access
+- **connect**: sign_in, sign_out, update_api_settings, setup_remote_access, enable_dynamic_remote_access
 - **onboarding**: reset, create_internal_boot_pool
 
 ### Environment Variable Hierarchy

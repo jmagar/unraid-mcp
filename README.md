@@ -209,8 +209,8 @@ Unraid plugin management and async installs. Destructive subactions marked with 
 | `install_operation` | Status of one install operation | `operation_id` | — |
 | `add` | Install plugins by name | `names` (list); optional `bundled`, `restart` | — |
 | `remove` | Uninstall plugins by name (irreversible without re-install) | `names` (list), `confirm=True` | * |
-| `install` | Async-install a `.plg` URL (poll via `install_operation`) | `url`; optional `plugin_name`, `forced` | — |
-| `install_language` | Async-install a language pack | `url` | — |
+| `install` | Async-install a `.plg` URL — runs code as root (poll via `install_operation`) | `url`, `confirm=True`; optional `plugin_name`, `forced` | * |
+| `install_language` | Async-install a language pack — runs code as root | `url`, `confirm=True` | * |
 
 #### `rclone` — 4 subactions
 
@@ -233,7 +233,7 @@ System settings, UPS, SSH, time, and server identity. Destructive subactions mar
 | `configure_ups` | Overwrite UPS monitoring configuration | `ups_config` (dict), `confirm=True` | * |
 | `update_ssh` | Update SSH daemon settings (can cut off shell access) | `config_input` (`{enabled, port}`), `confirm=True` | * |
 | `update_temperature` | Update temperature sensor configuration | `config_input` | — |
-| `update_system_time` | Update timezone / NTP / manual time | `config_input` | — |
+| `update_system_time` | Update timezone / NTP / manual time — can invalidate TLS certs | `config_input`, `confirm=True` | * |
 | `update_server_identity` | Update server name, comment, and model | `name`; optional `comment`, `sys_model` | — |
 
 #### `connect` — 7 subactions
@@ -244,8 +244,8 @@ Unraid Connect / remote-access state and control. Destructive subactions marked 
 | --- | --- | --- | --- |
 | `remote_access` | Current remote-access settings (type, forward, port) | — | — |
 | `cloud` | Unraid Connect / cloud status (relay, minigraph, key validity) | — | — |
-| `update_api_settings` | Update Connect API settings | `connect_input` (`{accessType?, forwardType?, port?}`) | — |
-| `sign_in` | Sign the server in to Unraid Connect | `connect_input` (`{apiKey, userInfo?}`) | — |
+| `update_api_settings` | Update Connect API settings (affects internet reachability) | `connect_input` (`{accessType?, forwardType?, port?}`), `confirm=True` | * |
+| `sign_in` | Sign the server in to Unraid Connect — registers with the cloud | `connect_input` (`{apiKey, userInfo?}`), `confirm=True` | * |
 | `sign_out` | Sign the server out of Unraid Connect | `confirm=True` | * |
 | `setup_remote_access` | Configure remote access — can expose the server to the internet | `connect_input`, `confirm=True` | * |
 | `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`), `confirm=True` | * |
@@ -324,7 +324,7 @@ Two delivery modes:
 | `temperature` | Snapshot | Temperature sensor readings | — |
 | `log_tail` | Collect | Stream log file lines | `path` (must start with `/var/log/` or `/boot/logs/`) |
 | `notification_feed` | Collect | Stream incoming notifications | — |
-| `plugin_install_updates` | Collect | Stream plugin-install progress events | `operation_id` |
+| `plugin_install_updates` | Collect | Stream plugin-install progress events | `operation_id` (required) |
 
 Optional parameters for `live`:
 
@@ -357,7 +357,11 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `disk` | `flash_backup` | Overwrites destination; configure a dedicated remote |
 | `setting` | `configure_ups` | Overwrites UPS daemon config |
 | `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
+| `setting` | `update_system_time` | Clock changes can invalidate TLS certs / break time-sensitive services |
 | `plugin` | `remove` | Irreversible without re-install |
+| `plugin` | `install` / `install_language` | Fetches and runs a `.plg` from a URL as root |
+| `connect` | `sign_in` | Registers the server with the Unraid Connect cloud |
+| `connect` | `update_api_settings` | Changes remote-access posture / internet reachability |
 | `docker` | `remove_container` | Removes a container (and optionally its image) |
 | `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
 | `docker` | `delete_entries` | Deletes Docker organizer entries |

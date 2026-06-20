@@ -153,7 +153,9 @@ folders, and network inspection.
 Container identification supports name, ID, or partial name (fuzzy match).
 Organizer subactions read their GraphQL variables from the `organizer_input`
 dict (e.g. `{name, parentId, childrenIds, folderId, newName, entryIds,
-sourceEntryIds, destinationFolderId, position, viewId, prefs}`).
+sourceEntryIds, destinationFolderId, position, viewId, prefs}`). They confirm the
+change by returning only the organizer `{version}` — re-query the layout
+separately (via the Unraid UI/API) if you need the resolved folder tree.
 
 #### `vm` (9 subactions)
 
@@ -222,8 +224,8 @@ Plugin management and async installs.
 | `install_operation` | Status of one install operation | `operation_id` | -- |
 | `add` | Install plugins | `names` (list) | -- |
 | `remove` | Uninstall plugins | `names` (list), `restart` | Yes |
-| `install` | Async-install a `.plg` (poll via `install_operation`) | `url`, `plugin_name`, `forced` | -- |
-| `install_language` | Async-install a language pack | `url` | -- |
+| `install` | Async-install a `.plg` — runs code as root (poll via `install_operation`) | `url`, `plugin_name`, `forced` | Yes |
+| `install_language` | Async-install a language pack — runs code as root | `url` | Yes |
 
 #### `rclone` (4 subactions)
 
@@ -246,7 +248,7 @@ System settings, UPS, SSH, time, and server identity.
 | `configure_ups` | Configure UPS settings | `ups_config` | Yes |
 | `update_ssh` | Update SSH daemon settings | `config_input` (`{enabled, port}`) | Yes |
 | `update_temperature` | Update temperature sensor config | `config_input` | -- |
-| `update_system_time` | Update timezone / NTP / manual time | `config_input` | -- |
+| `update_system_time` | Update timezone / NTP / manual time — can invalidate TLS certs | `config_input` | Yes |
 | `update_server_identity` | Update server name/comment/model | `name`, `comment`, `sys_model` | -- |
 
 #### `connect` (7 subactions)
@@ -257,8 +259,8 @@ Unraid Connect / remote-access state and control.
 |-----------|-------------|-------------|-------------|
 | `remote_access` | Current remote-access settings | -- | -- |
 | `cloud` | Unraid Connect / cloud status | -- | -- |
-| `update_api_settings` | Update Connect API settings | `connect_input` | -- |
-| `sign_in` | Sign the server in to Unraid Connect | `connect_input` (`{apiKey, userInfo?}`) | -- |
+| `update_api_settings` | Update Connect API settings (affects internet reachability) | `connect_input` | Yes |
+| `sign_in` | Sign the server in to Unraid Connect — registers with the cloud | `connect_input` (`{apiKey, userInfo?}`) | Yes |
 | `sign_out` | Sign the server out of Unraid Connect | -- | Yes |
 | `setup_remote_access` | Configure remote access (can expose server) | `connect_input` | Yes |
 | `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`) | Yes |
@@ -335,6 +337,8 @@ Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder o
 | `notification_feed` | Live notification feed | `collect_for` |
 | `plugin_install_updates` | Live plugin-install progress stream | `operation_id` (required), `collect_for` |
 
+> Note: `plugin_install_updates` requires `operation_id` — get one from `plugin/install`, then poll/stream by that id.
+
 ## Destructive Operations
 
 All destructive operations require `confirm=True`. Without it, interactive clients are prompted via MCP elicitation; non-interactive clients receive a `ToolError` instructing them to re-call with `confirm=True`.
@@ -355,7 +359,11 @@ All destructive operations require `confirm=True`. Without it, interactive clien
 | `disk` | `flash_backup` | Triggers flash backup operation |
 | `setting` | `configure_ups` | Modifies UPS configuration |
 | `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
+| `setting` | `update_system_time` | Clock changes can invalidate TLS certs / break time-sensitive services |
 | `plugin` | `remove` | Uninstalls a plugin |
+| `plugin` | `install` / `install_language` | Fetches and runs a `.plg` from a URL as root |
+| `connect` | `sign_in` | Registers the server with the Unraid Connect cloud |
+| `connect` | `update_api_settings` | Changes remote-access posture / internet reachability |
 | `docker` | `remove_container` | Removes a container (and optionally its image) |
 | `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
 | `docker` | `delete_entries` | Deletes Docker organizer entries |
