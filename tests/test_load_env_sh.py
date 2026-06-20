@@ -15,11 +15,18 @@ from pathlib import Path
 import pytest
 
 
-_LOAD_ENV = Path(__file__).resolve().parent.parent / "skills" / "unraid" / "load-env.sh"
+_LOAD_ENV = (
+    Path(__file__).resolve().parent.parent
+    / "plugins"
+    / "unraid"
+    / "skills"
+    / "unraid"
+    / "load-env.sh"
+)
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None or not _LOAD_ENV.exists(),
-    reason="bash and skills/unraid/load-env.sh are required",
+    reason="bash and plugins/unraid/skills/unraid/load-env.sh are required",
 )
 
 

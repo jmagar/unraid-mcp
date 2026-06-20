@@ -29,15 +29,19 @@ typecheck:
 # Validate skills SKILL.md files exist and are non-empty
 validate-skills:
     @echo "=== Validating skills ==="
-    @for f in skills/*/SKILL.md; do \
+    @for f in plugins/unraid/skills/*/SKILL.md; do \
         if [ -f "$$f" ]; then \
             echo "  ✓ $$f"; \
         else \
-            echo "  ✗ SKILL.md not found in skills/"; \
+            echo "  ✗ SKILL.md not found in plugins/unraid/skills/"; \
             exit 1; \
         fi; \
     done
     @echo "Skills validation passed"
+
+# Validate the Claude Code marketplace + plugin manifest structure
+validate-marketplace:
+    bash scripts/validate-marketplace.sh
 
 # Build Docker image
 build:
@@ -104,9 +108,9 @@ gen-token:
 
 # Run docker security checks
 check-contract:
-    bash bin/check-docker-security.sh
-    bash bin/check-no-baked-env.sh
-    bash bin/ensure-ignore-files.sh --check
+    bash scripts/check-docker-security.sh
+    bash scripts/check-no-baked-env.sh
+    bash scripts/ensure-ignore-files.sh --check
 
 # ── CLI Generation ────────────────────────────────────────────────────────────
 

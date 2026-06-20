@@ -12,23 +12,39 @@ The server translates MCP tool calls into Unraid GraphQL queries and mutations o
 
 ## What this repository ships
 
-- `unraid_mcp/` — server, GraphQL client, WebSocket subscriptions, config, and tool handlers
-- `skills/unraid/` — client-facing skill docs
-- `docs/` — authentication, destructive-action, and publishing references
-- `.claude-plugin/`, `.codex-plugin/`, `gemini-extension.json` — client manifests
-- `docker-compose.yaml`, `Dockerfile`, `entrypoint.sh` — container deployment
-- `tests/` — unit, safety, schema, HTTP-layer, and live coverage
+```
+unraid-mcp/
+├── unraid_mcp/                  # server, GraphQL client, subscriptions, config, tool handlers
+├── plugins/
+│   └── unraid/                  # the distributable plugin/extension (one per client)
+│       ├── .claude-plugin/      #   Claude Code plugin manifest (plugin.json) + README
+│       ├── .codex-plugin/       #   Codex plugin manifest (plugin.json)
+│       ├── .mcp.json            #   shared MCP server definition (Claude) — runs `uvx unraid-mcp`
+│       ├── hooks/               #   SessionStart / ConfigChange hooks (hooks.json)
+│       ├── scripts/             #   plugin-runtime hook scripts (plugin-setup.sh)
+│       └── skills/unraid/       #   client-facing skill docs, references, and helpers
+├── gemini-extension.json        # Gemini CLI extension manifest (repo root, for git-URL install)
+├── .claude-plugin/
+│   └── marketplace.json         # Claude Code marketplace manifest (lists the plugin above)
+├── .agents/plugins/
+│   └── marketplace.json         # Codex marketplace manifest
+├── scripts/                     # repo-maintenance scripts (CI, version-sync, validation)
+├── docs/                        # authentication, destructive-action, and publishing references
+├── docker-compose.yaml, Dockerfile, entrypoint.sh   # container deployment
+└── tests/                       # unit, safety, schema, HTTP-layer, and live coverage
+```
 
 ## Tools
+
+The server registers a **single `unraid` tool**. Every operation is reached via
+`unraid(action=..., subaction=...)`. Subscription diagnostics and the Markdown
+reference are themselves actions of that tool (`subscriptions` and `help`).
 
 ### Tool index
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action/subaction router for all operations |
-| `unraid_help` | Returns this reference as Markdown |
-| `diagnose_subscriptions` | Full diagnostic dump of the WebSocket subscription system |
-| `test_subscription_query` | Probe a raw GraphQL subscription for schema/debug work |
+| `unraid` | Unified action/subaction router for all operations (including `help` and `subscriptions` diagnostics) |
 
 ### `unraid` — action groups
 
@@ -331,13 +347,31 @@ Optional parameters for `live`:
 - `collect_for` (float, default `5.0`) — collection window in seconds for collect-mode subactions
 - `timeout` (float, default `10.0`) — WebSocket receive timeout in seconds
 
-### `diagnose_subscriptions`
+#### `subscriptions` — 2 subactions (WebSocket diagnostics)
 
-Returns a full diagnostic dump of the subscription system: auto-start status, reconnect configuration, per-subscription state (active, last error, data received), error counts, and troubleshooting recommendations. Useful when `live` subactions return no data.
+Diagnostics for the live subscription system. Useful when `live` subactions
+return no data.
 
-### `test_subscription_query`
+| Subaction | Description | Required params |
+| --- | --- | --- |
+| `diagnose` | Full diagnostic dump: auto-start status, reconnect config, per-subscription state (active, last error, data received), error counts, and troubleshooting recommendations | — |
+| `test_query` | Send a raw GraphQL subscription string directly over WebSocket to debug schema/field issues | `subscription_query` |
 
-Accepts a raw GraphQL subscription string and sends it directly over WebSocket. Validates the query first — must be a `subscription` operation targeting one of the whitelisted fields: `logFile`, `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`, `systemMetricsTemperature`, `displaySubscription`, `notificationsWarningsAndAlerts`, `pluginInstallUpdates`. Mutation and query keywords are rejected. Returns the first message received or a note that the subscription is waiting for events.
+`test_query` validates the query first — it must be a `subscription` operation
+targeting one of the whitelisted fields (`containerStats`, `cpu`,
+`dockerContainerStats`, `memory`, `array`, `network`, `docker`,
+`systemMetricsTemperature`, `vm`, `displaySubscription`,
+`notificationsWarningsAndAlerts`, `pluginInstallUpdates`); mutation/query keywords
+are rejected.
+
+```
+unraid(action="subscriptions", subaction="diagnose")
+unraid(action="subscriptions", subaction="test_query", subscription_query="subscription { cpu { used idle system } }")
+```
+
+#### `help` — the Markdown reference
+
+`unraid(action="help")` returns this action/subaction reference as Markdown.
 
 ### Destructive actions summary
 
@@ -431,16 +465,71 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `provider_id` | str | `oidc/provider` |
 | `token` | str | `oidc/validate_session` |
 | `path` | str | `live/log_tail` |
+| `subscription_query` | str | `subscriptions/test_query` |
 | `collect_for` | float (default `5.0`) | `live` collect-mode subactions |
 | `timeout` | float (default `10.0`) | `live` all subactions |
 
 ## Installation
 
-### Marketplace
+The plugin lives at `plugins/unraid/` and launches the server with
+`uvx unraid-mcp` (the published [PyPI package](https://pypi.org/project/unraid-mcp/)),
+so no local checkout is required once it's installed. You'll need
+[`uv`](https://docs.astral.sh/uv/) on your `PATH`.
+
+### Claude Code (plugin + marketplace)
+
+Add this repo as a marketplace, then install the plugin:
+
+```text
+/plugin marketplace add jmagar/unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
+```
+
+`marketplace add` accepts the `owner/repo` shorthand (or a full git URL / local
+path). After install, Claude Code prompts for **Unraid GraphQL API URL** and
+**Unraid API Key** (the plugin's `userConfig`); they're passed to the server and
+persisted to `~/.unraid-mcp/.env` by the SessionStart hook.
+
+### Codex (plugin + marketplace)
+
+The repo ships a Codex marketplace manifest at `.agents/plugins/marketplace.json`:
 
 ```bash
-/plugin marketplace add jmagar/claude-homelab
-/plugin install unraid-mcp @jmagar-claude-homelab
+codex plugin marketplace add jmagar/unraid-mcp
+# then enable `unraid-mcp@unraid-mcp` from the Codex `/plugins` view
+```
+
+Codex does not expand plugin-config placeholders into the MCP env, so export your
+credentials in the shell that launches Codex (the manifest forwards them by name):
+
+```bash
+export UNRAID_API_URL="https://tower.local/graphql"
+export UNRAID_API_KEY="your-api-key"
+```
+
+Alternatively, populate `~/.unraid-mcp/.env` (run `uvx unraid-mcp setup`) — the
+server reads it automatically.
+
+### Gemini CLI (extension)
+
+Install the extension straight from the repo (`gemini extensions install` reads
+`gemini-extension.json` from the repo root):
+
+```bash
+gemini extensions install https://github.com/jmagar/unraid-mcp
+```
+
+Gemini prompts for the `UNRAID_API_URL` and `UNRAID_API_KEY` settings on install
+and exports them to the server's environment.
+
+### Run the server directly with uvx
+
+No clone needed — run the published package on demand:
+
+```bash
+export UNRAID_API_URL="https://tower.local/graphql"
+export UNRAID_API_KEY="your-api-key"
+uvx unraid-mcp
 ```
 
 ### Local development

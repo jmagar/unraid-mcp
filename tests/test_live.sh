@@ -360,12 +360,9 @@ run_phase3() {
     pass "tools/list → 200  ($tool_count tools)"
     assert_jq "  unraid tool present" \
       "$HTTP_BODY" '.result.tools[] | select(.name == "unraid") | .name'
-    assert_jq "  diagnose_subscriptions tool present" \
-      "$HTTP_BODY" '.result.tools[] | select(.name == "diagnose_subscriptions") | .name'
   else
     fail "tools/list → 200  (got $HTTP_STATUS)"
     skip "  unraid tool present"                 "tools/list failed"
-    skip "  diagnose_subscriptions tool present" "tools/list failed"
   fi
 
   mcp_post "ping" 'null'

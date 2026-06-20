@@ -19,7 +19,8 @@ def test_plugin_option_map_matches_manifest_userconfig():
     """
     from unraid_mcp.core.setup import PLUGIN_OPTION_MAP
 
-    manifest = json.loads((_REPO_ROOT / ".claude-plugin" / "plugin.json").read_text())
+    plugin_dir = _REPO_ROOT / "plugins" / "unraid"
+    manifest = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text())
     user_keys = set(manifest["userConfig"])  # e.g. {"unraid_api_url", "unraid_api_key"}
 
     expected = {f"CLAUDE_PLUGIN_OPTION_{k.upper()}": k.upper() for k in user_keys}
@@ -29,7 +30,7 @@ def test_plugin_option_map_matches_manifest_userconfig():
     )
 
     # .mcp.json must hand each canonical var the matching plugin option.
-    mcp = json.loads((_REPO_ROOT / ".mcp.json").read_text())
+    mcp = json.loads((plugin_dir / ".mcp.json").read_text())
     env = mcp["mcpServers"]["unraid-mcp"]["env"]
     for option, canonical in PLUGIN_OPTION_MAP.items():
         assert env.get(canonical) == f"${{{option}}}", (
