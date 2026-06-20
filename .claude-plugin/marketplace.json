@@ -7,9 +7,6 @@
     "email": "jmagar@users.noreply.github.com",
     "url": "https://github.com/jmagar"
   },
-  "metadata": {
-    "pluginRoot": "./plugins"
-  },
   "plugins": [
     {
       "name": "unraid-mcp",

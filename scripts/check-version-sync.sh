@@ -35,9 +35,9 @@ if [ -f "plugins/unraid/.codex-plugin/plugin.json" ]; then
   [ -n "$v" ] && versions+=("plugins/unraid/.codex-plugin/plugin.json=$v") && files_checked+=("plugins/unraid/.codex-plugin/plugin.json")
 fi
 
-if [ -f "plugins/unraid/gemini-extension.json" ]; then
-  v=$(python3 -c "import json; print(json.load(open('plugins/unraid/gemini-extension.json')).get('version',''))" 2>/dev/null)
-  [ -n "$v" ] && versions+=("plugins/unraid/gemini-extension.json=$v") && files_checked+=("plugins/unraid/gemini-extension.json")
+if [ -f "gemini-extension.json" ]; then
+  v=$(python3 -c "import json; print(json.load(open('gemini-extension.json')).get('version',''))" 2>/dev/null)
+  [ -n "$v" ] && versions+=("gemini-extension.json=$v") && files_checked+=("gemini-extension.json")
 fi
 
 # Need at least one version source

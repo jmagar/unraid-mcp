@@ -344,7 +344,7 @@ release-please keeps these files in sync automatically (configured in `release-p
 - `pyproject.toml` — `version = "X.Y.Z"` in `[project]`
 - `plugins/unraid/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `plugins/unraid/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `plugins/unraid/gemini-extension.json` — `"version": "X.Y.Z"`
+- `gemini-extension.json` — `"version": "X.Y.Z"`
 - `CHANGELOG.md` — new entry generated from commit messages
 
 `server.json` (placeholder `0.0.0` in-repo, set from the tag at publish time) and

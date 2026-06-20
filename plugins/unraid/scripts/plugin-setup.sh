@@ -2,12 +2,22 @@
 # Persist the plugin's userConfig credentials to ~/.unraid-mcp/.env.
 # Runs `unraid-mcp setup plugin-hook` via uvx (the published PyPI package).
 # Idempotent: writing identical credentials is a no-op-equivalent rewrite.
-set -euo pipefail
+#
+# ADVISORY hook (SessionStart / ConfigChange): persisting credentials is a
+# convenience — the MCP server also receives them directly via the plugin's
+# .mcp.json env — so a missing `uvx`, no network, or a setup error must NEVER
+# block the session. Every failure path warns to stderr (greppable) and exits 0.
+set -uo pipefail
 
-# Make a hook failure greppable: under `set -euo pipefail` any errexit failure
-# (a failed `uvx` from a missing uv binary / no network, or an unexpected setup
-# error) prints this marker. Note: run_plugin_hook itself exits 0 even when the
-# .env write fails (advisory, by design), so this trap is mainly the uvx safety net.
-trap 'echo "plugin-setup.sh: credential setup hook failed (exit $?)" >&2' ERR
+if ! command -v uvx >/dev/null 2>&1; then
+  echo "plugin-setup.sh: 'uvx' not found on PATH — skipping credential persistence." \
+       "Install uv (https://docs.astral.sh/uv/) to enable it." >&2
+  exit 0
+fi
 
-uvx unraid-mcp setup plugin-hook
+if ! uvx unraid-mcp setup plugin-hook; then
+  echo "plugin-setup.sh: credential setup hook failed (uvx/network/setup error) —" \
+       "continuing; the server still receives credentials via the plugin env." >&2
+fi
+
+exit 0

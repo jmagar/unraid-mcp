@@ -11,7 +11,7 @@
       "extra-files": [
         { "type": "json", "path": "plugins/unraid/.claude-plugin/plugin.json", "jsonpath": "$.version" },
         { "type": "json", "path": "plugins/unraid/.codex-plugin/plugin.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "plugins/unraid/gemini-extension.json", "jsonpath": "$.version" }
+        { "type": "json", "path": "gemini-extension.json", "jsonpath": "$.version" }
       ]
     }
   }

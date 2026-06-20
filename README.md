@@ -20,10 +20,10 @@ unraid-mcp/
 │       ├── .claude-plugin/      #   Claude Code plugin manifest (plugin.json) + README
 │       ├── .codex-plugin/       #   Codex plugin manifest (plugin.json)
 │       ├── .mcp.json            #   shared MCP server definition (Claude) — runs `uvx unraid-mcp`
-│       ├── gemini-extension.json#   Gemini CLI extension manifest
 │       ├── hooks/               #   SessionStart / ConfigChange hooks (hooks.json)
 │       ├── scripts/             #   plugin-runtime hook scripts (plugin-setup.sh)
 │       └── skills/unraid/       #   client-facing skill docs, references, and helpers
+├── gemini-extension.json        # Gemini CLI extension manifest (repo root, for git-URL install)
 ├── .claude-plugin/
 │   └── marketplace.json         # Claude Code marketplace manifest (lists the plugin above)
 ├── .agents/plugins/
@@ -411,8 +411,8 @@ server reads it automatically.
 
 ### Gemini CLI (extension)
 
-Install the extension straight from the repo (the manifest is at
-`plugins/unraid/gemini-extension.json`):
+Install the extension straight from the repo (`gemini extensions install` reads
+`gemini-extension.json` from the repo root):
 
 ```bash
 gemini extensions install https://github.com/jmagar/unraid-mcp
