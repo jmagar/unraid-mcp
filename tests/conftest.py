@@ -14,9 +14,19 @@ from hypothesis.database import DirectoryBasedExampleDatabase
 
 # Redirect hypothesis storage (unicode_data, constants) and example database
 # to .cache/.hypothesis — keeps the repo root clean.
+#
+# deadline=None: the property tests re-register the (19-action) FastMCP `unraid`
+# tool per generated example, so the first example carries import/registration
+# warmup that can exceed hypothesis's default 200ms per-example deadline and flake
+# CI. These tests assert input validation, not latency, so the per-example
+# deadline is irrelevant noise — disable it.
 _HYPOTHESIS_DIR = Path(__file__).parent.parent / ".cache" / ".hypothesis"
 set_hypothesis_home_dir(_HYPOTHESIS_DIR)
-settings.register_profile("default", database=DirectoryBasedExampleDatabase(str(_HYPOTHESIS_DIR)))
+settings.register_profile(
+    "default",
+    database=DirectoryBasedExampleDatabase(str(_HYPOTHESIS_DIR)),
+    deadline=None,
+)
 settings.load_profile("default")
 
 
