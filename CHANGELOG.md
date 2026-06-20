@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/jmagar/unraid-mcp/compare/v1.6.1...v2.0.0) (2026-06-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* the `unraid_help`, `diagnose_subscriptions`, and `test_subscription_query` MCP tools are removed; use the `unraid` tool's `help` and `subscriptions` actions instead. Installed plugins now require `uv`/`uvx` on PATH and run the published `unraid-mcp` PyPI package.
+
+### Features
+
+* restructure into plugins/unraid marketplace + consolidate diagnostic tools ([#65](https://github.com/jmagar/unraid-mcp/issues/65)) ([176e80c](https://github.com/jmagar/unraid-mcp/commit/176e80c504065b206f815bb0167101f2b9e502f3))
+
+
+### Documentation
+
+* save session log ([#62](https://github.com/jmagar/unraid-mcp/issues/62)) ([05247c1](https://github.com/jmagar/unraid-mcp/commit/05247c1fc5b522ca3f89da60c3bfbd439a78e422))
+
 ## [1.6.1](https://github.com/jmagar/unraid-mcp/compare/v1.6.0...v1.6.1) (2026-06-19)
 
 
