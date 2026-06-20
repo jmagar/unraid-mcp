@@ -13,7 +13,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import validate_subaction
+from ..core.utils import mutation_success, validate_subaction
 from ..core.validation import validate_input_mapping
 
 
@@ -51,11 +51,19 @@ _CONNECT_INPUT_MUTATIONS: set[str] = {
     "enable_dynamic_remote_access",
 }
 
-# Mutations that return a bare Boolean (false => operation did not take effect).
+# Mutations that return a bare Boolean (false => operation did not take effect);
+# the rest (update_api_settings) return an object.
 _CONNECT_BOOL_MUTATIONS: set[str] = {
     "sign_in",
     "setup_remote_access",
     "enable_dynamic_remote_access",
+}
+
+_CONNECT_RESULT_FIELD: dict[str, str] = {
+    "update_api_settings": "updateApiSettings",
+    "sign_in": "connectSignIn",
+    "setup_remote_access": "setupRemoteAccess",
+    "enable_dynamic_remote_access": "enableDynamicRemoteAccess",
 }
 
 
@@ -108,18 +116,8 @@ async def _handle_connect(
             data = await _client.make_graphql_request(
                 _CONNECT_MUTATIONS[subaction], {"input": validated}
             )
-            result_key = {
-                "update_api_settings": "updateApiSettings",
-                "sign_in": "connectSignIn",
-                "setup_remote_access": "setupRemoteAccess",
-                "enable_dynamic_remote_access": "enableDynamicRemoteAccess",
-            }[subaction]
-            result = data.get(result_key)
-            # sign_in / setup_remote_access / enable_dynamic_remote_access return a
-            # bare Boolean — `false` means the operation did not take effect (e.g.
-            # sign-in rejected, remote access unchanged), so success must reflect it.
-            # update_api_settings returns an object (ConnectSettingsValues).
-            success = bool(result) if subaction in _CONNECT_BOOL_MUTATIONS else result is not None
+            result = data.get(_CONNECT_RESULT_FIELD[subaction])
+            success = mutation_success(result, boolean=subaction in _CONNECT_BOOL_MUTATIONS)
             return {"success": success, "subaction": subaction, "result": result}
 
         raise ToolError(f"Unhandled connect subaction '{subaction}' — this is a bug")

@@ -7,10 +7,41 @@ import pytest
 from conftest import make_tool_fn
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.core.utils import format_bytes, format_kb, safe_get
+from unraid_mcp.core.utils import (
+    coerce_list,
+    format_bytes,
+    format_kb,
+    mutation_success,
+    safe_get,
+)
 
 
 # --- Unit tests for helpers ---
+
+
+class TestCoerceList:
+    def test_passthrough_list(self) -> None:
+        assert coerce_list([1, 2]) == [1, 2]
+
+    @pytest.mark.parametrize("value", [None, {}, "x", 5, {"a": 1}])
+    def test_non_list_becomes_empty(self, value: object) -> None:
+        assert coerce_list(value) == []
+
+
+class TestMutationSuccess:
+    @pytest.mark.parametrize(
+        ("result", "boolean", "expected"),
+        [
+            (True, True, True),
+            (False, True, False),  # bare-Boolean false => not success
+            (None, True, False),
+            ({"version": 1}, False, True),  # object present => success
+            (None, False, False),  # object null => failure
+            ("", False, True),  # an empty string is still a non-null object result
+        ],
+    )
+    def test_derivation(self, result: object, boolean: bool, expected: bool) -> None:
+        assert mutation_success(result, boolean=boolean) is expected
 
 
 class TestFormatBytes:

@@ -31,13 +31,9 @@ class TestOnboardingQueries:
 class TestOnboardingSimpleMutations:
     @pytest.mark.parametrize("subaction", ["complete", "open", "close", "resume", "bypass"])
     async def test_simple_mutation(self, _mock_graphql: AsyncMock, subaction: str) -> None:
-        field = {
-            "complete": "completeOnboarding",
-            "open": "openOnboarding",
-            "close": "closeOnboarding",
-            "resume": "resumeOnboarding",
-            "bypass": "bypassOnboarding",
-        }[subaction]
+        from unraid_mcp.tools._onboarding import _ONBOARDING_RESULT_FIELD
+
+        field = _ONBOARDING_RESULT_FIELD[subaction]
         _mock_graphql.return_value = {"onboarding": {field: {"status": "COMPLETED"}}}
         result = await _make_tool()(action="onboarding", subaction=subaction)
         assert result["success"] is True
@@ -98,10 +94,9 @@ class TestOnboardingSuccessDerivation:
     async def test_remaining_simple_mutations(
         self, _mock_graphql: AsyncMock, subaction: str
     ) -> None:
-        field = {
-            "clear_override": "clearOnboardingOverride",
-            "refresh_internal_boot_context": "refreshInternalBootContext",
-        }[subaction]
+        from unraid_mcp.tools._onboarding import _ONBOARDING_RESULT_FIELD
+
+        field = _ONBOARDING_RESULT_FIELD[subaction]
         _mock_graphql.return_value = {"onboarding": {field: {"status": "INCOMPLETE"}}}
         result = await _make_tool()(action="onboarding", subaction=subaction)
         assert result["success"] is True

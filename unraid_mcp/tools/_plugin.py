@@ -13,7 +13,7 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import validate_subaction
+from ..core.utils import coerce_list, validate_subaction
 
 
 # ===========================================================================
@@ -68,9 +68,7 @@ async def _handle_plugin(
 
         if subaction == "list":
             data = await _client.make_graphql_request(_PLUGIN_QUERIES["list"])
-            plugins = data.get("plugins") or []
-            plugins = list(plugins) if isinstance(plugins, list) else []
-            capped, page = cap_list(plugins, limit)
+            capped, page = cap_list(coerce_list(data.get("plugins")), limit)
             return {
                 "success": True,
                 "subaction": subaction,
@@ -80,9 +78,7 @@ async def _handle_plugin(
 
         if subaction == "installed_unraid":
             data = await _client.make_graphql_request(_PLUGIN_QUERIES["installed_unraid"])
-            items = data.get("installedUnraidPlugins") or []
-            items = list(items) if isinstance(items, list) else []
-            capped, page = cap_list(items, limit)
+            capped, page = cap_list(coerce_list(data.get("installedUnraidPlugins")), limit)
             return {
                 "success": True,
                 "subaction": subaction,
@@ -92,9 +88,7 @@ async def _handle_plugin(
 
         if subaction == "install_operations":
             data = await _client.make_graphql_request(_PLUGIN_QUERIES["install_operations"])
-            ops = data.get("pluginInstallOperations") or []
-            ops = list(ops) if isinstance(ops, list) else []
-            capped, page = cap_list(ops, limit)
+            capped, page = cap_list(coerce_list(data.get("pluginInstallOperations")), limit)
             return {
                 "success": True,
                 "subaction": subaction,

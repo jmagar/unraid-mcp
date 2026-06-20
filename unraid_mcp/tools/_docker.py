@@ -20,7 +20,7 @@ from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
 from ..core.utils import safe_get, validate_subaction
-from ..core.validation import validate_input_mapping
+from ..core.validation import validate_input_mapping, validate_input_mapping_list
 
 
 # ===========================================================================
@@ -64,6 +64,19 @@ _DOCKER_ROOT_MUTATIONS: dict[str, str] = {
     "refresh_digests": "mutation RefreshDockerDigests { refreshDockerDigests }",
     "sync_template_paths": "mutation SyncDockerTemplatePaths { syncDockerTemplatePaths { scanned matched skipped errors } }",
     "reset_template_mappings": "mutation ResetDockerTemplateMappings { resetDockerTemplateMappings }",
+}
+
+# subaction -> GraphQL response field, kept beside the mutation dicts they mirror.
+_DOCKER_ROOT_RESULT_FIELD: dict[str, str] = {
+    "refresh_digests": "refreshDockerDigests",
+    "sync_template_paths": "syncDockerTemplatePaths",
+    "reset_template_mappings": "resetDockerTemplateMappings",
+}
+_DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
+    "start": "start",
+    "stop": "stop",
+    "unpause": "unpause",
+    "update_container": "updateContainer",
 }
 
 
@@ -178,11 +191,19 @@ def _find_container(
     )
 
 
-async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
+async def _resolve_container_id(
+    container_id: str,
+    *,
+    strict: bool = False,
+    containers: list[dict[str, Any]] | None = None,
+) -> str:
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
-    data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
-    containers = safe_get(data, "docker", "containers", default=[])
+    # Callers resolving several ids can pass a pre-fetched container list to avoid
+    # re-fetching the full list once per id (see docker/update_containers).
+    if containers is None:
+        data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
+        containers = safe_get(data, "docker", "containers", default=[])
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
         matches = [
@@ -336,12 +357,7 @@ async def _handle_docker(
         # Root-level no-arg mutations (refresh digests / template sync + reset).
         if subaction in _DOCKER_ROOT_MUTATIONS:
             data = await _client.make_graphql_request(_DOCKER_ROOT_MUTATIONS[subaction])
-            field = {
-                "refresh_digests": "refreshDockerDigests",
-                "sync_template_paths": "syncDockerTemplatePaths",
-                "reset_template_mappings": "resetDockerTemplateMappings",
-            }[subaction]
-            result = data.get(field)
+            result = data.get(_DOCKER_ROOT_RESULT_FIELD[subaction])
             if subaction == "sync_template_paths":
                 # Returns {scanned, matched, skipped, errors}; surface a non-empty
                 # errors list rather than reporting a partial sync as a clean success.
@@ -401,7 +417,16 @@ async def _handle_docker(
         if subaction == "update_containers":
             if not container_ids:
                 raise ToolError("container_ids is required for docker/update_containers")
-            resolved = [await _resolve_container_id(c, strict=True) for c in container_ids]
+            # Resolve every id against a single container-list fetch rather than
+            # re-fetching the full list once per id.
+            containers: list[dict[str, Any]] = []
+            if any(not _DOCKER_ID_PATTERN.match(c) for c in container_ids):
+                resolve_data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
+                containers = safe_get(resolve_data, "docker", "containers", default=[])
+            resolved = [
+                await _resolve_container_id(c, strict=True, containers=containers)
+                for c in container_ids
+            ]
             data = await _client.make_graphql_request(
                 _DOCKER_BULK_MUTATIONS["update_containers"], {"ids": resolved}
             )
@@ -427,7 +452,7 @@ async def _handle_docker(
                     "autostart_entries is required for docker/update_autostart "
                     "(list of {id, autoStart, wait?})"
                 )
-            entries = [validate_input_mapping(e, "autostart_entries[]") for e in autostart_entries]
+            entries = validate_input_mapping_list(autostart_entries, "autostart_entries")
             data = await _client.make_graphql_request(
                 _DOCKER_BULK_MUTATIONS["update_autostart"],
                 {"entries": entries, "persist": True},
@@ -452,13 +477,7 @@ async def _handle_docker(
                 "idempotent": True,
                 "message": f"Container already in desired state for '{subaction}'",
             }
-        field = {
-            "start": "start",
-            "stop": "stop",
-            "unpause": "unpause",
-            "update_container": "updateContainer",
-        }[subaction]
-        container = (data.get("docker") or {}).get(field)
+        container = (data.get("docker") or {}).get(_DOCKER_LIFECYCLE_RESULT_FIELD[subaction])
         return {
             "success": container is not None,
             "subaction": subaction,

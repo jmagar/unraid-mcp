@@ -12,7 +12,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import validate_subaction
+from ..core.utils import mutation_success, validate_subaction
 from ..core.validation import (
     DANGEROUS_KEY_PATTERN,
     validate_input_mapping,
@@ -55,6 +55,14 @@ _SETTING_MUTATIONS: dict[str, str] = {
 _SETTING_SUBACTIONS: set[str] = set(_SETTING_MUTATIONS)
 # update_ssh can lock out remote shell access if misconfigured (e.g. disabling SSH).
 _SETTING_DESTRUCTIVE: set[str] = {"configure_ups", "update_ssh"}
+
+# Response field per config mutation. update_temperature returns a bare Boolean;
+# update_ssh (Vars) and update_system_time (SystemTime) return objects.
+_SETTING_CONFIG_RESULT_FIELD: dict[str, str] = {
+    "update_ssh": "updateSshSettings",
+    "update_temperature": "updateTemperatureConfig",
+    "update_system_time": "updateSystemTime",
+}
 
 
 async def _handle_setting(
@@ -120,16 +128,8 @@ async def _handle_setting(
             data = await _client.make_graphql_request(
                 _SETTING_MUTATIONS[subaction], {"input": validated}
             )
-            result_key = {
-                "update_ssh": "updateSshSettings",
-                "update_temperature": "updateTemperatureConfig",
-                "update_system_time": "updateSystemTime",
-            }[subaction]
-            result = data.get(result_key)
-            # updateTemperatureConfig returns a bare Boolean — `false` means the
-            # config was not applied, so success must reflect that, not be hardcoded.
-            # The other two return objects (Vars / SystemTime); a null means failure.
-            success = bool(result) if subaction == "update_temperature" else result is not None
+            result = data.get(_SETTING_CONFIG_RESULT_FIELD[subaction])
+            success = mutation_success(result, boolean=subaction == "update_temperature")
             return {"success": success, "subaction": subaction, "result": result}
 
         if subaction == "update_server_identity":

@@ -193,6 +193,28 @@ def safe_get(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     return current
 
 
+def coerce_list(value: Any) -> list[Any]:
+    """Return ``value`` if it is a list, otherwise an empty list.
+
+    Defensive coercion for GraphQL fields that should be lists but may come back
+    ``None`` or malformed — keeps downstream code (``cap_list``, iteration) from
+    having to repeat the ``list(x) if isinstance(x, list) else []`` idiom.
+    """
+    return value if isinstance(value, list) else []
+
+
+def mutation_success(result: Any, *, boolean: bool) -> bool:
+    """Derive a mutation's success flag from its GraphQL result.
+
+    GraphQL mutations signal failure in the data payload, not by raising:
+    a bare-``Boolean`` resolver returns ``false`` when the op did not take effect,
+    while an object-returning resolver returns ``null`` on failure. Pass
+    ``boolean=True`` for the former (``success = bool(result)``) and ``boolean=False``
+    for the latter (``success = result is not None``).
+    """
+    return bool(result) if boolean else result is not None
+
+
 def format_bytes(bytes_value: int | None) -> str:
     """Format byte values into human-readable sizes.
 

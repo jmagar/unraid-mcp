@@ -14,8 +14,8 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import safe_get, validate_subaction
-from ..core.validation import validate_input_mapping
+from ..core.utils import coerce_list, safe_get, validate_subaction
+from ..core.validation import validate_input_mapping_list
 
 
 # ===========================================================================
@@ -71,25 +71,20 @@ async def _handle_key(
 
         if subaction == "list":
             data = await _client.make_graphql_request(_KEY_QUERIES["list"])
-            keys = data.get("apiKeys", [])
-            keys = list(keys) if isinstance(keys, list) else []
-            capped, page = cap_list(keys, limit)
+            capped, page = cap_list(coerce_list(data.get("apiKeys")), limit)
             return {"keys": capped, "page": page}
 
         if subaction == "possible_roles":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])
-            roles_list = data.get("apiKeyPossibleRoles", [])
-            return {"roles": list(roles_list) if isinstance(roles_list, list) else []}
+            return {"roles": coerce_list(data.get("apiKeyPossibleRoles"))}
 
         if subaction == "possible_permissions":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_permissions"])
-            perms = data.get("apiKeyPossiblePermissions", [])
-            return {"permissions": list(perms) if isinstance(perms, list) else []}
+            return {"permissions": coerce_list(data.get("apiKeyPossiblePermissions"))}
 
         if subaction == "auth_actions":
             data = await _client.make_graphql_request(_KEY_QUERIES["auth_actions"])
-            actions = data.get("getAvailableAuthActions", [])
-            return {"actions": list(actions) if isinstance(actions, list) else []}
+            return {"actions": coerce_list(data.get("getAvailableAuthActions"))}
 
         if subaction == "creation_form_schema":
             data = await _client.make_graphql_request(_KEY_QUERIES["creation_form_schema"])
@@ -103,8 +98,7 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_QUERIES["permissions_for_roles"], {"roles": roles}
             )
-            perms = data.get("getPermissionsForRoles", [])
-            return {"permissions": list(perms) if isinstance(perms, list) else []}
+            return {"permissions": coerce_list(data.get("getPermissionsForRoles"))}
 
         if subaction == "preview_permissions":
             if not roles and not permissions_input:
@@ -117,14 +111,13 @@ async def _handle_key(
                 variables["roles"] = roles
             if permissions_input:
                 # Validate like every other structured input before it reaches GraphQL.
-                variables["permissions"] = [
-                    validate_input_mapping(p, "permissions_input[]") for p in permissions_input
-                ]
+                variables["permissions"] = validate_input_mapping_list(
+                    permissions_input, "permissions_input"
+                )
             data = await _client.make_graphql_request(
                 _KEY_QUERIES["preview_permissions"], variables
             )
-            perms = data.get("previewEffectivePermissions", [])
-            return {"permissions": list(perms) if isinstance(perms, list) else []}
+            return {"permissions": coerce_list(data.get("previewEffectivePermissions"))}
 
         if subaction == "get":
             if not key_id:
