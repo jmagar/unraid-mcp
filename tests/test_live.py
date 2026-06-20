@@ -255,3 +255,71 @@ async def test_log_tail_no_level_unchanged(_mock_subscribe_collect):
     )
     assert result["filter"] is None
     assert result["events"][0]["logFile"]["content"] == "a info\nb [ERROR] boom"
+
+
+# ---------------------------------------------------------------------------
+# New subscriptions: display, notifications_warnings, plugin_install_updates
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_display_returns_snapshot(_mock_subscribe_once):
+    _mock_subscribe_once.return_value = {
+        "displaySubscription": {"theme": "white", "locale": "en_US"}
+    }
+    result = await _make_tool()(action="live", subaction="display")
+    assert result["success"] is True
+    assert result["data"]["displaySubscription"]["theme"] == "white"
+
+
+@pytest.mark.asyncio
+async def test_notifications_warnings_returns_snapshot(_mock_subscribe_once):
+    _mock_subscribe_once.return_value = {
+        "notificationsWarningsAndAlerts": [{"id": "n1", "importance": "ALERT"}]
+    }
+    result = await _make_tool()(action="live", subaction="notifications_warnings")
+    assert result["success"] is True
+    assert result["data"]["notificationsWarningsAndAlerts"][0]["importance"] == "ALERT"
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_updates_requires_operation_id(_mock_subscribe_collect):
+    from unraid_mcp.core.exceptions import ToolError
+
+    _mock_subscribe_collect.return_value = []
+    with pytest.raises(ToolError, match="operation_id is required"):
+        await _make_tool()(action="live", subaction="plugin_install_updates")
+
+
+@pytest.mark.asyncio
+async def test_plugin_install_updates_passes_operation_id(_mock_subscribe_collect):
+    _mock_subscribe_collect.return_value = [
+        {"pluginInstallUpdates": {"operationId": "op1", "status": "RUNNING"}}
+    ]
+    result = await _make_tool()(
+        action="live",
+        subaction="plugin_install_updates",
+        operation_id="op1",
+        collect_for=1.0,
+    )
+    assert result["success"] is True
+    assert result["events"][0]["pluginInstallUpdates"]["operationId"] == "op1"
+    # operationId must be forwarded as a subscription variable
+    assert _mock_subscribe_collect.call_args.kwargs["variables"] == {"operationId": "op1"}
+
+
+@pytest.mark.asyncio
+async def test_snapshot_actions_all_handled():
+    """Every SNAPSHOT_ACTIONS key must route through _handle_live without error.
+
+    Guards against adding a subscription key but forgetting the handler branch.
+    """
+    from unittest.mock import patch
+
+    from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
+
+    with patch("unraid_mcp.subscriptions.snapshot.subscribe_once") as once:
+        once.return_value = {"ok": True}
+        for action in SNAPSHOT_ACTIONS:
+            result = await _make_tool()(action="live", subaction=action, timeout=1.0)
+            assert result["subaction"] == action

@@ -47,6 +47,9 @@ _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
         "docker",
         "systemMetricsTemperature",
         "vm",
+        "displaySubscription",
+        "notificationsWarningsAndAlerts",
+        "pluginInstallUpdates",
     }
 )
 

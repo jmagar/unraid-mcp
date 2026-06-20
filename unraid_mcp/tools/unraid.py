@@ -1,24 +1,26 @@
 """Single consolidated Unraid tool.
 
-Provides the `unraid` tool with 17 actions, each routing to domain-specific
+Provides the `unraid` tool with 19 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
   system       - Server info, metrics, network, UPS (18 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
-  array        - Parity checks, array state, disk operations (13 subactions)
+  array        - Parity checks, array state, disk operations (14 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
-  docker       - Container lifecycle and network inspection (8 subactions)
+  docker       - Container lifecycle, updates, organizer, networks (25 subactions)
   vm           - Virtual machine lifecycle (9 subactions)
   notification - System notifications CRUD (12 subactions)
-  key          - API key management (7 subactions)
-  plugin       - Plugin management (3 subactions)
+  key          - API key & permission management (13 subactions)
+  plugin       - Plugin management and async installs (8 subactions)
   rclone       - Cloud storage remote management (4 subactions)
-  setting      - System settings and UPS config (2 subactions)
-  customization - Theme and UI customization (5 subactions)
+  setting      - System settings, UPS, SSH, time, identity (6 subactions)
+  connect      - Unraid Connect / remote access (7 subactions)
+  customization - Theme, locale and UI customization (5 subactions)
   oidc         - OIDC/SSO provider management (5 subactions)
+  onboarding   - First-boot/onboarding state (11 subactions)
   user         - Current authenticated user (1 subaction)
-  live         - Real-time WebSocket subscription snapshots (11 subactions)
+  live         - Real-time WebSocket subscription snapshots (16 subactions)
   subscriptions - WebSocket subscription diagnostics (2 subactions)
   help         - Return the full Markdown action/subaction reference (no subaction)
 """
@@ -42,13 +44,27 @@ from ._array import (  # noqa: F401
     _ARRAY_QUERIES,
     _handle_array,
 )
+from ._connect import (  # noqa: F401
+    _CONNECT_DESTRUCTIVE,
+    _CONNECT_MUTATIONS,
+    _CONNECT_QUERIES,
+    _handle_connect,
+)
 from ._customization import (  # noqa: F401
     _CUSTOMIZATION_MUTATIONS,
     _CUSTOMIZATION_QUERIES,
     _handle_customization,
 )
 from ._disk import _DISK_DESTRUCTIVE, _DISK_MUTATIONS, _DISK_QUERIES, _handle_disk  # noqa: F401
-from ._docker import _DOCKER_MUTATIONS, _DOCKER_QUERIES, _handle_docker  # noqa: F401
+from ._docker import (  # noqa: F401
+    _DOCKER_BULK_MUTATIONS,
+    _DOCKER_DESTRUCTIVE,
+    _DOCKER_MUTATIONS,
+    _DOCKER_ORGANIZER,
+    _DOCKER_QUERIES,
+    _DOCKER_ROOT_MUTATIONS,
+    _handle_docker,
+)
 from ._health import (  # noqa: F401
     _HEALTH_QUERIES,
     _HEALTH_SUBACTIONS,
@@ -64,6 +80,13 @@ from ._notification import (  # noqa: F401
     _handle_notification,
 )
 from ._oidc import _OIDC_QUERIES, _handle_oidc  # noqa: F401
+from ._onboarding import (  # noqa: F401
+    _ONBOARDING_DESTRUCTIVE,
+    _ONBOARDING_INPUT_MUTATIONS,
+    _ONBOARDING_QUERIES,
+    _ONBOARDING_SIMPLE_MUTATIONS,
+    _handle_onboarding,
+)
 from ._plugin import (  # noqa: F401
     _PLUGIN_DESTRUCTIVE,
     _PLUGIN_MUTATIONS,
@@ -208,19 +231,21 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 |--------|-----------|-------|
 | `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config` | |
 | `health` | `check`, `test_connection`, `diagnose`, `setup` | |
-| `array` | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
+| `array` | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
 | `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
-| `docker` | `list`, `details`, `ports`, `start`, `stop`, `restart`, `networks`, `network_details` | |
+| `docker` | `list`, `details`, `ports`, `start`, `stop`, `restart`, `unpause`, `networks`, `network_details`, `remove_container`*, `update_container`, `update_containers`, `update_all_containers`, `update_autostart`, `refresh_digests`, `sync_template_paths`, `reset_template_mappings`*, `create_folder`, `create_folder_with_items`, `rename_folder`, `set_folder_children`, `delete_entries`*, `move_entries_to_folder`, `move_items_to_position`, `update_view_preferences` | organizer ops use `organizer_input` |
 | `vm` | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`*, `reboot`, `reset`* | |
 | `notification` | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`*, `delete_archived`* | |
-| `key` | `list`, `get`, `create`, `update`, `delete`*, `add_role`, `remove_role` | |
-| `plugin` | `list`, `add`, `remove`* | |
+| `key` | `list`, `get`, `possible_roles`, `possible_permissions`, `permissions_for_roles`, `preview_permissions`, `auth_actions`, `creation_form_schema`, `create`, `update`, `delete`*, `add_role`, `remove_role` | |
+| `plugin` | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`*, `install`*, `install_language`* | install runs a .plg as root |
 | `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote`* | |
-| `setting` | `update`, `configure_ups`* | |
-| `customization` | `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` | |
+| `setting` | `update`, `configure_ups`*, `update_ssh`*, `update_temperature`, `update_system_time`*, `update_server_identity` | |
+| `connect` | `remote_access`, `cloud`, `update_api_settings`*, `sign_in`*, `sign_out`*, `setup_remote_access`*, `enable_dynamic_remote_access`* | Unraid Connect; all mutations destructive; inputs via `connect_input` |
+| `customization` | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`, `set_locale` | |
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
+| `onboarding` | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`* | inputs via `onboarding_input` |
 | `user` | `me` | |
-| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `owner`, `server_status`, `log_tail` (requires `path=`), `notification_feed` | |
+| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `log_tail` (requires `path=`), `notification_feed`, `plugin_install_updates` | |
 | `subscriptions` | `diagnose`, `test_query` (requires `subscription_query=`) | WebSocket subscription diagnostics |
 | `help` | _(no subaction)_ | Returns this reference |
 
@@ -234,12 +259,29 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `subaction` | str | Operation within the action |
 | `confirm` | bool | Set `True` for destructive subactions (marked `*`). Interactive clients are prompted via elicitation; agents and one-shot API callers **must** pass `confirm=True` to bypass elicitation. (default: False) |
 | `container_id` | str | Docker container ID or name |
+| `container_ids` | list[str] | Multiple container IDs/names (docker/update_containers) |
+| `with_image` | bool | Also remove the image (docker/remove_container) |
+| `autostart_entries` | list[dict] | Autostart config: `[{id, autoStart, wait?}]` (docker/update_autostart) |
+| `organizer_input` | dict | Docker organizer/folder mutation fields (docker/*_folder, *_entries, etc.) |
 | `vm_id` | str | VM identifier |
 | `disk_id` | str | Disk identifier |
 | `notification_id` | str | Single notification ID |
 | `notification_ids` | list[str] | Multiple notification IDs |
 | `key_id` | str | API key identifier |
-| `name` | str | Name for create/update operations |
+| `name` | str | Name for create/update operations (also server name for setting/update_server_identity) |
+| `roles` | list[str] | Roles (key ops, key/permissions_for_roles, key/preview_permissions) |
+| `permissions_input` | list[dict] | Structured permissions `[{resource, actions}]` (key/preview_permissions) |
+| `url` | str | Plugin .plg URL (plugin/install, plugin/install_language) |
+| `plugin_name` | str | Optional plugin name (plugin/install) |
+| `forced` | bool | Force plugin install (plugin/install) |
+| `operation_id` | str | Plugin install operation ID (plugin/install_operation, live/plugin_install_updates) |
+| `config_input` | dict | Input object for setting/update_ssh, update_temperature, update_system_time |
+| `comment` | str | Server comment (setting/update_server_identity) |
+| `sys_model` | str | Server model string (setting/update_server_identity) |
+| `connect_input` | dict | Input object for connect mutations (sign_in, setup_remote_access, etc.) |
+| `onboarding_input` | dict | Input object for onboarding/set_override, create_internal_boot_pool |
+| `theme_name` | str | Theme name (customization/set_theme) |
+| `locale` | str | Locale string (customization/set_locale) |
 | `path` | str | Log file path (for live/log_tail) |
 | `subscription_query` | str | Raw GraphQL subscription string (for `subscriptions/test_query`) |
 | `collect_for` | float | WebSocket collection duration in seconds (default: 5.0) |
@@ -291,6 +333,7 @@ unraid(action="help")
 
 UNRAID_ACTIONS = Literal[
     "array",
+    "connect",
     "customization",
     "disk",
     "docker",
@@ -300,6 +343,7 @@ UNRAID_ACTIONS = Literal[
     "live",
     "notification",
     "oidc",
+    "onboarding",
     "plugin",
     "rclone",
     "setting",
@@ -335,6 +379,10 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         # docker
         container_id: str | None = None,
         network_id: str | None = None,
+        container_ids: list[str] | None = None,
+        with_image: bool = False,
+        autostart_entries: list[dict[str, Any]] | None = None,
+        organizer_input: dict[str, Any] | None = None,
         # vm
         vm_id: str | None = None,
         # notification
@@ -353,18 +401,31 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         name: str | None = None,
         roles: list[str] | None = None,
         permissions: list[str] | None = None,
+        permissions_input: list[dict[str, Any]] | None = None,
         # plugin
         names: list[str] | None = None,
         bundled: bool = False,
         restart: bool = True,
+        url: str | None = None,
+        plugin_name: str | None = None,
+        forced: bool = False,
+        operation_id: str | None = None,
         # rclone
         provider_type: str | None = None,
         config_data: dict[str, Any] | None = None,
         # setting
         settings_input: dict[str, Any] | None = None,
         ups_config: dict[str, Any] | None = None,
+        config_input: dict[str, Any] | None = None,
+        comment: str | None = None,
+        sys_model: str | None = None,
+        # connect
+        connect_input: dict[str, Any] | None = None,
+        # onboarding
+        onboarding_input: dict[str, Any] | None = None,
         # customization
         theme_name: str | None = None,
+        locale: str | None = None,
         # oidc
         provider_id: str | None = None,
         token: str | None = None,
@@ -392,14 +453,20 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ health          │ check, test_connection, diagnose, setup                              │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ array           │ parity_status, parity_history, parity_start, parity_pause,          │
-        │                 │ parity_resume, parity_cancel, start_array, stop_array*,              │
-        │                 │ add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats*  │
+        │ array           │ parity_status, parity_history, assignable_disks,                     │
+        │                 │ parity_start, parity_pause, parity_resume, parity_cancel,            │
+        │                 │ start_array, stop_array*, add_disk, remove_disk*, mount_disk,         │
+        │                 │ unmount_disk, clear_disk_stats*                                      │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ disk            │ shares, disks, disk_details, log_files, logs, flash_backup*          │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ docker          │ list, details, ports, start, stop, restart, networks,                │
-        │                 │ network_details                                                      │
+        │ docker          │ list, details, ports, start, stop, restart, unpause, networks,       │
+        │                 │ network_details, remove_container*, update_container,                │
+        │                 │ update_containers, update_all_containers, update_autostart,          │
+        │                 │ refresh_digests, sync_template_paths, reset_template_mappings*,       │
+        │                 │ create_folder, create_folder_with_items, rename_folder,              │
+        │                 │ set_folder_children, delete_entries*, move_entries_to_folder,         │
+        │                 │ move_items_to_position, update_view_preferences                      │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ vm              │ list, details, start, stop, pause, resume,                           │
         │                 │ force_stop*, reboot, reset*                                          │
@@ -408,24 +475,37 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │                 │ archive_all, archive_many, unarchive_many, unarchive_all,            │
         │                 │ delete*, delete_archived*                                            │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ key             │ list, get, create, update, delete*, add_role, remove_role            │
+        │ key             │ list, get, possible_roles, possible_permissions,                     │
+        │                 │ permissions_for_roles, preview_permissions, auth_actions,            │
+        │                 │ creation_form_schema, create, update, delete*, add_role, remove_role │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ plugin          │ list, add, remove*                                                   │
+        │ plugin          │ list, installed_unraid, install_operations, install_operation,       │
+        │                 │ add, remove*, install*, install_language*                            │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ rclone          │ list_remotes, config_form, create_remote, delete_remote*             │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ setting         │ update, configure_ups*                                               │
+        │ setting         │ update, configure_ups*, update_ssh*, update_temperature,             │
+        │                 │ update_system_time*, update_server_identity                         │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ customization   │ theme, public_theme, is_initial_setup, sso_enabled, set_theme        │
+        │ connect         │ remote_access, cloud, update_api_settings*, sign_in*, sign_out*,      │
+        │                 │ setup_remote_access*, enable_dynamic_remote_access*                  │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ customization   │ public_theme, is_initial_setup, sso_enabled, set_theme, set_locale   │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ oidc            │ providers, provider, configuration, public_providers,                │
         │                 │ validate_session                                                     │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
+        │ onboarding      │ internal_boot_context, complete, open, close, resume, bypass,        │
+        │                 │ reset*, set_override, clear_override,                                │
+        │                 │ refresh_internal_boot_context, create_internal_boot_pool*           │
+        ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ user            │ me                                                                   │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ live            │ cpu, memory, cpu_telemetry, array_state, parity_progress,            │
-        │                 │ ups_status, notifications_overview, owner, server_status,            │
-        │                 │ log_tail (requires path=), notification_feed                         │
+        │                 │ ups_status, notifications_overview, notifications_warnings,          │
+        │                 │ owner, server_status, display, docker_container_stats,               │
+        │                 │ temperature, log_tail (requires path=), notification_feed,           │
+        │                 │ plugin_install_updates                                              │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ subscriptions   │ diagnose, test_query (requires subscription_query=)                  │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
@@ -472,7 +552,18 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             )
 
         if action == "docker":
-            return await _handle_docker(subaction, container_id, network_id, limit)
+            return await _handle_docker(
+                subaction,
+                container_id,
+                network_id,
+                limit,
+                ctx,
+                confirm,
+                container_ids,
+                with_image,
+                autostart_entries,
+                organizer_input,
+            )
 
         if action == "vm":
             return await _handle_vm(subaction, vm_id, ctx, confirm)
@@ -496,11 +587,31 @@ def register_unraid_tool(mcp: FastMCP) -> None:
 
         if action == "key":
             return await _handle_key(
-                subaction, key_id, name, roles, permissions, ctx, confirm, limit
+                subaction,
+                key_id,
+                name,
+                roles,
+                permissions,
+                ctx,
+                confirm,
+                limit,
+                permissions_input,
             )
 
         if action == "plugin":
-            return await _handle_plugin(subaction, names, bundled, restart, ctx, confirm, limit)
+            return await _handle_plugin(
+                subaction,
+                names,
+                bundled,
+                restart,
+                ctx,
+                confirm,
+                limit,
+                url,
+                plugin_name,
+                forced,
+                operation_id,
+            )
 
         if action == "rclone":
             return await _handle_rclone(
@@ -508,10 +619,26 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             )
 
         if action == "setting":
-            return await _handle_setting(subaction, settings_input, ups_config, ctx, confirm)
+            return await _handle_setting(
+                subaction,
+                settings_input,
+                ups_config,
+                ctx,
+                confirm,
+                config_input,
+                name,
+                comment,
+                sys_model,
+            )
+
+        if action == "connect":
+            return await _handle_connect(subaction, ctx, confirm, connect_input)
+
+        if action == "onboarding":
+            return await _handle_onboarding(subaction, ctx, confirm, onboarding_input)
 
         if action == "customization":
-            return await _handle_customization(subaction, theme_name)
+            return await _handle_customization(subaction, theme_name, locale)
 
         if action == "oidc":
             return await _handle_oidc(subaction, provider_id, token, limit)
@@ -520,7 +647,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return await _handle_user(subaction)
 
         if action == "live":
-            return await _handle_live(subaction, path, collect_for, timeout, level, context, limit)
+            return await _handle_live(
+                subaction, path, collect_for, timeout, level, context, limit, operation_id
+            )
 
         if action == "subscriptions":
             # Lazy import to keep tool import-time free of the subscription stack

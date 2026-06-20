@@ -1,8 +1,9 @@
 """Live (subscriptions) domain handler for the Unraid MCP tool.
 
 Covers: cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status,
-notifications_overview, notification_feed, log_tail, owner, server_status,
-docker_container_stats, temperature (13 subactions).
+notifications_overview, notifications_warnings, notification_feed, log_tail, owner,
+server_status, docker_container_stats, temperature, display,
+plugin_install_updates (16 subactions).
 """
 
 from typing import Any
@@ -56,6 +57,7 @@ async def _handle_live(
     level: str | None = None,
     context: int = 2,
     limit: int | None = None,
+    operation_id: str | None = None,
 ) -> dict[str, Any]:
     # IMPORTANT: Every key in COLLECT_ACTIONS must have an explicit handler in _handle_live below.
     # Adding to COLLECT_ACTIONS without updating this function causes a ToolError at runtime.
@@ -114,9 +116,19 @@ async def _handle_live(
                 "page": meta,
             }
 
-        if subaction == "notification_feed":
+        if subaction in ("notification_feed", "plugin_install_updates"):
+            # pluginInstallUpdates(operationId: ID!) requires the operation id;
+            # notification_feed takes no variables.
+            variables: dict[str, Any] | None = None
+            if subaction == "plugin_install_updates":
+                if not operation_id:
+                    raise ToolError("operation_id is required for live/plugin_install_updates")
+                variables = {"operationId": operation_id}
             events = await subscribe_collect(
-                COLLECT_ACTIONS["notification_feed"], collect_for=collect_for, timeout=timeout
+                COLLECT_ACTIONS[subaction],
+                variables=variables,
+                collect_for=collect_for,
+                timeout=timeout,
             )
             # Hard-cap the number of collected events (see log_tail above).
             capped, meta = cap_list(events, limit)

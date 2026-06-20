@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (1 Tool)
 
 The server registers a **single MCP tool**, `unraid`, with `action` (domain) +
-`subaction` (operation) routing (112 subactions). Call it as
+`subaction` (operation) routing (19 actions / 166 subactions). Call it as
 `unraid(action="docker", subaction="list")`. Subscription diagnostics and the
 Markdown reference that used to be standalone tools are now actions of `unraid`:
 - **`subscriptions`** — `diagnose` (connection states, errors, WebSocket URLs) and
@@ -117,23 +117,27 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 |--------|-----------|
 | **system** (18) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
 | **health** (4) | check, test_connection, diagnose, setup |
-| **array** (13) | parity_status, parity_history, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
+| **array** (14) | parity_status, parity_history, assignable_disks, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
-| **docker** (8) | list, details, ports, start, stop, restart, networks, network_details |
+| **docker** (25) | list, details, ports, start, stop, restart, unpause, networks, network_details, remove_container*, update_container, update_containers, update_all_containers, update_autostart, refresh_digests, sync_template_paths, reset_template_mappings*, create_folder, create_folder_with_items, rename_folder, set_folder_children, delete_entries*, move_entries_to_folder, move_items_to_position, update_view_preferences |
 | **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
 | **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
-| **key** (7) | list, get, create, update, delete*, add_role, remove_role |
-| **plugin** (3) | list, add, remove* |
+| **key** (13) | list, get, possible_roles, possible_permissions, permissions_for_roles, preview_permissions, auth_actions, creation_form_schema, create, update, delete*, add_role, remove_role |
+| **plugin** (8) | list, installed_unraid, install_operations, install_operation, add, remove*, install*, install_language* |
 | **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
-| **setting** (2) | update, configure_ups* |
-| **customization** (5) | theme, public_theme, is_initial_setup, sso_enabled, set_theme |
+| **setting** (6) | update, configure_ups*, update_ssh*, update_temperature, update_system_time*, update_server_identity |
+| **connect** (7) | remote_access, cloud, update_api_settings*, sign_in*, sign_out*, setup_remote_access*, enable_dynamic_remote_access* |
+| **customization** (5) | public_theme, is_initial_setup, sso_enabled, set_theme, set_locale |
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
+| **onboarding** (11) | internal_boot_context, complete, open, close, resume, bypass, reset*, set_override, clear_override, refresh_internal_boot_context, create_internal_boot_pool* |
 | **user** (1) | me |
-| **live** (11) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status |
+| **live** (16) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notifications_warnings, notification_feed, log_tail, owner, server_status, display, docker_container_stats, temperature, plugin_install_updates |
 | **subscriptions** (2) | diagnose, test_query (needs `subscription_query=`) |
 | **help** (0) | _(no subaction)_ — returns the Markdown reference |
 
-`*` = destructive, requires `confirm=True`
+`*` = destructive, requires `confirm=True`. Complex mutations take structured dict
+params: `organizer_input` (docker organizer), `connect_input` (connect), `config_input`
+(setting ssh/temperature/time), `onboarding_input` (onboarding), `permissions_input` (key).
 
 ### Log Filtering (`disk/logs`, `live/log_tail`)
 Both log-reading subactions accept optional `level` and `context` params to filter noisy
@@ -161,8 +165,11 @@ count only), both in `unraid_mcp/core/utils.py`.
 - **rclone**: delete_remote
 - **key**: delete
 - **disk**: flash_backup
-- **setting**: configure_ups
-- **plugin**: remove
+- **setting**: configure_ups, update_ssh, update_system_time
+- **plugin**: remove, install, install_language
+- **docker**: remove_container, reset_template_mappings, delete_entries
+- **connect**: sign_in, sign_out, update_api_settings, setup_remote_access, enable_dynamic_remote_access
+- **onboarding**: reset, create_internal_boot_pool
 
 ### Environment Variable Hierarchy
 The server loads environment variables from multiple locations in order:

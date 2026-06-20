@@ -6,12 +6,12 @@ unraid-mcp exposes four MCP tools:
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
-| `unraid` | Primary tool -- action+subaction dispatch for 15 domains | `action`, `subaction`, plus domain-specific params |
+| `unraid` | Primary tool -- action+subaction dispatch for 17 domains | `action`, `subaction`, plus domain-specific params |
 | `unraid_help` | Returns markdown reference for all actions | _(none)_ |
 | `diagnose_subscriptions` | Inspect WebSocket subscription states | _(none)_ |
 | `test_subscription_query` | Test a GraphQL subscription query | `query` (allowlisted fields only) |
 
-The consolidated action pattern keeps the MCP surface small (4 tools) while supporting 108 subactions across 15 domains. Clients call `unraid_help` first to discover available operations, then call `unraid` with the appropriate action and subaction.
+The consolidated action pattern keeps the MCP surface small (4 tools) while supporting ~160 subactions across 17 domains. Clients call `unraid_help` first to discover available operations, then call `unraid` with the appropriate action and subaction.
 
 ## Primary Tool: `unraid`
 
@@ -30,7 +30,7 @@ unraid(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `action` | `Literal[15 values]` | yes | Domain to operate on |
+| `action` | `Literal[17 values]` | yes | Domain to operate on |
 | `subaction` | `str` | yes | Operation within the domain |
 | `confirm` | `bool` | no | Set `True` for destructive subactions (default: `False`) |
 | `container_id` | `str` | no | Docker container ID or name (fuzzy match supported) |
@@ -83,7 +83,7 @@ Health checks, connection testing, diagnostics, and credential setup.
 | `diagnose` | Detailed diagnostic report with subscription status and middleware error stats | -- |
 | `setup` | Report credential status and print plugin/`.env` setup instructions (creds persist to `~/.unraid-mcp/.env`) | -- |
 
-#### `array` (13 subactions)
+#### `array` (14 subactions)
 
 Parity checks, array lifecycle, and disk operations.
 
@@ -91,6 +91,7 @@ Parity checks, array lifecycle, and disk operations.
 |-----------|-------------|-------------|-------------|
 | `parity_status` | Current parity check progress and status | -- | -- |
 | `parity_history` | Historical parity check results | -- | -- |
+| `assignable_disks` | Physical disks not yet in the array | `limit` | -- |
 | `parity_start` | Start a parity check | `correct` (bool) | -- |
 | `parity_pause` | Pause a running parity check | -- | -- |
 | `parity_resume` | Resume a paused parity check | -- | -- |
@@ -116,22 +117,45 @@ Shares, physical disks, log files.
 | `logs` | Read log content | `log_path`, `tail_lines` | -- |
 | `flash_backup` | Trigger a flash backup | `remote_name`, `source_path`, `destination_path`, `backup_options` | Yes |
 
-#### `docker` (8 subactions)
+#### `docker` (25 subactions)
 
-Container lifecycle and network inspection.
+Container lifecycle, image updates, template/digest maintenance, organizer
+folders, and network inspection.
 
-| Subaction | Description | Extra params |
-|-----------|-------------|-------------|
-| `list` | All containers with status, image, state | -- |
-| `details` | Single container details | `container_id` |
-| `ports` | All host port bindings across running containers, sorted by host port | -- |
-| `start` | Start a container | `container_id` |
-| `stop` | Stop a container | `container_id` |
-| `restart` | Restart a container | `container_id` |
-| `networks` | List Docker networks | -- |
-| `network_details` | Details for a specific network | `network_id` |
+| Subaction | Description | Extra params | Destructive |
+|-----------|-------------|-------------|-------------|
+| `list` | All containers with status, image, state | -- | -- |
+| `details` | Single container details | `container_id` | -- |
+| `ports` | All host port bindings across running containers, sorted by host port | -- | -- |
+| `start` | Start a container | `container_id` | -- |
+| `stop` | Stop a container | `container_id` | -- |
+| `restart` | Restart a container (stop+start composite) | `container_id` | -- |
+| `unpause` | Unpause a paused container | `container_id` | -- |
+| `remove_container` | Remove a container | `container_id`, `with_image` | Yes |
+| `update_container` | Apply a pending image update to one container | `container_id` | -- |
+| `update_containers` | Apply image updates to several containers | `container_ids` | -- |
+| `update_all_containers` | Apply all pending container image updates | -- | -- |
+| `update_autostart` | Set container autostart config | `autostart_entries` | -- |
+| `refresh_digests` | Refresh image digests (recheck for updates) | -- | -- |
+| `sync_template_paths` | Sync Docker template paths | -- | -- |
+| `reset_template_mappings` | Reset template path mappings to defaults | -- | Yes |
+| `create_folder` | Create an organizer folder | `organizer_input` | -- |
+| `create_folder_with_items` | Create a folder with items | `organizer_input` | -- |
+| `rename_folder` | Rename a folder | `organizer_input` | -- |
+| `set_folder_children` | Set a folder's children | `organizer_input` | -- |
+| `delete_entries` | Delete organizer entries | `organizer_input` | Yes |
+| `move_entries_to_folder` | Move entries into a folder | `organizer_input` | -- |
+| `move_items_to_position` | Move items to a position | `organizer_input` | -- |
+| `update_view_preferences` | Update organizer view preferences | `organizer_input` | -- |
+| `networks` | List Docker networks | -- | -- |
+| `network_details` | Details for a specific network | `network_id` | -- |
 
 Container identification supports name, ID, or partial name (fuzzy match).
+Organizer subactions read their GraphQL variables from the `organizer_input`
+dict (e.g. `{name, parentId, childrenIds, folderId, newName, entryIds,
+sourceEntryIds, destinationFolderId, position, viewId, prefs}`). They confirm the
+change by returning only the organizer `{version}` — re-query the layout
+separately (via the Unraid UI/API) if you need the resolved folder tree.
 
 #### `vm` (9 subactions)
 
@@ -168,29 +192,40 @@ System notification management.
 | `delete` | Delete a notification permanently | `notification_id`, `notification_type` | Yes |
 | `delete_archived` | Delete all archived notifications | -- | Yes |
 
-#### `key` (7 subactions)
+#### `key` (13 subactions)
 
-API key management.
+API key and permission management.
 
 | Subaction | Description | Extra params | Destructive |
 |-----------|-------------|-------------|-------------|
 | `list` | All API keys | -- | -- |
 | `get` | Single key details | `key_id` | -- |
+| `possible_roles` | All assignable roles | -- | -- |
+| `possible_permissions` | All grantable resource/action permissions | -- | -- |
+| `permissions_for_roles` | Permissions implied by given roles | `roles` | -- |
+| `preview_permissions` | Effective permissions for roles/permissions | `roles`, `permissions_input` | -- |
+| `auth_actions` | All available auth actions | -- | -- |
+| `creation_form_schema` | JSON-schema form for key creation | -- | -- |
 | `create` | Create a new key | `name`, `roles`, `permissions` | -- |
 | `update` | Update a key | `key_id`, `name`, `roles`, `permissions` | -- |
 | `delete` | Delete a key permanently | `key_id` | Yes |
 | `add_role` | Add a role to a key | `key_id`, `roles` | -- |
 | `remove_role` | Remove a role from a key | `key_id`, `roles` | -- |
 
-#### `plugin` (3 subactions)
+#### `plugin` (8 subactions)
 
-Plugin management.
+Plugin management and async installs.
 
 | Subaction | Description | Extra params | Destructive |
 |-----------|-------------|-------------|-------------|
-| `list` | All installed plugins | `bundled` | -- |
+| `list` | All installed plugins (structured) | `bundled` | -- |
+| `installed_unraid` | Raw installed `.plg` filenames | `limit` | -- |
+| `install_operations` | List async plugin-install operations | `limit` | -- |
+| `install_operation` | Status of one install operation | `operation_id` | -- |
 | `add` | Install plugins | `names` (list) | -- |
 | `remove` | Uninstall plugins | `names` (list), `restart` | Yes |
+| `install` | Async-install a `.plg` — runs code as root (poll via `install_operation`) | `url`, `plugin_name`, `forced` | Yes |
+| `install_language` | Async-install a language pack — runs code as root | `url` | Yes |
 
 #### `rclone` (4 subactions)
 
@@ -203,26 +238,44 @@ Cloud storage remote management.
 | `create_remote` | Create a new remote | `name`, `provider_type`, `config_data` | -- |
 | `delete_remote` | Delete a remote | `name` | Yes |
 
-#### `setting` (2 subactions)
+#### `setting` (6 subactions)
 
-System settings and UPS configuration.
+System settings, UPS, SSH, time, and server identity.
 
 | Subaction | Description | Extra params | Destructive |
 |-----------|-------------|-------------|-------------|
 | `update` | Update system settings | `settings_input` | -- |
 | `configure_ups` | Configure UPS settings | `ups_config` | Yes |
+| `update_ssh` | Update SSH daemon settings | `config_input` (`{enabled, port}`) | Yes |
+| `update_temperature` | Update temperature sensor config | `config_input` | -- |
+| `update_system_time` | Update timezone / NTP / manual time — can invalidate TLS certs | `config_input` | Yes |
+| `update_server_identity` | Update server name/comment/model | `name`, `comment`, `sys_model` | -- |
+
+#### `connect` (7 subactions)
+
+Unraid Connect / remote-access state and control.
+
+| Subaction | Description | Extra params | Destructive |
+|-----------|-------------|-------------|-------------|
+| `remote_access` | Current remote-access settings | -- | -- |
+| `cloud` | Unraid Connect / cloud status | -- | -- |
+| `update_api_settings` | Update Connect API settings (affects internet reachability) | `connect_input` | Yes |
+| `sign_in` | Sign the server in to Unraid Connect — registers with the cloud | `connect_input` (`{apiKey, userInfo?}`) | Yes |
+| `sign_out` | Sign the server out of Unraid Connect | -- | Yes |
+| `setup_remote_access` | Configure remote access (can expose server) | `connect_input` | Yes |
+| `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`) | Yes |
 
 #### `customization` (5 subactions)
 
-Theme and UI customization.
+Theme, locale, and UI customization.
 
 | Subaction | Description | Extra params |
 |-----------|-------------|-------------|
-| `theme` | Current theme settings | -- |
-| `public_theme` | Public-facing theme | -- |
-| `is_initial_setup` | Check if initial setup is complete | -- |
+| `public_theme` | Public-facing theme (also the server's current theme) | -- |
+| `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) | -- |
 | `sso_enabled` | Check SSO status | -- |
 | `set_theme` | Update theme | `theme_name` |
+| `set_locale` | Update UI locale | `locale` |
 
 #### `oidc` (5 subactions)
 
@@ -236,13 +289,32 @@ OIDC/SSO provider management.
 | `public_providers` | Public-facing provider list | -- |
 | `validate_session` | Validate current SSO session | `token` |
 
+#### `onboarding` (11 subactions)
+
+First-boot / onboarding state and the internal boot context. The dangerous ones
+require `confirm=True`.
+
+| Subaction | Description | Extra params | Destructive |
+|-----------|-------------|-------------|-------------|
+| `internal_boot_context` | Internal boot / first-boot context | -- | -- |
+| `complete` | Mark onboarding complete | -- | -- |
+| `open` | Open the onboarding flow | -- | -- |
+| `close` | Close the onboarding flow | -- | -- |
+| `resume` | Resume onboarding | -- | -- |
+| `bypass` | Bypass onboarding | -- | -- |
+| `reset` | Reset onboarding/setup state | -- | Yes |
+| `set_override` | Set an onboarding override | `onboarding_input` | -- |
+| `clear_override` | Clear the onboarding override | -- | -- |
+| `refresh_internal_boot_context` | Recompute the internal boot context | -- | -- |
+| `create_internal_boot_pool` | Create an internal boot pool (formats devices, may reboot) | `onboarding_input` | Yes |
+
 #### `user` (1 subaction)
 
 | Subaction | Description |
 |-----------|-------------|
 | `me` | Current authenticated user info |
 
-#### `live` (11 subactions)
+#### `live` (16 subactions)
 
 Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder on first call -- retry momentarily for live data.
 
@@ -255,10 +327,17 @@ Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder o
 | `parity_progress` | Live parity check progress | `collect_for` |
 | `ups_status` | Live UPS status | `collect_for` |
 | `notifications_overview` | Live notification counts | `collect_for` |
+| `notifications_warnings` | Live warnings/alerts feed | `collect_for` |
 | `owner` | Live owner info | `collect_for` |
 | `server_status` | Live server status | `collect_for` |
+| `display` | Live theme/display changes | `collect_for` |
+| `docker_container_stats` | Live per-container CPU/memory/IO stats | `collect_for` |
+| `temperature` | Live temperature sensor readings | `collect_for` |
 | `log_tail` | Live log tail stream | `path` (required), `collect_for` |
 | `notification_feed` | Live notification feed | `collect_for` |
+| `plugin_install_updates` | Live plugin-install progress stream | `operation_id` (required), `collect_for` |
+
+> Note: `plugin_install_updates` requires `operation_id` — get one from `plugin/install`, then poll/stream by that id.
 
 ## Destructive Operations
 
@@ -279,7 +358,20 @@ All destructive operations require `confirm=True`. Without it, interactive clien
 | `key` | `delete` | Permanently deletes an API key |
 | `disk` | `flash_backup` | Triggers flash backup operation |
 | `setting` | `configure_ups` | Modifies UPS configuration |
+| `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
+| `setting` | `update_system_time` | Clock changes can invalidate TLS certs / break time-sensitive services |
 | `plugin` | `remove` | Uninstalls a plugin |
+| `plugin` | `install` / `install_language` | Fetches and runs a `.plg` from a URL as root |
+| `connect` | `sign_in` | Registers the server with the Unraid Connect cloud |
+| `connect` | `update_api_settings` | Changes remote-access posture / internet reachability |
+| `docker` | `remove_container` | Removes a container (and optionally its image) |
+| `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
+| `docker` | `delete_entries` | Deletes Docker organizer entries |
+| `connect` | `sign_out` | Signs the server out of Unraid Connect |
+| `connect` | `setup_remote_access` | Reconfigures remote access; can expose the server |
+| `connect` | `enable_dynamic_remote_access` | Toggles dynamic remote access |
+| `onboarding` | `reset` | Resets onboarding/setup state |
+| `onboarding` | `create_internal_boot_pool` | Formats devices and may reboot the server |
 
 ## Error Responses
 

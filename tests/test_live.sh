@@ -420,7 +420,6 @@ run_phase4() {
   call_unraid "unraid rclone/list_remotes"    "rclone"       "list_remotes"
   call_unraid "unraid rclone/config_form"     "rclone"       "config_form" '{"provider_type":"s3"}'
   call_unraid "unraid plugin/list"            "plugin"       "list"
-  call_unraid "unraid customization/theme"    "customization" "theme"
   call_unraid "unraid customization/public_theme" "customization" "public_theme"
   call_unraid "unraid customization/sso_enabled"  "customization" "sso_enabled"
   call_unraid "unraid customization/is_initial_setup" "customization" "is_initial_setup"

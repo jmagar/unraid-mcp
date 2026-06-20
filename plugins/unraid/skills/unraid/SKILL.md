@@ -96,6 +96,7 @@ unraid(action="live",    subaction="cpu")
 |-----------|-------------|
 | `parity_status` | Current parity check progress and status |
 | `parity_history` | Historical parity check results |
+| `assignable_disks` | Physical disks not yet in the array (discovery counterpart to `add_disk`) |
 | `parity_start` | Start a parity check (requires `correct` — `True` writes corrections, `False` checks only) |
 | `parity_pause` | Pause a running parity check |
 | `parity_resume` | Resume a paused parity check |
@@ -127,7 +128,24 @@ unraid(action="live",    subaction="cpu")
 | `details` | Single container details (requires container identifier) |
 | `start` | Start a container (requires container identifier) |
 | `stop` | Stop a container (requires container identifier) |
-| `restart` | Restart a container (requires container identifier) |
+| `restart` | Restart a container (requires container identifier; stop+start composite) |
+| `unpause` | Unpause a paused container (requires container identifier) |
+| `remove_container` | ⚠️ Remove a container (requires container identifier, `confirm=True`; optional `with_image`) |
+| `update_container` | Apply a pending image update to one container (requires container identifier) |
+| `update_containers` | Apply image updates to several containers (requires `container_ids`) |
+| `update_all_containers` | Apply all pending container image updates |
+| `update_autostart` | Set container autostart config (requires `autostart_entries`: `[{id, autoStart, wait?}]`) |
+| `refresh_digests` | Refresh image digests (recheck for available updates) |
+| `sync_template_paths` | Sync Docker template paths |
+| `reset_template_mappings` | ⚠️ Reset template path mappings to defaults (requires `confirm=True`) |
+| `create_folder` | Create an organizer folder (requires `organizer_input`: `{name, parentId?, childrenIds?}`) |
+| `create_folder_with_items` | Create a folder containing items (`organizer_input`: `{name, parentId?, sourceEntryIds?, position?}`) |
+| `rename_folder` | Rename a folder (`organizer_input`: `{folderId, newName}`) |
+| `set_folder_children` | Set a folder's children (`organizer_input`: `{childrenIds, folderId?}`) |
+| `delete_entries` | ⚠️ Delete organizer entries (`organizer_input`: `{entryIds}`, `confirm=True`) |
+| `move_entries_to_folder` | Move entries into a folder (`organizer_input`: `{sourceEntryIds, destinationFolderId}`) |
+| `move_items_to_position` | Move items to a position (`organizer_input`: `{sourceEntryIds, destinationFolderId, position}`) |
+| `update_view_preferences` | Update organizer view prefs (`organizer_input`: `{prefs, viewId?}`) |
 | `networks` | List Docker networks |
 | `network_details` | Details for a specific network (requires `network_id`) |
 
@@ -170,6 +188,12 @@ unraid(action="live",    subaction="cpu")
 |-----------|-------------|
 | `list` | All API keys |
 | `get` | Single key details (requires `key_id`) |
+| `possible_roles` | All assignable roles |
+| `possible_permissions` | All grantable resource/action permissions |
+| `permissions_for_roles` | Permissions implied by given `roles` |
+| `preview_permissions` | Effective permissions for `roles` and/or `permissions_input` (`[{resource, actions}]`) |
+| `auth_actions` | All available auth actions |
+| `creation_form_schema` | JSON-schema form for key creation |
 | `create` | Create a new key (requires `name`; optional `roles`, `permissions`) |
 | `update` | Update a key (requires `key_id`) |
 | `delete` | ⚠️ Delete a key (requires `key_id`, `confirm=True`) |
@@ -180,9 +204,14 @@ unraid(action="live",    subaction="cpu")
 
 | Subaction | Description |
 |-----------|-------------|
-| `list` | All installed plugins |
+| `list` | All installed plugins (structured) |
+| `installed_unraid` | Raw installed `.plg` filenames |
+| `install_operations` | List async plugin-install operations |
+| `install_operation` | Status of one install operation (requires `operation_id`) |
 | `add` | Install plugins (requires `names` — list of plugin names) |
 | `remove` | ⚠️ Uninstall plugins (requires `names` — list of plugin names, `confirm=True`) |
+| `install` | ⚠️ Async-install a `.plg` — runs code as root (requires `url`, `confirm=True`; optional `plugin_name`, `forced`) — poll via `install_operation` |
+| `install_language` | ⚠️ Async-install a language pack — runs code as root (requires `url`, `confirm=True`) |
 
 ### `rclone` — Cloud Storage
 
@@ -199,16 +228,34 @@ unraid(action="live",    subaction="cpu")
 |-----------|-------------|
 | `update` | Update system settings (requires `settings_input` object) |
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
+| `update_ssh` | ⚠️ Update SSH daemon settings (requires `config_input`: `{enabled, port}`, `confirm=True`) |
+| `update_temperature` | Update temperature sensor config (requires `config_input`) |
+| `update_system_time` | ⚠️ Update timezone / NTP / manual time — can invalidate TLS certs (requires `config_input`, `confirm=True`) |
+| `update_server_identity` | Update server name/comment/model (requires `name`; optional `comment`, `sys_model`) |
+
+### `connect` — Unraid Connect / Remote Access
+
+All mutations change the server's cloud/remote-access posture and require `confirm=True`.
+
+| Subaction | Description |
+|-----------|-------------|
+| `remote_access` | Current remote-access settings (access/forward type, port) |
+| `cloud` | Unraid Connect / cloud status (relay, minigraph, API key validity) |
+| `update_api_settings` | ⚠️ Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`, `confirm=True`) |
+| `sign_in` | ⚠️ Sign the server in to Unraid Connect — registers with the cloud (requires `connect_input`: `{apiKey, userInfo?}`, `confirm=True`) |
+| `sign_out` | ⚠️ Sign the server out of Unraid Connect (requires `confirm=True`) |
+| `setup_remote_access` | ⚠️ Configure remote access — can expose the server (requires `connect_input`, `confirm=True`) |
+| `enable_dynamic_remote_access` | ⚠️ Toggle dynamic remote access (requires `connect_input`: `{url, enabled}`, `confirm=True`) |
 
 ### `customization` — Theme & Appearance
 
 | Subaction | Description |
 |-----------|-------------|
-| `theme` | Current theme settings |
-| `public_theme` | Public-facing theme |
-| `is_initial_setup` | Check if initial setup is complete |
+| `public_theme` | Public-facing theme (also the server's current theme; or use `system/display`) |
+| `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) |
 | `sso_enabled` | Check SSO status |
-| `set_theme` | Update theme (requires theme parameters) |
+| `set_theme` | Update theme (requires `theme_name`) |
+| `set_locale` | Update UI locale (requires `locale`) |
 
 ### `oidc` — SSO / OpenID Connect
 
@@ -219,6 +266,25 @@ unraid(action="live",    subaction="cpu")
 | `configuration` | OIDC configuration |
 | `public_providers` | Public-facing provider list |
 | `validate_session` | Validate current SSO session (requires `token`) |
+
+### `onboarding` — First-Boot / Setup State
+
+Operate on the server's onboarding/setup state. Rarely needed on a configured
+production server; the dangerous ones require `confirm=True`.
+
+| Subaction | Description |
+|-----------|-------------|
+| `internal_boot_context` | Internal boot / first-boot context (array stopped, boot eligibility, pools) |
+| `complete` | Mark onboarding complete |
+| `open` | Open the onboarding flow |
+| `close` | Close the onboarding flow |
+| `resume` | Resume onboarding |
+| `bypass` | Bypass onboarding |
+| `reset` | ⚠️ Reset onboarding/setup state (requires `confirm=True`) |
+| `set_override` | Set an onboarding override (requires `onboarding_input`) |
+| `clear_override` | Clear the onboarding override |
+| `refresh_internal_boot_context` | Recompute the internal boot context |
+| `create_internal_boot_pool` | ⚠️ Create an internal boot pool — FORMATS devices, may REBOOT (requires `onboarding_input`, `confirm=True`) |
 
 ### `user` — Current User
 
@@ -238,10 +304,15 @@ These use persistent WebSocket connections. Returns a "connecting" placeholder o
 | `parity_progress` | Live parity check progress |
 | `ups_status` | Live UPS status |
 | `notifications_overview` | Live notification counts |
+| `notifications_warnings` | Live warnings/alerts feed (filtered) |
 | `owner` | Live owner info |
 | `server_status` | Live server status |
+| `display` | Live theme/display changes |
+| `docker_container_stats` | Live per-container CPU/memory/IO stats |
+| `temperature` | Live temperature sensor readings |
 | `log_tail` | Live log tail stream |
 | `notification_feed` | Live notification feed |
+| `plugin_install_updates` | Live plugin-install progress stream (requires `operation_id`) |
 
 ---
 
@@ -262,7 +333,19 @@ All require `confirm=True` as an explicit parameter. Without it, the action is b
 | `key` | `delete` | Permanently deletes an API key |
 | `disk` | `flash_backup` | Triggers flash backup operation |
 | `setting` | `configure_ups` | Modifies UPS configuration |
+| `setting` | `update_ssh` | Can cut off remote shell access (disable SSH / change port) |
+| `setting` | `update_system_time` | Clock changes can invalidate TLS certs / break time-sensitive services |
 | `plugin` | `remove` | Uninstalls a plugin |
+| `plugin` | `install` / `install_language` | Fetches and runs a `.plg` from a URL as root |
+| `connect` | `sign_in` / `update_api_settings` | Registers with the cloud / changes internet reachability |
+| `docker` | `remove_container` | Removes a container (and optionally its image) |
+| `docker` | `reset_template_mappings` | Resets Docker template path mappings to defaults |
+| `docker` | `delete_entries` | Deletes Docker organizer entries |
+| `connect` | `sign_out` | Signs the server out of Unraid Connect |
+| `connect` | `setup_remote_access` | Reconfigures remote access; can expose the server to the internet |
+| `connect` | `enable_dynamic_remote_access` | Toggles dynamic remote access |
+| `onboarding` | `reset` | Resets onboarding/setup state |
+| `onboarding` | `create_internal_boot_pool` | Formats devices and may reboot the server |
 
 ---
 

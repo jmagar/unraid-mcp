@@ -27,6 +27,87 @@ DANGEROUS_KEY_PATTERN: re.Pattern[str] = re.compile(
 )
 
 
+def validate_input_mapping(
+    data: dict[str, Any],
+    label: str,
+    *,
+    max_keys: int = 100,
+    max_depth: int = 6,
+) -> dict[str, Any]:
+    """Validate a possibly-nested GraphQL input-object mapping.
+
+    Unlike ``validate_scalar_mapping`` (flat, scalar-only), this allows nested
+    dicts and lists so it can carry structured GraphQL input objects (e.g.
+    ``TemperatureConfigInput`` with nested ``sensors``/``thresholds``). It still
+    enforces a key cap, rejects dangerous key names, bounds nesting depth, and
+    caps scalar string length — so unvalidated bulk input can't reach a mutation.
+
+    Args:
+        data: The mapping to validate.
+        label: Human-readable label for error messages (e.g. "connect_input").
+        max_keys: Maximum number of keys allowed at any single level.
+        max_depth: Maximum nesting depth allowed.
+
+    Returns:
+        The validated mapping (values preserved, including nested structures).
+    """
+    if not isinstance(data, dict):
+        raise ToolError(f"{label} must be an object, got: {type(data).__name__}")
+
+    def _check(value: Any, path: str, depth: int) -> Any:
+        if depth > max_depth:
+            raise ToolError(f"{path} nesting exceeds max depth ({max_depth})")
+        if isinstance(value, dict):
+            if len(value) > max_keys:
+                raise ToolError(f"{path} has {len(value)} keys (max {max_keys})")
+            out: dict[str, Any] = {}
+            for key, item in value.items():
+                if not isinstance(key, str) or not key.strip():
+                    raise ToolError(
+                        f"{path} keys must be non-empty strings, got: {type(key).__name__}"
+                    )
+                if DANGEROUS_KEY_PATTERN.search(key):
+                    raise ToolError(f"{path} key '{key}' contains disallowed characters")
+                out[key] = _check(item, f"{path}['{key}']", depth + 1)
+            return out
+        if isinstance(value, list):
+            return [_check(item, f"{path}[]", depth + 1) for item in value]
+        if value is None or isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str) and len(value) > MAX_VALUE_LENGTH:
+                raise ToolError(
+                    f"{path} value exceeds max length ({len(value)} > {MAX_VALUE_LENGTH})"
+                )
+            return value
+        raise ToolError(f"{path} must be a scalar, list, or object, got: {type(value).__name__}")
+
+    return _check(data, label, 0)
+
+
+def validate_input_mapping_list(
+    items: list[Any], label: str, **kwargs: Any
+) -> list[dict[str, Any]]:
+    """Validate a list of GraphQL input-object mappings (per-item ``label[i]``).
+
+    Convenience wrapper around :func:`validate_input_mapping` for mutation inputs
+    that take a list of objects (e.g. ``permissions``, autostart ``entries``).
+    Each item must itself be an object (dict); a non-dict item is rejected with a
+    clear per-index message rather than a confusing scalar-type error.
+    """
+    return [validate_input_mapping(item, f"{label}[{i}]", **kwargs) for i, item in enumerate(items)]
+
+
+def validate_str_param(value: str, label: str) -> str:
+    """Bound a single string parameter to MAX_VALUE_LENGTH.
+
+    For bare scalar tool params (e.g. ``name``, ``comment``, ``locale``) that go
+    straight into GraphQL variables without passing through one of the mapping
+    validators — keeps the length cap consistent with the dict-input paths.
+    """
+    if len(value) > MAX_VALUE_LENGTH:
+        raise ToolError(f"{label} exceeds max length ({len(value)} > {MAX_VALUE_LENGTH})")
+    return value
+
+
 def validate_scalar_mapping(
     data: dict[str, Any],
     label: str,

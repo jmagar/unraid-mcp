@@ -4,7 +4,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/unraid-mcp)](https://pypi.org/project/unraid-mcp/) [![ghcr.io](https://img.shields.io/badge/ghcr.io-jmagar%2Funraid--mcp-blue?logo=docker)](https://github.com/jmagar/unraid-mcp/pkgs/container/unraid-mcp)
 
-MCP server for Unraid NAS management. Exposes a unified `unraid` action router with 15 action domains and 108 subactions, plus `unraid_help` and two diagnostic tools, all backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
+MCP server for Unraid NAS management. Exposes a unified `unraid` action router with 17 action domains and ~160 subactions, plus `unraid_help` and two diagnostic tools, all backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
 
 ## Overview
 
@@ -12,7 +12,7 @@ Four MCP tools are exposed:
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action router for all Unraid operations (15 domains, 108 subactions) |
+| `unraid` | Unified action router for all Unraid operations (17 domains, ~160 subactions) |
 | `unraid_help` | Returns markdown documentation for all actions and parameters |
 | `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
 | `test_subscription_query` | Test a specific GraphQL subscription query against allowlisted fields |

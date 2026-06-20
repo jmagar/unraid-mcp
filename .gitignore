@@ -97,3 +97,6 @@ data/
 
 # mcporter local test server definitions (may contain personal endpoints/tokens)
 /config/mcporter.json
+
+# Mock GraphQL server (tests/mock) — JS deps installed locally
+tests/mock/node_modules/

@@ -43,6 +43,8 @@ These subscriptions emit data continuously. The resource returns the latest cach
 | `unraid://live/memory` | Memory usage, swap, available, buffer/cache | `systemMetricsMemory` |
 | `unraid://live/cpu_telemetry` | CPU power draw and temperature | `systemMetricsCpuTelemetry` |
 | `unraid://live/array_state` | Array state, capacity, parity check status | `arraySubscription` |
+| `unraid://live/docker_container_stats` | Per-container CPU/memory/IO stats | `dockerContainerStats` |
+| `unraid://live/temperature` | Temperature sensor readings and summary | `systemMetricsTemperature` |
 
 ### Live telemetry (event-driven subscriptions)
 
@@ -53,8 +55,10 @@ These subscriptions only emit when state changes. A timeout does not indicate an
 | `unraid://live/parity_progress` | Parity check progress, speed, errors | `parityHistorySubscription` |
 | `unraid://live/ups_status` | UPS battery, power, model, status | `upsUpdates` |
 | `unraid://live/notifications_overview` | Unread/archive notification counts by type | `notificationsOverview` |
+| `unraid://live/notifications_warnings` | Live warnings/alerts feed (filtered) | `notificationsWarningsAndAlerts` |
 | `unraid://live/owner` | Server owner username, URL, avatar | `ownerSubscription` |
 | `unraid://live/server_status` | Server name, status, GUID, WAN/LAN IPs | `serversSubscription` |
+| `unraid://live/display` | Theme/display changes | `displaySubscription` |
 
 ## Response Format
 

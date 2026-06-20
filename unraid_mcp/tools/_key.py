@@ -1,6 +1,8 @@
 """Key domain handler for the Unraid MCP tool.
 
-Covers: list, get, possible_roles, create, update, delete*, add_role, remove_role (8 subactions).
+Covers: list, get, possible_roles, possible_permissions, permissions_for_roles,
+preview_permissions, auth_actions, creation_form_schema, create, update, delete*,
+add_role, remove_role (13 subactions).
 """
 
 from typing import Any
@@ -12,7 +14,8 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import safe_get, validate_subaction
+from ..core.utils import coerce_list, safe_get, validate_subaction
+from ..core.validation import validate_input_mapping_list
 
 
 # ===========================================================================
@@ -23,6 +26,11 @@ _KEY_QUERIES: dict[str, str] = {
     "list": "query ListApiKeys { apiKeys { id name roles permissions { resource actions } createdAt } }",
     "get": "query GetApiKey($id: PrefixedID!) { apiKey(id: $id) { id name roles permissions { resource actions } createdAt } }",
     "possible_roles": "query GetPossibleRoles { apiKeyPossibleRoles }",
+    "possible_permissions": "query GetPossiblePermissions { apiKeyPossiblePermissions { resource actions } }",
+    "permissions_for_roles": "query GetPermissionsForRoles($roles: [Role!]!) { getPermissionsForRoles(roles: $roles) { resource actions } }",
+    "preview_permissions": "query PreviewEffectivePermissions($roles: [Role!], $permissions: [AddPermissionInput!]) { previewEffectivePermissions(roles: $roles, permissions: $permissions) { resource actions } }",
+    "auth_actions": "query GetAvailableAuthActions { getAvailableAuthActions }",
+    "creation_form_schema": "query GetApiKeyCreationFormSchema { getApiKeyCreationFormSchema { id dataSchema uiSchema values } }",
 }
 
 _KEY_MUTATIONS: dict[str, str] = {
@@ -46,6 +54,7 @@ async def _handle_key(
     ctx: Context | None,
     confirm: bool,
     limit: int = 20,
+    permissions_input: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _KEY_SUBACTIONS, "key")
 
@@ -62,15 +71,53 @@ async def _handle_key(
 
         if subaction == "list":
             data = await _client.make_graphql_request(_KEY_QUERIES["list"])
-            keys = data.get("apiKeys", [])
-            keys = list(keys) if isinstance(keys, list) else []
-            capped, page = cap_list(keys, limit)
+            capped, page = cap_list(coerce_list(data.get("apiKeys")), limit)
             return {"keys": capped, "page": page}
 
         if subaction == "possible_roles":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])
-            roles_list = data.get("apiKeyPossibleRoles", [])
-            return {"roles": list(roles_list) if isinstance(roles_list, list) else []}
+            return {"roles": coerce_list(data.get("apiKeyPossibleRoles"))}
+
+        if subaction == "possible_permissions":
+            data = await _client.make_graphql_request(_KEY_QUERIES["possible_permissions"])
+            return {"permissions": coerce_list(data.get("apiKeyPossiblePermissions"))}
+
+        if subaction == "auth_actions":
+            data = await _client.make_graphql_request(_KEY_QUERIES["auth_actions"])
+            return {"actions": coerce_list(data.get("getAvailableAuthActions"))}
+
+        if subaction == "creation_form_schema":
+            data = await _client.make_graphql_request(_KEY_QUERIES["creation_form_schema"])
+            return {"schema": data.get("getApiKeyCreationFormSchema")}
+
+        if subaction == "permissions_for_roles":
+            if not roles:
+                raise ToolError(
+                    "roles is required for key/permissions_for_roles (e.g. roles=['ADMIN'])"
+                )
+            data = await _client.make_graphql_request(
+                _KEY_QUERIES["permissions_for_roles"], {"roles": roles}
+            )
+            return {"permissions": coerce_list(data.get("getPermissionsForRoles"))}
+
+        if subaction == "preview_permissions":
+            if not roles and not permissions_input:
+                raise ToolError(
+                    "key/preview_permissions requires roles and/or permissions_input "
+                    "(permissions_input is a list of {resource, actions})"
+                )
+            variables: dict[str, Any] = {}
+            if roles:
+                variables["roles"] = roles
+            if permissions_input:
+                # Validate like every other structured input before it reaches GraphQL.
+                variables["permissions"] = validate_input_mapping_list(
+                    permissions_input, "permissions_input"
+                )
+            data = await _client.make_graphql_request(
+                _KEY_QUERIES["preview_permissions"], variables
+            )
+            return {"permissions": coerce_list(data.get("previewEffectivePermissions"))}
 
         if subaction == "get":
             if not key_id:

@@ -35,24 +35,41 @@ def _all_domain_dicts() -> list[tuple[str, dict[str, str]]]:
     test_total_operations_count so the two lists stay in sync automatically.
     """
     from unraid_mcp.tools._array import _ARRAY_MUTATIONS, _ARRAY_QUERIES
+    from unraid_mcp.tools._connect import _CONNECT_MUTATIONS, _CONNECT_QUERIES
     from unraid_mcp.tools._customization import (
         _CUSTOMIZATION_MUTATIONS,
         _CUSTOMIZATION_QUERIES,
     )
     from unraid_mcp.tools._disk import _DISK_MUTATIONS, _DISK_QUERIES
-    from unraid_mcp.tools._docker import _DOCKER_MUTATIONS, _DOCKER_QUERIES
+
+    # Docker organizer specs hold their GraphQL under a "mutation" key — flatten
+    # to a {subaction: query} dict so the bulk validator can check them too.
+    from unraid_mcp.tools._docker import (
+        _DOCKER_BULK_MUTATIONS,
+        _DOCKER_MUTATIONS,
+        _DOCKER_ORGANIZER,
+        _DOCKER_QUERIES,
+        _DOCKER_ROOT_MUTATIONS,
+    )
     from unraid_mcp.tools._key import _KEY_MUTATIONS, _KEY_QUERIES
     from unraid_mcp.tools._notification import (
         _NOTIFICATION_MUTATIONS,
         _NOTIFICATION_QUERIES,
     )
     from unraid_mcp.tools._oidc import _OIDC_QUERIES
+    from unraid_mcp.tools._onboarding import (
+        _ONBOARDING_INPUT_MUTATIONS,
+        _ONBOARDING_QUERIES,
+        _ONBOARDING_SIMPLE_MUTATIONS,
+    )
     from unraid_mcp.tools._plugin import _PLUGIN_MUTATIONS, _PLUGIN_QUERIES
     from unraid_mcp.tools._rclone import _RCLONE_MUTATIONS, _RCLONE_QUERIES
     from unraid_mcp.tools._setting import _SETTING_MUTATIONS
     from unraid_mcp.tools._system import _SYSTEM_QUERIES
     from unraid_mcp.tools._user import _USER_QUERIES
     from unraid_mcp.tools._vm import _VM_MUTATIONS, _VM_QUERIES
+
+    docker_organizer = {k: v["mutation"] for k, v in _DOCKER_ORGANIZER.items()}
 
     return [
         ("system/QUERIES", _SYSTEM_QUERIES),
@@ -62,6 +79,9 @@ def _all_domain_dicts() -> list[tuple[str, dict[str, str]]]:
         ("disk/MUTATIONS", _DISK_MUTATIONS),
         ("docker/QUERIES", _DOCKER_QUERIES),
         ("docker/MUTATIONS", _DOCKER_MUTATIONS),
+        ("docker/BULK_MUTATIONS", _DOCKER_BULK_MUTATIONS),
+        ("docker/ROOT_MUTATIONS", _DOCKER_ROOT_MUTATIONS),
+        ("docker/ORGANIZER", docker_organizer),
         ("vm/QUERIES", _VM_QUERIES),
         ("vm/MUTATIONS", _VM_MUTATIONS),
         ("notification/QUERIES", _NOTIFICATION_QUERIES),
@@ -72,11 +92,16 @@ def _all_domain_dicts() -> list[tuple[str, dict[str, str]]]:
         ("key/QUERIES", _KEY_QUERIES),
         ("key/MUTATIONS", _KEY_MUTATIONS),
         ("setting/MUTATIONS", _SETTING_MUTATIONS),
+        ("connect/QUERIES", _CONNECT_QUERIES),
+        ("connect/MUTATIONS", _CONNECT_MUTATIONS),
         ("customization/QUERIES", _CUSTOMIZATION_QUERIES),
         ("customization/MUTATIONS", _CUSTOMIZATION_MUTATIONS),
         ("plugin/QUERIES", _PLUGIN_QUERIES),
         ("plugin/MUTATIONS", _PLUGIN_MUTATIONS),
         ("oidc/QUERIES", _OIDC_QUERIES),
+        ("onboarding/QUERIES", _ONBOARDING_QUERIES),
+        ("onboarding/SIMPLE_MUTATIONS", _ONBOARDING_SIMPLE_MUTATIONS),
+        ("onboarding/INPUT_MUTATIONS", _ONBOARDING_INPUT_MUTATIONS),
     ]
 
 
@@ -244,7 +269,7 @@ class TestArrayQueries:
     def test_all_array_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._array import _ARRAY_QUERIES as QUERIES
 
-        assert set(QUERIES.keys()) == {"parity_status", "parity_history"}
+        assert set(QUERIES.keys()) == {"parity_status", "parity_history", "assignable_disks"}
 
 
 class TestArrayMutations:
@@ -471,13 +496,40 @@ class TestDockerMutations:
         assert not errors, f"stop mutation validation failed: {errors}"
 
     def test_all_docker_mutations_covered(self, schema: GraphQLSchema) -> None:
-        from unraid_mcp.tools._docker import _DOCKER_MUTATIONS as MUTATIONS
+        from unraid_mcp.tools._docker import (
+            _DOCKER_BULK_MUTATIONS,
+            _DOCKER_MUTATIONS,
+            _DOCKER_ORGANIZER,
+            _DOCKER_ROOT_MUTATIONS,
+        )
 
-        expected = {
+        assert set(_DOCKER_MUTATIONS.keys()) == {
             "start",
             "stop",
+            "unpause",
+            "update_container",
         }
-        assert set(MUTATIONS.keys()) == expected
+        assert set(_DOCKER_BULK_MUTATIONS.keys()) == {
+            "remove_container",
+            "update_containers",
+            "update_all_containers",
+            "update_autostart",
+        }
+        assert set(_DOCKER_ROOT_MUTATIONS.keys()) == {
+            "refresh_digests",
+            "sync_template_paths",
+            "reset_template_mappings",
+        }
+        assert set(_DOCKER_ORGANIZER.keys()) == {
+            "create_folder",
+            "create_folder_with_items",
+            "rename_folder",
+            "set_folder_children",
+            "delete_entries",
+            "move_entries_to_folder",
+            "move_items_to_position",
+            "update_view_preferences",
+        }
 
 
 # ============================================================================
@@ -747,7 +799,16 @@ class TestKeysQueries:
     def test_all_keys_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._key import _KEY_QUERIES as QUERIES
 
-        assert set(QUERIES.keys()) == {"list", "get", "possible_roles"}
+        assert set(QUERIES.keys()) == {
+            "list",
+            "get",
+            "possible_roles",
+            "possible_permissions",
+            "permissions_for_roles",
+            "preview_permissions",
+            "auth_actions",
+            "creation_form_schema",
+        }
 
 
 class TestKeysMutations:
@@ -813,6 +874,10 @@ class TestSettingsMutations:
         expected = {
             "update",
             "configure_ups",
+            "update_ssh",
+            "update_temperature",
+            "update_system_time",
+            "update_server_identity",
         }
         assert set(MUTATIONS.keys()) == expected
 
@@ -849,20 +914,24 @@ class TestHealthQueries:
 
 
 # ============================================================================
-# Customization Tool (4 queries + 1 mutation)
+# Customization Tool (3 queries + 1 mutation)
 # ============================================================================
 class TestCustomizationQueries:
-    """Validate queries from unraid_mcp/tools/customization.py."""
+    """Validate queries from unraid_mcp/tools/_customization.py."""
 
     def test_public_theme_query(self, schema: GraphQLSchema) -> None:
-        # publicPartnerInfo not in schema; validate only publicTheme
-        errors = _validate_operation(schema, "query { publicTheme { name } }")
-        assert not errors, f"public_theme (publicTheme) query validation failed: {errors}"
+        # publicPartnerInfo was removed from Query upstream; query is publicTheme-only.
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["public_theme"])
+        assert not errors, f"public_theme query validation failed: {errors}"
 
     def test_is_initial_setup_query(self, schema: GraphQLSchema) -> None:
-        # isInitialSetup not in schema; isFreshInstall is the equivalent field
-        errors = _validate_operation(schema, "query { isFreshInstall }")
-        assert not errors, f"is_initial_setup (isFreshInstall) query validation failed: {errors}"
+        # isInitialSetup was renamed to isFreshInstall upstream.
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["is_initial_setup"])
+        assert not errors, f"is_initial_setup query validation failed: {errors}"
 
     def test_sso_enabled_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
@@ -870,14 +939,15 @@ class TestCustomizationQueries:
         errors = _validate_operation(schema, QUERIES["sso_enabled"])
         assert not errors, f"sso_enabled query validation failed: {errors}"
 
-    def test_customization_activation_code_query(self, schema: GraphQLSchema) -> None:
-        # Customization.theme not in schema; use activationCode which is present
-        errors = _validate_operation(schema, "query { customization { activationCode { code } } }")
-        assert not errors, f"customization activationCode query validation failed: {errors}"
+    def test_all_customization_queries_covered(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
+
+        # `theme` was removed: `customization { theme partnerInfo }` no longer exists.
+        assert set(QUERIES.keys()) == {"public_theme", "is_initial_setup", "sso_enabled"}
 
 
 class TestCustomizationMutations:
-    """Validate mutations from unraid_mcp/tools/customization.py."""
+    """Validate mutations from unraid_mcp/tools/_customization.py."""
 
     def test_set_theme_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_MUTATIONS as MUTATIONS
@@ -888,7 +958,7 @@ class TestCustomizationMutations:
     def test_all_customization_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_MUTATIONS as MUTATIONS
 
-        assert set(MUTATIONS.keys()) == {"set_theme"}
+        assert set(MUTATIONS.keys()) == {"set_theme", "set_locale"}
 
 
 # ============================================================================
@@ -906,7 +976,12 @@ class TestPluginsQueries:
     def test_all_plugins_queries_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._plugin import _PLUGIN_QUERIES as QUERIES
 
-        assert set(QUERIES.keys()) == {"list"}
+        assert set(QUERIES.keys()) == {
+            "list",
+            "installed_unraid",
+            "install_operations",
+            "install_operation",
+        }
 
 
 class TestPluginsMutations:
@@ -927,7 +1002,7 @@ class TestPluginsMutations:
     def test_all_plugins_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._plugin import _PLUGIN_MUTATIONS as MUTATIONS
 
-        assert set(MUTATIONS.keys()) == {"add", "remove"}
+        assert set(MUTATIONS.keys()) == {"add", "remove", "install", "install_language"}
 
 
 # ============================================================================
@@ -997,14 +1072,7 @@ class TestSchemaCompleteness:
 
         # Known schema mismatches — bugs in tool implementation, not in tests.
         # Remove entries as they are fixed.
-        KNOWN_SCHEMA_ISSUES: set[str] = {  # noqa: N806
-            # customization: Customization.theme field does not exist
-            "customization/QUERIES/theme",
-            # customization: publicPartnerInfo not in Query type
-            "customization/QUERIES/public_theme",
-            # customization: isInitialSetup not in Query type (use isFreshInstall)
-            "customization/QUERIES/is_initial_setup",
-        }
+        KNOWN_SCHEMA_ISSUES: set[str] = set()  # noqa: N806
 
         failures: list[str] = []
         unexpected_passes: list[str] = []

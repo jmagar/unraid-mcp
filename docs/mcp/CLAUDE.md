@@ -32,7 +32,7 @@ Documentation for the unraid-mcp MCP server.
 1. ENV.md -- understand required configuration
 2. AUTH.md -- set up authentication
 3. TRANSPORT.md -- choose a transport and connect
-4. TOOLS.md -- learn available operations (15 domains, 108 subactions)
+4. TOOLS.md -- learn available operations (17 domains, ~160 subactions)
 5. RESOURCES.md -- discover live subscription data endpoints
 6. ELICITATION.md -- understand the destructive action gates
 

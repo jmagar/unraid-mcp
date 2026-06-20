@@ -1,17 +1,27 @@
 """Docker domain handler for the Unraid MCP tool.
 
-Covers: list, details, ports, start, stop, restart, networks, network_details
-(8 subactions).
+Covers: list, details, ports, start, stop, restart, unpause, networks,
+network_details, remove_container*, update_container, update_containers,
+update_all_containers, update_autostart, refresh_digests, sync_template_paths,
+reset_template_mappings*, create_folder, create_folder_with_items, rename_folder,
+set_folder_children, delete_entries*, move_entries_to_folder,
+move_items_to_position, update_view_preferences (25 subactions, plus a deprecated
+`logs` stub that returns an informative ToolError — not counted).
 """
 
 import re
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, TypedDict
+
+from fastmcp import Context
 
 from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
+from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import safe_get, validate_subaction
+from ..core.utils import mutation_success, safe_get, validate_subaction
+from ..core.validation import validate_input_mapping, validate_input_mapping_list
 
 
 # ===========================================================================
@@ -37,14 +47,121 @@ _DOCKER_RESOLVE_QUERY = "query ResolveContainerID { docker { containers { id nam
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",
     "stop": "mutation StopContainer($id: PrefixedID!) { docker { stop(id: $id) { id names state status } } }",
+    "unpause": "mutation UnpauseContainer($id: PrefixedID!) { docker { unpause(id: $id) { id names state status } } }",
+    "update_container": "mutation UpdateContainer($id: PrefixedID!) { docker { updateContainer(id: $id) { id names image state status } } }",
+}
+
+# Lifecycle mutations not handled by the single-id path: a Boolean-returning
+# remove, the image-update bulk ops (one/many/all containers), and the autostart
+# config mutation. Each is routed by a bespoke branch in _handle_docker.
+_DOCKER_BULK_MUTATIONS: dict[str, str] = {
+    "remove_container": "mutation RemoveContainer($id: PrefixedID!, $withImage: Boolean) { docker { removeContainer(id: $id, withImage: $withImage) } }",
+    "update_containers": "mutation UpdateContainers($ids: [PrefixedID!]!) { docker { updateContainers(ids: $ids) { id names image state status } } }",
+    "update_all_containers": "mutation UpdateAllContainers { docker { updateAllContainers { id names image state status } } }",
+    "update_autostart": "mutation UpdateAutostart($entries: [DockerAutostartEntryInput!]!, $persist: Boolean) { docker { updateAutostartConfiguration(entries: $entries, persistUserPreferences: $persist) } }",
+}
+
+# Root-level Docker mutations (not namespaced under the `docker` mutation field).
+_DOCKER_ROOT_MUTATIONS: dict[str, str] = {
+    "refresh_digests": "mutation RefreshDockerDigests { refreshDockerDigests }",
+    "sync_template_paths": "mutation SyncDockerTemplatePaths { syncDockerTemplatePaths { scanned matched skipped errors } }",
+    "reset_template_mappings": "mutation ResetDockerTemplateMappings { resetDockerTemplateMappings }",
+}
+
+# subaction -> GraphQL response field, kept beside the mutation dicts they mirror.
+_DOCKER_ROOT_RESULT_FIELD: dict[str, str] = {
+    "refresh_digests": "refreshDockerDigests",
+    "sync_template_paths": "syncDockerTemplatePaths",
+    "reset_template_mappings": "resetDockerTemplateMappings",
+}
+_DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
+    "start": "start",
+    "stop": "stop",
+    "unpause": "unpause",
+    "update_container": "updateContainer",
+}
+
+
+# Docker "organizer" (folder/view) mutations. Each spec lists the required and
+# optional GraphQL variables (sourced from the `organizer_input` dict), the
+# mutation string, and the response field to read back. The return selection is
+# trimmed to `version` — enough to confirm the layout changed without serialising
+# the full resolved organizer tree. Using a TypedDict lets `ty` catch a missing or
+# misspelled spec key at check time rather than at runtime.
+class _OrganizerSpec(TypedDict):
+    mutation: str
+    required: Sequence[str]  # read-only lookup tables — not meant to be mutated
+    optional: Sequence[str]
+    result_field: str
+
+
+_DOCKER_ORGANIZER: dict[str, _OrganizerSpec] = {
+    "create_folder": {
+        "mutation": "mutation CreateDockerFolder($name: String!, $parentId: String, $childrenIds: [String!]) { createDockerFolder(name: $name, parentId: $parentId, childrenIds: $childrenIds) { version } }",
+        "required": ["name"],
+        "optional": ["parentId", "childrenIds"],
+        "result_field": "createDockerFolder",
+    },
+    "create_folder_with_items": {
+        "mutation": "mutation CreateDockerFolderWithItems($name: String!, $parentId: String, $sourceEntryIds: [String!], $position: Float) { createDockerFolderWithItems(name: $name, parentId: $parentId, sourceEntryIds: $sourceEntryIds, position: $position) { version } }",
+        "required": ["name"],
+        "optional": ["parentId", "sourceEntryIds", "position"],
+        "result_field": "createDockerFolderWithItems",
+    },
+    "rename_folder": {
+        "mutation": "mutation RenameDockerFolder($folderId: String!, $newName: String!) { renameDockerFolder(folderId: $folderId, newName: $newName) { version } }",
+        "required": ["folderId", "newName"],
+        "optional": [],
+        "result_field": "renameDockerFolder",
+    },
+    "set_folder_children": {
+        "mutation": "mutation SetDockerFolderChildren($folderId: String, $childrenIds: [String!]!) { setDockerFolderChildren(folderId: $folderId, childrenIds: $childrenIds) { version } }",
+        "required": ["childrenIds"],
+        "optional": ["folderId"],
+        "result_field": "setDockerFolderChildren",
+    },
+    "delete_entries": {
+        "mutation": "mutation DeleteDockerEntries($entryIds: [String!]!) { deleteDockerEntries(entryIds: $entryIds) { version } }",
+        "required": ["entryIds"],
+        "optional": [],
+        "result_field": "deleteDockerEntries",
+    },
+    "move_entries_to_folder": {
+        "mutation": "mutation MoveDockerEntries($sourceEntryIds: [String!]!, $destinationFolderId: String!) { moveDockerEntriesToFolder(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId) { version } }",
+        "required": ["sourceEntryIds", "destinationFolderId"],
+        "optional": [],
+        "result_field": "moveDockerEntriesToFolder",
+    },
+    "move_items_to_position": {
+        "mutation": "mutation MoveDockerItems($sourceEntryIds: [String!]!, $destinationFolderId: String!, $position: Float!) { moveDockerItemsToPosition(sourceEntryIds: $sourceEntryIds, destinationFolderId: $destinationFolderId, position: $position) { version } }",
+        "required": ["sourceEntryIds", "destinationFolderId", "position"],
+        "optional": [],
+        "result_field": "moveDockerItemsToPosition",
+    },
+    "update_view_preferences": {
+        "mutation": "mutation UpdateDockerViewPreferences($viewId: String, $prefs: JSON!) { updateDockerViewPreferences(viewId: $viewId, prefs: $prefs) { version } }",
+        "required": ["prefs"],
+        "optional": ["viewId"],
+        "result_field": "updateDockerViewPreferences",
+    },
 }
 
 # "logs" has no GraphQL query (field removed in Unraid 7.2.x) but is still a
 # recognised subaction so validation passes and the informative ToolError below
 # is returned rather than a generic "Invalid action" message.
 # "ports" has a dedicated list query and aggregates host port bindings client-side.
-_DOCKER_SUBACTIONS: set[str] = set(_DOCKER_QUERIES) | set(_DOCKER_MUTATIONS) | {"restart", "logs"}
-_DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart"}
+_DOCKER_SUBACTIONS: set[str] = (
+    set(_DOCKER_QUERIES)
+    | set(_DOCKER_MUTATIONS)
+    | set(_DOCKER_BULK_MUTATIONS)
+    | set(_DOCKER_ROOT_MUTATIONS)
+    | set(_DOCKER_ORGANIZER)
+    | {"restart", "logs"}
+)
+_DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart", "unpause", "update_container"}
+# remove_container deletes the container (and optionally its image); reset_template_mappings
+# wipes user template path overrides; delete_entries removes organizer entries.
+_DOCKER_DESTRUCTIVE: set[str] = {"remove_container", "reset_template_mappings", "delete_entries"}
 _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 _DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
 
@@ -76,11 +193,19 @@ def _find_container(
     )
 
 
-async def _resolve_container_id(container_id: str, *, strict: bool = False) -> str:
+async def _resolve_container_id(
+    container_id: str,
+    *,
+    strict: bool = False,
+    containers: list[dict[str, Any]] | None = None,
+) -> str:
     if _DOCKER_ID_PATTERN.match(container_id):
         return container_id
-    data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
-    containers = safe_get(data, "docker", "containers", default=[])
+    # Callers resolving several ids can pass a pre-fetched container list to avoid
+    # re-fetching the full list once per id (see docker/update_containers).
+    if containers is None:
+        data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
+        containers = safe_get(data, "docker", "containers", default=[])
     if _DOCKER_SHORT_ID_PATTERN.match(container_id):
         id_lower = container_id.lower()
         matches = [
@@ -113,12 +238,34 @@ async def _handle_docker(
     container_id: str | None,
     network_id: str | None,
     limit: int | None = None,
+    ctx: Context | None = None,
+    confirm: bool = False,
+    container_ids: list[str] | None = None,
+    with_image: bool = False,
+    autostart_entries: list[dict[str, Any]] | None = None,
+    organizer_input: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     validate_subaction(subaction, _DOCKER_SUBACTIONS, "docker")
     if subaction in _DOCKER_NEEDS_CONTAINER_ID and not container_id:
         raise ToolError(f"container_id is required for docker/{subaction}")
     if subaction == "network_details" and not network_id:
         raise ToolError("network_id is required for docker/network_details")
+
+    await gate_destructive_action(
+        ctx,
+        subaction,
+        _DOCKER_DESTRUCTIVE,
+        confirm,
+        {
+            "remove_container": f"Remove container **{container_id}**"
+            + (" and its image" if with_image else "")
+            + ". This cannot be undone.",
+            "reset_template_mappings": "Reset all Docker template path mappings to defaults. "
+            "Custom template path overrides will be lost.",
+            "delete_entries": "Delete the specified Docker organizer entries "
+            "(folders/items) from the layout.",
+        },
+    )
 
     with tool_error_handler("docker", subaction, logger):
         logger.info(f"Executing unraid action=docker subaction={subaction}")
@@ -209,6 +356,120 @@ async def _handle_docker(
                 response["note"] = "Container was already stopped before restart"
             return response
 
+        # Root-level no-arg mutations (refresh digests / template sync + reset).
+        if subaction in _DOCKER_ROOT_MUTATIONS:
+            data = await _client.make_graphql_request(_DOCKER_ROOT_MUTATIONS[subaction])
+            result = data.get(_DOCKER_ROOT_RESULT_FIELD[subaction])
+            if subaction == "sync_template_paths":
+                # Returns {scanned, matched, skipped, errors}; surface a non-empty
+                # errors list rather than reporting a partial sync as a clean success.
+                errors = (result or {}).get("errors") or []
+                return {
+                    "success": not errors,
+                    "subaction": subaction,
+                    "result": result,
+                    "errors": errors,
+                }
+            # refresh_digests / reset_template_mappings return a bare Boolean —
+            # `false` means the operation did not take effect.
+            return {
+                "success": mutation_success(result, boolean=True),
+                "subaction": subaction,
+                "result": result,
+            }
+
+        # Organizer (folder/view) mutations driven by organizer_input.
+        if subaction in _DOCKER_ORGANIZER:
+            spec = _DOCKER_ORGANIZER[subaction]
+            supplied = validate_input_mapping(organizer_input or {}, "organizer_input")
+            missing = [k for k in spec["required"] if supplied.get(k) is None]
+            if missing:
+                raise ToolError(
+                    f"organizer_input is missing required field(s) for docker/{subaction}: "
+                    f"{', '.join(missing)}"
+                )
+            allowed = set(spec["required"]) | set(spec["optional"])
+            # Reject unknown keys rather than silently dropping them — a typo'd
+            # field name would otherwise vanish and the mutation run with defaults.
+            unknown = set(supplied) - allowed
+            if unknown:
+                raise ToolError(
+                    f"organizer_input has unknown field(s) for docker/{subaction}: "
+                    f"{', '.join(sorted(unknown))}. Allowed: {', '.join(sorted(allowed))}"
+                )
+            variables = {k: v for k, v in supplied.items() if v is not None}
+            data = await _client.make_graphql_request(spec["mutation"], variables)
+            organizer = data.get(spec["result_field"])
+            return {
+                "success": mutation_success(organizer, boolean=False),
+                "subaction": subaction,
+                "organizer": organizer,
+            }
+
+        # Bulk / image-update lifecycle mutations.
+        if subaction == "remove_container":
+            actual_id = await _resolve_container_id(container_id or "", strict=True)
+            data = await _client.make_graphql_request(
+                _DOCKER_BULK_MUTATIONS["remove_container"],
+                {"id": actual_id, "withImage": with_image},
+            )
+            return {
+                "success": bool(safe_get(data, "docker", "removeContainer")),
+                "subaction": subaction,
+                "container_id": actual_id,
+                "with_image": with_image,
+            }
+
+        if subaction == "update_containers":
+            if not container_ids:
+                raise ToolError("container_ids is required for docker/update_containers")
+            # Resolve every id against a single container-list fetch rather than
+            # re-fetching the full list once per id.
+            containers: list[dict[str, Any]] = []
+            if any(not _DOCKER_ID_PATTERN.match(c) for c in container_ids):
+                resolve_data = await _client.make_graphql_request(_DOCKER_RESOLVE_QUERY)
+                containers = safe_get(resolve_data, "docker", "containers", default=[])
+            resolved = [
+                await _resolve_container_id(c, strict=True, containers=containers)
+                for c in container_ids
+            ]
+            data = await _client.make_graphql_request(
+                _DOCKER_BULK_MUTATIONS["update_containers"], {"ids": resolved}
+            )
+            return {
+                "success": True,
+                "subaction": subaction,
+                "containers": safe_get(data, "docker", "updateContainers", default=[]),
+            }
+
+        if subaction == "update_all_containers":
+            data = await _client.make_graphql_request(
+                _DOCKER_BULK_MUTATIONS["update_all_containers"]
+            )
+            return {
+                "success": True,
+                "subaction": subaction,
+                "containers": safe_get(data, "docker", "updateAllContainers", default=[]),
+            }
+
+        if subaction == "update_autostart":
+            if not autostart_entries:
+                raise ToolError(
+                    "autostart_entries is required for docker/update_autostart "
+                    "(list of {id, autoStart, wait?})"
+                )
+            entries = validate_input_mapping_list(autostart_entries, "autostart_entries")
+            data = await _client.make_graphql_request(
+                _DOCKER_BULK_MUTATIONS["update_autostart"],
+                {"entries": entries, "persist": True},
+            )
+            return {
+                "success": bool(safe_get(data, "docker", "updateAutostartConfiguration")),
+                "subaction": subaction,
+                "entry_count": len(entries),
+            }
+
+        # Single-id namespaced lifecycle mutations: start, stop, unpause, update_container.
         actual_id = await _resolve_container_id(container_id or "", strict=True)
         data = await _client.make_graphql_request(
             _DOCKER_MUTATIONS[subaction],
@@ -222,8 +483,9 @@ async def _handle_docker(
                 "idempotent": True,
                 "message": f"Container already in desired state for '{subaction}'",
             }
+        container = (data.get("docker") or {}).get(_DOCKER_LIFECYCLE_RESULT_FIELD[subaction])
         return {
-            "success": True,
+            "success": mutation_success(container, boolean=False),
             "subaction": subaction,
-            "container": (data.get("docker") or {}).get(subaction),
+            "container": container,
         }

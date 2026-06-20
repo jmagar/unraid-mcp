@@ -1,8 +1,8 @@
 """Array domain handler for the Unraid MCP tool.
 
-Covers: parity_status, parity_history, parity_start, parity_pause, parity_resume,
-parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk,
-unmount_disk, clear_disk_stats* (13 subactions).
+Covers: parity_status, parity_history, assignable_disks, parity_start, parity_pause,
+parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*,
+mount_disk, unmount_disk, clear_disk_stats* (14 subactions).
 """
 
 from typing import Any
@@ -14,7 +14,7 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import validate_subaction
+from ..core.utils import coerce_list, validate_subaction
 
 
 # ===========================================================================
@@ -24,6 +24,8 @@ from ..core.utils import validate_subaction
 _ARRAY_QUERIES: dict[str, str] = {
     "parity_status": "query GetParityStatus { array { parityCheckStatus { progress speed errors status paused running correcting } } }",
     "parity_history": "query GetParityHistory { parityHistory { date duration speed status errors progress correcting paused running } }",
+    # Discovery counterpart to add_disk: lists physical disks not yet in the array.
+    "assignable_disks": "query GetAssignableDisks { assignableDisks { id device name type vendor size serialNum interfaceType smartStatus temperature isSpinning } }",
 }
 
 _ARRAY_MUTATIONS: dict[str, str] = {
@@ -83,6 +85,14 @@ async def _handle_array(
                         "data": data,
                         "page": meta,
                     }
+            if subaction == "assignable_disks":
+                capped, meta = cap_list(coerce_list(data.get("assignableDisks")), limit)
+                return {
+                    "success": True,
+                    "subaction": subaction,
+                    "data": {"assignableDisks": capped},
+                    "page": meta,
+                }
             return {"success": True, "subaction": subaction, "data": data}
 
         if subaction == "parity_start":

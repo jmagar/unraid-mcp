@@ -30,7 +30,7 @@ The plugin registers **3 MCP tools**:
 
 | Tool | Purpose |
 |------|---------|
-| `unraid` | Primary tool — `action` (domain) + `subaction` (operation) routing, ~108 subactions across 15 domains |
+| `unraid` | Primary tool — `action` (domain) + `subaction` (operation) routing, ~~160 subactions across 17 domains |
 | `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
 | `test_subscription_query` | Test a specific GraphQL subscription query (allowlisted fields only) |
 
