@@ -161,3 +161,7 @@ docs/references/
 
 # ── Personal ──────────────────────────────────────────────────────────────────
 CLAUDE.md.local
+
+# Local binary artifacts
+/bin/
+plugins/unraid/bin/
