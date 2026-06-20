@@ -1,15 +1,19 @@
 # `hooks/`
 
-> **Authoritative hooks live in `.claude-plugin/plugin.json`** (declared inline). This
-> `hooks/hooks.json` is kept as a mirror for environments/tooling that read the default
-> `hooks/` location. The two are not byte-identical — `plugin.json` inlines the uv-sync
-> command while this file calls `bin/sync-uv.sh` — but both end SessionStart by running
-> `bin/plugin-setup.sh` and define the same `ConfigChange` hook. Every wrapper is
-> idempotent, so if both sources are loaded a double-run is harmless. When changing the
-> setup/ConfigChange wiring, update both files.
+This directory holds the plugin's hook configuration. `hooks.json` is the
+**single source of truth** — the Claude plugin manifest
+(`../.claude-plugin/plugin.json`) references it via `"hooks": "./hooks/hooks.json"`
+rather than inlining hook commands.
 
-Use this subtree only for hook entrypoints that are called from `hooks/hooks.json`.
+Current wiring (both run the same idempotent credential-setup script):
 
-- Put hook-specific wrappers here when Claude Code needs to run them automatically
-- Use `bin/` for reusable executables and helpers you may run manually or from hooks
-- If logic is useful outside the hook lifecycle, keep the implementation in `bin/` and make the hook call it
+- **SessionStart** → `${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh`
+- **ConfigChange** (`user_settings`) → `${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh`
+
+`plugin-setup.sh` lives in `../scripts/` and runs `uvx unraid-mcp setup
+plugin-hook` to persist the plugin's userConfig credentials to
+`~/.unraid-mcp/.env`. Because the server is launched with `uvx unraid-mcp`
+(published PyPI package), there is no bundled uv project to sync — the old
+`sync-uv.sh` hook was removed.
+
+When changing hook wiring, edit `hooks.json` only; the manifest picks it up.

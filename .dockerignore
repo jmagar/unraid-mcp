@@ -1,7 +1,7 @@
 .git
 .github
 .claude-plugin
-.codex-plugin
+plugins
 .agents
 .beads
 .dolt
