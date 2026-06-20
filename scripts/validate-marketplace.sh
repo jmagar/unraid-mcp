@@ -34,34 +34,39 @@ check() {
 echo "=== Validating Claude Code Marketplace Structure ==="
 echo ""
 
+# Marketplace manifest lives at the repo root; the plugin lives under plugins/unraid/.
+MARKETPLACE=".claude-plugin/marketplace.json"
+PLUGIN_DIR="plugins/unraid"
+PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+SKILLS_DIR="$PLUGIN_DIR/skills/unraid"
+
 # Check marketplace manifest
-check "Marketplace manifest exists" "test -f .claude-plugin/marketplace.json"
-check "Marketplace manifest is valid JSON" "jq empty .claude-plugin/marketplace.json"
-check "Marketplace has name" "jq -e '.name' .claude-plugin/marketplace.json"
-check "Marketplace has plugins array" "jq -e '.plugins | type == \"array\"' .claude-plugin/marketplace.json"
+check "Marketplace manifest exists" "test -f $MARKETPLACE"
+check "Marketplace manifest is valid JSON" "jq empty $MARKETPLACE"
+check "Marketplace has name" "jq -e '.name' $MARKETPLACE"
+check "Marketplace has plugins array" "jq -e '.plugins | type == \"array\"' $MARKETPLACE"
 
 # Check plugin manifest
-check "Plugin manifest exists" "test -f .claude-plugin/plugin.json"
-check "Plugin manifest is valid JSON" "jq empty .claude-plugin/plugin.json"
-check "Plugin has name" "jq -e '.name' .claude-plugin/plugin.json"
-check "Plugin has version" "jq -e '.version' .claude-plugin/plugin.json"
+check "Plugin manifest exists" "test -f $PLUGIN_JSON"
+check "Plugin manifest is valid JSON" "jq empty $PLUGIN_JSON"
+check "Plugin has name" "jq -e '.name' $PLUGIN_JSON"
+check "Plugin has version" "jq -e '.version' $PLUGIN_JSON"
 
 # Check plugin structure
-check "Plugin has SKILL.md" "test -f skills/unraid/SKILL.md"
-check "Plugin has README.md" "test -f skills/unraid/README.md"
-check "Plugin has scripts directory" "test -d skills/unraid/scripts"
-check "Plugin has examples directory" "test -d skills/unraid/examples"
-check "Plugin has references directory" "test -d skills/unraid/references"
+check "Plugin has SKILL.md" "test -f $SKILLS_DIR/SKILL.md"
+check "Plugin has README.md" "test -f $SKILLS_DIR/README.md"
+check "Plugin has scripts directory" "test -d $SKILLS_DIR/scripts"
+check "Plugin has examples directory" "test -d $SKILLS_DIR/examples"
+check "Plugin has references directory" "test -d $SKILLS_DIR/references"
 
 # Validate plugin is listed in marketplace
-check "Plugin listed in marketplace" "jq -e '.plugins[] | select(.name == \"unraid\")' .claude-plugin/marketplace.json"
+check "Plugin listed in marketplace" "jq -e '.plugins[] | select(.name == \"unraid-mcp\")' $MARKETPLACE"
 
 # Check marketplace metadata
-check "Marketplace has repository" "jq -e '.repository' .claude-plugin/marketplace.json"
-check "Marketplace has owner" "jq -e '.owner' .claude-plugin/marketplace.json"
+check "Marketplace has owner" "jq -e '.owner' $MARKETPLACE"
 
 # Verify source path
-PLUGIN_SOURCE=$(jq -r '.plugins[]? | select(.name == "unraid") | .source // empty' .claude-plugin/marketplace.json 2>/dev/null || true)
+PLUGIN_SOURCE=$(jq -r '.plugins[]? | select(.name == "unraid-mcp") | .source // empty' $MARKETPLACE 2>/dev/null || true)
 if [ -n "$PLUGIN_SOURCE" ]; then
     check "Plugin source path is valid" "test -d \"$PLUGIN_SOURCE\""
 else
@@ -73,7 +78,7 @@ fi
 # Check version sync between pyproject.toml and plugin.json
 echo "Checking version sync..."
 TOML_VER=$(grep -m1 '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
-PLUGIN_VER=$(python3 -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])" 2>/dev/null || echo "ERROR_READING")
+PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null || echo "ERROR_READING")
 if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
     echo -e "${RED}FAIL: Version mismatch — pyproject.toml=$TOML_VER, plugin.json=$PLUGIN_VER${NC}"
     CHECKS=$((CHECKS + 1))
@@ -95,5 +100,5 @@ else
     echo -e "${GREEN}All checks passed!${NC}"
     echo ""
     echo "Marketplace is ready for distribution at:"
-    echo "  $(jq -r '.repository' .claude-plugin/marketplace.json)"
+    echo "  $(jq -r '.plugins[0].repository // .plugins[0].homepage // "n/a"' "$MARKETPLACE")"
 fi

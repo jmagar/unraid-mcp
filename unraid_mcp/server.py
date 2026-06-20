@@ -33,7 +33,6 @@ from .config.settings import (
 from .core import middleware_refs as _middleware_refs
 from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
 from .core.response_limit import StructuredResponseLimitingMiddleware
-from .subscriptions.diagnostics import register_diagnostic_tools
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
@@ -119,10 +118,11 @@ mcp = FastMCP(
 def register_all_modules() -> None:
     """Register all tools and resources with the MCP instance."""
     try:
-        # Register subscription resources and diagnostic tools
+        # Register subscription resources (live data caches). The subscription
+        # diagnostics are exposed through the consolidated `unraid` tool's
+        # `subscriptions` action, not as standalone tools.
         register_subscription_resources(mcp)
-        register_diagnostic_tools(mcp)
-        logger.info("Subscription resources and diagnostic tools registered")
+        logger.info("Subscription resources registered")
 
         # Register the consolidated unraid tool
         register_unraid_tool(mcp)

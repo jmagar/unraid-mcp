@@ -5,11 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/sync-uv.sh"
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh"
           }
         ]
       }
@@ -20,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh"
           }
         ]
       }

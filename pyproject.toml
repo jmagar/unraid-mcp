@@ -107,8 +107,8 @@ only-include = ["unraid_mcp"]
 include = [
     "/unraid_mcp",
     "/tests",
-    "/commands",
-    "/skills",
+    "/plugins",
+    "/scripts",
     "/README.md",
     "/LICENSE",
     "/CLAUDE.md",

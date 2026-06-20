@@ -20,33 +20,7 @@
     "monitoring"
   ],
   "mcpServers": "./.mcp.json",
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "diff -q \"${CLAUDE_PLUGIN_ROOT}/uv.lock\" \"${CLAUDE_PLUGIN_DATA}/uv.lock\" >/dev/null 2>&1 || (cp \"${CLAUDE_PLUGIN_ROOT}/uv.lock\" \"${CLAUDE_PLUGIN_DATA}/uv.lock\" && UV_PROJECT_ENVIRONMENT=\"${CLAUDE_PLUGIN_DATA}/.venv\" uv sync --project \"${CLAUDE_PLUGIN_ROOT}\") || rm -f \"${CLAUDE_PLUGIN_DATA}/uv.lock\""
-          },
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
-          }
-        ]
-      }
-    ],
-    "ConfigChange": [
-      {
-        "matcher": "user_settings",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/plugin-setup.sh"
-          }
-        ]
-      }
-    ]
-  },
+  "hooks": "./hooks/hooks.json",
   "userConfig": {
     "unraid_api_url": {
       "type": "string",

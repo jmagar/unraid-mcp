@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bin.generate_unraid_api_reference import (
+from scripts.generate_unraid_api_reference import (
     _build_summary_markdown,
     _doc_header,
     _introspection_to_sdl,

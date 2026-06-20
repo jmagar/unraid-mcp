@@ -98,12 +98,20 @@ Copy `.env.example` to `.env` and configure:
   while the subscription starts — callers should retry in a moment. When
   `UNRAID_AUTO_START_SUBSCRIPTIONS=false`, resources fall back to on-demand `subscribe_once`.
 
-### Tool Categories (3 Tools: 1 Primary + 2 Diagnostic)
+### Tool Categories (1 Tool)
 
-The server registers **3 MCP tools**:
-- **`unraid`** — primary tool with `action` (domain) + `subaction` (operation) routing, 108 subactions. Call it as `unraid(action="docker", subaction="list")`.
-- **`diagnose_subscriptions`** — inspect subscription connection states, errors, and WebSocket URLs.
-- **`test_subscription_query`** — test a specific GraphQL subscription query (allowlisted fields only).
+The server registers a **single MCP tool**, `unraid`, with `action` (domain) +
+`subaction` (operation) routing (112 subactions). Call it as
+`unraid(action="docker", subaction="list")`. Subscription diagnostics and the
+Markdown reference that used to be standalone tools are now actions of `unraid`:
+- **`subscriptions`** — `diagnose` (connection states, errors, WebSocket URLs) and
+  `test_query` (test a GraphQL subscription query; allowlisted fields only, needs
+  `subscription_query=`).
+- **`help`** — returns the full Markdown action/subaction reference (no subaction).
+
+The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
+(`_handle_subscriptions`, `diagnose_subscriptions`, `test_subscription_query`);
+`server.py` no longer calls `register_diagnostic_tools`.
 
 | action | subactions |
 |--------|-----------|
@@ -122,6 +130,8 @@ The server registers **3 MCP tools**:
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
 | **user** (1) | me |
 | **live** (11) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notification_feed, log_tail, owner, server_status |
+| **subscriptions** (2) | diagnose, test_query (needs `subscription_query=`) |
+| **help** (0) | _(no subaction)_ — returns the Markdown reference |
 
 `*` = destructive, requires `confirm=True`
 
@@ -243,8 +253,9 @@ Conventional Commit messages:
 - `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE` → major.
 
 On every push to `main`, release-please maintains a "release PR" that bumps the version
-in `pyproject.toml` + the three plugin manifests (`.claude-plugin/plugin.json`,
-`.codex-plugin/plugin.json`, `gemini-extension.json`) and prepends a CHANGELOG entry.
+in `pyproject.toml` + the three plugin manifests
+(`plugins/unraid/.claude-plugin/plugin.json`, `plugins/unraid/.codex-plugin/plugin.json`,
+`plugins/unraid/gemini-extension.json`) and prepends a CHANGELOG entry.
 Merging that PR tags `vX.Y.Z` and triggers `publish-pypi.yml` + `docker-publish.yml`.
 
 Config: `release-please-config.json` (which files get bumped) and
@@ -331,8 +342,8 @@ computes the bump when the work lands on `main`:
 
 release-please keeps these files in sync automatically (configured in `release-please-config.json`):
 - `pyproject.toml` — `version = "X.Y.Z"` in `[project]`
-- `.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `plugins/unraid/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `plugins/unraid/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `gemini-extension.json` — `"version": "X.Y.Z"`
 - `CHANGELOG.md` — new entry generated from commit messages
 

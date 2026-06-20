@@ -4,12 +4,10 @@
   "description": "Query, monitor, and manage Unraid servers via GraphQL API through MCP tools. Supports system info, Docker, VMs, array/parity, notifications, plugins, and live telemetry.",
   "mcpServers": {
     "unraid-mcp": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "run",
-        "unraid-mcp-server"
-      ],
-      "cwd": "${extensionPath}"
+        "unraid-mcp"
+      ]
     }
   },
   "settings": [
