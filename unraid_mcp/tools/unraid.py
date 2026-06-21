@@ -27,9 +27,11 @@ Actions:
 
 import datetime
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal, get_args
 
 from fastmcp import Context, FastMCP
+from pydantic import BaseModel, Field
 
 from ..config.logging import logger
 from ..core import client as _client
@@ -354,6 +356,409 @@ UNRAID_ACTIONS = Literal[
 ]
 
 
+# ===========================================================================
+# STRUCTURED INPUT MODEL
+# ===========================================================================
+#
+# `UnraidInput` collects every tool parameter into one validated model. The
+# registered `unraid` tool keeps its flat keyword signature (so the MCP input
+# schema stays flat — top-level `action`, `subaction`, … — and the consumer
+# contract is unchanged), but it immediately packs those args into an
+# `UnraidInput` instance and dispatches through the handler registry below.
+# Keeping the model fields' names/types/defaults identical to the signature
+# guarantees both stay in lockstep.
+class UnraidInput(BaseModel):
+    """Validated parameter bag for the consolidated `unraid` tool.
+
+    Field names, types, and defaults mirror the `unraid` tool signature exactly.
+    The tool builds one of these from its flat keyword args, so the MCP-facing
+    input schema is unaffected — this is an internal structure used for dispatch.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    # Typed `str`, not the UNRAID_ACTIONS Literal: the MCP-facing enum constraint
+    # lives on the tool *signature* (which is what builds the input schema). The
+    # model accepts any string so an invalid action falls through to the registry
+    # lookup and raises a uniform ToolError — matching the original ladder's
+    # behavior — instead of a pydantic ValidationError.
+    action: str = Field(description="Domain to operate on (one of the actions).")
+    subaction: str = Field(default="", description="Operation within the action.")
+    confirm: bool = Field(
+        default=False,
+        description=(
+            "Set True for destructive subactions (marked *). Interactive clients are "
+            "prompted via elicitation; agents and one-shot API callers must pass "
+            "confirm=True to bypass elicitation."
+        ),
+    )
+    # system
+    device_id: str | None = Field(default=None, description="UPS device id (system/ups_device).")
+    # array + disk
+    disk_id: str | None = Field(default=None, description="Disk identifier.")
+    correct: bool | None = Field(
+        default=None, description="Correct parity errors during a check (array)."
+    )
+    slot: int | None = Field(default=None, description="Disk slot number (array add/remove).")
+    # disk
+    log_path: str | None = Field(default=None, description="Log file path (disk/logs).")
+    tail_lines: int = Field(default=100, description="Number of trailing log lines (disk/logs).")
+    remote_name: str | None = Field(default=None, description="Rclone remote name (disk/flash_backup).")
+    source_path: str | None = Field(default=None, description="Source path (disk/flash_backup).")
+    destination_path: str | None = Field(
+        default=None, description="Destination path (disk/flash_backup)."
+    )
+    backup_options: dict[str, Any] | None = Field(
+        default=None, description="Flash-backup options (disk/flash_backup)."
+    )
+    # docker
+    container_id: str | None = Field(default=None, description="Docker container ID or name.")
+    network_id: str | None = Field(default=None, description="Docker network ID (docker/network_details).")
+    container_ids: list[str] | None = Field(
+        default=None, description="Multiple container IDs/names (docker/update_containers)."
+    )
+    with_image: bool = Field(
+        default=False, description="Also remove the image (docker/remove_container)."
+    )
+    autostart_entries: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Autostart config: [{id, autoStart, wait?}] (docker/update_autostart).",
+    )
+    organizer_input: dict[str, Any] | None = Field(
+        default=None,
+        description="Docker organizer/folder mutation fields (docker/*_folder, *_entries, etc.).",
+    )
+    # vm
+    vm_id: str | None = Field(default=None, description="VM identifier.")
+    # notification
+    notification_id: str | None = Field(default=None, description="Single notification ID.")
+    notification_ids: list[str] | None = Field(
+        default=None, description="Multiple notification IDs."
+    )
+    notification_type: str | None = Field(default=None, description="Notification type (create).")
+    importance: str | None = Field(default=None, description="Notification importance (create).")
+    offset: int = Field(default=0, description="Pagination offset.")
+    limit: int = Field(default=20, description="Max items to return.")
+    list_type: str = Field(default="UNREAD", description="Notification list filter.")
+    title: str | None = Field(default=None, description="Notification title (create).")
+    subject: str | None = Field(default=None, description="Notification subject (create).")
+    description: str | None = Field(default=None, description="Notification description (create).")
+    # key
+    key_id: str | None = Field(default=None, description="API key identifier.")
+    name: str | None = Field(
+        default=None,
+        description=(
+            "Name for create/update operations (also server name for "
+            "setting/update_server_identity)."
+        ),
+    )
+    roles: list[str] | None = Field(
+        default=None,
+        description="Roles (key ops, key/permissions_for_roles, key/preview_permissions).",
+    )
+    permissions: list[str] | None = Field(default=None, description="Permission strings (key ops).")
+    permissions_input: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Structured permissions [{resource, actions}] (key/preview_permissions).",
+    )
+    # plugin
+    names: list[str] | None = Field(default=None, description="Plugin names (plugin/add, remove).")
+    bundled: bool = Field(default=False, description="Include bundled plugins (plugin/list).")
+    restart: bool = Field(default=True, description="Restart after plugin op.")
+    url: str | None = Field(
+        default=None, description="Plugin .plg URL (plugin/install, plugin/install_language)."
+    )
+    plugin_name: str | None = Field(default=None, description="Optional plugin name (plugin/install).")
+    forced: bool = Field(default=False, description="Force plugin install (plugin/install).")
+    operation_id: str | None = Field(
+        default=None,
+        description="Plugin install operation ID (plugin/install_operation, live/plugin_install_updates).",
+    )
+    # rclone
+    provider_type: str | None = Field(
+        default=None, description="Rclone provider type (rclone/create_remote)."
+    )
+    config_data: dict[str, Any] | None = Field(
+        default=None, description="Rclone remote config (rclone/create_remote)."
+    )
+    # setting
+    settings_input: dict[str, Any] | None = Field(
+        default=None, description="Settings input object (setting/update)."
+    )
+    ups_config: dict[str, Any] | None = Field(
+        default=None, description="UPS config object (setting/configure_ups)."
+    )
+    config_input: dict[str, Any] | None = Field(
+        default=None,
+        description="Input object for setting/update_ssh, update_temperature, update_system_time.",
+    )
+    comment: str | None = Field(
+        default=None, description="Server comment (setting/update_server_identity)."
+    )
+    sys_model: str | None = Field(
+        default=None, description="Server model string (setting/update_server_identity)."
+    )
+    # connect
+    connect_input: dict[str, Any] | None = Field(
+        default=None,
+        description="Input object for connect mutations (sign_in, setup_remote_access, etc.).",
+    )
+    # onboarding
+    onboarding_input: dict[str, Any] | None = Field(
+        default=None,
+        description="Input object for onboarding/set_override, create_internal_boot_pool.",
+    )
+    # customization
+    theme_name: str | None = Field(default=None, description="Theme name (customization/set_theme).")
+    locale: str | None = Field(default=None, description="Locale string (customization/set_locale).")
+    # oidc
+    provider_id: str | None = Field(default=None, description="OIDC provider id (oidc/provider).")
+    token: str | None = Field(default=None, description="Session token (oidc/validate_session).")
+    # subscriptions
+    subscription_query: str | None = Field(
+        default=None, description="Raw GraphQL subscription string (subscriptions/test_query)."
+    )
+    # live
+    path: str | None = Field(default=None, description="Log file path (live/log_tail).")
+    collect_for: float = Field(
+        default=5.0, description="WebSocket collection duration in seconds."
+    )
+    timeout: float = Field(default=10.0, description="WebSocket timeout in seconds.")
+    # log filtering (disk/logs + live/log_tail)
+    level: str | None = Field(
+        default=None,
+        description=(
+            "Filter logs to this severity and above: one of debug, info, notice, warning, "
+            "error, critical (disk/logs and live/log_tail). Omit for no filtering."
+        ),
+    )
+    context: int = Field(
+        default=2,
+        description=(
+            "Lines of context kept before/after each matching log line (default 2). "
+            "Non-contiguous matches are separated by ---."
+        ),
+    )
+
+
+# ===========================================================================
+# DISPATCH REGISTRY
+# ===========================================================================
+#
+# One async adapter per action, mapping the structured `UnraidInput` onto the
+# corresponding `_handle_*` with the exact same keyword arguments the original
+# 19-branch ladder used. Replaces the `if action == ...` chain (arch-L2).
+# Handlers that need no ctx ignore the `ctx` parameter. The `help` action is a
+# pure-string special case kept inline in the tool body (no GraphQL/ctx needed).
+
+# Type of a registry entry: (input model, ctx) -> result.
+_ActionHandler = Callable[[UnraidInput, "Context | None"], Awaitable[dict[str, Any] | str]]
+
+
+async def _dispatch_system(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_system(inp.subaction, device_id=inp.device_id, limit=inp.limit)
+
+
+async def _dispatch_health(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_health(inp.subaction, ctx)
+
+
+async def _dispatch_array(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_array(
+        inp.subaction,
+        disk_id=inp.disk_id,
+        correct=inp.correct,
+        slot=inp.slot,
+        ctx=ctx,
+        confirm=inp.confirm,
+        limit=inp.limit,
+    )
+
+
+async def _dispatch_disk(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_disk(
+        inp.subaction,
+        disk_id=inp.disk_id,
+        log_path=inp.log_path,
+        tail_lines=inp.tail_lines,
+        remote_name=inp.remote_name,
+        source_path=inp.source_path,
+        destination_path=inp.destination_path,
+        backup_options=inp.backup_options,
+        ctx=ctx,
+        confirm=inp.confirm,
+        level=inp.level,
+        context=inp.context,
+        limit=inp.limit,
+    )
+
+
+async def _dispatch_docker(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_docker(
+        inp.subaction,
+        container_id=inp.container_id,
+        network_id=inp.network_id,
+        limit=inp.limit,
+        ctx=ctx,
+        confirm=inp.confirm,
+        container_ids=inp.container_ids,
+        with_image=inp.with_image,
+        autostart_entries=inp.autostart_entries,
+        organizer_input=inp.organizer_input,
+    )
+
+
+async def _dispatch_vm(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_vm(inp.subaction, vm_id=inp.vm_id, ctx=ctx, confirm=inp.confirm)
+
+
+async def _dispatch_notification(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_notification(
+        inp.subaction,
+        ctx=ctx,
+        confirm=inp.confirm,
+        notification_id=inp.notification_id,
+        notification_ids=inp.notification_ids,
+        notification_type=inp.notification_type,
+        importance=inp.importance,
+        offset=inp.offset,
+        limit=inp.limit,
+        list_type=inp.list_type,
+        title=inp.title,
+        subject=inp.subject,
+        description=inp.description,
+    )
+
+
+async def _dispatch_key(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_key(
+        inp.subaction,
+        key_id=inp.key_id,
+        name=inp.name,
+        roles=inp.roles,
+        permissions=inp.permissions,
+        ctx=ctx,
+        confirm=inp.confirm,
+        limit=inp.limit,
+        permissions_input=inp.permissions_input,
+    )
+
+
+async def _dispatch_plugin(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_plugin(
+        inp.subaction,
+        names=inp.names,
+        bundled=inp.bundled,
+        restart=inp.restart,
+        ctx=ctx,
+        confirm=inp.confirm,
+        limit=inp.limit,
+        url=inp.url,
+        plugin_name=inp.plugin_name,
+        forced=inp.forced,
+        operation_id=inp.operation_id,
+    )
+
+
+async def _dispatch_rclone(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_rclone(
+        inp.subaction,
+        name=inp.name,
+        provider_type=inp.provider_type,
+        config_data=inp.config_data,
+        ctx=ctx,
+        confirm=inp.confirm,
+        limit=inp.limit,
+    )
+
+
+async def _dispatch_setting(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_setting(
+        inp.subaction,
+        settings_input=inp.settings_input,
+        ups_config=inp.ups_config,
+        ctx=ctx,
+        confirm=inp.confirm,
+        config_input=inp.config_input,
+        name=inp.name,
+        comment=inp.comment,
+        sys_model=inp.sys_model,
+    )
+
+
+async def _dispatch_connect(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_connect(
+        inp.subaction, ctx=ctx, confirm=inp.confirm, connect_input=inp.connect_input
+    )
+
+
+async def _dispatch_onboarding(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_onboarding(
+        inp.subaction, ctx=ctx, confirm=inp.confirm, onboarding_input=inp.onboarding_input
+    )
+
+
+async def _dispatch_customization(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_customization(
+        inp.subaction, theme_name=inp.theme_name, locale=inp.locale
+    )
+
+
+async def _dispatch_oidc(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_oidc(
+        inp.subaction, provider_id=inp.provider_id, token=inp.token, limit=inp.limit
+    )
+
+
+async def _dispatch_user(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_user(inp.subaction)
+
+
+async def _dispatch_live(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    return await _handle_live(
+        inp.subaction,
+        path=inp.path,
+        collect_for=inp.collect_for,
+        timeout=inp.timeout,
+        level=inp.level,
+        context=inp.context,
+        limit=inp.limit,
+        operation_id=inp.operation_id,
+    )
+
+
+async def _dispatch_subscriptions(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+    # Lazy import to keep tool import-time free of the subscription stack
+    # (mirrors the health/diagnose pattern).
+    from ..subscriptions.diagnostics import _handle_subscriptions
+
+    return await _handle_subscriptions(inp.subaction, inp.subscription_query)
+
+
+# action name -> adapter. Built once at import; `help` is handled inline in the
+# tool body because it is a pure string with no ctx/GraphQL dependency.
+_ACTION_DISPATCH: dict[str, _ActionHandler] = {
+    "system": _dispatch_system,
+    "health": _dispatch_health,
+    "array": _dispatch_array,
+    "disk": _dispatch_disk,
+    "docker": _dispatch_docker,
+    "vm": _dispatch_vm,
+    "notification": _dispatch_notification,
+    "key": _dispatch_key,
+    "plugin": _dispatch_plugin,
+    "rclone": _dispatch_rclone,
+    "setting": _dispatch_setting,
+    "connect": _dispatch_connect,
+    "onboarding": _dispatch_onboarding,
+    "customization": _dispatch_customization,
+    "oidc": _dispatch_oidc,
+    "user": _dispatch_user,
+    "live": _dispatch_live,
+    "subscriptions": _dispatch_subscriptions,
+}
+
+
 def register_unraid_tool(mcp: FastMCP) -> None:
     """Register the single `unraid` tool with the FastMCP instance."""
 
@@ -523,169 +928,83 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         Non-contiguous matches are separated by a '---' marker. Omit level for
         unchanged output.
         """
+        # `help` is a pure string with no ctx/GraphQL dependency — handle it
+        # before building the model so it stays a trivial fast path.
         if action == "help":
             return _HELP_TEXT
 
-        if action == "system":
-            return await _handle_system(subaction, device_id=device_id, limit=limit)
-
-        if action == "health":
-            return await _handle_health(subaction, ctx)
-
-        if action == "array":
-            return await _handle_array(
-                subaction,
-                disk_id=disk_id,
-                correct=correct,
-                slot=slot,
-                ctx=ctx,
-                confirm=confirm,
-                limit=limit,
-            )
-
-        if action == "disk":
-            return await _handle_disk(
-                subaction,
-                disk_id=disk_id,
-                log_path=log_path,
-                tail_lines=tail_lines,
-                remote_name=remote_name,
-                source_path=source_path,
-                destination_path=destination_path,
-                backup_options=backup_options,
-                ctx=ctx,
-                confirm=confirm,
-                level=level,
-                context=context,
-                limit=limit,
-            )
-
-        if action == "docker":
-            return await _handle_docker(
-                subaction,
-                container_id=container_id,
-                network_id=network_id,
-                limit=limit,
-                ctx=ctx,
-                confirm=confirm,
-                container_ids=container_ids,
-                with_image=with_image,
-                autostart_entries=autostart_entries,
-                organizer_input=organizer_input,
-            )
-
-        if action == "vm":
-            return await _handle_vm(subaction, vm_id=vm_id, ctx=ctx, confirm=confirm)
-
-        if action == "notification":
-            return await _handle_notification(
-                subaction,
-                ctx=ctx,
-                confirm=confirm,
-                notification_id=notification_id,
-                notification_ids=notification_ids,
-                notification_type=notification_type,
-                importance=importance,
-                offset=offset,
-                limit=limit,
-                list_type=list_type,
-                title=title,
-                subject=subject,
-                description=description,
-            )
-
-        if action == "key":
-            return await _handle_key(
-                subaction,
-                key_id=key_id,
-                name=name,
-                roles=roles,
-                permissions=permissions,
-                ctx=ctx,
-                confirm=confirm,
-                limit=limit,
-                permissions_input=permissions_input,
-            )
-
-        if action == "plugin":
-            return await _handle_plugin(
-                subaction,
-                names=names,
-                bundled=bundled,
-                restart=restart,
-                ctx=ctx,
-                confirm=confirm,
-                limit=limit,
-                url=url,
-                plugin_name=plugin_name,
-                forced=forced,
-                operation_id=operation_id,
-            )
-
-        if action == "rclone":
-            return await _handle_rclone(
-                subaction,
-                name=name,
-                provider_type=provider_type,
-                config_data=config_data,
-                ctx=ctx,
-                confirm=confirm,
-                limit=limit,
-            )
-
-        if action == "setting":
-            return await _handle_setting(
-                subaction,
-                settings_input=settings_input,
-                ups_config=ups_config,
-                ctx=ctx,
-                confirm=confirm,
-                config_input=config_input,
-                name=name,
-                comment=comment,
-                sys_model=sys_model,
-            )
-
-        if action == "connect":
-            return await _handle_connect(
-                subaction, ctx=ctx, confirm=confirm, connect_input=connect_input
-            )
-
-        if action == "onboarding":
-            return await _handle_onboarding(
-                subaction, ctx=ctx, confirm=confirm, onboarding_input=onboarding_input
-            )
-
-        if action == "customization":
-            return await _handle_customization(subaction, theme_name=theme_name, locale=locale)
-
-        if action == "oidc":
-            return await _handle_oidc(subaction, provider_id=provider_id, token=token, limit=limit)
-
-        if action == "user":
-            return await _handle_user(subaction)
-
-        if action == "live":
-            return await _handle_live(
-                subaction,
-                path=path,
-                collect_for=collect_for,
-                timeout=timeout,
-                level=level,
-                context=context,
-                limit=limit,
-                operation_id=operation_id,
-            )
-
-        if action == "subscriptions":
-            # Lazy import to keep tool import-time free of the subscription stack
-            # (mirrors the health/diagnose pattern above).
-            from ..subscriptions.diagnostics import _handle_subscriptions
-
-            return await _handle_subscriptions(subaction, subscription_query)
-
-        raise ToolError(
-            f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"
+        # Pack the flat keyword args into the structured input model. The tool
+        # signature stays flat (so the MCP input schema is unchanged), but the
+        # rest of the routing operates on the validated model.
+        inp = UnraidInput(
+            action=action,
+            subaction=subaction,
+            confirm=confirm,
+            device_id=device_id,
+            disk_id=disk_id,
+            correct=correct,
+            slot=slot,
+            log_path=log_path,
+            tail_lines=tail_lines,
+            remote_name=remote_name,
+            source_path=source_path,
+            destination_path=destination_path,
+            backup_options=backup_options,
+            container_id=container_id,
+            network_id=network_id,
+            container_ids=container_ids,
+            with_image=with_image,
+            autostart_entries=autostart_entries,
+            organizer_input=organizer_input,
+            vm_id=vm_id,
+            notification_id=notification_id,
+            notification_ids=notification_ids,
+            notification_type=notification_type,
+            importance=importance,
+            offset=offset,
+            limit=limit,
+            list_type=list_type,
+            title=title,
+            subject=subject,
+            description=description,
+            key_id=key_id,
+            name=name,
+            roles=roles,
+            permissions=permissions,
+            permissions_input=permissions_input,
+            names=names,
+            bundled=bundled,
+            restart=restart,
+            url=url,
+            plugin_name=plugin_name,
+            forced=forced,
+            operation_id=operation_id,
+            provider_type=provider_type,
+            config_data=config_data,
+            settings_input=settings_input,
+            ups_config=ups_config,
+            config_input=config_input,
+            comment=comment,
+            sys_model=sys_model,
+            connect_input=connect_input,
+            onboarding_input=onboarding_input,
+            theme_name=theme_name,
+            locale=locale,
+            provider_id=provider_id,
+            token=token,
+            subscription_query=subscription_query,
+            path=path,
+            collect_for=collect_for,
+            timeout=timeout,
+            level=level,
+            context=context,
         )
+
+        handler = _ACTION_DISPATCH.get(action)
+        if handler is None:
+            raise ToolError(
+                f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"
+            )
+        return await handler(inp, ctx)
 
     logger.info("Unraid tool registered successfully")
