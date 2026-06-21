@@ -130,10 +130,16 @@ async def test_install_rejects_bad_url_scheme(_mock_graphql):
 
 
 @pytest.mark.asyncio
-async def test_install_passes_input(_mock_graphql):
+async def test_install_passes_input(_mock_graphql, monkeypatch):
     _mock_graphql.return_value = {
         "unraidPlugins": {"installPlugin": {"id": "op2", "status": "QUEUED"}}
     }
+    # Resolve the public host to a stable public IP so the SSRF guard passes
+    # without touching real DNS/network.
+    monkeypatch.setattr(
+        "unraid_mcp.tools._plugin.socket.getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
     result = await _make_tool()(
         action="plugin",
         subaction="install",
@@ -145,3 +151,91 @@ async def test_install_passes_input(_mock_graphql):
     assert result["operation"]["status"] == "QUEUED"
     sent = _mock_graphql.call_args.args[1]
     assert sent["input"] == {"url": "https://example.com/x.plg", "forced": True, "name": "x"}
+
+
+# --- SSRF guard (findings S-H2 / T-H4) -------------------------------------
+# install/install_language forward the URL to the Unraid API which fetches & runs
+# the .plg as root. The guard must reject URLs whose host resolves to a
+# private/loopback/link-local/reserved/unspecified address.
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "http://169.254.169.254/x.plg",  # cloud metadata (link-local)
+        "https://127.0.0.1/x.plg",  # loopback
+        "http://192.168.1.1/x.plg",  # RFC1918 private
+        "https://10.0.0.5/x.plg",  # RFC1918 private
+        "http://[::1]/x.plg",  # IPv6 loopback
+    ],
+)
+@pytest.mark.asyncio
+async def test_install_rejects_ssrf_targets(_mock_graphql, bad_url):
+    from unraid_mcp.core.exceptions import ToolError
+
+    # confirm=True so the destructive gate passes — the SSRF guard, not the
+    # confirm-gate, must be what trips. GraphQL must never be reached.
+    with pytest.raises(ToolError):
+        await _make_tool()(action="plugin", subaction="install", url=bad_url, confirm=True)
+    _mock_graphql.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "http://169.254.169.254/x.plg",
+        "https://127.0.0.1/x.plg",
+        "http://192.168.1.1/x.plg",
+        "https://10.0.0.5/x.plg",
+        "http://[::1]/x.plg",
+    ],
+)
+@pytest.mark.asyncio
+async def test_install_language_rejects_ssrf_targets(_mock_graphql, bad_url):
+    from unraid_mcp.core.exceptions import ToolError
+
+    with pytest.raises(ToolError):
+        await _make_tool()(
+            action="plugin", subaction="install_language", url=bad_url, confirm=True
+        )
+    _mock_graphql.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_install_rejects_unresolvable_host(_mock_graphql, monkeypatch):
+    """DNS resolution failure must fail closed, not forward the URL."""
+    import socket
+
+    from unraid_mcp.core.exceptions import ToolError
+
+    def _boom(*_a, **_k):
+        raise socket.gaierror("name or service not known")
+
+    monkeypatch.setattr("unraid_mcp.tools._plugin.socket.getaddrinfo", _boom)
+    with pytest.raises(ToolError, match="could not be resolved"):
+        await _make_tool()(
+            action="plugin",
+            subaction="install",
+            url="https://no-such-host.invalid/x.plg",
+            confirm=True,
+        )
+    _mock_graphql.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_install_allows_public_host(_mock_graphql, monkeypatch):
+    """A public-resolving host passes the SSRF guard and reaches the API."""
+    _mock_graphql.return_value = {
+        "unraidPlugins": {"installPlugin": {"id": "op3", "status": "QUEUED"}}
+    }
+    monkeypatch.setattr(
+        "unraid_mcp.tools._plugin.socket.getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],  # example.com (public)
+    )
+    result = await _make_tool()(
+        action="plugin",
+        subaction="install",
+        url="https://example.com/x.plg",
+        confirm=True,
+    )
+    assert result["operation"]["status"] == "QUEUED"
+    _mock_graphql.assert_called_once()
