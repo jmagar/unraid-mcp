@@ -1,11 +1,14 @@
 """Tests for the setting subactions of the consolidated unraid tool."""
 
+import importlib
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
 
+from unraid_mcp.config import settings as settings_module
+from unraid_mcp.config.settings import Settings
 from unraid_mcp.core.exceptions import ToolError
 
 
@@ -244,3 +247,93 @@ class TestSettingsServerIdentitySuccess:
             action="setting", subaction="update_server_identity", name="Tower"
         )
         assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Module-level startup guards (S-H1 SSL fail-closed + port range)
+#
+# These are security-relevant guards in unraid_mcp/config/settings.py that lost
+# direct coverage in the pydantic migration:
+#   * the port guard is now the pydantic field validator Settings._parse_port —
+#     testable by instantiating Settings(...) directly;
+#   * the S-H1 verify-ssl guard is genuinely module-level (it depends on the
+#     cross-field UNRAID_VERIFY_SSL / UNRAID_ALLOW_INSECURE_TLS interaction and
+#     calls sys.exit(1) after Settings()) — only reachable by re-executing the
+#     module, so these tests reload it under a patched os.environ.
+# ---------------------------------------------------------------------------
+
+
+class TestPortGuard:
+    """Direct coverage for the Settings._parse_port pydantic field validator."""
+
+    @pytest.mark.parametrize("bad_port", ["abc", "0", "65536"])
+    def test_bad_port_exits(self, bad_port: str) -> None:
+        # Non-integer or out-of-range (1-65535) ports are a fatal startup error.
+        with pytest.raises(SystemExit) as excinfo:
+            Settings(UNRAID_MCP_PORT=bad_port)
+        assert excinfo.value.code == 1
+
+    def test_valid_port_parsed_to_int(self) -> None:
+        settings = Settings(UNRAID_MCP_PORT="8080")
+        assert settings.unraid_mcp_port == 8080
+        assert isinstance(settings.unraid_mcp_port, int)
+
+
+@pytest.fixture
+def _reload_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[None, None, None]:
+    """Reload the settings module under a controlled env, restoring it afterwards.
+
+    The S-H1 guard fires while the module body executes, so it can only be
+    exercised by re-importing the module. After the test, reload once more with a
+    clean (verify-on) env so the global module state other tests share is left in
+    a known-good shape rather than whatever the last test forced.
+    """
+    # Clear the TLS-related vars so each test starts from a known baseline and
+    # only the values it sets are in effect.
+    monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
+    monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+    try:
+        yield
+    finally:
+        monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
+        monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+        importlib.reload(settings_module)
+
+
+class TestVerifySslGuard:
+    """Coverage for the S-H1 SSL fail-closed guard (module-level, cross-field)."""
+
+    @pytest.mark.parametrize("falsey", ["false", "0", "no"])
+    def test_disabled_without_opt_in_exits(
+        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch, falsey: str
+    ) -> None:
+        # Disabling verification without the explicit UNRAID_ALLOW_INSECURE_TLS
+        # opt-in must fail closed with sys.exit(1).
+        monkeypatch.setenv("UNRAID_VERIFY_SSL", falsey)
+        with pytest.raises(SystemExit) as excinfo:
+            importlib.reload(settings_module)
+        assert excinfo.value.code == 1
+
+    @pytest.mark.parametrize("falsey", ["false", "0", "no"])
+    def test_disabled_with_opt_in_allowed(
+        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch, falsey: str
+    ) -> None:
+        # With the second opt-in present, verification may be disabled: no exit,
+        # and UNRAID_VERIFY_SSL resolves to the bool False.
+        monkeypatch.setenv("UNRAID_VERIFY_SSL", falsey)
+        monkeypatch.setenv("UNRAID_ALLOW_INSECURE_TLS", "true")
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_VERIFY_SSL is False
+
+    def test_ca_bundle_path_preserved_as_str(
+        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A value that is neither truthy nor falsey is treated as a CA-bundle
+        # path and preserved verbatim as a str (the safe self-signed-cert route).
+        ca_path = "/etc/ssl/certs/myca.pem"
+        monkeypatch.setenv("UNRAID_VERIFY_SSL", ca_path)
+        importlib.reload(settings_module)
+        assert ca_path == settings_module.UNRAID_VERIFY_SSL
+        assert isinstance(settings_module.UNRAID_VERIFY_SSL, str)

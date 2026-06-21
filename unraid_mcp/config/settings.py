@@ -13,8 +13,13 @@ retained as hand-written code that runs at import time:
 * refusal to load a *symlinked* env file (CWE-22 / symlink-attack guard);
 * the issue-#28 fix where an empty-string credential env var must NOT shadow the
   value coming from a ``.env`` file;
-* the fatal ``sys.exit(1)`` startup guards for ports and the
-  ``UNRAID_VERIFY_SSL`` / ``UNRAID_ALLOW_INSECURE_TLS`` (S-H1) interaction.
+* the fatal ``sys.exit(1)`` guard for the ``UNRAID_VERIFY_SSL`` /
+  ``UNRAID_ALLOW_INSECURE_TLS`` (S-H1) interaction, which runs at module level
+  *after* ``Settings()`` because it depends on cross-field state.
+
+The fatal-on-bad-input port guard, by contrast, *is* expressed inside the model
+as the pydantic field validator ``Settings._parse_port`` (it only needs the
+single ``UNRAID_MCP_PORT`` field), so it is not module-level hand-written code.
 
 Every name this module historically exported is re-exported, unchanged, at the
 end of the file so existing imports (``from ..config.settings import X`` and
