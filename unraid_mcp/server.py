@@ -7,6 +7,8 @@ separate modules for configuration, core functionality, subscriptions, and tools
 import os
 import secrets
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 from dotenv import set_key
@@ -32,7 +34,9 @@ from .config.settings import (
 )
 from .core import middleware_refs as _middleware_refs
 from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
+from .core.client import close_http_client
 from .core.response_limit import StructuredResponseLimitingMiddleware
+from .subscriptions.manager import subscription_manager
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
@@ -96,12 +100,42 @@ _response_limiter = StructuredResponseLimitingMiddleware(max_size=UNRAID_MCP_MAX
 # read/write tools.
 
 
+@asynccontextmanager
+async def lifespan(_server: "FastMCP") -> AsyncIterator[None]:
+    """Server lifespan: run shutdown cleanup inside the server's own event loop.
+
+    FastMCP enters this context manager on startup (before the transport begins
+    serving) and exits it on shutdown — on every transport and every exit path,
+    including a normal ``mcp.run()`` return and SIGTERM (the container stop
+    signal). Putting teardown here guarantees WebSocket subscription tasks and the
+    shared httpx connection pool are released in the SAME loop that created them,
+    instead of the old ``asyncio.run(...)``-in-a-fresh-loop dance in ``main.py``
+    that swallowed "event loop is closed" errors and never ran on SIGTERM.
+
+    Startup work (subscription auto-start) is unchanged: it is triggered lazily on
+    the first resource read via ``ensure_subscriptions_started()`` in
+    ``subscriptions/resources.py`` — nothing to do here on the startup side.
+    """
+    try:
+        yield
+    finally:
+        try:
+            await subscription_manager.stop_all()
+        except Exception:
+            logger.error("Error stopping subscriptions during shutdown", exc_info=True)
+        try:
+            await close_http_client()
+        except Exception:
+            logger.error("Error closing HTTP client during shutdown", exc_info=True)
+
+
 # Initialize FastMCP instance — ASGI-level bearer auth added at run time via
 # mcp.run(middleware=[...]) so it fires before any MCP protocol processing.
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
+    lifespan=lifespan,
     middleware=[
         _logging_middleware,
         _error_middleware,

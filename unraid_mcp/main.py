@@ -5,37 +5,7 @@ This is the main entry point for the Unraid MCP Server. It imports and starts
 the modular server implementation from unraid_mcp.server.
 """
 
-import asyncio
 import sys
-
-
-async def shutdown_cleanup() -> None:
-    """Cleanup resources on server shutdown."""
-    try:
-        from .subscriptions.manager import subscription_manager
-
-        await subscription_manager.stop_all()
-    except Exception as e:
-        print(f"Error stopping subscriptions during cleanup: {e}", file=sys.stderr)
-
-    try:
-        from .core.client import close_http_client
-
-        await close_http_client()
-    except Exception as e:
-        print(f"Error during cleanup: {e}", file=sys.stderr)
-
-
-def _run_shutdown_cleanup() -> None:
-    """Run shutdown cleanup, suppressing expected event loop errors."""
-    try:
-        asyncio.run(shutdown_cleanup())
-    except RuntimeError as e:
-        msg = str(e).lower()
-        if "event loop is closed" in msg or "no running event loop" in msg:
-            pass  # Expected during shutdown
-        else:
-            print(f"WARNING: Unexpected error during cleanup: {e}", file=sys.stderr)
 
 
 def main() -> None:
@@ -58,16 +28,18 @@ def main() -> None:
 
         sys.exit(run_plugin_hook())
 
+    # Shutdown cleanup (subscription_manager.stop_all() + close_http_client())
+    # now runs IN the server's own event loop via the FastMCP lifespan defined in
+    # server.py — on every transport and exit path, including a normal mcp.run()
+    # return and SIGTERM. So there is no longer a separate cleanup call here.
     try:
         from .server import run_server
 
         run_server()
     except KeyboardInterrupt:
         print("\nServer stopped by user")
-        _run_shutdown_cleanup()
     except Exception as e:
         print(f"Server failed to start: {e}")
-        _run_shutdown_cleanup()
         raise
 
 
