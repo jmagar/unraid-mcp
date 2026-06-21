@@ -20,6 +20,8 @@ from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.client import redact_sensitive
 from ..core.types import SubscriptionData
+from .protocol import CompleteEvent, DataEvent, ErrorEvent, iter_messages
+from .state import SubscriptionState, _StateFieldView
 from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 
 
@@ -28,17 +30,6 @@ _MAX_RESOURCE_DATA_BYTES = 1_048_576  # 1MB
 _MAX_RESOURCE_DATA_LINES = 5_000
 # Minimum stable connection duration (seconds) before resetting reconnect counter
 _STABLE_CONNECTION_SECONDS = 30
-
-
-def _preview(message: str | bytes, n: int = 200) -> str:
-    """Return the first *n* characters of *message* as a UTF-8 string.
-
-    Safe for both str and bytes payloads; replaces unmappable bytes rather
-    than raising. Used to log a safe, bounded snippet before/after errors.
-    """
-    if isinstance(message, str):
-        return message[:n]
-    return message[:n].decode("utf-8", errors="replace")
 
 
 # Subscription names that carry log content and therefore need _cap_log_content.
@@ -93,16 +84,67 @@ def _cap_log_content(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class SubscriptionManager:
-    """Manages GraphQL subscriptions and converts them to MCP resources."""
+    """Manages GraphQL subscriptions and converts them to MCP resources.
+
+    Per-subscription state is consolidated into a single
+    ``dict[str, SubscriptionState]`` (``self.states``) — one object per name —
+    instead of ~8 parallel dicts. The historical attribute surface
+    (``active_subscriptions``, ``resource_data``, ``connection_states``,
+    ``last_error``, ``reconnect_attempts``, ``_connection_start_times``,
+    ``_last_graphql_error``, ``_graphql_error_count``) is preserved as
+    :class:`~.state._StateFieldView` field-projections over ``self.states`` so
+    callers and tests can keep reading/writing them as mappings, while
+    ``self.states`` remains the one source of truth.
+
+    Lock discipline (unchanged):
+
+    * ``_task_lock`` guards the task-lifecycle fields of each state (task,
+      connection_state, last_error, reconnect_attempts, connection_start_time,
+      and the graphql-error-dedup fields).
+    * ``_data_lock`` guards the ``data`` field (WebSocket message writes + reads).
+
+    Two fine-grained locks (instead of one coarse lock) keep WebSocket message
+    updates from blocking tool reads of the task state and vice versa.
+
+    ABBA-avoidance: :meth:`get_subscription_status` needs both lock-protected
+    field groups, so it snapshots under each lock *separately* (acquire/release
+    ``_task_lock``, then acquire/release ``_data_lock``) — never holding both at
+    once. This is required because ``_subscription_loop`` holds ``_data_lock``
+    while writing ``data`` and, at loop exit, acquires ``_task_lock`` to clear its
+    task; holding both here in the opposite order would form the classic ABBA
+    cycle.
+    """
 
     def __init__(self) -> None:
-        self.active_subscriptions: dict[str, asyncio.Task[None]] = {}
-        self.resource_data: dict[str, SubscriptionData] = {}
-        # Two fine-grained locks instead of one coarse lock (P-01):
-        # _task_lock guards active_subscriptions dict (task lifecycle).
-        # _data_lock guards resource_data dict (WebSocket message writes + reads).
-        # Splitting prevents WebSocket message updates from blocking tool reads
-        # of active_subscriptions and vice versa.
+        # Consolidated single source of truth: one SubscriptionState per name.
+        self.states: dict[str, SubscriptionState] = {}
+
+        # Backward-compatible field-views over self.states (see class docstring).
+        self.active_subscriptions: _StateFieldView[asyncio.Task[None]] = _StateFieldView(
+            self.states, "task", None
+        )
+        self.resource_data: _StateFieldView[SubscriptionData] = _StateFieldView(
+            self.states, "data", None
+        )
+        self.connection_states: _StateFieldView[str] = _StateFieldView(
+            self.states, "connection_state", ""
+        )
+        self.last_error: _StateFieldView[str] = _StateFieldView(self.states, "last_error", None)
+        self.reconnect_attempts: _StateFieldView[int] = _StateFieldView(
+            self.states, "reconnect_attempts", 0
+        )
+        self._connection_start_times: _StateFieldView[float] = _StateFieldView(
+            self.states, "connection_start_time", None
+        )
+        # Deduplicated GraphQL error tracking (first error in the current burst +
+        # repeat count) — used to suppress log spam.
+        self._last_graphql_error: _StateFieldView[str] = _StateFieldView(
+            self.states, "graphql_error_msg", None
+        )
+        self._graphql_error_count: _StateFieldView[int] = _StateFieldView(
+            self.states, "graphql_error_count", 0
+        )
+
         self._task_lock = asyncio.Lock()
         self._data_lock = asyncio.Lock()
 
@@ -110,15 +152,7 @@ class SubscriptionManager:
         self.auto_start_enabled = (
             os.getenv("UNRAID_AUTO_START_SUBSCRIPTIONS", "true").lower() == "true"
         )
-        self.reconnect_attempts: dict[str, int] = {}
         self.max_reconnect_attempts = int(os.getenv("UNRAID_MAX_RECONNECT_ATTEMPTS", "10"))
-        self.connection_states: dict[str, str] = {}  # Track connection state per subscription
-        self.last_error: dict[str, str] = {}  # Track last error per subscription
-        self._connection_start_times: dict[str, float] = {}  # Track when connections started
-        # Track last GraphQL error per subscription to deduplicate log spam.
-        # Key: subscription name, Value: first error message seen in the current burst.
-        self._last_graphql_error: dict[str, str] = {}
-        self._graphql_error_count: dict[str, int] = {}
 
         # Define subscription configurations
         from .queries import SNAPSHOT_ACTIONS
@@ -169,6 +203,64 @@ class SubscriptionManager:
         self.connection_states[name] = state
         if error is not None:
             self.last_error[name] = error
+
+    async def _store_subscription_data(self, subscription_name: str, data: Any) -> None:
+        """Cache a fresh subscription data payload under _data_lock.
+
+        Clears any GraphQL-error burst (data means recovery), caps log content for
+        log subscriptions to bound memory, and writes the resource cache. The
+        write happens under ``_data_lock`` (paired with ``get_resource_data``).
+        """
+        self._clear_graphql_error_burst(subscription_name)
+        capped_data = (
+            _cap_log_content(data)
+            if isinstance(data, dict) and subscription_name in _LOG_SUBSCRIPTION_NAMES
+            else data
+        )
+        new_entry = SubscriptionData(data=capped_data, last_updated=datetime.now(UTC))
+        async with self._data_lock:
+            self.resource_data[subscription_name] = new_entry
+        logger.debug(
+            "[RESOURCE:%s] Resource data updated successfully",
+            subscription_name,
+        )
+
+    def _track_graphql_error(self, subscription_name: str, errors: Any) -> None:
+        """Record a GraphQL-error payload with deduplicated log spam.
+
+        Logs the first occurrence of a distinct error as a warning, periodic
+        reminders at powers of ten for repeats, and debug otherwise. Always
+        records ``last_error``. Contains no ``await`` (matches the historical
+        inline write).
+        """
+        err_msg = str(errors)
+        prev = self._last_graphql_error.get(subscription_name)
+        count = self._graphql_error_count.get(subscription_name, 0) + 1
+        self._graphql_error_count[subscription_name] = count
+        if prev != err_msg:
+            # First occurrence of this error — log as warning.
+            self._last_graphql_error[subscription_name] = err_msg
+            self._graphql_error_count[subscription_name] = 1
+            logger.warning(
+                "[DATA:%s] GraphQL error (will suppress repeats): %s",
+                subscription_name,
+                err_msg,
+            )
+        elif count in (10, 100, 1000):
+            # Periodic reminder at powers of 10.
+            logger.warning(
+                "[DATA:%s] GraphQL error repeated %d times: %s",
+                subscription_name,
+                count,
+                err_msg,
+            )
+        else:
+            logger.debug(
+                "[DATA:%s] GraphQL error (repeat #%d)",
+                subscription_name,
+                count,
+            )
+        self.last_error[subscription_name] = f"GraphQL errors: {errors}"
 
     async def auto_start_all_subscriptions(self) -> None:
         """Auto-start all subscriptions marked for auto-start.
@@ -463,154 +555,60 @@ class SubscriptionManager:
                     )
                     self._set_connection_state(subscription_name, "subscribed")
 
-                    # Listen for subscription data
-                    message_count = 0
-
-                    async for message in websocket:
-                        try:
-                            data = json.loads(message)
-                            message_count += 1
-                            message_type = data.get("type", "unknown")
-
-                            logger.debug(
-                                "[DATA:%s] Message #%d: %s",
-                                subscription_name,
-                                message_count,
-                                message_type,
-                            )
-
-                            # Handle different message types
-                            expected_data_type = (
-                                "next" if selected_proto == "graphql-transport-ws" else "data"
-                            )
-
-                            if (
-                                data.get("type") == expected_data_type
-                                and data.get("id") == subscription_name
-                            ):
-                                payload = data.get("payload", {})
-
-                                if payload.get("data"):
-                                    logger.info(
-                                        "[DATA:%s] Received subscription data update",
-                                        subscription_name,
-                                    )
-                                    self._clear_graphql_error_burst(subscription_name)
-                                    capped_data = (
-                                        _cap_log_content(payload["data"])
-                                        if isinstance(payload["data"], dict)
-                                        and subscription_name in _LOG_SUBSCRIPTION_NAMES
-                                        else payload["data"]
-                                    )
-                                    new_entry = SubscriptionData(
-                                        data=capped_data,
-                                        last_updated=datetime.now(UTC),
-                                    )
-                                    async with self._data_lock:
-                                        self.resource_data[subscription_name] = new_entry
-                                    logger.debug(
-                                        "[RESOURCE:%s] Resource data updated successfully",
-                                        subscription_name,
-                                    )
-                                elif payload.get("errors"):
-                                    err_msg = str(payload["errors"])
-                                    prev = self._last_graphql_error.get(subscription_name)
-                                    count = self._graphql_error_count.get(subscription_name, 0) + 1
-                                    self._graphql_error_count[subscription_name] = count
-                                    if prev != err_msg:
-                                        # First occurrence of this error — log as warning
-                                        self._last_graphql_error[subscription_name] = err_msg
-                                        self._graphql_error_count[subscription_name] = 1
-                                        logger.warning(
-                                            "[DATA:%s] GraphQL error (will suppress repeats): %s",
-                                            subscription_name,
-                                            err_msg,
-                                        )
-                                    elif count in (10, 100, 1000):
-                                        # Periodic reminder at powers of 10
-                                        logger.warning(
-                                            "[DATA:%s] GraphQL error repeated %d times: %s",
-                                            subscription_name,
-                                            count,
-                                            err_msg,
-                                        )
-                                    else:
-                                        logger.debug(
-                                            "[DATA:%s] GraphQL error (repeat #%d)",
-                                            subscription_name,
-                                            count,
-                                        )
-                                    self.last_error[subscription_name] = (
-                                        f"GraphQL errors: {payload['errors']}"
-                                    )
-                                else:
-                                    logger.warning(
-                                        "[DATA:%s] Empty or invalid data payload: %s",
-                                        subscription_name,
-                                        payload,
-                                    )
-
-                            elif data.get("type") == "ping":
-                                logger.debug(
-                                    "[PROTOCOL:%s] Received ping, sending pong",
-                                    subscription_name,
-                                )
-                                await websocket.send(json.dumps({"type": "pong"}))
-
-                            elif data.get("type") == "error":
-                                error_payload = data.get("payload", {})
-                                logger.error(
-                                    "[SUBSCRIPTION:%s] Subscription error: %s",
-                                    subscription_name,
-                                    error_payload,
-                                )
-                                self._set_connection_state(
-                                    subscription_name,
-                                    "error",
-                                    f"Subscription error: {error_payload}",
-                                )
-
-                            elif data.get("type") == "complete":
+                    # Listen for subscription data. The shared iter_messages()
+                    # primitive normalizes the post-handshake stream: ping->pong,
+                    # ka/pong keepalives + unmatched frames ignored, and malformed
+                    # frames logged-and-skipped (the per-message resilience that was
+                    # previously implemented inline here). The manager-specific
+                    # behavior — data caching, GraphQL-error dedup, never breaking on
+                    # an 'error' event, breaking on 'complete' — stays here.
+                    expected_data_type = (
+                        "next" if selected_proto == "graphql-transport-ws" else "data"
+                    )
+                    async for event in iter_messages(
+                        websocket,
+                        sub_id=subscription_name,
+                        expected_data_type=expected_data_type,
+                    ):
+                        if isinstance(event, DataEvent):
+                            payload = event.payload
+                            if payload.get("data"):
                                 logger.info(
-                                    "[SUBSCRIPTION:%s] Subscription completed by server",
+                                    "[DATA:%s] Received subscription data update",
                                     subscription_name,
                                 )
-                                self._set_connection_state(subscription_name, "completed")
-                                break
-
-                            elif data.get("type") in ["ka", "pong"]:
-                                logger.debug(
-                                    "[PROTOCOL:%s] Keepalive message: %s",
-                                    subscription_name,
-                                    message_type,
+                                await self._store_subscription_data(
+                                    subscription_name, payload["data"]
                                 )
-
+                            elif payload.get("errors"):
+                                self._track_graphql_error(subscription_name, payload["errors"])
                             else:
-                                logger.debug(
-                                    "[PROTOCOL:%s] Unhandled message type: %s",
+                                logger.warning(
+                                    "[DATA:%s] Empty or invalid data payload: %s",
                                     subscription_name,
-                                    message_type,
+                                    payload,
                                 )
-
-                        except json.JSONDecodeError as e:
+                        elif isinstance(event, ErrorEvent):
+                            # Match the historical default of {} for a payload-less
+                            # error frame (the legacy loop used data.get("payload", {})).
+                            error_payload = event.payload if event.payload is not None else {}
                             logger.error(
-                                "[PROTOCOL:%s] Failed to decode message: %s...",
+                                "[SUBSCRIPTION:%s] Subscription error: %s",
                                 subscription_name,
-                                _preview(message),
+                                error_payload,
                             )
-                            logger.error(
-                                "[PROTOCOL:%s] JSON decode error: %s",
+                            self._set_connection_state(
                                 subscription_name,
-                                e,
+                                "error",
+                                f"Subscription error: {error_payload}",
                             )
-                        except Exception as e:
-                            logger.error(
-                                f"[DATA:{subscription_name}] Error processing message: {e}",
-                                exc_info=True,
+                        elif isinstance(event, CompleteEvent):
+                            logger.info(
+                                "[SUBSCRIPTION:%s] Subscription completed by server",
+                                subscription_name,
                             )
-                            logger.debug(
-                                f"[DATA:{subscription_name}] Raw message: {_preview(message)}..."
-                            )
+                            self._set_connection_state(subscription_name, "completed")
+                            break
 
             except TimeoutError:
                 error_msg = "Connection or authentication timeout"

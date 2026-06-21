@@ -15,18 +15,15 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-import websockets
-from websockets.typing import Subprotocol
-
 from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
+from .protocol import ProtocolError, graphql_ws_session
 from .resources import ensure_subscriptions_started
 from .utils import (
     _analyze_subscription_status,
-    build_connection_init,
     build_ws_ssl_context,
     build_ws_url,
 )
@@ -118,58 +115,46 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
 
         ssl_context = build_ws_ssl_context(ws_url)
 
-        # Test connection
-        async with websockets.connect(
-            ws_url,
-            subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
-            ssl=ssl_context,
-            open_timeout=10,
-            ping_interval=30,
-            ping_timeout=10,
-        ) as websocket:
-            # Send connection init
-            await websocket.send(json.dumps(build_connection_init()))
+        # Shared handshake: connect -> connection_init -> connection_ack -> subscribe.
+        # ack_timeout=None keeps the historical bare recv() (no deadline) on the ack;
+        # ping_interval=30 matches the original probe configuration.
+        try:
+            async with graphql_ws_session(
+                ws_url,
+                subscription_query,
+                sub_id="test",
+                ssl_context=ssl_context,
+                open_timeout=10,
+                ack_timeout=None,
+                ping_interval=30,
+                ping_timeout=10,
+            ) as session:
+                # Wait for the first response with a timeout. The probe deliberately
+                # does NOT normalize the frame — it returns whatever the server sent
+                # first so a developer can inspect the raw subscription response.
+                try:
+                    response = await asyncio.wait_for(session.ws.recv(), timeout=5.0)
+                    result = json.loads(response)
 
-            # Wait for ack
-            response = await websocket.recv()
-            init_response = json.loads(response)
+                    logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
+                    return {
+                        "success": True,
+                        "response": result,
+                        "query_tested": subscription_query,
+                    }
 
-            if init_response.get("type") != "connection_ack":
-                logger.error(
-                    "[TEST_SUBSCRIPTION] Connection not acknowledged: %s",
-                    init_response,
-                )
-                raise ToolError(
-                    "Subscription test failed: WebSocket connection was not acknowledged."
-                )
-
-            # Use the negotiated subprotocol to pick the correct message type.
-            # graphql-transport-ws uses "subscribe"; legacy graphql-ws uses "start".
-            selected_proto = websocket.subprotocol or ""
-            start_type = "subscribe" if selected_proto == "graphql-transport-ws" else "start"
-
-            # Send subscription
-            await websocket.send(
-                json.dumps(
-                    {"id": "test", "type": start_type, "payload": {"query": subscription_query}}
-                )
-            )
-
-            # Wait for response with timeout
-            try:
-                response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                result = json.loads(response)
-
-                logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
-                return {"success": True, "response": result, "query_tested": subscription_query}
-
-            except TimeoutError:
-                return {
-                    "success": True,
-                    "response": "No immediate response (subscriptions may only send data on changes)",
-                    "query_tested": subscription_query,
-                    "note": "Connection successful, subscription may be waiting for events",
-                }
+                except TimeoutError:
+                    return {
+                        "success": True,
+                        "response": "No immediate response (subscriptions may only send data on changes)",
+                        "query_tested": subscription_query,
+                        "note": "Connection successful, subscription may be waiting for events",
+                    }
+        except ProtocolError as e:
+            logger.error("[TEST_SUBSCRIPTION] Connection not acknowledged: %s", e)
+            raise ToolError(
+                "Subscription test failed: WebSocket connection was not acknowledged."
+            ) from e
 
     except ToolError:
         raise

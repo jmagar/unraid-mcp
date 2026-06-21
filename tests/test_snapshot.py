@@ -65,7 +65,7 @@ async def test_subscribe_once_returns_first_event(mock_ws):
         for item in items:
             yield item
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -96,7 +96,7 @@ async def test_subscribe_once_raises_on_graphql_error(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([error_msg])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -121,7 +121,7 @@ async def test_subscribe_collect_returns_multiple_events(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([msg1, msg2])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -165,7 +165,7 @@ async def test_subscribe_once_skips_non_json_frame_then_returns(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter(["this is not json {{{", good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -192,7 +192,7 @@ async def test_subscribe_once_skips_non_dict_json_frame_then_returns(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([bad_list, bad_str, good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -219,7 +219,7 @@ async def test_subscribe_once_skips_missing_payload_and_unknown_type(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([missing_payload, unknown_type, good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -251,7 +251,7 @@ async def test_subscribe_once_still_raises_on_graphql_error_after_bad_frame(mock
     mock_ws.__aiter__ = lambda s: aiter([bad, error_msg])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -279,7 +279,7 @@ async def test_subscribe_collect_skips_malformed_frames(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([bad_json, good1, bad_list, missing_payload, good2])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 

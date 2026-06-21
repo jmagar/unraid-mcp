@@ -9,19 +9,27 @@ subscribe, collect all events for `collect_for` seconds, return the list.
 Neither function maintains a persistent connection — they open and close a
 WebSocket per call. This is intentional: MCP tools are request-response.
 Use the SubscriptionManager for long-lived monitoring resources.
+
+Both helpers share the graphql-ws handshake + message-normalization primitive in
+:mod:`.protocol` (``graphql_ws_session`` + ``iter_messages``): the handshake,
+ping->pong keepalives, and malformed-frame skipping live there, so this module
+only contains the snapshot-specific timeout + return-first / collect-window
+semantics.
 """
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from typing import Any
 
-import websockets
-from websockets.typing import Subprotocol
-
 from ..config.logging import logger
 from ..core.exceptions import ToolError
-from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
+from .protocol import (
+    DataEvent,
+    ErrorEvent,
+    ProtocolError,
+    graphql_ws_session,
+)
+from .utils import build_ws_ssl_context, build_ws_url
 
 
 _SUB_ID = "snapshot-1"
@@ -35,46 +43,40 @@ async def _ws_handshake(
 ):
     """Connect, authenticate, and subscribe over WebSocket.
 
-    Yields (ws, proto, expected_type) after the subscription is active.
-    The caller iterates on ws for data events.
+    Yields the live :class:`~.protocol.GraphqlWsSession` after the subscription
+    is active. The caller iterates ``session.messages()`` for data events.
+
+    Translates the protocol's :class:`~.protocol.ProtocolError` (auth failure /
+    unexpected handshake frame) into a :class:`ToolError`, preserving the
+    historical snapshot error messages.
     """
     ws_url = build_ws_url()
     ssl_context = build_ws_ssl_context(ws_url)
 
-    async with websockets.connect(
-        ws_url,
-        subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
-        open_timeout=timeout,
-        ping_interval=20,
-        ping_timeout=10,
-        ssl=ssl_context,
-    ) as ws:
-        proto = ws.subprotocol or "graphql-transport-ws"
+    try:
+        async with graphql_ws_session(
+            ws_url,
+            query,
+            sub_id=_SUB_ID,
+            variables=variables,
+            ssl_context=ssl_context,
+            open_timeout=timeout,
+            ack_timeout=timeout,
+            ping_interval=20,
+            ping_timeout=10,
+        ) as session:
+            yield session
+    except ProtocolError as e:
+        if e.kind == "connection_error":
+            raise ToolError(f"Subscription auth failed: {e.payload}") from e
+        raise ToolError(f"Unexpected handshake response: {e.ack_type}") from e
 
-        # Handshake
-        await ws.send(json.dumps(build_connection_init()))
 
-        raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-        ack = json.loads(raw)
-        if ack.get("type") == "connection_error":
-            raise ToolError(f"Subscription auth failed: {ack.get('payload')}")
-        if ack.get("type") != "connection_ack":
-            raise ToolError(f"Unexpected handshake response: {ack.get('type')}")
-
-        # Subscribe
-        start_type = "subscribe" if proto == "graphql-transport-ws" else "start"
-        await ws.send(
-            json.dumps(
-                {
-                    "id": _SUB_ID,
-                    "type": start_type,
-                    "payload": {"query": query, "variables": variables or {}},
-                }
-            )
-        )
-
-        expected_type = "next" if proto == "graphql-transport-ws" else "data"
-        yield ws, expected_type
+def _raise_on_errors(payload: dict[str, Any]) -> None:
+    """Raise ToolError if a data payload carries GraphQL errors."""
+    if errors := payload.get("errors"):
+        msgs = "; ".join(e.get("message", str(e)) for e in errors)
+        raise ToolError(f"Subscription errors: {msgs}")
 
 
 async def subscribe_once(
@@ -86,34 +88,18 @@ async def subscribe_once(
 
     Raises ToolError on auth failure, GraphQL errors, or timeout.
     """
-    async with _ws_handshake(query, variables, timeout) as (ws, expected_type):
+    async with _ws_handshake(query, variables, timeout) as session:
         try:
             async with asyncio.timeout(timeout):
-                async for raw_msg in ws:
-                    # Parse + dispatch each frame defensively: a single malformed
-                    # frame must be logged and skipped, not abort the snapshot.
-                    # Mirrors the persistent manager loop's per-message resilience.
-                    # ToolError (auth/GraphQL errors) is re-raised so it still
-                    # propagates to the caller.
-                    try:
-                        msg = json.loads(raw_msg)
-                        if msg.get("type") == "ping":
-                            await ws.send(json.dumps({"type": "pong"}))
-                            continue
-                        if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
-                            payload = msg.get("payload", {})
-                            if errors := payload.get("errors"):
-                                msgs = "; ".join(e.get("message", str(e)) for e in errors)
-                                raise ToolError(f"Subscription errors: {msgs}")
-                            if data := payload.get("data"):
-                                return data
-                        elif msg.get("type") == "error" and msg.get("id") == _SUB_ID:
-                            raise ToolError(f"Subscription error: {msg.get('payload')}")
-                    except ToolError:
-                        raise
-                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
-                        logger.warning("Skipping malformed subscription frame: %s", e)
-                        continue
+                async for event in session.messages():
+                    if isinstance(event, DataEvent):
+                        _raise_on_errors(event.payload)
+                        if data := event.payload.get("data"):
+                            return data
+                    elif isinstance(event, ErrorEvent):
+                        raise ToolError(f"Subscription error: {event.payload}")
+                    # CompleteEvent: fall through; the websocket close that follows
+                    # surfaces as "closed before data" below.
         except TimeoutError:
             raise ToolError(f"Subscription timed out after {timeout:.0f}s") from None
 
@@ -133,32 +119,20 @@ async def subscribe_collect(
     """
     events: list[dict[str, Any]] = []
 
-    async with _ws_handshake(query, variables, timeout) as (ws, expected_type):
+    async with _ws_handshake(query, variables, timeout) as session:
         try:
             async with asyncio.timeout(collect_for):
-                async for raw_msg in ws:
-                    # Parse + dispatch each frame defensively: a single malformed
-                    # frame must be logged and skipped, not abort the collection.
-                    # Mirrors the persistent manager loop's per-message resilience.
-                    # ToolError (auth/GraphQL errors) is re-raised so it still
-                    # propagates to the caller.
-                    try:
-                        msg = json.loads(raw_msg)
-                        if msg.get("type") == "ping":
-                            await ws.send(json.dumps({"type": "pong"}))
-                            continue
-                        if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
-                            payload = msg.get("payload", {})
-                            if errors := payload.get("errors"):
-                                msgs = "; ".join(e.get("message", str(e)) for e in errors)
-                                raise ToolError(f"Subscription errors: {msgs}")
-                            if data := payload.get("data"):
-                                events.append(data)
-                    except ToolError:
-                        raise
-                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
-                        logger.warning("Skipping malformed subscription frame: %s", e)
-                        continue
+                async for event in session.messages():
+                    if isinstance(event, DataEvent):
+                        _raise_on_errors(event.payload)
+                        if data := event.payload.get("data"):
+                            events.append(data)
+                    elif isinstance(event, ErrorEvent):
+                        raise ToolError(f"Subscription error: {event.payload}")
+                    # CompleteEvent is ignored: the historical loop kept collecting
+                    # until the window expired or the socket closed, never breaking
+                    # early on a server 'complete'. The ws close that follows ends
+                    # the async-for and returns the collected events.
         except TimeoutError:
             pass  # Collection window expired — return whatever was collected
 
