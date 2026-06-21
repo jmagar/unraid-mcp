@@ -111,7 +111,13 @@ Log file paths are restricted to allowed prefixes (`/var/log/`, `/boot/logs/`, `
 
 - All queries and mutations use pre-built query dicts (`_*_QUERIES`, `_*_MUTATIONS`)
 - No string interpolation of user input into GraphQL query strings
-- Subscription test tool only allows whitelisted field names: `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`
+- The subscription test tool (`subscriptions/test_query`) only allows the **12 whitelisted
+  schema field names** in `_ALLOWED_SUBSCRIPTION_FIELDS`
+  (`unraid_mcp/subscriptions/diagnostics.py`): `containerStats`, `cpu`,
+  `dockerContainerStats`, `memory`, `array`, `network`, `docker`,
+  `systemMetricsTemperature`, `vm`, `displaySubscription`,
+  `notificationsWarningsAndAlerts`, `pluginInstallUpdates`. The validator also rejects any
+  query containing a bare `mutation` or `query` keyword.
 
 ### Port validation
 
