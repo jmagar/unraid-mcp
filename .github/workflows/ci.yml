@@ -102,6 +102,12 @@ jobs:
     name: MCP Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Best-effort live smoke test against the real Unraid box (via repo secrets).
+    # The homelab Unraid API is normally unreachable from GitHub's cloud runners
+    # (private/Tailscale), so a ConnectError here must NOT block the build. The
+    # no-secrets `e2e` job gates the real integration + mock-server suites instead;
+    # this job provides opportunistic live coverage when the box is reachable.
+    continue-on-error: true
     needs: [lint, typecheck, test]
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     env:
