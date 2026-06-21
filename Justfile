@@ -22,9 +22,9 @@ lint:
 fmt:
     uv run ruff format .
 
-# Type-check (pyright / mypy)
+# Type-check (ty)
 typecheck:
-    uv run pyright unraid_mcp/ || uv run mypy unraid_mcp/
+    uv run ty check unraid_mcp/
 
 # Validate skills SKILL.md files exist and are non-empty
 validate-skills:
@@ -106,11 +106,11 @@ gen-token:
 
 # ── Quality Gates ─────────────────────────────────────────────────────────────
 
-# Run docker security checks
+# Run repo contract checks (version sync, env hygiene, marketplace structure)
 check-contract:
-    bash scripts/check-docker-security.sh
-    bash scripts/check-no-baked-env.sh
-    bash scripts/ensure-ignore-files.sh --check
+    bash scripts/check-version-sync.sh
+    bash scripts/block-env-commits.sh
+    bash scripts/validate-marketplace.sh
 
 # ── CLI Generation ────────────────────────────────────────────────────────────
 
