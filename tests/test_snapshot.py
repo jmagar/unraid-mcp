@@ -65,7 +65,7 @@ async def test_subscribe_once_returns_first_event(mock_ws):
         for item in items:
             yield item
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -96,7 +96,7 @@ async def test_subscribe_once_raises_on_graphql_error(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([error_msg])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -121,7 +121,7 @@ async def test_subscribe_collect_returns_multiple_events(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([msg1, msg2])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -165,7 +165,7 @@ async def test_subscribe_once_skips_non_json_frame_then_returns(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter(["this is not json {{{", good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -192,7 +192,7 @@ async def test_subscribe_once_skips_non_dict_json_frame_then_returns(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([bad_list, bad_str, good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -219,7 +219,7 @@ async def test_subscribe_once_skips_missing_payload_and_unknown_type(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([missing_payload, unknown_type, good])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -251,7 +251,7 @@ async def test_subscribe_once_still_raises_on_graphql_error_after_bad_frame(mock
     mock_ws.__aiter__ = lambda s: aiter([bad, error_msg])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -279,7 +279,7 @@ async def test_subscribe_collect_skips_malformed_frames(mock_ws):
     mock_ws.__aiter__ = lambda s: aiter([bad_json, good1, bad_list, missing_payload, good2])
     mock_ws.recv = AsyncMock(return_value=ack)
 
-    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
         mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
         mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
 
@@ -291,3 +291,109 @@ async def test_subscribe_collect_skips_malformed_frames(mock_ws):
     assert len(result) == 2
     assert result[0]["notificationAdded"]["id"] == "1"
     assert result[1]["notificationAdded"]["id"] == "2"
+
+
+# ---------------------------------------------------------------------------
+# Best-effort error handling: subscribe_collect must NOT abort on a standalone
+# protocol 'error' frame. It logs and keeps collecting, returning the events it
+# gathered before the window expired (this differs from subscribe_once, which
+# raises on an error frame). This restores the historical collect behavior.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_continues_past_standalone_error_frame(mock_ws):
+    """[good, error, good] within the window returns BOTH good events, not a raise."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    good1 = _make_ws_message("snapshot-1", {"notificationAdded": {"id": "1", "title": "A"}})
+    error_frame = json.dumps(
+        {"id": "snapshot-1", "type": "error", "payload": {"message": "transient blip"}}
+    )
+    good2 = _make_ws_message("snapshot-1", {"notificationAdded": {"id": "2", "title": "B"}})
+
+    async def aiter(items):
+        for item in items:
+            yield item
+        await asyncio.sleep(10)  # hang after messages so the window expires
+
+    mock_ws.__aiter__ = lambda s: aiter([good1, error_frame, good2])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_collect(
+            "subscription { notificationAdded { id title } }",
+            collect_for=0.1,
+        )
+
+    # The standalone error frame was logged-and-skipped, not fatal: both good
+    # events survive and are returned.
+    assert len(result) == 2
+    assert result[0]["notificationAdded"]["id"] == "1"
+    assert result[1]["notificationAdded"]["id"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_once_still_raises_on_standalone_error_frame(mock_ws):
+    """subscribe_once must still RAISE on a standalone error frame (unlike collect)."""
+    from unraid_mcp.core.exceptions import ToolError
+    from unraid_mcp.subscriptions.snapshot import subscribe_once
+
+    ack = json.dumps({"type": "connection_ack"})
+    error_frame = json.dumps(
+        {"id": "snapshot-1", "type": "error", "payload": {"message": "bad subscription"}}
+    )
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter([error_frame])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(ToolError, match="Subscription error"):
+            await subscribe_once("subscription { systemMetricsCpu { percentTotal } }")
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_still_raises_on_errors_inside_data_payload(mock_ws):
+    """GraphQL errors carried INSIDE a data payload still raise in subscribe_collect."""
+    from unraid_mcp.core.exceptions import ToolError
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    # A 'next' (data-type) frame whose payload carries GraphQL 'errors' — this is
+    # _raise_on_errors territory and must still abort, unlike a standalone 'error'.
+    data_with_errors = json.dumps(
+        {
+            "id": "snapshot-1",
+            "type": "next",
+            "payload": {"errors": [{"message": "Not authorized"}]},
+        }
+    )
+
+    async def aiter(items):
+        for item in items:
+            yield item
+        await asyncio.sleep(10)
+
+    mock_ws.__aiter__ = lambda s: aiter([data_with_errors])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(ToolError, match="Not authorized"):
+            await subscribe_collect(
+                "subscription { notificationAdded { id title } }",
+                collect_for=0.1,
+            )

@@ -41,6 +41,23 @@ _NOTIFICATION_MUTATIONS: dict[str, str] = {
 
 _NOTIFICATION_SUBACTIONS: set[str] = set(_NOTIFICATION_QUERIES) | set(_NOTIFICATION_MUTATIONS)
 _NOTIFICATION_DESTRUCTIVE: set[str] = {"delete", "delete_archived"}
+
+# Maps each mutation subaction to the top-level GraphQL result field it returns,
+# so the handler can project to that subtree instead of echoing the whole `data`
+# blob (which would leak the operation name and inflate the response). The
+# create/notify_if_unique branches are handled separately because they have
+# bespoke success/duplicate shapes.
+_NOTIFICATION_RESULT_FIELD: dict[str, str] = {
+    "archive": "archiveNotification",
+    "mark_unread": "unreadNotification",
+    "delete": "deleteNotification",
+    "delete_archived": "deleteArchivedNotifications",
+    "archive_all": "archiveAll",
+    "archive_many": "archiveNotifications",
+    "unarchive_many": "unarchiveNotifications",
+    "unarchive_all": "unarchiveAll",
+    "recalculate": "recalculateOverview",
+}
 _VALID_IMPORTANCE = frozenset({"ALERT", "WARNING", "INFO"})
 _VALID_LIST_TYPES = frozenset({"UNREAD", "ARCHIVE"})
 # Upper clamp on the server-side `limit` so e.g. limit=5000 can't dump thousands
@@ -186,7 +203,8 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS[subaction], {"id": notification_id}
             )
-            return {"success": True, "subaction": subaction, "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         if subaction == "delete":
             if not notification_id or not notification_type:
@@ -195,11 +213,13 @@ async def _handle_notification(
                 _NOTIFICATION_MUTATIONS["delete"],
                 {"id": notification_id, "type": notification_type.upper()},
             )
-            return {"success": True, "subaction": "delete", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["delete"])
+            return {"success": True, "subaction": "delete", "data": result}
 
         if subaction == "delete_archived":
             data = await _client.make_graphql_request(_NOTIFICATION_MUTATIONS["delete_archived"])
-            return {"success": True, "subaction": "delete_archived", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["delete_archived"])
+            return {"success": True, "subaction": "delete_archived", "data": result}
 
         if subaction == "archive_all":
             variables: dict[str, Any] | None = (
@@ -208,7 +228,8 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["archive_all"], variables
             )
-            return {"success": True, "subaction": "archive_all", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["archive_all"])
+            return {"success": True, "subaction": "archive_all", "data": result}
 
         if subaction == "archive_many":
             if not notification_ids:
@@ -216,7 +237,8 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["archive_many"], {"ids": notification_ids}
             )
-            return {"success": True, "subaction": "archive_many", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["archive_many"])
+            return {"success": True, "subaction": "archive_many", "data": result}
 
         if subaction == "unarchive_many":
             if not notification_ids:
@@ -224,19 +246,22 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_MUTATIONS["unarchive_many"], {"ids": notification_ids}
             )
-            return {"success": True, "subaction": "unarchive_many", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["unarchive_many"])
+            return {"success": True, "subaction": "unarchive_many", "data": result}
 
         if subaction == "unarchive_all":
-            vars_: dict[str, Any] | None = (
+            variables: dict[str, Any] | None = (
                 {"importance": importance.upper()} if importance else None
             )
             data = await _client.make_graphql_request(
-                _NOTIFICATION_MUTATIONS["unarchive_all"], vars_
+                _NOTIFICATION_MUTATIONS["unarchive_all"], variables
             )
-            return {"success": True, "subaction": "unarchive_all", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["unarchive_all"])
+            return {"success": True, "subaction": "unarchive_all", "data": result}
 
         if subaction == "recalculate":
             data = await _client.make_graphql_request(_NOTIFICATION_MUTATIONS["recalculate"])
-            return {"success": True, "subaction": "recalculate", "data": data}
+            result = safe_get(data, _NOTIFICATION_RESULT_FIELD["recalculate"])
+            return {"success": True, "subaction": "recalculate", "data": result}
 
         raise ToolError(f"Unhandled notification subaction '{subaction}' — this is a bug")

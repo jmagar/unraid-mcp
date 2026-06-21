@@ -8,6 +8,9 @@ import httpx
 import pytest
 
 from unraid_mcp.core.client import (
+    _HTTP_CODE_304,
+    _START_IDEMPOTENT_PHRASES,
+    _STOP_IDEMPOTENT_PHRASES,
     DEFAULT_TIMEOUT,
     DISK_TIMEOUT,
     _RateLimiter,
@@ -60,6 +63,17 @@ class TestIsIdempotentError:
     def test_case_insensitive(self) -> None:
         assert is_idempotent_error("ALREADY STARTED", "start") is True
         assert is_idempotent_error("ALREADY STOPPED", "stop") is True
+
+    def test_idempotent_constants_drive_matching(self) -> None:
+        """Every named constant phrase must actually match its operation."""
+        # The numeric 304 signal is idempotent for BOTH operations.
+        assert is_idempotent_error(_HTTP_CODE_304, "start") is True
+        assert is_idempotent_error(_HTTP_CODE_304, "stop") is True
+        # Each prose phrase must match (and stay in its own operation's bucket).
+        for phrase in _START_IDEMPOTENT_PHRASES:
+            assert is_idempotent_error(phrase, "start") is True
+        for phrase in _STOP_IDEMPOTENT_PHRASES:
+            assert is_idempotent_error(phrase, "stop") is True
 
 
 # ---------------------------------------------------------------------------

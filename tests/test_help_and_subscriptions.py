@@ -172,7 +172,7 @@ class TestTestSubscriptionQueryHandler:
         # 'flash' is not in the allowlist; validation must reject it end-to-end
         # without ever opening a WebSocket.
         with (
-            patch("unraid_mcp.subscriptions.diagnostics.websockets.connect") as mock_connect,
+            patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect,
             pytest.raises(ToolError, match="is not allowed"),
         ):
             await test_subscription_query("subscription { flash { guid } }")
@@ -208,7 +208,7 @@ class TestTestSubscriptionQueryHandler:
                 "unraid_mcp.subscriptions.diagnostics.build_ws_ssl_context",
                 return_value=None,
             ),
-            patch("unraid_mcp.subscriptions.diagnostics.websockets.connect") as mock_connect,
+            patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect,
         ):
             mock_connect.return_value.__aenter__ = AsyncMock(return_value=ws)
             mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)

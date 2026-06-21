@@ -2,6 +2,28 @@
 
 This module handles loading environment variables from multiple .env locations
 and provides all configuration constants used throughout the application.
+
+The simple, type-coercible environment variables are modelled declaratively with
+a :class:`pydantic_settings.BaseSettings` subclass (``Settings``). The subtle,
+security-relevant behaviours that pydantic-settings does not cover natively are
+retained as hand-written code that runs at import time:
+
+* multi-location ``.env`` discovery with the canonical ``~/.unraid-mcp/.env``
+  taking priority (``_load_env_files``);
+* refusal to load a *symlinked* env file (CWE-22 / symlink-attack guard);
+* the issue-#28 fix where an empty-string credential env var must NOT shadow the
+  value coming from a ``.env`` file;
+* the fatal ``sys.exit(1)`` guard for the ``UNRAID_VERIFY_SSL`` /
+  ``UNRAID_ALLOW_INSECURE_TLS`` (S-H1) interaction, which runs at module level
+  *after* ``Settings()`` because it depends on cross-field state.
+
+The fatal-on-bad-input port guard, by contrast, *is* expressed inside the model
+as the pydantic field validator ``Settings._parse_port`` (it only needs the
+single ``UNRAID_MCP_PORT`` field), so it is not module-level hand-written code.
+
+Every name this module historically exported is re-exported, unchanged, at the
+end of the file so existing imports (``from ..config.settings import X`` and
+``_settings.X``) keep working with identical types and values.
 """
 
 import os
@@ -10,6 +32,8 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ..version import VERSION as APP_VERSION
 
@@ -31,6 +55,11 @@ CREDENTIALS_ENV_PATH = CREDENTIALS_DIR / ".env"
 # .env on the search path — including the canonical ~/.unraid-mcp/.env — so the
 # credentials silently never load. See GitHub issue #28.
 _EMPTY_AS_UNSET_KEYS = ("UNRAID_API_URL", "UNRAID_API_KEY")
+
+# Truthy tokens used for boolean env coercion. This intentionally matches the
+# historical hand-rolled ``raw in ("true", "1", "yes")`` behaviour rather than
+# pydantic's broader default bool parsing (which also accepts "on"/"off"/"f"…).
+_BOOL_TRUE_TOKENS = ("true", "1", "yes")
 
 
 def _load_env_files() -> None:
@@ -75,78 +104,188 @@ def _load_env_files() -> None:
 
 _load_env_files()
 
+
+class Settings(BaseSettings):
+    """Declarative model for the simple, type-coercible Unraid MCP env vars.
+
+    Only the straightforward variables live here. The ``UNRAID_VERIFY_SSL`` union
+    (bool-or-CA-path) plus its S-H1 fatal guard are resolved separately at module
+    level because the guard's ``sys.exit(1)`` depends on cross-field state and is
+    clearer kept inline.
+
+    Field aliases are the exact env-var names; ``populate_by_name`` lets tests and
+    callers construct the model with either the field name or the env-var alias.
+    """
+
+    model_config = SettingsConfigDict(
+        populate_by_name=True,
+        extra="ignore",
+        case_sensitive=True,
+    )
+
+    # Core API Configuration. None when absent (mirrors os.getenv()).
+    unraid_api_url: str | None = Field(default=None, alias="UNRAID_API_URL")
+    unraid_api_key: str | None = Field(default=None, alias="UNRAID_API_KEY")
+
+    # Server Configuration
+    unraid_mcp_port: int = Field(default=6970, alias="UNRAID_MCP_PORT")
+    unraid_mcp_host: str = Field(default="0.0.0.0", alias="UNRAID_MCP_HOST")  # noqa: S104
+    unraid_mcp_transport: str = Field(default="streamable-http", alias="UNRAID_MCP_TRANSPORT")
+
+    # Maximum serialized tool-response size in bytes. Responses larger than this are
+    # replaced with a structured, still-parseable truncation marker (see
+    # core/response_limit.py) rather than hard-cut mid-JSON. Default 40 KB (~10K
+    # tokens) keeps a single response a small fraction of the client context window;
+    # the per-list cap_list defaults do the primary bounding, this is the backstop.
+    unraid_mcp_max_response_bytes: int = Field(default=40000, alias="UNRAID_MCP_MAX_RESPONSE_BYTES")
+
+    # HTTP Authentication
+    # Bearer token for HTTP transport (streamable-http / sse).
+    # Auto-generated on first HTTP startup if absent; written to CREDENTIALS_ENV_PATH.
+    # Set UNRAID_MCP_DISABLE_HTTP_AUTH=true only when an upstream gateway handles auth.
+    unraid_mcp_bearer_token: str | None = Field(default=None, alias="UNRAID_MCP_BEARER_TOKEN")
+    unraid_mcp_disable_http_auth: bool = Field(default=False, alias="UNRAID_MCP_DISABLE_HTTP_AUTH")
+
+    # Affirms that a trusted reverse proxy (e.g. SWAG) fronts this server and enforces
+    # authentication. Required when UNRAID_MCP_DISABLE_HTTP_AUTH=true AND the bind host is
+    # not loopback — otherwise the server would expose an unauthenticated MCP endpoint on a
+    # public/LAN interface (finding S-H3). The documented topology runs behind SWAG, so the
+    # operator must explicitly opt in to that arrangement; leaving it false fails closed.
+    unraid_mcp_trust_proxy: bool = Field(default=False, alias="UNRAID_MCP_TRUST_PROXY")
+
+    # SSL Configuration — second explicit opt-in gating disabled TLS verification (S-H1).
+    unraid_allow_insecure_tls: bool = Field(default=False, alias="UNRAID_ALLOW_INSECURE_TLS")
+
+    # Raw UNRAID_VERIFY_SSL string; resolved to bool|str (CA-bundle path) below.
+    raw_verify_ssl: str = Field(default="true", alias="UNRAID_VERIFY_SSL")
+
+    # Logging Configuration
+    log_level_str: str = Field(default="INFO", alias="UNRAID_MCP_LOG_LEVEL")
+    log_file_name: str = Field(default="unraid-mcp.log", alias="UNRAID_MCP_LOG_FILE")
+
+    # -- validators -----------------------------------------------------------
+
+    @field_validator("unraid_api_url", "unraid_api_key", "unraid_mcp_bearer_token", mode="before")
+    @classmethod
+    def _empty_to_none(cls, value: object) -> object:
+        """Mirror ``os.getenv(...) or None`` — empty string becomes None."""
+        if value == "":
+            return None
+        return value
+
+    @field_validator("unraid_mcp_port", mode="before")
+    @classmethod
+    def _parse_port(cls, value: object) -> int:
+        """Parse + validate a port number, exiting fatally on bad input.
+
+        Mirrors the original ``_parse_port`` helper: a non-integer or
+        out-of-range value is a fatal startup error (``sys.exit(1)``), not a
+        silent fallback.
+        """
+        raw = str(value)
+        try:
+            port = int(raw)
+        except ValueError:
+            print(
+                f"FATAL: UNRAID_MCP_PORT={raw!r} is not a valid integer port number",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not (1 <= port <= 65535):
+            print(
+                f"FATAL: UNRAID_MCP_PORT={port} outside valid port range 1-65535",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return port
+
+    @field_validator("unraid_mcp_max_response_bytes", mode="before")
+    @classmethod
+    def _parse_positive_int(cls, value: object) -> int:
+        """Parse a positive integer, falling back to the default on error.
+
+        Mirrors the original ``_parse_positive_int`` helper: bad / non-positive
+        values emit a WARNING and fall back rather than aborting startup.
+        """
+        default = 40000
+        if value is None:
+            return default
+        raw = value if isinstance(value, int) else str(value)
+        if isinstance(raw, str) and raw.strip() == "":
+            return default
+        try:
+            parsed = int(raw)
+        except ValueError:
+            print(
+                f"WARNING: UNRAID_MCP_MAX_RESPONSE_BYTES={raw!r} is not a valid integer; "
+                f"using default {default}",
+                file=sys.stderr,
+            )
+            return default
+        if parsed <= 0:
+            print(
+                f"WARNING: UNRAID_MCP_MAX_RESPONSE_BYTES={parsed} must be positive; "
+                f"using default {default}",
+                file=sys.stderr,
+            )
+            return default
+        return parsed
+
+    @field_validator(
+        "unraid_mcp_disable_http_auth",
+        "unraid_mcp_trust_proxy",
+        "unraid_allow_insecure_tls",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_bool(cls, value: object) -> bool:
+        """Coerce to bool using the historical truthy token set.
+
+        Matches ``raw.lower() in ("true", "1", "yes")`` exactly so behaviour is
+        identical to the pre-migration code (and narrower than pydantic's default
+        bool parsing).
+        """
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() in _BOOL_TRUE_TOKENS
+
+    @field_validator("unraid_mcp_transport", mode="before")
+    @classmethod
+    def _lower_transport(cls, value: object) -> str:
+        return str(value).lower()
+
+    @field_validator("raw_verify_ssl", mode="before")
+    @classmethod
+    def _lower_verify_ssl(cls, value: object) -> str:
+        return str(value).lower()
+
+    @field_validator("log_level_str", mode="before")
+    @classmethod
+    def _upper_log_level(cls, value: object) -> str:
+        return str(value).upper()
+
+
+_settings = Settings()
+
 # Core API Configuration
 # Loaded once at startup from the .env hierarchy / process env. Consumers should
 # read the current value via a local import (from ..config import settings as
 # _settings; _settings.UNRAID_API_URL), so a future reload picks up the latest
 # binding rather than a stale module-import snapshot.
-UNRAID_API_URL = os.getenv("UNRAID_API_URL")
-UNRAID_API_KEY = os.getenv("UNRAID_API_KEY")
-
+UNRAID_API_URL = _settings.unraid_api_url
+UNRAID_API_KEY = _settings.unraid_api_key
 
 # Server Configuration
-def _parse_port(env_var: str, default: int) -> int:
-    """Parse a port number from environment variable with validation."""
-    raw = os.getenv(env_var, str(default))
-    try:
-        port = int(raw)
-    except ValueError:
-        print(f"FATAL: {env_var}={raw!r} is not a valid integer port number", file=sys.stderr)
-        sys.exit(1)
-    if not (1 <= port <= 65535):
-        print(f"FATAL: {env_var}={port} outside valid port range 1-65535", file=sys.stderr)
-        sys.exit(1)
-    return port
+UNRAID_MCP_PORT = _settings.unraid_mcp_port
+UNRAID_MCP_HOST = _settings.unraid_mcp_host
+UNRAID_MCP_TRANSPORT = _settings.unraid_mcp_transport
 
-
-def _parse_positive_int(env_var: str, default: int) -> int:
-    """Parse a positive integer from an environment variable, falling back on error."""
-    raw = os.getenv(env_var)
-    if raw is None or raw.strip() == "":
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        print(
-            f"WARNING: {env_var}={raw!r} is not a valid integer; using default {default}",
-            file=sys.stderr,
-        )
-        return default
-    if value <= 0:
-        print(
-            f"WARNING: {env_var}={value} must be positive; using default {default}",
-            file=sys.stderr,
-        )
-        return default
-    return value
-
-
-UNRAID_MCP_PORT = _parse_port("UNRAID_MCP_PORT", 6970)
-UNRAID_MCP_HOST = os.getenv("UNRAID_MCP_HOST", "0.0.0.0")  # noqa: S104 — intentional for Docker
-UNRAID_MCP_TRANSPORT = os.getenv("UNRAID_MCP_TRANSPORT", "streamable-http").lower()
-
-# Maximum serialized tool-response size in bytes. Responses larger than this are
-# replaced with a structured, still-parseable truncation marker (see
-# core/response_limit.py) rather than hard-cut mid-JSON. Default 40 KB (~10K
-# tokens) keeps a single response a small fraction of the client context window;
-# the per-list cap_list defaults do the primary bounding, this is the backstop.
-UNRAID_MCP_MAX_RESPONSE_BYTES = _parse_positive_int("UNRAID_MCP_MAX_RESPONSE_BYTES", 40000)
+UNRAID_MCP_MAX_RESPONSE_BYTES = _settings.unraid_mcp_max_response_bytes
 
 # HTTP Authentication
-# Bearer token for HTTP transport (streamable-http / sse).
-# Auto-generated on first HTTP startup if absent; written to CREDENTIALS_ENV_PATH.
-# Set UNRAID_MCP_DISABLE_HTTP_AUTH=true only when an upstream gateway handles auth.
-UNRAID_MCP_BEARER_TOKEN: str | None = os.getenv("UNRAID_MCP_BEARER_TOKEN") or None
-_raw_disable_auth = os.getenv("UNRAID_MCP_DISABLE_HTTP_AUTH", "false").lower()
-UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _raw_disable_auth in ("true", "1", "yes")
-
-# Affirms that a trusted reverse proxy (e.g. SWAG) fronts this server and enforces
-# authentication. Required when UNRAID_MCP_DISABLE_HTTP_AUTH=true AND the bind host is
-# not loopback — otherwise the server would expose an unauthenticated MCP endpoint on a
-# public/LAN interface (finding S-H3). The documented topology runs behind SWAG, so the
-# operator must explicitly opt in to that arrangement; leaving it false fails closed.
-_raw_trust_proxy = os.getenv("UNRAID_MCP_TRUST_PROXY", "false").lower()
-UNRAID_MCP_TRUST_PROXY: bool = _raw_trust_proxy in ("true", "1", "yes")
+UNRAID_MCP_BEARER_TOKEN: str | None = _settings.unraid_mcp_bearer_token
+UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _settings.unraid_mcp_disable_http_auth
+UNRAID_MCP_TRUST_PROXY: bool = _settings.unraid_mcp_trust_proxy
 
 # SSL Configuration
 # UNRAID_VERIFY_SSL accepts: true/1/yes (verify, default), false/0/no (disable —
@@ -158,10 +297,9 @@ UNRAID_MCP_TRUST_PROXY: bool = _raw_trust_proxy in ("true", "1", "yes")
 # unverified peer over BOTH the httpx GraphQL client AND the WebSocket subscription
 # connection, so a man-in-the-middle can capture it. The CA-bundle path is the safe
 # alternative for self-signed certs.
-_raw_allow_insecure_tls = os.getenv("UNRAID_ALLOW_INSECURE_TLS", "false").lower()
-UNRAID_ALLOW_INSECURE_TLS: bool = _raw_allow_insecure_tls in ("true", "1", "yes")
+UNRAID_ALLOW_INSECURE_TLS: bool = _settings.unraid_allow_insecure_tls
 
-raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
+raw_verify_ssl = _settings.raw_verify_ssl
 if raw_verify_ssl in ["false", "0", "no"]:
     if not UNRAID_ALLOW_INSECURE_TLS:
         print(
@@ -181,8 +319,8 @@ else:  # Path to CA bundle
     UNRAID_VERIFY_SSL = raw_verify_ssl
 
 # Logging Configuration
-LOG_LEVEL_STR = os.getenv("UNRAID_MCP_LOG_LEVEL", "INFO").upper()
-LOG_FILE_NAME = os.getenv("UNRAID_MCP_LOG_FILE", "unraid-mcp.log")
+LOG_LEVEL_STR = _settings.log_level_str
+LOG_FILE_NAME = _settings.log_file_name
 # Use /.dockerenv as the container indicator for robust Docker detection.
 IS_DOCKER = Path("/.dockerenv").exists()
 LOGS_DIR = Path("/app/logs") if IS_DOCKER else PROJECT_ROOT / "logs"

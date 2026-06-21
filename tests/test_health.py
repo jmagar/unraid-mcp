@@ -39,7 +39,6 @@ class TestHealthActions:
     async def test_check_healthy(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
             "info": {
-                "machineId": "abc123",
                 "time": "2026-02-08T12:00:00Z",
                 "versions": {"unraid": "7.2.0"},
                 "os": {"uptime": 86400},
@@ -53,11 +52,34 @@ class TestHealthActions:
         assert result["status"] == "healthy"
         assert "api_latency_ms" in result
 
+    async def test_check_does_not_expose_machine_id(self, _mock_graphql: AsyncMock) -> None:
+        """health/check must not surface machineId (CWE-200 hardware fingerprint).
+
+        Even if the upstream API were to return machineId, the health summary must
+        not echo it into unraid_system.
+        """
+        _mock_graphql.return_value = {
+            "info": {
+                "machineId": "should-not-leak",
+                "time": "2026-02-08T12:00:00Z",
+                "versions": {"unraid": "7.2.0"},
+                "os": {"uptime": 86400},
+            },
+            "array": {"state": "STARTED"},
+            "notifications": {"overview": {"unread": {"alert": 0, "warning": 0, "total": 0}}},
+            "docker": {"containers": []},
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="health", subaction="check")
+        assert "machine_id" not in result.get("unraid_system", {})
+        # And the query the handler issues must not even ask for it.
+        sent_query = _mock_graphql.call_args.args[0]
+        assert "machineId" not in sent_query
+
     async def test_check_docker_counts_uppercase_states(self, _mock_graphql: AsyncMock) -> None:
         """ContainerState enum is UPPERCASE — running/stopped counts must use case-insensitive match."""
         _mock_graphql.return_value = {
             "info": {
-                "machineId": "x",
                 "versions": {"core": {"unraid": "7.0"}},
                 "os": {"uptime": 1},
             },
@@ -80,7 +102,7 @@ class TestHealthActions:
 
     async def test_check_warning_on_alerts(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "info": {"machineId": "abc", "versions": {"unraid": "7.2"}, "os": {"uptime": 100}},
+            "info": {"versions": {"unraid": "7.2"}, "os": {"uptime": 100}},
             "array": {"state": "STARTED"},
             "notifications": {"overview": {"unread": {"alert": 3, "warning": 0, "total": 3}}},
             "docker": {"containers": []},

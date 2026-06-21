@@ -74,6 +74,19 @@ class DockerMutationResult(BaseModel):
     container: Any = None
 
 
+class ProjectedMutationResult(BaseModel):
+    """Shape returned by array/notification mutations after the raw-`data` fix.
+
+    `data` carries the projected result subtree (the mutation's GraphQL result
+    field), never the whole top-level response dict, so the operation-name
+    wrapper (e.g. ``archiveNotification``/``setState``) is gone.
+    """
+
+    success: bool
+    subaction: str
+    data: Any = None
+
+
 class DockerListResult(BaseModel):
     """Top-level shape of docker/list response."""
 
@@ -311,6 +324,16 @@ def _notifications_mock() -> Generator[AsyncMock, None, None]:
         yield mock
 
 
+@pytest.fixture
+def _array_mock() -> Generator[AsyncMock, None, None]:
+    with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
+        yield mock
+
+
+def _array_tool():
+    return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
+
+
 def _docker_tool():
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
@@ -464,6 +487,96 @@ class TestDockerMutationContract:
         validated = DockerMutationResult(**result)
         assert validated.success is True
         assert validated.subaction == "stop"
+
+
+# ---------------------------------------------------------------------------
+# Array mutation projection contract tests (raw-`data` projection fix)
+# ---------------------------------------------------------------------------
+
+
+class TestArrayMutationProjectionContract:
+    """array mutations project `data` to the result subtree, dropping the wrapper."""
+
+    async def test_parity_start_projects_to_start_subtree(self, _array_mock: AsyncMock) -> None:
+        _array_mock.return_value = {"parityCheck": {"start": True}}
+        result = await _array_tool()(action="array", subaction="parity_start", correct=False)
+        validated = ProjectedMutationResult(**result)
+        assert validated.subaction == "parity_start"
+        # Projected to parityCheck.start; the operation wrapper is gone.
+        assert validated.data is True
+        assert "parityCheck" not in result
+
+    async def test_start_array_projects_to_set_state_subtree(self, _array_mock: AsyncMock) -> None:
+        _array_mock.return_value = {"array": {"setState": {"state": "STARTED"}}}
+        result = await _array_tool()(action="array", subaction="start_array")
+        validated = ProjectedMutationResult(**result)
+        assert validated.data == {"state": "STARTED"}
+        assert "array" not in result
+
+    async def test_add_disk_projects_to_add_disk_subtree(self, _array_mock: AsyncMock) -> None:
+        _array_mock.return_value = {"array": {"addDiskToArray": {"state": "STARTED", "disks": []}}}
+        result = await _array_tool()(action="array", subaction="add_disk", disk_id="abc123:local")
+        validated = ProjectedMutationResult(**result)
+        assert validated.data == {"state": "STARTED", "disks": []}
+        assert "array" not in result
+
+    async def test_parity_status_query_projects_to_status_subtree(
+        self, _array_mock: AsyncMock
+    ) -> None:
+        _array_mock.return_value = {"array": {"parityCheckStatus": {"progress": 50}}}
+        result = await _array_tool()(action="array", subaction="parity_status")
+        validated = ProjectedMutationResult(**result)
+        assert validated.data == {"progress": 50}
+        assert "array" not in result
+
+
+# ---------------------------------------------------------------------------
+# Notification mutation projection contract tests (raw-`data` projection fix)
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationMutationProjectionContract:
+    """notification mutations project `data` to the result subtree, no wrapper."""
+
+    async def test_archive_projects_to_archive_notification_subtree(
+        self, _notifications_mock: AsyncMock
+    ) -> None:
+        _notifications_mock.return_value = {"archiveNotification": {"id": "n:1"}}
+        result = await _notifications_tool()(
+            action="notification", subaction="archive", notification_id="n:1"
+        )
+        validated = ProjectedMutationResult(**result)
+        assert validated.subaction == "archive"
+        assert validated.data == {"id": "n:1"}
+        assert "archiveNotification" not in result
+
+    async def test_recalculate_projects_to_overview_subtree(
+        self, _notifications_mock: AsyncMock
+    ) -> None:
+        overview = {
+            "unread": {"info": 1, "warning": 0, "alert": 0, "total": 1},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+        }
+        _notifications_mock.return_value = {"recalculateOverview": overview}
+        result = await _notifications_tool()(action="notification", subaction="recalculate")
+        validated = ProjectedMutationResult(**result)
+        assert validated.data == overview
+        assert "recalculateOverview" not in result
+
+    async def test_archive_many_projects_to_overview_subtree(
+        self, _notifications_mock: AsyncMock
+    ) -> None:
+        overview = {
+            "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            "archive": {"info": 2, "warning": 0, "alert": 0, "total": 2},
+        }
+        _notifications_mock.return_value = {"archiveNotifications": overview}
+        result = await _notifications_tool()(
+            action="notification", subaction="archive_many", notification_ids=["n:1", "n:2"]
+        )
+        validated = ProjectedMutationResult(**result)
+        assert validated.data == overview
+        assert "archiveNotifications" not in result
 
 
 # ---------------------------------------------------------------------------

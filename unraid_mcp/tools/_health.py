@@ -29,7 +29,9 @@ _HEALTH_SUBACTIONS: set[str] = {"check", "test_connection", "diagnose", "setup"}
 _HEALTH_QUERIES: dict[str, str] = {
     "comprehensive_health": (
         "query ComprehensiveHealthCheck {"
-        " info { machineId time versions { core { unraid } } os { uptime } }"
+        # machineId intentionally omitted — it's a stable hardware fingerprint
+        # (CWE-200) and the health summary doesn't need it.
+        " info { time versions { core { unraid } } os { uptime } }"
         " array { state }"
         " notifications { overview { unread { alert warning total } } }"
         " docker { containers { id state status } }"
@@ -86,7 +88,7 @@ async def _comprehensive_health_check() -> dict[str, Any]:
             health_info["unraid_system"] = {
                 "status": "connected",
                 "url": safe_display_url(UNRAID_API_URL),
-                "machine_id": info.get("machineId"),
+                # machine_id deliberately not surfaced — see CWE-200 note on the query.
                 "version": safe_get(info, "versions", "core", "unraid"),
                 "uptime": safe_get(info, "os", "uptime"),
             }

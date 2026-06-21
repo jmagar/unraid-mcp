@@ -68,6 +68,9 @@ class TestArrayActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="array", subaction="parity_status")
         assert result["success"] is True
+        # data is projected to the array.parityCheckStatus subtree, not the raw blob.
+        assert result["data"] == {"progress": 50}
+        assert "array" not in result
 
     async def test_parity_pause(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"pause": True}}
@@ -102,14 +105,17 @@ class TestArrayMutationFailures:
         tool_fn = _make_tool()
         result = await tool_fn(action="array", subaction="parity_start", correct=False)
         assert result["success"] is True
-        assert result["data"] == {"parityCheck": {"start": False}}
+        # data is projected to the parityCheck.start subtree, not the raw blob.
+        assert result["data"] is False
+        assert "parityCheck" not in result
 
     async def test_parity_start_mutation_returns_null(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"parityCheck": {"start": None}}
         tool_fn = _make_tool()
         result = await tool_fn(action="array", subaction="parity_start", correct=False)
         assert result["success"] is True
-        assert result["data"] == {"parityCheck": {"start": None}}
+        assert result["data"] is None
+        assert "parityCheck" not in result
 
     async def test_parity_start_mutation_returns_empty_object(
         self, _mock_graphql: AsyncMock
@@ -118,7 +124,8 @@ class TestArrayMutationFailures:
         tool_fn = _make_tool()
         result = await tool_fn(action="array", subaction="parity_start", correct=False)
         assert result["success"] is True
-        assert result["data"] == {"parityCheck": {"start": {}}}
+        assert result["data"] == {}
+        assert "parityCheck" not in result
 
     async def test_mutation_timeout(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = TimeoutError("operation timed out")
@@ -207,6 +214,9 @@ async def test_start_array(_mock_graphql):
     _mock_graphql.return_value = {"array": {"setState": {"state": "STARTED"}}}
     result = await _make_tool()(action="array", subaction="start_array")
     assert result["success"] is True
+    # data is projected to the array.setState subtree, not the raw blob.
+    assert result["data"] == {"state": "STARTED"}
+    assert "array" not in result
 
 
 @pytest.mark.asyncio
@@ -236,6 +246,9 @@ async def test_add_disk_success(_mock_graphql):
     _mock_graphql.return_value = {"array": {"addDiskToArray": {"state": "STARTED"}}}
     result = await _make_tool()(action="array", subaction="add_disk", disk_id="abc123:local")
     assert result["success"] is True
+    # data is projected to the array.addDiskToArray subtree, not the raw blob.
+    assert result["data"] == {"state": "STARTED"}
+    assert "array" not in result
 
 
 # remove_disk — destructive
@@ -272,6 +285,9 @@ async def test_unmount_disk_success(_mock_graphql):
     _mock_graphql.return_value = {"array": {"unmountArrayDisk": {"id": "abc123:local"}}}
     result = await _make_tool()(action="array", subaction="unmount_disk", disk_id="abc123:local")
     assert result["success"] is True
+    # data is projected to the array.unmountArrayDisk subtree, not the raw blob.
+    assert result["data"] == {"id": "abc123:local"}
+    assert "array" not in result
 
 
 # clear_disk_stats — destructive
@@ -292,6 +308,9 @@ async def test_clear_disk_stats_with_confirm(_mock_graphql):
         action="array", subaction="clear_disk_stats", disk_id="abc123:local", confirm=True
     )
     assert result["success"] is True
+    # data is projected to the bare clearArrayDiskStatistics boolean, not the blob.
+    assert result["data"] is True
+    assert "array" not in result
 
 
 class TestArrayAssignableDisks:

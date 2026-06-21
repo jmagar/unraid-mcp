@@ -15,18 +15,15 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-import websockets
-from websockets.typing import Subprotocol
-
 from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
+from .protocol import ProtocolError, graphql_ws_session
 from .resources import ensure_subscriptions_started
 from .utils import (
     _analyze_subscription_status,
-    build_connection_init,
     build_ws_ssl_context,
     build_ws_url,
 )
@@ -118,58 +115,46 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
 
         ssl_context = build_ws_ssl_context(ws_url)
 
-        # Test connection
-        async with websockets.connect(
-            ws_url,
-            subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
-            ssl=ssl_context,
-            open_timeout=10,
-            ping_interval=30,
-            ping_timeout=10,
-        ) as websocket:
-            # Send connection init
-            await websocket.send(json.dumps(build_connection_init()))
+        # Shared handshake: connect -> connection_init -> connection_ack -> subscribe.
+        # ack_timeout=None keeps the historical bare recv() (no deadline) on the ack;
+        # ping_interval=30 matches the original probe configuration.
+        try:
+            async with graphql_ws_session(
+                ws_url,
+                subscription_query,
+                sub_id="test",
+                ssl_context=ssl_context,
+                open_timeout=10,
+                ack_timeout=None,
+                ping_interval=30,
+                ping_timeout=10,
+            ) as session:
+                # Wait for the first response with a timeout. The probe deliberately
+                # does NOT normalize the frame — it returns whatever the server sent
+                # first so a developer can inspect the raw subscription response.
+                try:
+                    response = await asyncio.wait_for(session.ws.recv(), timeout=5.0)
+                    result = json.loads(response)
 
-            # Wait for ack
-            response = await websocket.recv()
-            init_response = json.loads(response)
+                    logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
+                    return {
+                        "success": True,
+                        "response": result,
+                        "query_tested": subscription_query,
+                    }
 
-            if init_response.get("type") != "connection_ack":
-                logger.error(
-                    "[TEST_SUBSCRIPTION] Connection not acknowledged: %s",
-                    init_response,
-                )
-                raise ToolError(
-                    "Subscription test failed: WebSocket connection was not acknowledged."
-                )
-
-            # Use the negotiated subprotocol to pick the correct message type.
-            # graphql-transport-ws uses "subscribe"; legacy graphql-ws uses "start".
-            selected_proto = websocket.subprotocol or ""
-            start_type = "subscribe" if selected_proto == "graphql-transport-ws" else "start"
-
-            # Send subscription
-            await websocket.send(
-                json.dumps(
-                    {"id": "test", "type": start_type, "payload": {"query": subscription_query}}
-                )
-            )
-
-            # Wait for response with timeout
-            try:
-                response = await asyncio.wait_for(websocket.recv(), timeout=5.0)
-                result = json.loads(response)
-
-                logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
-                return {"success": True, "response": result, "query_tested": subscription_query}
-
-            except TimeoutError:
-                return {
-                    "success": True,
-                    "response": "No immediate response (subscriptions may only send data on changes)",
-                    "query_tested": subscription_query,
-                    "note": "Connection successful, subscription may be waiting for events",
-                }
+                except TimeoutError:
+                    return {
+                        "success": True,
+                        "response": "No immediate response (subscriptions may only send data on changes)",
+                        "query_tested": subscription_query,
+                        "note": "Connection successful, subscription may be waiting for events",
+                    }
+        except ProtocolError as e:
+            logger.error("[TEST_SUBSCRIPTION] Connection not acknowledged: %s", e)
+            raise ToolError(
+                "Subscription test failed: WebSocket connection was not acknowledged."
+            ) from e
 
     except ToolError:
         raise
@@ -197,6 +182,11 @@ async def diagnose_subscriptions() -> dict[str, Any]:
         # Get comprehensive status
         status = await subscription_manager.get_subscription_status()
 
+        # Aggregate counts/config via the manager's locked accessor — never
+        # reach into its internal state (active_subscriptions / resource_data /
+        # subscription_configs / connection_states) directly (arch-L1).
+        summary = await subscription_manager.get_summary()
+
         # Analyze connection issues and error counts via shared helper.
         # Gates connection_issues on current failure state (Bug 5 fix).
         error_count, connection_issues = _analyze_subscription_status(status)
@@ -214,22 +204,18 @@ async def diagnose_subscriptions() -> dict[str, Any]:
         diagnostic_info: dict[str, Any] = {
             "timestamp": datetime.now(UTC).isoformat(),
             "environment": {
-                "auto_start_enabled": subscription_manager.auto_start_enabled,
-                "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
+                "auto_start_enabled": summary["auto_start_enabled"],
+                "max_reconnect_attempts": summary["max_reconnect_attempts"],
                 "unraid_api_url": safe_display_url(_settings.UNRAID_API_URL),
                 "api_key_configured": bool(_settings.UNRAID_API_KEY),
                 "websocket_url": ws_url_display,
             },
             "subscriptions": status,
             "summary": {
-                "total_configured": len(subscription_manager.subscription_configs),
-                "auto_start_count": sum(
-                    1
-                    for s in subscription_manager.subscription_configs.values()
-                    if s.get("auto_start")
-                ),
-                "active_count": len(subscription_manager.active_subscriptions),
-                "with_data": len(subscription_manager.resource_data),
+                "total_configured": summary["total_configured"],
+                "auto_start_count": summary["auto_start_count"],
+                "active_count": summary["active_count"],
+                "with_data": summary["with_data"],
                 "in_error_state": error_count,
                 "connection_issues": connection_issues,
             },

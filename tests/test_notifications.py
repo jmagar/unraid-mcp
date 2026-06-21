@@ -94,14 +94,16 @@ class TestNotificationsActions:
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="archive", notification_id="n:1")
         assert result["success"] is True
+        # data is projected to the archiveNotification subtree, not the raw blob.
+        assert result["data"] == {"id": "n:1"}
+        assert "archiveNotification" not in result
 
     async def test_delete_with_confirm(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "deleteNotification": {
-                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-            }
+        overview = {
+            "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
         }
+        _mock_graphql.return_value = {"deleteNotification": overview}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="notification",
@@ -111,17 +113,22 @@ class TestNotificationsActions:
             confirm=True,
         )
         assert result["success"] is True
+        # data is projected to the deleteNotification subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "deleteNotification" not in result
 
     async def test_archive_all(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "archiveAll": {
-                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 1},
-            }
+        overview = {
+            "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 1},
         }
+        _mock_graphql.return_value = {"archiveAll": overview}
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="archive_all")
         assert result["success"] is True
+        # data is projected to the archiveAll subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "archiveAll" not in result
 
     async def test_mark_unread_notification(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"unreadNotification": {"id": "n:1"}}
@@ -131,6 +138,9 @@ class TestNotificationsActions:
         )
         assert result["success"] is True
         assert result["subaction"] == "mark_unread"
+        # data is projected to the unreadNotification subtree, not the raw blob.
+        assert result["data"] == {"id": "n:1"}
+        assert "unreadNotification" not in result
 
     async def test_list_with_importance_filter(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
@@ -167,16 +177,18 @@ class TestNotificationsActions:
         assert filter_var["limit"] == _MAX_NOTIFICATION_LIMIT
 
     async def test_delete_archived(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "deleteArchivedNotifications": {
-                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-            }
+        overview = {
+            "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
         }
+        _mock_graphql.return_value = {"deleteArchivedNotifications": overview}
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="delete_archived", confirm=True)
         assert result["success"] is True
         assert result["subaction"] == "delete_archived"
+        # data is projected to the deleteArchivedNotifications subtree, not the blob.
+        assert result["data"] == overview
+        assert "deleteArchivedNotifications" not in result
 
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("boom")
@@ -278,17 +290,19 @@ class TestNotificationsCreateValidation:
 
 class TestNewNotificationMutations:
     async def test_archive_many_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "archiveNotifications": {
-                "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-                "archive": {"info": 2, "warning": 0, "alert": 0, "total": 2},
-            }
+        overview = {
+            "unread": {"info": 0, "warning": 0, "alert": 0, "total": 0},
+            "archive": {"info": 2, "warning": 0, "alert": 0, "total": 2},
         }
+        _mock_graphql.return_value = {"archiveNotifications": overview}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="notification", subaction="archive_many", notification_ids=["n:1", "n:2"]
         )
         assert result["success"] is True
+        # data is projected to the archiveNotifications subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "archiveNotifications" not in result
         call_args = _mock_graphql.call_args
         assert call_args[0][1] == {"ids": ["n:1", "n:2"]}
 
@@ -298,17 +312,19 @@ class TestNewNotificationMutations:
             await tool_fn(action="notification", subaction="archive_many")
 
     async def test_unarchive_many_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "unarchiveNotifications": {
-                "unread": {"info": 2, "warning": 0, "alert": 0, "total": 2},
-                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-            }
+        overview = {
+            "unread": {"info": 2, "warning": 0, "alert": 0, "total": 2},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
         }
+        _mock_graphql.return_value = {"unarchiveNotifications": overview}
         tool_fn = _make_tool()
         result = await tool_fn(
             action="notification", subaction="unarchive_many", notification_ids=["n:1", "n:2"]
         )
         assert result["success"] is True
+        # data is projected to the unarchiveNotifications subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "unarchiveNotifications" not in result
 
     async def test_unarchive_many_requires_ids(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
@@ -316,15 +332,17 @@ class TestNewNotificationMutations:
             await tool_fn(action="notification", subaction="unarchive_many")
 
     async def test_unarchive_all_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "unarchiveAll": {
-                "unread": {"info": 5, "warning": 1, "alert": 0, "total": 6},
-                "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
-            }
+        overview = {
+            "unread": {"info": 5, "warning": 1, "alert": 0, "total": 6},
+            "archive": {"info": 0, "warning": 0, "alert": 0, "total": 0},
         }
+        _mock_graphql.return_value = {"unarchiveAll": overview}
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="unarchive_all")
         assert result["success"] is True
+        # data is projected to the unarchiveAll subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "unarchiveAll" not in result
 
     async def test_unarchive_all_with_importance(self, _mock_graphql: AsyncMock) -> None:
         """Lowercase importance input must be uppercased before being sent to GraphQL."""
@@ -337,15 +355,17 @@ class TestNewNotificationMutations:
         assert call_args[0][1] == {"importance": "WARNING"}
 
     async def test_recalculate_success(self, _mock_graphql: AsyncMock) -> None:
-        _mock_graphql.return_value = {
-            "recalculateOverview": {
-                "unread": {"info": 3, "warning": 1, "alert": 0, "total": 4},
-                "archive": {"info": 10, "warning": 0, "alert": 0, "total": 10},
-            }
+        overview = {
+            "unread": {"info": 3, "warning": 1, "alert": 0, "total": 4},
+            "archive": {"info": 10, "warning": 0, "alert": 0, "total": 10},
         }
+        _mock_graphql.return_value = {"recalculateOverview": overview}
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="recalculate")
         assert result["success"] is True
+        # data is projected to the recalculateOverview subtree, not the raw blob.
+        assert result["data"] == overview
+        assert "recalculateOverview" not in result
 
 
 class TestNotificationsListResponseSize:

@@ -14,13 +14,19 @@ from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
 from ..core.pagination import cap_list
-from ..core.utils import coerce_list, validate_subaction
+from ..core.utils import coerce_list, safe_get, validate_subaction
 
 
 # ===========================================================================
 # ARRAY
 # ===========================================================================
 
+# NOTE: `parityHistory` and `assignableDisks` take no arguments in the Unraid
+# GraphQL schema — there is no server-side limit/offset/pagination to push the
+# bound down into. Both return `[T!]!` with an empty Argument column in the schema
+# reference (docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md, `query.parityhistory`
+# and `query.assignabledisks`), unlike e.g. `notifications.list(filter:)`. So we
+# fetch the full upstream list and bound it client-side via cap_list below.
 _ARRAY_QUERIES: dict[str, str] = {
     "parity_status": "query GetParityStatus { array { parityCheckStatus { progress speed errors status paused running correcting } } }",
     "parity_history": "query GetParityHistory { parityHistory { date duration speed status errors progress correcting paused running } }",
@@ -44,6 +50,26 @@ _ARRAY_MUTATIONS: dict[str, str] = {
 
 _ARRAY_SUBACTIONS: set[str] = set(_ARRAY_QUERIES) | set(_ARRAY_MUTATIONS)
 _ARRAY_DESTRUCTIVE: set[str] = {"remove_disk", "clear_disk_stats", "stop_array"}
+
+# Maps each non-list subaction to the GraphQL key chain for its meaningful result
+# subtree, so the handler projects to that subtree under `data` instead of echoing
+# the whole top-level response (which leaks the operation wrapper and inflates the
+# payload). The list subactions (parity_history, assignable_disks) are excluded —
+# they keep their cap_list + page shapes untouched.
+_ARRAY_RESULT_FIELD: dict[str, tuple[str, ...]] = {
+    "parity_status": ("array", "parityCheckStatus"),
+    "parity_start": ("parityCheck", "start"),
+    "parity_pause": ("parityCheck", "pause"),
+    "parity_resume": ("parityCheck", "resume"),
+    "parity_cancel": ("parityCheck", "cancel"),
+    "start_array": ("array", "setState"),
+    "stop_array": ("array", "setState"),
+    "add_disk": ("array", "addDiskToArray"),
+    "remove_disk": ("array", "removeDiskFromArray"),
+    "mount_disk": ("array", "mountArrayDisk"),
+    "unmount_disk": ("array", "unmountArrayDisk"),
+    "clear_disk_stats": ("array", "clearArrayDiskStatistics"),
+}
 
 
 async def _handle_array(
@@ -93,7 +119,10 @@ async def _handle_array(
                     "data": {"assignableDisks": capped},
                     "page": meta,
                 }
-            return {"success": True, "subaction": subaction, "data": data}
+            # Non-list query (parity_status): project to the meaningful subtree
+            # rather than echoing the whole top-level response.
+            result = safe_get(data, *_ARRAY_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         if subaction == "parity_start":
             if correct is None:
@@ -101,7 +130,8 @@ async def _handle_array(
             data = await _client.make_graphql_request(
                 _ARRAY_MUTATIONS[subaction], {"correct": correct}
             )
-            return {"success": True, "subaction": subaction, "data": data}
+            result = safe_get(data, *_ARRAY_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         if subaction in (
             "parity_pause",
@@ -111,7 +141,8 @@ async def _handle_array(
             "stop_array",
         ):
             data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction])
-            return {"success": True, "subaction": subaction, "data": data}
+            result = safe_get(data, *_ARRAY_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         if subaction == "add_disk":
             if not disk_id:
@@ -120,12 +151,14 @@ async def _handle_array(
             if slot is not None:
                 variables["slot"] = slot
             data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction], variables)
-            return {"success": True, "subaction": subaction, "data": data}
+            result = safe_get(data, *_ARRAY_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         if subaction in ("remove_disk", "mount_disk", "unmount_disk", "clear_disk_stats"):
             if not disk_id:
                 raise ToolError(f"disk_id is required for array/{subaction}")
             data = await _client.make_graphql_request(_ARRAY_MUTATIONS[subaction], {"id": disk_id})
-            return {"success": True, "subaction": subaction, "data": data}
+            result = safe_get(data, *_ARRAY_RESULT_FIELD[subaction])
+            return {"success": True, "subaction": subaction, "data": result}
 
         raise ToolError(f"Unhandled array subaction '{subaction}' — this is a bug")

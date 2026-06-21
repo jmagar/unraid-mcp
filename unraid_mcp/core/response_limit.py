@@ -71,6 +71,26 @@ class StructuredResponseLimitingMiddleware(Middleware):
         self.max_size = max_size
         self.tools = set(tools) if tools is not None else None
 
+    @staticmethod
+    def _measure(result: ToolResult) -> int:
+        """Return the serialized byte size of a ToolResult.
+
+        The ``unraid`` tool's payload is a JSON string in a single ``TextContent``
+        block — by far the common case. For that shape we measure the text bytes
+        directly instead of re-serializing the whole ``ToolResult`` via
+        ``pydantic_core.to_json`` on every call. The full serialization is only
+        marginally larger (the content wrapper plus JSON escaping of the text — and
+        escaping can add more than a wrapper's worth of bytes for quote/backslash-
+        heavy content), so the fast path under-counts and is therefore conservative:
+        it never truncates a response that full serialization would have kept under
+        the cap. Multi-content or other result shapes fall back to full
+        serialization.
+        """
+        content = result.content
+        if len(content) == 1 and isinstance(content[0], TextContent):
+            return len(content[0].text.encode())
+        return len(pydantic_core.to_json(result, fallback=str))
+
     def _marker_result(self, original_bytes: int) -> ToolResult:
         """Build a ToolResult wrapping the structured truncation marker."""
         marker = {
@@ -99,8 +119,7 @@ class StructuredResponseLimitingMiddleware(Middleware):
         if self.tools is not None and context.message.name not in self.tools:
             return result
 
-        serialized = pydantic_core.to_json(result, fallback=str)
-        size = len(serialized)
+        size = self._measure(result)
         if size <= self.max_size:
             return result
 

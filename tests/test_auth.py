@@ -608,10 +608,15 @@ def _make_get_scope(path: str, host: str = "localhost:6970") -> dict:
     }
 
 
-async def _run_well_known(path: str, method: str = "GET", host: str = "localhost:6970"):
+async def _run_well_known(
+    path: str,
+    method: str = "GET",
+    host: str = "localhost:6970",
+    public_host: str | None = None,
+):
     """Run WellKnownMiddleware and return (status, headers_dict, parsed_body)."""
     app, called = _app_called_flag()  # noqa: RUF059
-    mw = WellKnownMiddleware(app)
+    mw = WellKnownMiddleware(app, public_host=public_host)
     scope = {
         "type": "http",
         "method": method,
@@ -647,9 +652,9 @@ async def _run_well_known(path: str, method: str = "GET", host: str = "localhost
 
 
 class TestWellKnownMiddleware:
-    def _run(self, path, method="GET", host="localhost:6970"):
+    def _run(self, path, method="GET", host="localhost:6970", public_host=None):
         return asyncio.get_event_loop().run_until_complete(
-            _run_well_known(path, method=method, host=host)
+            _run_well_known(path, method=method, host=host, public_host=public_host)
         )
 
     # ------------------------------------------------------------------
@@ -682,6 +687,29 @@ class TestWellKnownMiddleware:
             "/.well-known/oauth-protected-resource", host="myserver.example.com:6970"
         )
         assert "myserver.example.com:6970" in body["resource"]
+
+    def test_configured_public_host_overrides_request_host(self):
+        """When a public_host is configured it is used verbatim, ignoring Host."""
+        _, _, body = self._run(
+            "/.well-known/oauth-protected-resource",
+            host="attacker.evil.example:6970",
+            public_host="trusted.example.com:6970",
+        )
+        assert body["resource"] == "http://trusted.example.com:6970"
+        assert "attacker" not in body["resource"]
+
+    def test_request_host_is_sanitized_when_no_public_host(self):
+        """Unsafe chars in the Host header are stripped from the resource URI."""
+        # CRLF + a path-injection attempt are dropped; valid host[:port] chars survive.
+        _, _, body = self._run(
+            "/.well-known/oauth-protected-resource",
+            host="evil.example.com:6970/\r\nX-Injected: 1",
+        )
+        # Only [A-Za-z0-9.:-] survive: '/', CR, LF, and the space are stripped.
+        assert body["resource"] == "http://evil.example.com:6970X-Injected:1"
+        assert "\r" not in body["resource"]
+        assert "\n" not in body["resource"]
+        assert "/" not in body["resource"].split("://", 1)[1]
 
     def test_no_authorization_servers_field(self):
         """Absence of authorization_servers tells clients: use a pre-configured token."""
