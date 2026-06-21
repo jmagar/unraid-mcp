@@ -140,6 +140,13 @@ UNRAID_MCP_BEARER_TOKEN: str | None = os.getenv("UNRAID_MCP_BEARER_TOKEN") or No
 _raw_disable_auth = os.getenv("UNRAID_MCP_DISABLE_HTTP_AUTH", "false").lower()
 UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _raw_disable_auth in ("true", "1", "yes")
 
+# When HTTP auth is disabled, the server refuses to bind a non-loopback interface
+# unless an upstream proxy/gateway is explicitly trusted to enforce auth. Set this
+# true for the documented SWAG-fronted topology, where SWAG/Authelia front the
+# endpoint. Leaving it false fails closed on a public/LAN bind (finding S-H3).
+_raw_trust_proxy = os.getenv("UNRAID_MCP_TRUST_PROXY", "false").lower()
+UNRAID_MCP_TRUST_PROXY: bool = _raw_trust_proxy in ("true", "1", "yes")
+
 # SSL Configuration
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
 if raw_verify_ssl in ["false", "0", "no"]:
