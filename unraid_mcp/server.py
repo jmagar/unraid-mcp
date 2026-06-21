@@ -4,6 +4,7 @@ This is the main server implementation using the modular architecture with
 separate modules for configuration, core functionality, subscriptions, and tools.
 """
 
+import ipaddress
 import os
 import secrets
 import sys
@@ -35,6 +36,33 @@ from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddlewa
 from .core.response_limit import StructuredResponseLimitingMiddleware
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
+
+
+_LOOPBACK_HOSTNAMES = frozenset({"localhost"})
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return True if *host* binds only a loopback interface.
+
+    Loopback binds (``127.0.0.0/8``, ``::1``, ``localhost``) keep an
+    unauthenticated endpoint off the network. Bind-all addresses
+    (``0.0.0.0``, ``::``), LAN IPs, and non-localhost hostnames are treated as
+    non-loopback (fail closed — unknown names could resolve anywhere). Used by
+    the startup guard for finding S-H3.
+    """
+    h = host.strip().lower().strip("[]")
+    if not h:
+        return False
+    if h in _LOOPBACK_HOSTNAMES:
+        return True
+    try:
+        addr = ipaddress.ip_address(h)
+    except ValueError:
+        return False
+    if addr.is_loopback:
+        return True
+    mapped = getattr(addr, "ipv4_mapped", None)
+    return bool(mapped is not None and mapped.is_loopback)
 
 
 def _chmod_safe(path: object, mode: int, *, strict: bool = False) -> None:
@@ -197,6 +225,27 @@ def run_server() -> None:
             print(
                 "FATAL: HTTP transport requires a bearer token. "
                 "Set UNRAID_MCP_BEARER_TOKEN in ~/.unraid-mcp/.env or restart to auto-generate.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        # S-H3: disabling auth is only safe behind a trusted gateway or on
+        # loopback. Refuse to expose an unauthenticated MCP endpoint on a
+        # public/LAN interface — that would let anyone on the network drive the
+        # Unraid API. Operators fronting the server with SWAG/Authelia opt in
+        # via UNRAID_MCP_TRUST_PROXY=true.
+        if (
+            is_http
+            and _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
+            and not _settings.UNRAID_MCP_TRUST_PROXY
+            and not _is_loopback_host(_settings.UNRAID_MCP_HOST)
+        ):
+            print(
+                "FATAL: UNRAID_MCP_DISABLE_HTTP_AUTH=true with a non-loopback bind host "
+                f"({_settings.UNRAID_MCP_HOST}) would expose an unauthenticated MCP endpoint "
+                "on the network. Refusing to start. Either bind to 127.0.0.1, re-enable "
+                "bearer-token auth, or set UNRAID_MCP_TRUST_PROXY=true if an upstream gateway "
+                "enforces authentication.",
                 file=sys.stderr,
             )
             sys.exit(1)
