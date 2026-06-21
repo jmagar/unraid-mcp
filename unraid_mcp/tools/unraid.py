@@ -527,129 +527,154 @@ def register_unraid_tool(mcp: FastMCP) -> None:
             return _HELP_TEXT
 
         if action == "system":
-            return await _handle_system(subaction, device_id, limit)
+            return await _handle_system(subaction, device_id=device_id, limit=limit)
 
         if action == "health":
             return await _handle_health(subaction, ctx)
 
         if action == "array":
-            return await _handle_array(subaction, disk_id, correct, slot, ctx, confirm, limit)
+            return await _handle_array(
+                subaction,
+                disk_id=disk_id,
+                correct=correct,
+                slot=slot,
+                ctx=ctx,
+                confirm=confirm,
+                limit=limit,
+            )
 
         if action == "disk":
             return await _handle_disk(
                 subaction,
-                disk_id,
-                log_path,
-                tail_lines,
-                remote_name,
-                source_path,
-                destination_path,
-                backup_options,
-                ctx,
-                confirm,
-                level,
-                context,
-                limit,
+                disk_id=disk_id,
+                log_path=log_path,
+                tail_lines=tail_lines,
+                remote_name=remote_name,
+                source_path=source_path,
+                destination_path=destination_path,
+                backup_options=backup_options,
+                ctx=ctx,
+                confirm=confirm,
+                level=level,
+                context=context,
+                limit=limit,
             )
 
         if action == "docker":
             return await _handle_docker(
                 subaction,
-                container_id,
-                network_id,
-                limit,
-                ctx,
-                confirm,
-                container_ids,
-                with_image,
-                autostart_entries,
-                organizer_input,
+                container_id=container_id,
+                network_id=network_id,
+                limit=limit,
+                ctx=ctx,
+                confirm=confirm,
+                container_ids=container_ids,
+                with_image=with_image,
+                autostart_entries=autostart_entries,
+                organizer_input=organizer_input,
             )
 
         if action == "vm":
-            return await _handle_vm(subaction, vm_id, ctx, confirm)
+            return await _handle_vm(subaction, vm_id=vm_id, ctx=ctx, confirm=confirm)
 
         if action == "notification":
             return await _handle_notification(
                 subaction,
-                ctx,
-                confirm,
-                notification_id,
-                notification_ids,
-                notification_type,
-                importance,
-                offset,
-                limit,
-                list_type,
-                title,
-                subject,
-                description,
+                ctx=ctx,
+                confirm=confirm,
+                notification_id=notification_id,
+                notification_ids=notification_ids,
+                notification_type=notification_type,
+                importance=importance,
+                offset=offset,
+                limit=limit,
+                list_type=list_type,
+                title=title,
+                subject=subject,
+                description=description,
             )
 
         if action == "key":
             return await _handle_key(
                 subaction,
-                key_id,
-                name,
-                roles,
-                permissions,
-                ctx,
-                confirm,
-                limit,
-                permissions_input,
+                key_id=key_id,
+                name=name,
+                roles=roles,
+                permissions=permissions,
+                ctx=ctx,
+                confirm=confirm,
+                limit=limit,
+                permissions_input=permissions_input,
             )
 
         if action == "plugin":
             return await _handle_plugin(
                 subaction,
-                names,
-                bundled,
-                restart,
-                ctx,
-                confirm,
-                limit,
-                url,
-                plugin_name,
-                forced,
-                operation_id,
+                names=names,
+                bundled=bundled,
+                restart=restart,
+                ctx=ctx,
+                confirm=confirm,
+                limit=limit,
+                url=url,
+                plugin_name=plugin_name,
+                forced=forced,
+                operation_id=operation_id,
             )
 
         if action == "rclone":
             return await _handle_rclone(
-                subaction, name, provider_type, config_data, ctx, confirm, limit
+                subaction,
+                name=name,
+                provider_type=provider_type,
+                config_data=config_data,
+                ctx=ctx,
+                confirm=confirm,
+                limit=limit,
             )
 
         if action == "setting":
             return await _handle_setting(
                 subaction,
-                settings_input,
-                ups_config,
-                ctx,
-                confirm,
-                config_input,
-                name,
-                comment,
-                sys_model,
+                settings_input=settings_input,
+                ups_config=ups_config,
+                ctx=ctx,
+                confirm=confirm,
+                config_input=config_input,
+                name=name,
+                comment=comment,
+                sys_model=sys_model,
             )
 
         if action == "connect":
-            return await _handle_connect(subaction, ctx, confirm, connect_input)
+            return await _handle_connect(
+                subaction, ctx=ctx, confirm=confirm, connect_input=connect_input
+            )
 
         if action == "onboarding":
-            return await _handle_onboarding(subaction, ctx, confirm, onboarding_input)
+            return await _handle_onboarding(
+                subaction, ctx=ctx, confirm=confirm, onboarding_input=onboarding_input
+            )
 
         if action == "customization":
-            return await _handle_customization(subaction, theme_name, locale)
+            return await _handle_customization(subaction, theme_name=theme_name, locale=locale)
 
         if action == "oidc":
-            return await _handle_oidc(subaction, provider_id, token, limit)
+            return await _handle_oidc(subaction, provider_id=provider_id, token=token, limit=limit)
 
         if action == "user":
             return await _handle_user(subaction)
 
         if action == "live":
             return await _handle_live(
-                subaction, path, collect_for, timeout, level, context, limit, operation_id
+                subaction,
+                path=path,
+                collect_for=collect_for,
+                timeout=timeout,
+                level=level,
+                context=context,
+                limit=limit,
+                operation_id=operation_id,
             )
 
         if action == "subscriptions":
