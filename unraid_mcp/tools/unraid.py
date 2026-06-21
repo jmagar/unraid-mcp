@@ -403,7 +403,9 @@ class UnraidInput(BaseModel):
     # disk
     log_path: str | None = Field(default=None, description="Log file path (disk/logs).")
     tail_lines: int = Field(default=100, description="Number of trailing log lines (disk/logs).")
-    remote_name: str | None = Field(default=None, description="Rclone remote name (disk/flash_backup).")
+    remote_name: str | None = Field(
+        default=None, description="Rclone remote name (disk/flash_backup)."
+    )
     source_path: str | None = Field(default=None, description="Source path (disk/flash_backup).")
     destination_path: str | None = Field(
         default=None, description="Destination path (disk/flash_backup)."
@@ -413,7 +415,9 @@ class UnraidInput(BaseModel):
     )
     # docker
     container_id: str | None = Field(default=None, description="Docker container ID or name.")
-    network_id: str | None = Field(default=None, description="Docker network ID (docker/network_details).")
+    network_id: str | None = Field(
+        default=None, description="Docker network ID (docker/network_details)."
+    )
     container_ids: list[str] | None = Field(
         default=None, description="Multiple container IDs/names (docker/update_containers)."
     )
@@ -468,7 +472,9 @@ class UnraidInput(BaseModel):
     url: str | None = Field(
         default=None, description="Plugin .plg URL (plugin/install, plugin/install_language)."
     )
-    plugin_name: str | None = Field(default=None, description="Optional plugin name (plugin/install).")
+    plugin_name: str | None = Field(
+        default=None, description="Optional plugin name (plugin/install)."
+    )
     forced: bool = Field(default=False, description="Force plugin install (plugin/install).")
     operation_id: str | None = Field(
         default=None,
@@ -509,8 +515,12 @@ class UnraidInput(BaseModel):
         description="Input object for onboarding/set_override, create_internal_boot_pool.",
     )
     # customization
-    theme_name: str | None = Field(default=None, description="Theme name (customization/set_theme).")
-    locale: str | None = Field(default=None, description="Locale string (customization/set_locale).")
+    theme_name: str | None = Field(
+        default=None, description="Theme name (customization/set_theme)."
+    )
+    locale: str | None = Field(
+        default=None, description="Locale string (customization/set_locale)."
+    )
     # oidc
     provider_id: str | None = Field(default=None, description="OIDC provider id (oidc/provider).")
     token: str | None = Field(default=None, description="Session token (oidc/validate_session).")
@@ -520,9 +530,7 @@ class UnraidInput(BaseModel):
     )
     # live
     path: str | None = Field(default=None, description="Log file path (live/log_tail).")
-    collect_for: float = Field(
-        default=5.0, description="WebSocket collection duration in seconds."
-    )
+    collect_for: float = Field(default=5.0, description="WebSocket collection duration in seconds.")
     timeout: float = Field(default=10.0, description="WebSocket timeout in seconds.")
     # log filtering (disk/logs + live/log_tail)
     level: str | None = Field(
@@ -699,9 +707,7 @@ async def _dispatch_onboarding(inp: UnraidInput, ctx: Context | None) -> dict[st
 
 
 async def _dispatch_customization(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
-    return await _handle_customization(
-        inp.subaction, theme_name=inp.theme_name, locale=inp.locale
-    )
+    return await _handle_customization(inp.subaction, theme_name=inp.theme_name, locale=inp.locale)
 
 
 async def _dispatch_oidc(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:

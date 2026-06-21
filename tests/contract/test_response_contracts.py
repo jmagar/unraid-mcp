@@ -497,9 +497,7 @@ class TestDockerMutationContract:
 class TestArrayMutationProjectionContract:
     """array mutations project `data` to the result subtree, dropping the wrapper."""
 
-    async def test_parity_start_projects_to_start_subtree(
-        self, _array_mock: AsyncMock
-    ) -> None:
+    async def test_parity_start_projects_to_start_subtree(self, _array_mock: AsyncMock) -> None:
         _array_mock.return_value = {"parityCheck": {"start": True}}
         result = await _array_tool()(action="array", subaction="parity_start", correct=False)
         validated = ProjectedMutationResult(**result)
@@ -508,24 +506,16 @@ class TestArrayMutationProjectionContract:
         assert validated.data is True
         assert "parityCheck" not in result
 
-    async def test_start_array_projects_to_set_state_subtree(
-        self, _array_mock: AsyncMock
-    ) -> None:
+    async def test_start_array_projects_to_set_state_subtree(self, _array_mock: AsyncMock) -> None:
         _array_mock.return_value = {"array": {"setState": {"state": "STARTED"}}}
         result = await _array_tool()(action="array", subaction="start_array")
         validated = ProjectedMutationResult(**result)
         assert validated.data == {"state": "STARTED"}
         assert "array" not in result
 
-    async def test_add_disk_projects_to_add_disk_subtree(
-        self, _array_mock: AsyncMock
-    ) -> None:
-        _array_mock.return_value = {
-            "array": {"addDiskToArray": {"state": "STARTED", "disks": []}}
-        }
-        result = await _array_tool()(
-            action="array", subaction="add_disk", disk_id="abc123:local"
-        )
+    async def test_add_disk_projects_to_add_disk_subtree(self, _array_mock: AsyncMock) -> None:
+        _array_mock.return_value = {"array": {"addDiskToArray": {"state": "STARTED", "disks": []}}}
+        result = await _array_tool()(action="array", subaction="add_disk", disk_id="abc123:local")
         validated = ProjectedMutationResult(**result)
         assert validated.data == {"state": "STARTED", "disks": []}
         assert "array" not in result
