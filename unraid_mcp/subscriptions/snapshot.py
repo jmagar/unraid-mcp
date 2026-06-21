@@ -90,19 +90,30 @@ async def subscribe_once(
         try:
             async with asyncio.timeout(timeout):
                 async for raw_msg in ws:
-                    msg = json.loads(raw_msg)
-                    if msg.get("type") == "ping":
-                        await ws.send(json.dumps({"type": "pong"}))
+                    # Parse + dispatch each frame defensively: a single malformed
+                    # frame must be logged and skipped, not abort the snapshot.
+                    # Mirrors the persistent manager loop's per-message resilience.
+                    # ToolError (auth/GraphQL errors) is re-raised so it still
+                    # propagates to the caller.
+                    try:
+                        msg = json.loads(raw_msg)
+                        if msg.get("type") == "ping":
+                            await ws.send(json.dumps({"type": "pong"}))
+                            continue
+                        if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
+                            payload = msg.get("payload", {})
+                            if errors := payload.get("errors"):
+                                msgs = "; ".join(e.get("message", str(e)) for e in errors)
+                                raise ToolError(f"Subscription errors: {msgs}")
+                            if data := payload.get("data"):
+                                return data
+                        elif msg.get("type") == "error" and msg.get("id") == _SUB_ID:
+                            raise ToolError(f"Subscription error: {msg.get('payload')}")
+                    except ToolError:
+                        raise
+                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
+                        logger.warning("Skipping malformed subscription frame: %s", e)
                         continue
-                    if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
-                        payload = msg.get("payload", {})
-                        if errors := payload.get("errors"):
-                            msgs = "; ".join(e.get("message", str(e)) for e in errors)
-                            raise ToolError(f"Subscription errors: {msgs}")
-                        if data := payload.get("data"):
-                            return data
-                    elif msg.get("type") == "error" and msg.get("id") == _SUB_ID:
-                        raise ToolError(f"Subscription error: {msg.get('payload')}")
         except TimeoutError:
             raise ToolError(f"Subscription timed out after {timeout:.0f}s") from None
 
@@ -126,17 +137,28 @@ async def subscribe_collect(
         try:
             async with asyncio.timeout(collect_for):
                 async for raw_msg in ws:
-                    msg = json.loads(raw_msg)
-                    if msg.get("type") == "ping":
-                        await ws.send(json.dumps({"type": "pong"}))
+                    # Parse + dispatch each frame defensively: a single malformed
+                    # frame must be logged and skipped, not abort the collection.
+                    # Mirrors the persistent manager loop's per-message resilience.
+                    # ToolError (auth/GraphQL errors) is re-raised so it still
+                    # propagates to the caller.
+                    try:
+                        msg = json.loads(raw_msg)
+                        if msg.get("type") == "ping":
+                            await ws.send(json.dumps({"type": "pong"}))
+                            continue
+                        if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
+                            payload = msg.get("payload", {})
+                            if errors := payload.get("errors"):
+                                msgs = "; ".join(e.get("message", str(e)) for e in errors)
+                                raise ToolError(f"Subscription errors: {msgs}")
+                            if data := payload.get("data"):
+                                events.append(data)
+                    except ToolError:
+                        raise
+                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
+                        logger.warning("Skipping malformed subscription frame: %s", e)
                         continue
-                    if msg.get("type") == expected_type and msg.get("id") == _SUB_ID:
-                        payload = msg.get("payload", {})
-                        if errors := payload.get("errors"):
-                            msgs = "; ".join(e.get("message", str(e)) for e in errors)
-                            raise ToolError(f"Subscription errors: {msgs}")
-                        if data := payload.get("data"):
-                            events.append(data)
         except TimeoutError:
             pass  # Collection window expired — return whatever was collected
 
