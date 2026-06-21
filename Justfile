@@ -106,9 +106,10 @@ gen-token:
 
 # ── Quality Gates ─────────────────────────────────────────────────────────────
 
-# Run repo contract checks (version sync + marketplace/plugin manifest structure)
+# Run repo contract checks (version sync, env hygiene, marketplace structure)
 check-contract:
     bash scripts/check-version-sync.sh
+    bash scripts/block-env-commits.sh
     bash scripts/validate-marketplace.sh
 
 # ── CLI Generation ────────────────────────────────────────────────────────────
