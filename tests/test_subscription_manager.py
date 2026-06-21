@@ -6,9 +6,11 @@ cap nested 'content' fields, and only truncate when both byte limit and line
 limit are exceeded.
 """
 
+from datetime import UTC, datetime
 from unittest.mock import patch
 
-from unraid_mcp.subscriptions.manager import _cap_log_content
+from unraid_mcp.core.types import SubscriptionData
+from unraid_mcp.subscriptions.manager import SubscriptionManager, _cap_log_content
 
 
 class TestCapLogContentImmutability:
@@ -154,3 +156,50 @@ class TestCapLogContentSingleMassiveLine:
         ):
             _cap_log_content(data)
         assert data["content"] == huge_content
+
+
+class TestGetSummary:
+    """get_summary() must report aggregate counts/states from seeded state.
+
+    The accessor is the public, locked replacement for diagnostics.py reaching
+    into the manager's internal state directly (arch-L1).
+    """
+
+    async def test_summary_reflects_seeded_state(self) -> None:
+        mgr = SubscriptionManager()
+        # One subscription with a live (fake) task -> counts as active.
+        mgr.active_subscriptions["cpu"] = object()  # type: ignore[assignment]
+        mgr.connection_states["cpu"] = "subscribed"
+        # A second subscription that has cached data but no task.
+        mgr.connection_states["memory"] = "connected"
+        mgr.resource_data["memory"] = SubscriptionData(
+            data={"systemMetricsMemory": {"percentTotal": 33.0}},
+            last_updated=datetime.now(UTC),
+        )
+
+        summary = await mgr.get_summary()
+
+        # Counts derived under the appropriate locks.
+        assert summary["active_count"] == 1
+        assert summary["with_data"] == 1
+        assert summary["total_configured"] == len(mgr.subscription_configs)
+        assert summary["auto_start_count"] == sum(
+            1 for c in mgr.subscription_configs.values() if c.get("auto_start")
+        )
+
+        # Per-name connection states are surfaced as a plain snapshot dict.
+        assert summary["connection_states"]["cpu"] == "subscribed"
+        assert summary["connection_states"]["memory"] == "connected"
+
+        # Config values are echoed through.
+        assert summary["auto_start_enabled"] == mgr.auto_start_enabled
+        assert summary["max_reconnect_attempts"] == mgr.max_reconnect_attempts
+
+    async def test_summary_empty_manager_has_zero_counts(self) -> None:
+        mgr = SubscriptionManager()
+        summary = await mgr.get_summary()
+        assert summary["active_count"] == 0
+        assert summary["with_data"] == 0
+        assert summary["connection_states"] == {}
+        # total_configured is non-zero because configs are built in __init__.
+        assert summary["total_configured"] == len(mgr.subscription_configs)

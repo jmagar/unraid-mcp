@@ -106,13 +106,27 @@ class SubscriptionManager:
     Two fine-grained locks (instead of one coarse lock) keep WebSocket message
     updates from blocking tool reads of the task state and vice versa.
 
-    ABBA-avoidance: :meth:`get_subscription_status` needs both lock-protected
-    field groups, so it snapshots under each lock *separately* (acquire/release
-    ``_task_lock``, then acquire/release ``_data_lock``) — never holding both at
-    once. This is required because ``_subscription_loop`` holds ``_data_lock``
-    while writing ``data`` and, at loop exit, acquires ``_task_lock`` to clear its
-    task; holding both here in the opposite order would form the classic ABBA
-    cycle.
+    ABBA-avoidance: :meth:`get_subscription_status` and :meth:`get_summary` need
+    both lock-protected field groups, so they snapshot under each lock
+    *separately* (acquire/release ``_task_lock``, then acquire/release
+    ``_data_lock``) — never holding both at once, and always in that same
+    ``_task_lock`` → ``_data_lock`` order. This is required because
+    ``_subscription_loop`` holds ``_data_lock`` while writing ``data`` and, at
+    loop exit, acquires ``_task_lock`` to clear its task; holding both here in the
+    opposite order would form the classic ABBA cycle.
+
+    Single-writer-per-name invariant: each subscription name is driven by exactly
+    one ``_subscription_loop`` task (``start_subscription`` enforces this under
+    ``_task_lock`` via a TOCTOU-safe guard before creating the task), so that task
+    is the sole writer of its name's task-lifecycle fields. The "no await between
+    paired writes" rule keeps related fields mutually consistent without a held
+    lock: helpers that mutate more than one field together — notably
+    :meth:`_set_connection_state` (``connection_state`` + ``last_error``) and the
+    graphql-error-dedup writes in :meth:`_track_graphql_error` — contain no
+    ``await``, so asyncio's cooperative scheduling cannot interleave another
+    coroutine between the paired writes. Readers therefore observe either the
+    full pre-write or full post-write pair, never a half-applied mix; the locks
+    serialize *readers* against each other, not these single-writer pairs.
     """
 
     def __init__(self) -> None:
@@ -786,6 +800,52 @@ class SubscriptionManager:
 
         logger.debug(f"[SUBSCRIPTION_MANAGER] Generated status for {len(status)} subscriptions")
         return status
+
+    async def get_summary(self) -> dict[str, Any]:
+        """Return aggregate subscription counts/states for diagnostics.
+
+        Public accessor so external callers (e.g. diagnostics.py) never reach
+        into the manager's internal ``states``/field-views directly — the same
+        encapsulation rule the locked accessors above enforce.
+
+        Acquires ``_task_lock`` and ``_data_lock`` *separately* (sequential, not
+        simultaneous), mirroring :meth:`get_subscription_status`'s ABBA-avoidance
+        ordering — never holding both at once.
+
+        Returns a dict with:
+
+        * ``total_configured`` — number of configured subscriptions.
+        * ``auto_start_count`` — configs marked ``auto_start``.
+        * ``active_count`` — subscriptions with a live task.
+        * ``with_data`` — subscriptions that have cached resource data.
+        * ``connection_states`` — ``{name: connection_state}`` snapshot.
+        * ``auto_start_enabled`` / ``max_reconnect_attempts`` — config values.
+        """
+        # subscription_configs is set once in __init__ and never mutated, so it
+        # needs no lock. total/auto-start counts derive from it.
+        total_configured = len(self.subscription_configs)
+        auto_start_count = sum(
+            1 for config in self.subscription_configs.values() if config.get("auto_start")
+        )
+
+        # Task-lifecycle fields (active task, connection_state) under _task_lock.
+        async with self._task_lock:
+            active_count = len(self.active_subscriptions)
+            connection_states = dict(self.connection_states)
+
+        # Cached resource data under _data_lock (acquired separately).
+        async with self._data_lock:
+            with_data = len(self.resource_data)
+
+        return {
+            "total_configured": total_configured,
+            "auto_start_count": auto_start_count,
+            "active_count": active_count,
+            "with_data": with_data,
+            "connection_states": connection_states,
+            "auto_start_enabled": self.auto_start_enabled,
+            "max_reconnect_attempts": self.max_reconnect_attempts,
+        }
 
 
 # Global subscription manager instance

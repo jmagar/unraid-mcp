@@ -182,6 +182,11 @@ async def diagnose_subscriptions() -> dict[str, Any]:
         # Get comprehensive status
         status = await subscription_manager.get_subscription_status()
 
+        # Aggregate counts/config via the manager's locked accessor — never
+        # reach into its internal state (active_subscriptions / resource_data /
+        # subscription_configs / connection_states) directly (arch-L1).
+        summary = await subscription_manager.get_summary()
+
         # Analyze connection issues and error counts via shared helper.
         # Gates connection_issues on current failure state (Bug 5 fix).
         error_count, connection_issues = _analyze_subscription_status(status)
@@ -199,22 +204,18 @@ async def diagnose_subscriptions() -> dict[str, Any]:
         diagnostic_info: dict[str, Any] = {
             "timestamp": datetime.now(UTC).isoformat(),
             "environment": {
-                "auto_start_enabled": subscription_manager.auto_start_enabled,
-                "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
+                "auto_start_enabled": summary["auto_start_enabled"],
+                "max_reconnect_attempts": summary["max_reconnect_attempts"],
                 "unraid_api_url": safe_display_url(_settings.UNRAID_API_URL),
                 "api_key_configured": bool(_settings.UNRAID_API_KEY),
                 "websocket_url": ws_url_display,
             },
             "subscriptions": status,
             "summary": {
-                "total_configured": len(subscription_manager.subscription_configs),
-                "auto_start_count": sum(
-                    1
-                    for s in subscription_manager.subscription_configs.values()
-                    if s.get("auto_start")
-                ),
-                "active_count": len(subscription_manager.active_subscriptions),
-                "with_data": len(subscription_manager.resource_data),
+                "total_configured": summary["total_configured"],
+                "auto_start_count": summary["auto_start_count"],
+                "active_count": summary["active_count"],
+                "with_data": summary["with_data"],
                 "in_error_state": error_count,
                 "connection_issues": connection_issues,
             },
