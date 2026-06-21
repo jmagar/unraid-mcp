@@ -120,6 +120,22 @@ For SWAG, nginx, or Traefik:
 
 See `docs/unraid.subdomain.conf` for a SWAG nginx example.
 
+### `DISABLE_HTTP_AUTH=true` trust boundary
+
+Disabling bearer auth removes the server's only inbound authentication. It is **only** safe
+when a fronting gateway terminates auth in front of it. Enforce the boundary at deploy time:
+
+- **A fronting gateway is required.** Never expose the server with auth disabled directly to
+  an untrusted network.
+- **Do not publish the container port to the host's public interface.** In
+  `docker-compose.yaml`, either omit the `ports:` mapping entirely (reach the server only
+  over the internal `DOCKER_NETWORK` the gateway shares) or scope it to loopback, e.g.
+  `ports: ["127.0.0.1:6970:6970"]`. A published `0.0.0.0` port + disabled auth is an open
+  endpoint.
+- **`UNRAID_MCP_TRUST_PROXY=true` is required to bind a public (non-loopback) interface**
+  while auth is disabled — it is the explicit acknowledgement that a trusted proxy sits in
+  front. Without it, the server refuses to bind publicly with auth off.
+
 ## See Also
 
 - [TRANSPORT.md](TRANSPORT.md) -- Transport-specific configuration

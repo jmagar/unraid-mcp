@@ -1,9 +1,25 @@
 # Destructive Actions
 
-**Last Updated:** 2026-03-24
-**Total destructive actions:** 12 across 8 domains (single `unraid` tool)
+**Total destructive actions:** 26 across 11 domains (single `unraid` tool)
 
-All destructive actions require `confirm=True` at the call site. There is no additional environment variable gate — `confirm` is the sole guard.
+All destructive actions require `confirm=True` at the call site. There is no additional
+environment variable gate — `confirm` is the sole guard. (Exception: `plugin install` /
+`install_language` additionally pass through an SSRF guard before forwarding — see that
+domain below.)
+
+| Domain (`action=`) | Destructive subactions |
+|--------------------|------------------------|
+| `array` | `stop_array`, `remove_disk`, `clear_disk_stats` |
+| `vm` | `force_stop`, `reset` |
+| `notification` | `delete`, `delete_archived` |
+| `rclone` | `delete_remote` |
+| `key` | `delete` |
+| `disk` | `flash_backup` |
+| `setting` | `configure_ups`, `update_ssh`, `update_system_time` |
+| `plugin` | `remove`, `install`, `install_language` |
+| `docker` | `remove_container`, `reset_template_mappings`, `delete_entries` |
+| `connect` | `sign_in`, `sign_out`, `update_api_settings`, `setup_remote_access`, `enable_dynamic_remote_access` |
+| `onboarding` | `reset`, `create_internal_boot_pool` |
 
 > **mcporter commands below** use stdio transport. Run `test-tools.sh` for automated non-destructive coverage; destructive actions are always skipped there and tested manually per the strategies below.
 >
@@ -210,6 +226,16 @@ Wrong config can break UPS integration. If live testing is required: read curren
 
 ## `plugin`
 
+> **⚠️ Highest blast radius in the entire server.** `plugin install` /
+> `install_language` make the Unraid host **fetch a caller-supplied `.plg` URL and run it
+> as root**. Beyond the `confirm=True` gate, `_validate_plugin_url()` in `tools/_plugin.py`
+> applies an SSRF guard (rejects non-`http(s)`, hostless, and
+> private/loopback/link-local/reserved targets, blocking pivots like
+> `http://169.254.169.254/`). That guard is defence-in-depth, not a complete mitigation —
+> the Unraid host re-resolves the URL at fetch time (TOCTOU), and the `.plg` still runs as
+> root. **For shared / multi-tenant deployments, disable `plugin install` and
+> `plugin install_language` at the gateway.**
+
 ### `remove` — Uninstall a plugin (irreversible without re-install)
 
 **Strategy: mock/safety audit only.**
@@ -223,12 +249,103 @@ mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
 
 ---
 
+### `install` / `install_language` — Fetch and run a `.plg` as root (highest risk)
+
+**Strategy: mock/safety audit only — never run against a shared or production host.**
+Confirm the `confirm=False` guard raises `ToolError` in `tests/safety/`, and that
+`_validate_plugin_url()` rejects private/loopback/`file://` URLs. Only run live against a
+disposable test host you fully control, with a `.plg` URL you authored.
+
+```bash
+# Only on a disposable, fully-trusted host:
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
+  --args '{"action":"plugin","subaction":"install","url":"https://<trusted-host>/test.plg","confirm":true}' --output json
+```
+
+---
+
+## `setting`
+
+### `update_ssh` — Overwrite SSH server configuration
+
+**Strategy: mock/safety audit only.**
+Bad SSH config can lock you out of the host. Confirm the `confirm=False` guard raises
+`ToolError` in `tests/safety/`. If live testing is required, read the current config first,
+re-apply identical values (no-op), and verify.
+
+### `update_system_time` — Change the host clock / NTP configuration
+
+**Strategy: mock/safety audit only.**
+Clock changes can break TLS, scheduled jobs, and log ordering. Confirm the guard in
+`tests/safety/`; do not run live unless intentionally adjusting time.
+
+---
+
+## `docker`
+
+### `remove_container` — Delete a container
+
+```bash
+# Use a throwaway container you intend to delete
+mcporter call --stdio-cmd "uv run unraid-mcp-server" --tool unraid \
+  --args '{"action":"docker","subaction":"remove_container","id":"<CONTAINER_ID>","confirm":true}' --output json
+```
+
+### `delete_entries` — Delete docker organizer folder/entry definitions
+
+**Strategy: safety audit; live only on a test view.**
+Removes organizer entries (not the containers themselves) and is irreversible. Confirm the
+`confirm=False` guard in `tests/safety/`.
+
+### `reset_template_mappings` — Reset stored template path mappings
+
+**Strategy: mock/safety audit only.**
+Clears template path mappings; confirm the guard in `tests/safety/`.
+
+---
+
+## `connect`
+
+All five `connect` mutations are destructive — they change Unraid Connect / remote-access
+state (and in the `sign_in`/`sign_out` case, the cloud session itself). They are
+**mock/safety audit only** unless you are intentionally reconfiguring Unraid Connect on a
+host you own. Confirm each `confirm=False` guard in `tests/safety/`.
+
+| Subaction | Effect |
+|-----------|--------|
+| `sign_in` | Sign the host into Unraid Connect (cloud session) |
+| `sign_out` | Sign the host out of Unraid Connect |
+| `update_api_settings` | Overwrite Connect API settings |
+| `setup_remote_access` | Configure remote access |
+| `enable_dynamic_remote_access` | Enable dynamic remote access |
+
+> Run live only on `shart` (a host you fully control), never on a production tower.
+
+---
+
+## `onboarding`
+
+### `reset` — Reset onboarding state
+
+**Strategy: mock/safety audit only.** Confirm the `confirm=False` guard in `tests/safety/`.
+
+### `create_internal_boot_pool` — Create an internal boot pool
+
+**Strategy: mock/safety audit only.** Pool creation is destructive to existing layout;
+confirm the guard in `tests/safety/` and never run live except during intentional
+onboarding.
+
+---
+
 ## Safety Audit (Automated)
 
 The `tests/safety/` directory contains pytest tests that verify:
 - Every destructive action raises `ToolError` when called with `confirm=False`
 - Every destructive action raises `ToolError` when called without the `confirm` parameter
-- The `_*_DESTRUCTIVE` sets in `unraid_mcp/tools/unraid.py` stay in sync with the actions listed above
+- Each runtime `_*_DESTRUCTIVE` set (re-exported from the domain modules via
+  `unraid_mcp/tools/unraid.py`) matches the in-test `KNOWN_DESTRUCTIVE` audit dict in
+  `tests/safety/test_destructive_guards.py`. **No test parses this Markdown file** — keep
+  this document in sync with `KNOWN_DESTRUCTIVE` and the domain `_*_DESTRUCTIVE` sets by hand.
 - No GraphQL request reaches the network layer when confirmation is missing (`TestNoGraphQLCallsWhenUnconfirmed`)
 - Non-destructive actions never require `confirm` (`TestNonDestructiveActionsNeverRequireConfirm`)
 
@@ -255,4 +372,18 @@ uv run pytest tests/safety/ -v
 | `key` | `delete` | Create test key → destroy | either |
 | `disk` | `flash_backup` | Dedicated test remote, isolated path | either |
 | `setting` | `configure_ups` | Mock/safety audit only | — |
+| `setting` | `update_ssh` | Mock/safety audit only (lockout risk) | — |
+| `setting` | `update_system_time` | Mock/safety audit only | — |
 | `plugin` | `remove` | Mock/safety audit only | — |
+| `plugin` | `install` | Mock/safety audit only (root code exec) | disposable host only |
+| `plugin` | `install_language` | Mock/safety audit only (root code exec) | disposable host only |
+| `docker` | `remove_container` | Throwaway container → delete | either |
+| `docker` | `delete_entries` | Test organizer view only | either |
+| `docker` | `reset_template_mappings` | Mock/safety audit only | — |
+| `connect` | `sign_in` | Mock/safety audit only | shart only |
+| `connect` | `sign_out` | Mock/safety audit only | shart only |
+| `connect` | `update_api_settings` | Mock/safety audit only | shart only |
+| `connect` | `setup_remote_access` | Mock/safety audit only | shart only |
+| `connect` | `enable_dynamic_remote_access` | Mock/safety audit only | shart only |
+| `onboarding` | `reset` | Mock/safety audit only | — |
+| `onboarding` | `create_internal_boot_pool` | Mock/safety audit only | — |

@@ -189,15 +189,25 @@ The server loads environment variables from multiple locations in order:
 `server.py` wraps all tools in a 4-layer stack (order matters — outermost first):
 1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
 2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
-3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
+3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window. This is an
+   **inbound-abuse/DoS guard only**; it does NOT bound the upstream Unraid API's burst
+   limit (a 540/min window cannot prevent exceeding 100 req/10s). The authoritative
+   upstream limiter is the **httpx token bucket** in `core/client.py` (`_RateLimiter`:
+   90 tokens, 9.0 tokens/sec refill, modeling Unraid's 100 req/10s hard limit with ~10%
+   headroom) — every outbound GraphQL call `acquire()`s a token first, and 429s are
+   retried with backoff.
 4. **StructuredResponseLimitingMiddleware** (`core/response_limit.py`) — replaces responses over the cap (default 40 KB ≈ 10K tokens, override via `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a complete, parseable JSON truncation marker instead of a lossy mid-JSON byte cut
 
-Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool mixes reads and mutations under one name, making per-subaction cache exclusion impossible.
+Note: there is **no query cache**. The only caching middleware ever present —
+`ResponseCachingMiddleware` — was removed because the consolidated `unraid` tool mixes
+reads and mutations under one name, making per-subaction cache exclusion impossible. The
+`health/diagnose` "caching disabled" note is simply accurate.
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
 - Selective queries to avoid GraphQL type overflow issues
-- Optional caching controls for Docker container queries
+- Upstream token-bucket rate limiting (`core/client.py`, 90 tokens / 9 rps) bounds the
+  Unraid API's 100 req/10s hard limit; no response/query cache exists
 - Log file overwrite at 10MB cap to prevent disk space issues
 
 ## Critical Gotchas
@@ -206,15 +216,21 @@ Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool
 **Mutation handlers MUST return before the domain query dict lookup.** Mutations are not in the domain `_*_QUERIES` dicts (e.g., `_DOCKER_QUERIES`, `_ARRAY_QUERIES`) — reaching that line for a mutation subaction causes a `KeyError`. Always add early-return `if subaction == "mutation_name": ... return` blocks BEFORE the queries lookup.
 
 ### Test Patching
-- Patch at the **tool module level**: `unraid_mcp.tools.unraid.make_graphql_request` (not core)
-- `conftest.py`'s `mock_graphql_request` patches the core module — wrong for tool-level tests
-- Use `conftest.py`'s `make_tool_fn()` helper or local `_make_tool()` pattern
+- Patch at the **core module level**: `unraid_mcp.core.client.make_graphql_request`. Tool
+  modules import the client as a module (`from ..core import client as _client`) and call
+  `_client.make_graphql_request(...)`, so they resolve the attribute on the `client` module
+  object at call time — patching the core target intercepts every call. Patching a
+  per-tool name like `unraid_mcp.tools.unraid.make_graphql_request` has **no effect** (that
+  name is not bound in the tool module's namespace). 46/47 test sites already use the core
+  target; `conftest.py`'s `mock_graphql_request` fixture patches it for you.
+- Use `conftest.py`'s `make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")`
+  helper to extract the consolidated `unraid` tool fn, or a local `_make_tool()` pattern.
 
 ### Test Suite Structure
 ```
 tests/
 ├── conftest.py           # Shared fixtures + make_tool_fn() helper
-├── test_*.py             # Unit tests (mock at tool module level)
+├── test_*.py             # Unit tests (mock at core client level)
 ├── http_layer/           # httpx-level request/response tests (respx)
 ├── integration/          # WebSocket subscription lifecycle tests (slow)
 ├── safety/               # Destructive action guard tests

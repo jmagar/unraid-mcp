@@ -29,19 +29,22 @@ Override the credentials directory with `UNRAID_CREDENTIALS_DIR`.
 | `UNRAID_MCP_HOST` | `0.0.0.0` | Bind address for HTTP transport |
 | `UNRAID_MCP_PORT` | `6970` | Port for the MCP HTTP server. Must be 1-65535. |
 | `UNRAID_MCP_TRANSPORT` | `streamable-http` | Transport method: `streamable-http`, `stdio`, or `sse` (deprecated) |
+| `UNRAID_MCP_MAX_RESPONSE_BYTES` | `40000` | Max serialized tool-response size (~10K tokens). Over-cap responses are replaced with a parseable JSON truncation marker (`{"error":"response_truncated","truncated":true,...}`). |
 
 ## Authentication variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `UNRAID_MCP_BEARER_TOKEN` | auto-generated | Bearer token for HTTP auth. Auto-generated on first HTTP startup if absent. Generate manually with `openssl rand -hex 32`. |
-| `UNRAID_MCP_DISABLE_HTTP_AUTH` | `false` | Set `true` to disable bearer auth (only behind a trusted gateway). |
+| `UNRAID_MCP_DISABLE_HTTP_AUTH` | `false` | Set `true` to disable bearer auth. Only valid behind a trusted fronting gateway — requires `UNRAID_MCP_TRUST_PROXY=true` to bind a public interface (see below). |
+| `UNRAID_MCP_TRUST_PROXY` | `false` | Required second opt-in when auth is disabled (`UNRAID_MCP_DISABLE_HTTP_AUTH=true`) and the server binds a non-loopback interface. Asserts a fronting gateway terminates auth; without it, a public bind with auth disabled is refused. |
 
 ## SSL variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `UNRAID_VERIFY_SSL` | `true` | SSL verification for upstream Unraid API. Set `false` for self-signed certs. Can also be a path to a CA bundle. |
+| `UNRAID_VERIFY_SSL` | `true` | SSL verification for the upstream Unraid API. **Recommended for self-signed certs: point this at a CA-bundle path** (`/path/to/ca.pem`) to trust the cert without disabling verification. `false` disables verification entirely (dangerous — see `UNRAID_ALLOW_INSECURE_TLS`). |
+| `UNRAID_ALLOW_INSECURE_TLS` | `false` | Required second opt-in when `UNRAID_VERIFY_SSL=false`. Disabling verification sends the `UNRAID_API_KEY` to an unverified peer over **both** the httpx GraphQL client and the WebSocket subscription connection, exposing it to MITM interception. The server refuses to start with verification off unless this is `true`. Prefer the CA-bundle path instead. |
 
 ## Logging variables
 
@@ -85,14 +88,26 @@ Configured in code (not via environment variables):
 | Tool execution | 120s | FastMCP tool timeout |
 | WebSocket collection | 5s default | Configurable via `collect_for` parameter |
 
+## Rate limiting
+
+Two independent limiters:
+
+- **Upstream token bucket (authoritative):** `core/client.py` `_RateLimiter` — 90 tokens,
+  9.0 tokens/sec refill (~9 rps), modeling Unraid's hard **100 req / 10 s** limit with
+  ~10% headroom. Every outbound GraphQL call acquires a token first; 429s are retried with
+  backoff. This is what keeps the server inside Unraid's burst window.
+- **Inbound abuse/DoS guard:** `SlidingWindowRateLimitingMiddleware` — 540 requests per
+  60-second sliding window on the MCP surface. It does **not** bound Unraid's 10-second
+  burst (a per-minute window can't), so it is not the upstream limiter.
+
 ## Middleware configuration
 
 Configured in code:
 
 | Middleware | Setting | Value |
 | --- | --- | --- |
-| Rate limiting | Max requests | 540 per 60-second sliding window |
-| Response limiting | Max size | 512 KB (truncated, not errored) |
+| Rate limiting (inbound) | Max requests | 540 per 60-second sliding window (abuse/DoS guard, not the upstream limiter) |
+| Response limiting | Max size | 40 KB default (`UNRAID_MCP_MAX_RESPONSE_BYTES=40000`); over-cap responses are replaced with a parseable JSON truncation marker, not byte-cut |
 | Logging | Methods logged | `tools/call`, `resources/read` |
 | Error handling | Traceback included | Only when `LOG_LEVEL=DEBUG` |
 

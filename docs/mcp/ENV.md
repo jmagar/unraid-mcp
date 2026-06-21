@@ -20,13 +20,15 @@
 | Variable | Required | Default | Sensitive | Description |
 |----------|----------|---------|-----------|-------------|
 | `UNRAID_MCP_BEARER_TOKEN` | conditional | auto-generated | yes | Bearer token for HTTP auth. Required when transport is HTTP and auth is not disabled. |
-| `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | no | Disable bearer auth (only behind a trusted gateway) |
+| `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | no | Disable bearer auth. Only valid behind a trusted fronting gateway; binding a public interface with auth disabled additionally requires `UNRAID_MCP_TRUST_PROXY=true`. |
+| `UNRAID_MCP_TRUST_PROXY` | conditional | `false` | no | Required second opt-in to bind a non-loopback interface while `UNRAID_MCP_DISABLE_HTTP_AUTH=true`. Asserts an upstream gateway terminates auth; without it a public bind with auth off is refused. |
 
 ## SSL/TLS
 
 | Variable | Required | Default | Sensitive | Description |
 |----------|----------|---------|-----------|-------------|
-| `UNRAID_VERIFY_SSL` | no | `true` | no | SSL verification for upstream API. `false` for self-signed certs, or a CA bundle path. |
+| `UNRAID_VERIFY_SSL` | no | `true` | no | SSL verification for the upstream API. **Recommended for self-signed certs: a CA-bundle path** (`/path/to/ca.pem`) to trust the cert without disabling verification. `false` disables verification entirely (dangerous). |
+| `UNRAID_ALLOW_INSECURE_TLS` | conditional | `false` | no | Required second opt-in when `UNRAID_VERIFY_SSL=false`. With verification off, the `UNRAID_API_KEY` is sent to an unverified peer over both the HTTP GraphQL client and the WebSocket subscription connection (MITM exposure), so the server refuses to start unless this is `true`. Prefer the CA-bundle path instead. |
 
 ## Logging
 

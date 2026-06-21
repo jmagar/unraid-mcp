@@ -53,9 +53,15 @@ For deployments behind a trusted reverse proxy (e.g., SWAG with its own auth):
 
 ```bash
 UNRAID_MCP_DISABLE_HTTP_AUTH=true
+# Required to bind a public (non-loopback) interface with auth off:
+UNRAID_MCP_TRUST_PROXY=true
 ```
 
-When disabled, all HTTP requests are forwarded without token validation. The server logs a warning.
+When disabled, all HTTP requests are forwarded without token validation. The server logs a
+warning. This is only safe behind a fronting gateway that terminates auth itself — binding
+a public interface with auth disabled additionally requires `UNRAID_MCP_TRUST_PROXY=true`
+(without it, the server refuses to bind publicly). Keep the container's published port
+unexposed or loopback-scoped; see [DEPLOY.md](DEPLOY.md).
 
 ### Error responses
 
@@ -107,10 +113,16 @@ x-api-key: <UNRAID_API_KEY>
 
 The `UNRAID_VERIFY_SSL` setting controls SSL verification for outbound requests:
 - `true` (default): Full SSL verification
-- `false`: Disables verification (self-signed certs)
-- Path string: Custom CA bundle
+- **Path string: custom CA bundle — the recommended way to trust a self-signed cert**
+  without weakening verification (`UNRAID_VERIFY_SSL=/path/to/ca.pem`)
+- `false`: disables verification entirely (discouraged)
 
-A warning is logged when SSL verification is disabled.
+**Why the CA-bundle path is preferred:** with verification off, the `UNRAID_API_KEY`
+travels to an unverified peer over **both** the GraphQL HTTP client and the WebSocket
+subscription connection, so a man-in-the-middle can capture it. Because of this, disabling
+verification is gated behind a second explicit opt-in: the server refuses to start with
+`UNRAID_VERIFY_SSL=false` unless `UNRAID_ALLOW_INSECURE_TLS=true` is also set. A warning is
+logged when verification is disabled.
 
 ## Unauthenticated endpoints
 

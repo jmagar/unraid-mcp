@@ -21,8 +21,9 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 |  MCP Middleware Chain:                         |
 |  1. LoggingMiddleware    (request logging)     |
 |  2. ErrorHandlingMiddleware (exception wrap)   |
-|  3. RateLimitingMiddleware (540 req/min)       |
-|  4. ResponseLimitingMiddleware (512 KB cap)    |
+|  3. RateLimitingMiddleware (540/min, inbound)  |
+|  4. StructuredResponseLimitingMiddleware       |
+|     (40 KB cap -> JSON truncation marker)       |
 +----------------------------------------------+
     |
     +----> Tools (1 registered)
@@ -76,7 +77,9 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 3. MCP middleware logs, handles errors, checks rate limit, caps response size
 4. `unraid()` routes to domain handler (e.g., `_handle_docker`)
 5. Handler looks up pre-built GraphQL query from domain `_*_QUERIES` dict
-6. `core/client.py` sends async HTTP request to Unraid API with `x-api-key`
+6. `core/client.py` acquires a token from the upstream **token-bucket rate limiter**
+   (`_RateLimiter`: 90 tokens / 9 rps, modeling Unraid's 100 req/10s hard limit), then
+   sends the async HTTP request to the Unraid API with `x-api-key` (429s retried with backoff)
 7. Response parsed, formatted, returned to client
 
 ### Tool call (mutation with destructive gate)
@@ -120,7 +123,9 @@ One `unraid` tool with 19 actions (170 subactions) instead of many separate tool
 - Simplifies client tool selection
 - Enables shared parameters across domains
 
-**Tradeoff**: Caching is disabled because the single tool mixes reads and mutations.
+**Tradeoff**: There is no response/query cache. The single `unraid` tool mixes reads and
+mutations under one name, so per-subaction cache exclusion is impossible — the
+`ResponseCachingMiddleware` that once existed was removed for this reason.
 
 ### Pre-built query dicts
 

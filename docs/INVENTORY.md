@@ -53,8 +53,8 @@ Complete listing of all plugin components.
 | --- | --- | --- |
 | 1 (outermost) | `LoggingMiddleware` | Logs every tools/call and resources/read with duration |
 | 2 | `ErrorHandlingMiddleware` | Converts unhandled exceptions to MCP errors |
-| 3 | `SlidingWindowRateLimitingMiddleware` | 540 req/min sliding window |
-| 4 (innermost) | `ResponseLimitingMiddleware` | Truncates responses > 512 KB |
+| 3 | `SlidingWindowRateLimitingMiddleware` | 540 req/min sliding window (inbound abuse/DoS guard; the authoritative upstream limiter is the token bucket in `core/client.py`) |
+| 4 (innermost) | `StructuredResponseLimitingMiddleware` | Replaces responses over the cap (40 KB default, `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a parseable JSON truncation marker |
 
 ## ASGI middleware
 

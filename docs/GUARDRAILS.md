@@ -40,6 +40,8 @@ All destructive operations are gated by the `gate_destructive_action()` function
 
 ### Destructive actions registry
 
+**26 destructive subactions across 11 domains.**
+
 | Domain | Destructive subactions |
 | --- | --- |
 | `array` | `stop_array`, `remove_disk`, `clear_disk_stats` |
@@ -48,10 +50,30 @@ All destructive operations are gated by the `gate_destructive_action()` function
 | `rclone` | `delete_remote` |
 | `key` | `delete` |
 | `disk` | `flash_backup` |
-| `setting` | `configure_ups` |
-| `plugin` | `remove` |
+| `setting` | `configure_ups`, `update_ssh`, `update_system_time` |
+| `plugin` | `remove`, `install`, `install_language` |
+| `docker` | `remove_container`, `reset_template_mappings`, `delete_entries` |
+| `connect` | `sign_in`, `sign_out`, `update_api_settings`, `setup_remote_access`, `enable_dynamic_remote_access` |
+| `onboarding` | `reset`, `create_internal_boot_pool` |
 
-Each domain module defines its own `_*_DESTRUCTIVE` set and per-action description dictionary.
+Each domain module defines its own `_*_DESTRUCTIVE` set and per-action description
+dictionary. `tests/safety/test_destructive_guards.py` asserts each runtime
+`_*_DESTRUCTIVE` set matches an in-test `KNOWN_DESTRUCTIVE` audit dict (it does **not**
+parse this Markdown table — keep the two in sync manually).
+
+### Highest blast-radius action: `plugin install` / `plugin install_language`
+
+`plugin install` (and `install_language`) is the single most dangerous operation in this
+server: it makes the Unraid host **fetch a caller-supplied `.plg` URL and execute it as
+root**. It is gated by `confirm=True` like every destructive action, and additionally by
+an SSRF guard (`_validate_plugin_url()` in `tools/_plugin.py`) that rejects non-`http(s)`,
+hostless, and private/loopback/link-local/reserved targets before forwarding — blocking
+pivots such as `http://169.254.169.254/` (cloud metadata) and RFC1918 hosts. That guard is
+**defence-in-depth, not a complete mitigation**: the Unraid host does its own DNS
+(re-)resolution at fetch time (a TOCTOU window), and the URL still resolves to whatever the
+`.plg` author intends. **For shared / multi-tenant deployments, disable `plugin install`
+and `plugin install_language` at the gateway** rather than relying on `confirm` + SSRF
+guard alone.
 
 ### Elicitation fallback
 
@@ -99,11 +121,26 @@ Log file paths are restricted to allowed prefixes (`/var/log/`, `/boot/logs/`, `
 
 ### Size limiting
 
-`ResponseLimitingMiddleware` truncates responses exceeding 512 KB with a clear suffix rather than erroring. This protects client context windows from oversized responses.
+`StructuredResponseLimitingMiddleware` (`core/response_limit.py`) replaces any response
+exceeding the cap (default **40 KB / `UNRAID_MCP_MAX_RESPONSE_BYTES=40000`**, ~10K tokens)
+with a complete, parseable JSON truncation marker
+(`{"error": "response_truncated", "truncated": true, ...}`) rather than hard-cutting
+mid-JSON or appending a suffix. This protects client context windows from oversized
+responses. It is a backstop; the per-list `cap_list` defaults do the primary bounding.
 
 ### Rate limiting
 
-`SlidingWindowRateLimitingMiddleware` enforces 540 requests per 60-second sliding window. This stays under the Unraid API's 600 req/min ceiling.
+Two independent limiters cover two different concerns:
+
+- **Upstream (authoritative):** the httpx **token bucket** in `core/client.py`
+  (`_RateLimiter`: 90 tokens, 9.0 tokens/sec refill, ~9 rps) bounds outbound calls to the
+  Unraid API's hard **100 req / 10 s** limit (with ~10% headroom). Every GraphQL request
+  acquires a token first; 429 responses are retried with backoff. This is the limiter that
+  actually keeps the server within Unraid's burst window.
+- **Inbound (abuse/DoS guard):** `SlidingWindowRateLimitingMiddleware` enforces 540
+  requests per 60-second sliding window on the MCP surface. It guards against inbound
+  abuse but **cannot** bound Unraid's 10-second burst limit (a 540/min window permits far
+  more than 100 req in any given 10 s) — that job belongs to the token bucket above.
 
 ### Log content capping
 
