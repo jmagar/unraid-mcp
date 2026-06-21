@@ -106,14 +106,17 @@ class SubscriptionManager:
     Two fine-grained locks (instead of one coarse lock) keep WebSocket message
     updates from blocking tool reads of the task state and vice versa.
 
-    ABBA-avoidance: :meth:`get_subscription_status` and :meth:`get_summary` need
-    both lock-protected field groups, so they snapshot under each lock
+    Independent lock domains (no ABBA cycle): the two locks are kept strictly
+    independent — *no code path holds both at once*. ``_subscription_loop``
+    acquires ``_data_lock`` and ``_task_lock`` only in disjoint blocks (the
+    ``data`` write under ``_data_lock``; the task-clear at loop exit under
+    ``_task_lock``), never nested. :meth:`get_subscription_status` and
+    :meth:`get_summary` need both field groups, so they snapshot under each lock
     *separately* (acquire/release ``_task_lock``, then acquire/release
-    ``_data_lock``) — never holding both at once, and always in that same
-    ``_task_lock`` → ``_data_lock`` order. This is required because
-    ``_subscription_loop`` holds ``_data_lock`` while writing ``data`` and, at
-    loop exit, acquires ``_task_lock`` to clear its task; holding both here in the
-    opposite order would form the classic ABBA cycle.
+    ``_data_lock``) rather than nesting them. Reading the two domains under
+    separate, non-overlapping critical sections is what keeps them independent
+    and avoids ever INTRODUCING an ABBA cycle — there is no inverse-order
+    acquisition anywhere for it to deadlock against.
 
     Single-writer-per-name invariant: each subscription name is driven by exactly
     one ``_subscription_loop`` task (``start_subscription`` enforces this under
@@ -219,11 +222,19 @@ class SubscriptionManager:
             self.last_error[name] = error
 
     async def _store_subscription_data(self, subscription_name: str, data: Any) -> None:
-        """Cache a fresh subscription data payload under _data_lock.
+        """Cache a fresh subscription data payload.
 
         Clears any GraphQL-error burst (data means recovery), caps log content for
-        log subscriptions to bound memory, and writes the resource cache. The
-        write happens under ``_data_lock`` (paired with ``get_resource_data``).
+        log subscriptions to bound memory, and writes the resource cache.
+
+        Lock domains: the ``_clear_graphql_error_burst`` call mutates
+        task-lock-guarded fields (``graphql_error_msg`` / ``graphql_error_count``)
+        but does so WITHOUT holding ``_task_lock`` — that is safe only because of
+        the single-writer-per-name invariant (this coroutine runs inside the one
+        ``_subscription_loop`` task that owns those fields, so no other writer can
+        race it; ``_task_lock`` serializes *readers*, not this sole writer). Only
+        the ``data`` write is performed under ``_data_lock`` (paired with
+        ``get_resource_data``).
         """
         self._clear_graphql_error_burst(subscription_name)
         capped_data = (
@@ -746,16 +757,19 @@ class SubscriptionManager:
     async def get_subscription_status(self) -> dict[str, dict[str, Any]]:
         """Get detailed status of all subscriptions for diagnostics.
 
-        Acquires _task_lock and _data_lock separately (sequential, not simultaneous)
-        to prevent an ABBA deadlock:
+        Acquires _task_lock and _data_lock separately (sequential, not
+        simultaneous) to keep the two lock domains independent — no code path
+        holds both at once, so no ABBA cycle can form:
 
-        - This method would hold _task_lock → then acquire _data_lock.
-        - _subscription_loop holds _data_lock (during resource_data write) and at
-          loop exit acquires _task_lock (to remove itself from active_subscriptions).
+        - This method snapshots task-lifecycle state under _task_lock, releases
+          it, then snapshots resource data under _data_lock.
+        - _subscription_loop also touches the two locks only in disjoint blocks
+          (the resource_data write under _data_lock; the loop-exit task removal
+          under _task_lock), never nested.
 
-        Holding both locks simultaneously from here creates the classic ABBA cycle.
-        Instead, snapshot state under each lock independently, then release before
-        acquiring the other.
+        Snapshotting under each lock independently (rather than nesting them)
+        avoids INTRODUCING an ABBA cycle: there is no inverse-order acquisition
+        anywhere for a nested acquire here to deadlock against.
         """
         # Snapshot task-related state under _task_lock
         async with self._task_lock:

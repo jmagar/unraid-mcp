@@ -41,6 +41,13 @@ class SubscriptionState:
     fields (``task``, ``connection_state``, ``last_error``, ``reconnect_attempts``,
     ``connection_start_time`` and the graphql-error-dedup fields) are guarded by
     the manager's ``_task_lock``; ``data`` is guarded by ``_data_lock``.
+
+    Transitional note: the manager still writes these fields *through* the
+    backward-compat :class:`_StateFieldView` mappings, so the single-writer
+    invariant is enforced by convention, not structurally. A future change should
+    migrate the manager's writes to ``self.states[name].<field>`` directly and
+    make the views read-only — at which point this object becomes the true single
+    source of truth and the shim can be retired.
     """
 
     # Task lifecycle (was active_subscriptions[name]).
@@ -62,6 +69,12 @@ class SubscriptionState:
 
 class _StateFieldView[V](MutableMapping[str, V]):
     """A ``MutableMapping`` projecting one field of every ``SubscriptionState``.
+
+    Transitional backward-compat shim: the manager still *writes* through these
+    views (e.g. ``mgr.connection_states[name] = "active"``), so the
+    single-writer-per-name invariant is not yet structural. A future change
+    should migrate the manager's writes to ``self.states[name].<field>`` directly
+    and make these views read-only projections; until then they remain writable.
 
     Backed by the manager's consolidated ``states`` dict — never its own storage.
     Reading ``view[name]`` returns ``getattr(states[name], field)``; writing
@@ -151,6 +164,10 @@ class _StateFieldView[V](MutableMapping[str, V]):
         if isinstance(other, dict):
             return dict(self) == other
         return NotImplemented
+
+    # Defining __eq__ makes the type unhashable; spell that out explicitly so the
+    # view behaves like the mutable dict it projects (a dict is unhashable too).
+    __hash__ = None
 
     def __repr__(self) -> str:
         return f"_StateFieldView({dict(self)!r})"

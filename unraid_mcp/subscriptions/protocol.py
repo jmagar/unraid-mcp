@@ -37,7 +37,7 @@ import asyncio
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import websockets
 from websockets.typing import Subprotocol
@@ -78,12 +78,12 @@ class ProtocolError(Exception):
         self,
         message: str,
         *,
-        kind: str,
+        kind: Literal["connection_error", "unexpected"],
         payload: Any = None,
         ack_type: Any = None,
     ) -> None:
         super().__init__(message)
-        self.kind = kind
+        self.kind: Literal["connection_error", "unexpected"] = kind
         self.payload = payload
         self.ack_type = ack_type
 
@@ -157,7 +157,11 @@ async def iter_messages(
                 continue
 
             if msg_type == expected_data_type and msg.get("id") == sub_id:
-                yield DataEvent(payload=msg.get("payload", {}) or {})
+                # Coerce a missing or non-dict payload to {} so the consumer's
+                # ``payload.get("data")`` never raises AttributeError on a truthy
+                # non-dict payload (e.g. a list or string sent in a data frame).
+                payload = msg.get("payload")
+                yield DataEvent(payload=payload if isinstance(payload, dict) else {})
             elif msg_type == "error" and msg.get("id") == sub_id:
                 yield ErrorEvent(payload=msg.get("payload"))
             elif msg_type == "complete":
@@ -223,7 +227,9 @@ async def graphql_ws_session(
         ws_url: the ``ws(s)://.../graphql`` endpoint.
         query: the GraphQL subscription document.
         sub_id: id used in the subscribe message and to match data/error frames.
-        variables: subscription variables (``{}`` when omitted).
+        variables: subscription variables. When ``None`` the ``variables`` key is
+            omitted from the subscribe payload entirely (matching the diagnostics
+            probe's historical wire format); when provided it is sent as-is.
         ssl_context: SSL context for ``wss://`` (``None`` for plaintext).
         open_timeout: websocket connect timeout.
         ack_timeout: timeout waiting for ``connection_ack``. ``None`` waits with a
@@ -273,12 +279,18 @@ async def graphql_ws_session(
 
         # Subscribe: transport-ws uses "subscribe"; legacy graphql-ws uses "start".
         start_type = "subscribe" if proto == "graphql-transport-ws" else "start"
+        # Omit the "variables" key entirely when no variables are provided so the
+        # wire format matches the diagnostics probe's historical exact frame
+        # (it sent no "variables" key). When variables ARE passed, send them as-is.
+        subscribe_payload: dict[str, Any] = {"query": query}
+        if variables is not None:
+            subscribe_payload["variables"] = variables
         await ws.send(
             json.dumps(
                 {
                     "id": sub_id,
                     "type": start_type,
-                    "payload": {"query": query, "variables": variables or {}},
+                    "payload": subscribe_payload,
                 }
             )
         )

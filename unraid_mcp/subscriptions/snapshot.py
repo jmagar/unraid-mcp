@@ -116,6 +116,16 @@ async def subscribe_collect(
 
     Returns an empty list if no events arrive within the window.
     Always closes the connection after the window expires.
+
+    Best-effort error handling: a standalone protocol ``error`` frame is logged
+    and skipped — collection continues and whatever was gathered before the
+    window expired is returned. This matches the historical behavior (the legacy
+    collect loop only matched ``expected_type``/``error`` frames and never broke
+    on a standalone ``error``, so it kept collecting). Note this differs from
+    :func:`subscribe_once`, which *does* raise on an ``ErrorEvent``: a one-shot
+    snapshot has nothing to fall back to, whereas a collection window may still
+    hold useful events. GraphQL errors carried *inside* a data payload still
+    raise via :func:`_raise_on_errors` here, matching ``subscribe_once``.
     """
     events: list[dict[str, Any]] = []
 
@@ -128,7 +138,14 @@ async def subscribe_collect(
                         if data := event.payload.get("data"):
                             events.append(data)
                     elif isinstance(event, ErrorEvent):
-                        raise ToolError(f"Subscription error: {event.payload}")
+                        # Best-effort: do NOT abort the whole collection window on a
+                        # standalone protocol 'error' frame. Log and keep collecting
+                        # so already-collected events are still returned (matches the
+                        # historical collect loop, which never broke on 'error').
+                        logger.warning(
+                            "Subscription error frame during collect (continuing): %s",
+                            event.payload,
+                        )
                     # CompleteEvent is ignored: the historical loop kept collecting
                     # until the window expired or the socket closed, never breaking
                     # early on a server 'complete'. The ws close that follows ends
