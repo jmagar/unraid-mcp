@@ -17,13 +17,15 @@ import asyncio
 import contextlib
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastmcp.exceptions import ToolError
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+
+from unraid_mcp.tools.unraid import UNRAID_ACTIONS
 
 
 # Ensure tests/ is on sys.path so "from conftest import make_tool_fn" resolves
@@ -719,23 +721,10 @@ class TestInfoActionGuard:
     @settings(max_examples=200, suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_invalid_action_raises_tool_error(self, action: str) -> None:
         """Invalid domain names raise ToolError."""
-        valid_actions = {
-            "array",
-            "customization",
-            "disk",
-            "docker",
-            "health",
-            "key",
-            "live",
-            "notification",
-            "oidc",
-            "plugin",
-            "rclone",
-            "setting",
-            "system",
-            "user",
-            "vm",
-        }
+        # Derive the valid set from the real action Literal so it can't go stale
+        # (a hardcoded list previously omitted connect/onboarding/subscriptions/
+        # oidc/etc., which would have fuzzed real actions as if they were invalid).
+        valid_actions = set(get_args(UNRAID_ACTIONS))
         if action in valid_actions:
             return
 

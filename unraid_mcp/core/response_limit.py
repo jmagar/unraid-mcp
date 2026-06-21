@@ -78,9 +78,13 @@ class StructuredResponseLimitingMiddleware(Middleware):
         The ``unraid`` tool's payload is a JSON string in a single ``TextContent``
         block — by far the common case. For that shape we measure the text bytes
         directly instead of re-serializing the whole ``ToolResult`` via
-        ``pydantic_core.to_json`` on every call (the full serialization is only a
-        few bytes larger — the content wrapper — so the cap behavior is unchanged).
-        Multi-content or other result shapes fall back to full serialization.
+        ``pydantic_core.to_json`` on every call. The full serialization is only
+        marginally larger (the content wrapper plus JSON escaping of the text — and
+        escaping can add more than a wrapper's worth of bytes for quote/backslash-
+        heavy content), so the fast path under-counts and is therefore conservative:
+        it never truncates a response that full serialization would have kept under
+        the cap. Multi-content or other result shapes fall back to full
+        serialization.
         """
         content = result.content
         if len(content) == 1 and isinstance(content[0], TextContent):
