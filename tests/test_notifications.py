@@ -1,5 +1,6 @@
 """Tests for notification subactions of the consolidated unraid tool."""
 
+import json
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
@@ -345,3 +346,51 @@ class TestNewNotificationMutations:
         tool_fn = _make_tool()
         result = await tool_fn(action="notification", subaction="recalculate")
         assert result["success"] is True
+
+
+class TestNotificationsListResponseSize:
+    """Response-size safety for notification/list (findings T-H3 / P-M1).
+
+    A 200-row payload measures ~114 KB — over the 40 KB response cap — so the
+    list must be bounded by cap_list (tool default) rather than the fixed 200
+    clamp. This test fails on the old 200-clamp behavior and passes once
+    notification/list routes through cap_list.
+    """
+
+    async def test_list_default_response_under_cap(self, _mock_graphql: AsyncMock) -> None:
+        from unraid_mcp.config.settings import UNRAID_MCP_MAX_RESPONSE_BYTES
+        from unraid_mcp.tools._notification import _MAX_NOTIFICATION_LIMIT
+
+        # Build ~200 realistic rows with long title/subject/description so the
+        # raw payload exceeds the response cap if returned in full.
+        rows = [
+            {
+                "id": f"notification:{i:04d}",
+                "title": f"Container health degraded on appdata share #{i} " + ("x" * 60),
+                "subject": f"Docker container restarted unexpectedly ({i}) " + ("y" * 80),
+                "description": (
+                    "The monitoring subsystem detected repeated restarts and "
+                    "elevated error rates for this service. " + ("z" * 200)
+                ),
+                "importance": "WARNING",
+                "link": f"/dashboard/notifications/{i}",
+                "type": "UNREAD",
+                "timestamp": "2026-06-20T12:00:00.000Z",
+                "formattedTimestamp": "Jun 20, 2026 12:00 PM",
+            }
+            for i in range(_MAX_NOTIFICATION_LIMIT)
+        ]
+        _mock_graphql.return_value = {"notifications": {"list": rows}}
+
+        tool_fn = _make_tool()
+        result = await tool_fn(action="notification", subaction="list")
+
+        size = len(json.dumps(result).encode())
+        assert size <= UNRAID_MCP_MAX_RESPONSE_BYTES, (
+            f"notification/list response is {size} bytes, over the "
+            f"{UNRAID_MCP_MAX_RESPONSE_BYTES} byte cap"
+        )
+        # Bounded by the tool default, with truncation surfaced via page meta.
+        assert len(result["notifications"]) < _MAX_NOTIFICATION_LIMIT
+        assert result["page"]["truncated"] is True
+        assert result["page"]["total"] == _MAX_NOTIFICATION_LIMIT

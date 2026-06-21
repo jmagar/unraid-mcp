@@ -3,6 +3,11 @@
 from unraid_mcp.core.pagination import DEFAULT_LIST_LIMIT, cap_list
 
 
+def test_default_list_limit_matches_documented_tool_default():
+    """DEFAULT_LIST_LIMIT must equal the tool-level default (20) documented in CLAUDE.md."""
+    assert DEFAULT_LIST_LIMIT == 20
+
+
 def test_under_limit_returns_all_not_truncated():
     items = [1, 2, 3]
     capped, meta = cap_list(items, limit=10)

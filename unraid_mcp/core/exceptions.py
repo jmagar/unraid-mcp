@@ -33,6 +33,19 @@ class CredentialsNotConfiguredError(Exception):
         return "Unraid credentials are not configured."
 
 
+# Exception types that almost always indicate a server-side programming bug
+# rather than a transient upstream/IO failure. When one of these escapes a tool
+# handler, the agent should stop retrying — re-running the same call will hit the
+# same code path and fail identically.
+_LIKELY_BUG_EXCEPTIONS: tuple[type[Exception], ...] = (
+    KeyError,
+    AttributeError,
+    TypeError,
+    IndexError,
+    NameError,
+)
+
+
 @contextlib.contextmanager
 def tool_error_handler(
     tool_name: str,
@@ -45,6 +58,17 @@ def tool_error_handler(
     with setup instructions including CREDENTIALS_ENV_PATH; does not log.
     Gives TimeoutError a descriptive message. Catches all other exceptions,
     logs them with full traceback, and wraps them in ToolError.
+
+    Remaining exceptions are split into two user-facing classes — without leaking
+    any internal specifics — so the agent can decide whether retrying is worthwhile:
+
+    * *likely-server-bug* types (``KeyError``, ``AttributeError``, ``TypeError``,
+      ``IndexError``, ``NameError``) surface as an "internal error (likely a bug)"
+      message, signalling that retrying the same call will not help.
+    * everything else (network/IO/upstream errors) surfaces as an
+      "upstream/network error" message, which is worth a retry.
+
+    Both classes are logged in full via ``logger.exception``.
 
     Args:
         tool_name: The tool name for error messages (e.g., "docker", "vm").
@@ -70,8 +94,15 @@ def tool_error_handler(
         raise ToolError(
             f"Request timed out executing {tool_name}/{action}. The Unraid API did not respond in time."
         ) from e
+    except _LIKELY_BUG_EXCEPTIONS as e:
+        logger.exception(f"Likely server bug in unraid_{tool_name} action={action}")
+        raise ToolError(
+            f"Internal error executing {tool_name}/{action} (likely a server bug). "
+            f"Retrying is unlikely to help. Check server logs for details."
+        ) from e
     except Exception as e:
         logger.exception(f"Error in unraid_{tool_name} action={action}")
         raise ToolError(
-            f"Failed to execute {tool_name}/{action}. Check server logs for details."
+            f"Failed to execute {tool_name}/{action} (upstream/network error). "
+            f"This may be transient — retrying may help. Check server logs for details."
         ) from e

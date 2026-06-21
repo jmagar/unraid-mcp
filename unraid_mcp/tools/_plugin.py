@@ -4,6 +4,8 @@ Covers: list, installed_unraid, install_operations, install_operation, add,
 remove*, install, install_language (8 subactions).
 """
 
+import ipaddress
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -44,11 +46,22 @@ _PLUGIN_DESTRUCTIVE: set[str] = {"remove", "install", "install_language"}
 
 
 def _validate_plugin_url(url: str) -> str:
-    """Reject non-http(s) / hostless plugin URLs before forwarding to the API.
+    """Reject non-http(s) / hostless / SSRF-prone plugin URLs before forwarding.
 
     Defence-in-depth against a delegated-SSRF / `file://` install vector — the
-    Unraid API performs the actual fetch, but the MCP layer should not pass
-    obviously-abusive schemes through.
+    Unraid API performs the actual fetch (and runs the resulting .plg as root),
+    but the MCP layer should not pass obviously-abusive schemes or URLs that
+    resolve to internal/cloud-metadata endpoints through.
+
+    The host is resolved via ``socket.getaddrinfo`` and rejected if *any*
+    resolved address is private/loopback/link-local/reserved/unspecified, which
+    blocks pivots like ``http://169.254.169.254/`` (cloud metadata), RFC1918,
+    ``127.0.0.1``/``::1``, and so on.
+
+    CAVEAT — DNS rebinding: a hostname that resolves to a public address here can
+    re-resolve to a private one when the Unraid host later fetches it (TOCTOU).
+    This is a best-effort, defence-in-depth check at the MCP layer; it is not a
+    complete SSRF mitigation. The Unraid host does its own (re-)resolution.
     """
     try:
         parsed = urlparse(url)
@@ -58,6 +71,36 @@ def _validate_plugin_url(url: str) -> str:
         raise ToolError(f"plugin url must use http or https, got '{parsed.scheme or '(none)'}'")
     if not parsed.netloc:
         raise ToolError("plugin url must include a hostname")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ToolError("plugin url must include a hostname")
+
+    try:
+        addrinfo = socket.getaddrinfo(hostname, parsed.port or None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as exc:
+        raise ToolError(f"plugin url host '{hostname}' could not be resolved: {exc}") from exc
+
+    for _family, _type, _proto, _canon, sockaddr in addrinfo:
+        try:
+            ip = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            # Unparseable sockaddr — fail closed rather than forward an unknown host.
+            raise ToolError(
+                f"plugin url host '{hostname}' resolved to an unparseable address"
+            ) from None
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ToolError(
+                f"plugin url host '{hostname}' resolves to a non-public address ({ip}); "
+                "refusing to forward (SSRF guard)"
+            )
+
     return url
 
 

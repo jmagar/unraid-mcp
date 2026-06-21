@@ -21,19 +21,20 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 |  MCP Middleware Chain:                         |
 |  1. LoggingMiddleware    (request logging)     |
 |  2. ErrorHandlingMiddleware (exception wrap)   |
-|  3. RateLimitingMiddleware (540 req/min)       |
-|  4. ResponseLimitingMiddleware (512 KB cap)    |
+|  3. RateLimitingMiddleware (540/min, inbound)  |
+|  4. StructuredResponseLimitingMiddleware       |
+|     (40 KB cap -> JSON truncation marker)       |
 +----------------------------------------------+
     |
-    +----> Tools (4 registered)
-    |      +-- unraid (action+subaction router)
-    |      |   +-- _system.py    (18 subactions)
+    +----> Tools (1 registered)
+    |      +-- unraid (action+subaction router, 19 actions / 170 subactions)
+    |      |   +-- _system.py    (20 subactions)
     |      |   +-- _health.py    (4 subactions)
     |      |   +-- _array.py     (14 subactions)
     |      |   +-- _disk.py      (6 subactions)
-    |      |   +-- _docker.py    (25 subactions)
+    |      |   +-- _docker.py    (26 subactions)
     |      |   +-- _vm.py        (9 subactions)
-    |      |   +-- _notification (12 subactions)
+    |      |   +-- _notification (13 subactions)
     |      |   +-- _key.py       (13 subactions)
     |      |   +-- _plugin.py    (8 subactions)
     |      |   +-- _rclone.py    (4 subactions)
@@ -44,9 +45,8 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
     |      |   +-- _onboarding.py (11 subactions)
     |      |   +-- _user.py      (1 subaction)
     |      |   +-- _live.py      (16 subactions)
-    |      +-- unraid_help
-    |      +-- diagnose_subscriptions
-    |      +-- test_subscription_query
+    |      |   +-- subscriptions action -> diagnostics.py (2 subactions: diagnose, test_query)
+    |      |   +-- help action (returns the Markdown reference)
     |
     +----> Resources (10 registered)
            +-- unraid://logs/stream
@@ -77,7 +77,9 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 3. MCP middleware logs, handles errors, checks rate limit, caps response size
 4. `unraid()` routes to domain handler (e.g., `_handle_docker`)
 5. Handler looks up pre-built GraphQL query from domain `_*_QUERIES` dict
-6. `core/client.py` sends async HTTP request to Unraid API with `x-api-key`
+6. `core/client.py` acquires a token from the upstream **token-bucket rate limiter**
+   (`_RateLimiter`: 90 tokens / 9 rps, modeling Unraid's 100 req/10s hard limit), then
+   sends the async HTTP request to the Unraid API with `x-api-key` (429s retried with backoff)
 7. Response parsed, formatted, returned to client
 
 ### Tool call (mutation with destructive gate)
@@ -116,12 +118,14 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 
 ### Consolidated tool pattern
 
-One `unraid` tool with 17 action domains instead of 17+ separate tools. This:
+One `unraid` tool with 19 actions (170 subactions) instead of many separate tools. This:
 - Reduces MCP context window usage (one tool description covers all operations)
 - Simplifies client tool selection
 - Enables shared parameters across domains
 
-**Tradeoff**: Caching is disabled because the single tool mixes reads and mutations.
+**Tradeoff**: There is no response/query cache. The single `unraid` tool mixes reads and
+mutations under one name, so per-subaction cache exclusion is impossible — the
+`ResponseCachingMiddleware` that once existed was removed for this reason.
 
 ### Pre-built query dicts
 

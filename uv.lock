@@ -1670,7 +1670,7 @@ dev = [
     { name = "respx", specifier = ">=0.22.0" },
     { name = "ruff", specifier = ">=0.12.8" },
     { name = "twine", specifier = ">=6.0.1" },
-    { name = "ty", specifier = ">=0.0.15" },
+    { name = "ty", specifier = "==0.0.23" },
 ]
 
 [[package]]

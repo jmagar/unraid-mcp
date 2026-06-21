@@ -514,6 +514,52 @@ class TestDataReception:
         with p[0], p[1], p[2], p[3], p[4]:
             await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
 
+    async def test_malformed_frames_skipped_then_good_data_stored(self) -> None:
+        """A non-JSON frame, a non-dict JSON frame, a 'next' frame missing its
+        payload, and an unknown type are all skipped; a valid frame that follows
+        is still stored (manager per-message resilience — T-M4)."""
+        mgr = SubscriptionManager()
+        mgr.max_reconnect_attempts = 2
+
+        ws = FakeWebSocket(
+            [
+                {"type": "connection_ack"},
+                "not valid json {{{",  # non-JSON text frame
+                "[1, 2, 3]",  # valid JSON but not an object
+                {"type": "next", "id": "test_sub"},  # missing 'payload'
+                {"type": "totally_unknown", "id": "test_sub", "payload": {}},  # unknown type
+                {"type": "next", "id": "test_sub", "payload": {"data": {"ok": 1}}},  # good
+                {"type": "complete", "id": "test_sub"},
+            ],
+            subprotocol="graphql-transport-ws",
+        )
+        p = _loop_patches(ws)
+        with p[0], p[1], p[2], p[3], p[4]:
+            await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
+
+        # The valid frame after the malformed ones was still processed and stored.
+        assert "test_sub" in mgr.resource_data
+        assert mgr.resource_data["test_sub"].data == {"ok": 1}
+
+    async def test_next_frame_missing_payload_is_not_stored(self) -> None:
+        """A data frame whose 'payload' is absent must not crash or store data."""
+        mgr = SubscriptionManager()
+        mgr.max_reconnect_attempts = 2
+
+        ws = FakeWebSocket(
+            [
+                {"type": "connection_ack"},
+                {"type": "next", "id": "test_sub"},  # no 'payload' key
+                {"type": "complete", "id": "test_sub"},
+            ],
+            subprotocol="graphql-transport-ws",
+        )
+        p = _loop_patches(ws)
+        with p[0], p[1], p[2], p[3], p[4]:
+            await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
+
+        assert "test_sub" not in mgr.resource_data
+
 
 # ---------------------------------------------------------------------------
 # Reconnection and Backoff
@@ -660,6 +706,91 @@ class TestReconnection:
 
             assert "WebSocket connection closed" in mgr.last_error.get("test_sub", "")
             assert mgr.connection_states["test_sub"] in ("disconnected", "max_retries_exceeded")
+
+
+# ---------------------------------------------------------------------------
+# Concurrent start (T-M3)
+# ---------------------------------------------------------------------------
+
+
+class _HangingWebSocket:
+    """Fake WS that acks once then blocks the data stream forever.
+
+    Keeps the subscription task 'active' so concurrent start attempts can be
+    observed without the loop completing and self-removing. ``recv()`` returns
+    the connection_ack; ``__anext__`` awaits an Event that is never set.
+    """
+
+    def __init__(self, subprotocol: str = "graphql-transport-ws") -> None:
+        self.subprotocol = subprotocol
+        self.send = AsyncMock()
+        self._acked = False
+
+    async def recv(self) -> str:
+        return json.dumps({"type": "connection_ack"})
+
+    def __aiter__(self) -> "_HangingWebSocket":
+        return self
+
+    async def __anext__(self) -> str:
+        # Block forever — the subscription stays active.
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")  # pragma: no cover
+
+
+class TestConcurrentStart:
+    async def test_concurrent_start_creates_single_connection(self) -> None:
+        """Two concurrent start_subscription('cpu') calls establish exactly one
+        connection and leave a single consistent per-name task (T-M3).
+
+        The TOCTOU guard inside _task_lock must ensure the second caller is a
+        no-op, so websockets.connect is invoked exactly once.
+        """
+        mgr = SubscriptionManager()
+
+        connect_calls = 0
+
+        def _connect_side_effect(*_a: Any, **_kw: Any) -> MagicMock:
+            nonlocal connect_calls
+            connect_calls += 1
+            return _ws_context(_HangingWebSocket())
+
+        with (
+            patch(_WS_CONNECT, side_effect=_connect_side_effect),
+            patch(_API_URL, "https://test.local"),
+            patch(_API_KEY, "test-key"),
+            patch(_SSL_CTX, return_value=None),
+            patch(_SLEEP, new_callable=AsyncMock),
+        ):
+            # Fire both starts concurrently.
+            await asyncio.gather(
+                mgr.start_subscription("cpu", SAMPLE_QUERY),
+                mgr.start_subscription("cpu", SAMPLE_QUERY),
+            )
+
+            # Exactly one task tracked for the name, and it is a Task.
+            assert "cpu" in mgr.active_subscriptions
+            assert isinstance(mgr.active_subscriptions["cpu"], asyncio.Task)
+            assert len([k for k in mgr.active_subscriptions if k == "cpu"]) == 1
+
+            # Give the single task a turn so it actually opens the connection.
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+            # Only one underlying WebSocket connection was established despite
+            # two concurrent start attempts.
+            assert connect_calls == 1, f"expected exactly one connect, got {connect_calls}"
+
+            # Per-name state is consistent — one reconnect counter, one state entry.
+            assert mgr.connection_states.get("cpu") in (
+                "active",
+                "connected",
+                "authenticated",
+                "subscribed",
+            )
+
+            await mgr.stop_subscription("cpu")
+            assert "cpu" not in mgr.active_subscriptions
 
 
 # ---------------------------------------------------------------------------

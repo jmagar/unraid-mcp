@@ -126,8 +126,14 @@ unraid(action="system", subaction="overview")
 - Check if Unraid's API is enabled in Settings > Management Access
 
 **"SSL verification failed"**
-- For self-signed certificates, set `UNRAID_VERIFY_SSL=false` in `.env`
-- Only use this in trusted networks
+- **Recommended:** point `UNRAID_VERIFY_SSL` at a CA-bundle path
+  (`UNRAID_VERIFY_SSL=/path/to/ca.pem`) to trust a self-signed cert *without* turning off
+  verification.
+- Disabling verification entirely (`UNRAID_VERIFY_SSL=false`) is discouraged: it sends
+  your `UNRAID_API_KEY` to an unverified peer over **both** the GraphQL HTTP client and the
+  WebSocket subscription connection, so a man-in-the-middle can capture the key. If you
+  must, the server requires a second explicit opt-in (`UNRAID_ALLOW_INSECURE_TLS=true`) and
+  it should only ever be used on a fully trusted network.
 
 **"Bearer token required"**
 - The server auto-generates a token on first HTTP startup

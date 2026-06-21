@@ -62,6 +62,7 @@ async def _handle_live(
     # IMPORTANT: Every key in COLLECT_ACTIONS must have an explicit handler in _handle_live below.
     # Adding to COLLECT_ACTIONS without updating this function causes a ToolError at runtime.
     from ..core.utils import validate_subaction
+    from ..subscriptions.manager import subscription_manager
     from ..subscriptions.queries import COLLECT_ACTIONS, EVENT_DRIVEN_ACTIONS, SNAPSHOT_ACTIONS
     from ..subscriptions.snapshot import subscribe_collect, subscribe_once
 
@@ -77,6 +78,28 @@ async def _handle_live(
         logger.info(f"Executing unraid action=live subaction={subaction} timeout={timeout}")
 
         if subaction in SNAPSHOT_ACTIONS:
+            # Warm-cache fast path: when the persistent SubscriptionManager is
+            # auto-starting subscriptions, a long-lived WebSocket for this snapshot
+            # subaction is already holding fresh data. The snapshot subaction name
+            # is identical to the manager's subscription name (both come from
+            # SNAPSHOT_ACTIONS keys — see manager.subscription_configs), so we can
+            # serve the cached resource data directly and skip the full per-call WS
+            # handshake. Falls through to the live path below when the cache is cold
+            # (None) or auto-start is disabled.
+            if subscription_manager.auto_start_enabled:
+                cached = await subscription_manager.get_resource_data(subaction)
+                if cached is not None:
+                    logger.debug(
+                        "live/%s served from warm subscription cache (skipped fresh WS)",
+                        subaction,
+                    )
+                    return {
+                        "success": True,
+                        "subaction": subaction,
+                        "source": "cache",
+                        "data": cached,
+                    }
+
             if subaction in EVENT_DRIVEN_ACTIONS:
                 try:
                     data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
@@ -91,7 +114,7 @@ async def _handle_live(
                     raise
             else:
                 data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
-            return {"success": True, "subaction": subaction, "data": data}
+            return {"success": True, "subaction": subaction, "source": "live", "data": data}
 
         if subaction == "log_tail":
             events = await subscribe_collect(

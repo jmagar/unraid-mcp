@@ -26,13 +26,11 @@ The individual plugin configuration for the Unraid MCP server.
 
 ## MCP Tools Exposed
 
-The plugin registers **3 MCP tools**:
+The plugin registers **a single MCP tool**:
 
 | Tool | Purpose |
 |------|---------|
-| `unraid` | Primary tool — `action` (domain) + `subaction` (operation) routing, ~~160 subactions across 17 domains |
-| `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
-| `test_subscription_query` | Test a specific GraphQL subscription query (allowlisted fields only) |
+| `unraid` | The only tool — `action` (domain) + `subaction` (operation) routing, 170 subactions across 19 actions. WebSocket diagnostics and the Markdown reference are the `subscriptions` and `help` actions of this tool. |
 
 ### Calling Convention
 

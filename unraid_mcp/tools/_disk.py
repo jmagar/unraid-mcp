@@ -49,12 +49,40 @@ _ALLOWED_LOG_PREFIXES = ("/var/log/", "/boot/logs/")
 _MAX_TAIL_LINES = 10_000
 
 
-def _validate_path(path: str, allowed_prefixes: tuple[str, ...], label: str) -> str:
+def _path_within_base(normalized: str, base: str) -> bool:
+    """Boundary-correct containment check: ``normalized`` is ``base`` or under it.
+
+    A naive ``startswith(base)`` would wrongly accept siblings that merely share a
+    prefix (e.g. ``/bootleg`` for base ``/boot``). The correct rule is an exact
+    match OR a match on ``base`` followed by a path separator.
+    """
+    base = base.rstrip("/")
+    return normalized == base or normalized.startswith(base + "/")
+
+
+def _validate_path(
+    path: str,
+    allowed_prefixes: tuple[str, ...],
+    label: str,
+    *,
+    exact_or_prefix: bool = False,
+) -> str:
     """Validate a remote path string for traversal and allowed prefix.
 
     Uses pure string normalization — no filesystem access. The path is validated
     locally but consumed on the remote Unraid server, so realpath would resolve
     against the wrong filesystem.
+
+    Prefix handling depends on ``allowed_prefixes`` and ``exact_or_prefix``:
+
+    - ``exact_or_prefix=True`` — ``allowed_prefixes`` are base directories matched
+      with a boundary-correct check (the dir itself or anything under it) so
+      ``/boot`` does not also admit ``/bootleg``.
+    - ``exact_or_prefix=False`` (default) — legacy ``startswith`` prefix match; keep
+      those prefixes trailing-slash terminated (e.g. ``/var/log/``) to avoid the
+      sibling-prefix bug.
+    - empty ``allowed_prefixes`` — skip the prefix check entirely (only null-byte
+      and traversal hardening apply), e.g. for remote rclone destination paths.
 
     Returns the normalized path. Raises ToolError on any violation.
     """
@@ -69,7 +97,13 @@ def _validate_path(path: str, allowed_prefixes: tuple[str, ...], label: str) -> 
     # os.sep would be '\\' on Windows, silently breaking the traversal check.
     if ".." in normalized.split("/"):
         raise ToolError(f"{label} must not contain path traversal sequences (../)")
-    if not any(normalized.startswith(p) for p in allowed_prefixes):
+    if not allowed_prefixes:
+        return normalized
+    if exact_or_prefix:
+        allowed = any(_path_within_base(normalized, p) for p in allowed_prefixes)
+    else:
+        allowed = any(normalized.startswith(p) for p in allowed_prefixes)
+    if not allowed:
         raise ToolError(f"{label} must start with one of: {', '.join(allowed_prefixes)}")
     return normalized
 
@@ -119,27 +153,17 @@ async def _handle_disk(
                 raise ToolError("source_path is required for disk/flash_backup")
             if not destination_path:
                 raise ToolError("destination_path is required for disk/flash_backup")
-            # Validate paths — flash backup source must come from /boot/ only.
-            # NOTE: _validate_path is not reused here because its prefix check uses
-            # startswith(), which would allow '/bootleg/...' to pass '/boot' prefix.
-            # The correct check is (normalized == "/boot" or startswith("/boot/")),
-            # which requires an inline implementation.
-            if "\x00" in source_path:
-                raise ToolError("source_path must not contain null bytes")
-            # Normalize BEFORE checking '..' �� raw-string check is bypassable via
-            # encoded sequences like 'foo/bar/../..'.
-            normalized = posixpath.normpath(source_path)
-            if ".." in normalized.split("/"):
-                raise ToolError("source_path must not contain path traversal sequences (../)")
-            if not (normalized == "/boot" or normalized.startswith("/boot/")):
-                raise ToolError("source_path must start with /boot/ (flash drive only)")
-            source_path = normalized
-            if "\x00" in destination_path:
-                raise ToolError("destination_path must not contain null bytes")
-            normalized_dest = posixpath.normpath(destination_path)
-            if ".." in normalized_dest.split("/"):
-                raise ToolError("destination_path must not contain path traversal sequences (../)")
-            destination_path = normalized_dest
+            # Validate paths — flash backup source must come from /boot only.
+            # The boundary-correct "/boot vs /bootleg" rule lives in a single
+            # place: _validate_path's exact_or_prefix mode (a naive
+            # startswith("/boot") would wrongly admit "/bootleg/...").
+            source_path = _validate_path(
+                source_path, ("/boot",), "source_path", exact_or_prefix=True
+            )
+            # The destination is a remote (rclone) target, so it carries no local
+            # prefix restriction — only null-byte + traversal hardening applies.
+            # An empty allowed_prefixes tuple skips the prefix check entirely.
+            destination_path = _validate_path(destination_path, (), "destination_path")
             input_data: dict[str, Any] = {
                 "remoteName": remote_name,
                 "sourcePath": source_path,

@@ -10,13 +10,16 @@ import pytest
 from unraid_mcp.core.client import (
     DEFAULT_TIMEOUT,
     DISK_TIMEOUT,
-    _QueryCache,
     _RateLimiter,
     is_idempotent_error,
     make_graphql_request,
     redact_sensitive,
 )
-from unraid_mcp.core.exceptions import CredentialsNotConfiguredError, ToolError
+from unraid_mcp.core.exceptions import (
+    CredentialsNotConfiguredError,
+    ToolError,
+    tool_error_handler,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +144,162 @@ class TestRedactSensitive:
         result = redact_sensitive(data)
         for key, val in result.items():
             assert val == "***", f"Key '{key}' was not redacted"
+
+    def test_additional_sensitive_keys_are_redacted(self) -> None:
+        """client_secret, activation_code, private_key keys are redacted by name."""
+        data = {
+            "client_secret": "cs_value",
+            "clientSecret": "cs_value2",
+            "activation_code": "AC-123",
+            "activationCode": "AC-456",
+            "private_key": "pk_value",
+            "privateKey": "pk_value2",
+            "username": "safe",
+        }
+        result = redact_sensitive(data)
+        assert result["client_secret"] == "***"
+        assert result["clientSecret"] == "***"
+        assert result["activation_code"] == "***"
+        assert result["activationCode"] == "***"
+        assert result["private_key"] == "***"
+        assert result["privateKey"] == "***"
+        assert result["username"] == "safe"
+
+    def test_jwt_shaped_value_redacted_under_innocuous_key(self) -> None:
+        """A JWT-shaped value is masked even when its key is not sensitive."""
+        jwt = (
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+            ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+            ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+        )
+        data = {"note": jwt, "comment": "this is fine"}
+        result = redact_sensitive(data)
+        assert result["note"] == "***"
+        assert result["comment"] == "this is fine"
+
+    def test_sk_prefixed_token_value_redacted(self) -> None:
+        """An sk- prefixed token value is masked regardless of key name."""
+        data = {"detail": "sk-abcdef0123456789ABCDEF"}
+        result = redact_sensitive(data)
+        assert result["detail"] == "***"
+
+    def test_high_entropy_token_value_redacted(self) -> None:
+        """A long mixed-charset opaque token is masked even under a benign key."""
+        data = {"misc": "AKIA1234567890ABCDEFxyz0987654321"}
+        result = redact_sensitive(data)
+        assert result["misc"] == "***"
+
+    def test_client_secret_key_and_jwt_value_both_masked_ordinary_kept(self) -> None:
+        """Combined: client_secret key masked, JWT value masked, ordinary text kept."""
+        jwt = "eyJ0eXAiOiJKV1QifQ.eyJpZCI6N30.AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+        data = {
+            "client_secret": "whatever",
+            "blob": jwt,
+            "description": "A perfectly ordinary sentence with words.",
+        }
+        result = redact_sensitive(data)
+        assert result["client_secret"] == "***"
+        assert result["blob"] == "***"
+        assert result["description"] == "A perfectly ordinary sentence with words."
+
+    def test_ordinary_strings_not_redacted(self) -> None:
+        """Plain text, URLs, paths, short IDs, and pure-numeric values survive."""
+        data = {
+            "msg": "the array is healthy and mounted",
+            "url": "https://unraid.local/graphql",
+            "path": "/mnt/user/appdata",
+            "short": "abc123",  # below length floor
+            "count": "1234567890123456789012345",  # long but no letters
+            "words": "alphabetical-words-with-no-digits-but-long-enough-here",
+        }
+        result = redact_sensitive(data)
+        assert result["msg"] == "the array is healthy and mounted"
+        assert result["url"] == "https://unraid.local/graphql"
+        assert result["path"] == "/mnt/user/appdata"
+        assert result["short"] == "abc123"
+        assert result["count"] == "1234567890123456789012345"
+        assert result["words"] == "alphabetical-words-with-no-digits-but-long-enough-here"
+
+    def test_top_level_secret_string_redacted(self) -> None:
+        """A bare JWT string (not in a dict) is redacted by value scanning."""
+        jwt = "eyJ0eXAiOiJKV1QifQ.eyJpZCI6N30.AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+        assert redact_sensitive(jwt) == "***"
+
+
+# ---------------------------------------------------------------------------
+# tool_error_handler — error classification
+# ---------------------------------------------------------------------------
+
+
+class TestToolErrorHandler:
+    """Verify tool_error_handler distinguishes likely-bug vs upstream errors."""
+
+    def _logger(self) -> MagicMock:
+        return MagicMock()
+
+    def test_keyerror_maps_to_internal_bug_class(self) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError) as exc_info,
+            tool_error_handler("docker", "list", logger),
+        ):
+            raise KeyError("missing_field")
+        msg = str(exc_info.value)
+        assert "likely a server bug" in msg
+        assert "Retrying is unlikely to help" in msg
+        # No internal specifics leaked (the missing key name must not appear).
+        assert "missing_field" not in msg
+        logger.exception.assert_called_once()
+
+    @pytest.mark.parametrize("exc", [AttributeError, TypeError, IndexError, NameError])
+    def test_other_bug_types_map_to_internal_class(self, exc: type[Exception]) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError, match="likely a server bug"),
+            tool_error_handler("vm", "start", logger),
+        ):
+            raise exc("boom")
+
+    def test_network_error_maps_to_upstream_class(self) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError) as exc_info,
+            tool_error_handler("system", "overview", logger),
+        ):
+            raise httpx.ConnectError("Connection refused")
+        msg = str(exc_info.value)
+        assert "upstream/network error" in msg
+        assert "retrying may help" in msg
+        assert "likely a server bug" not in msg
+        logger.exception.assert_called_once()
+
+    def test_generic_runtime_error_maps_to_upstream_class(self) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError, match="upstream/network error"),
+            tool_error_handler("array", "parity_status", logger),
+        ):
+            raise RuntimeError("unexpected upstream state")
+
+    def test_tool_error_passes_through_unchanged(self) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError, match="original message"),
+            tool_error_handler("docker", "list", logger),
+        ):
+            raise ToolError("original message")
+        # Pass-through must not log.
+        logger.exception.assert_not_called()
+
+    def test_timeout_error_maps_to_timeout_message(self) -> None:
+        logger = self._logger()
+        with (
+            pytest.raises(ToolError, match="timed out"),
+            tool_error_handler("disk", "disks", logger),
+        ):
+            raise TimeoutError("slow")
+        # A TimeoutError must not be classified as a bug.
+        assert "likely a server bug" not in str(logger)
 
 
 # ---------------------------------------------------------------------------
@@ -546,88 +705,6 @@ class TestRateLimiter:
         limiter = _RateLimiter()
         assert limiter.max_tokens == 90
         assert limiter.refill_rate == 9.0
-
-
-# ---------------------------------------------------------------------------
-# _QueryCache
-# ---------------------------------------------------------------------------
-
-
-class TestQueryCache:
-    """Unit tests for the TTL query cache."""
-
-    async def test_miss_on_empty_cache(self) -> None:
-        cache = _QueryCache()
-        assert await cache.get("{ info }", None) is None
-
-    async def test_put_and_get_hit(self) -> None:
-        cache = _QueryCache()
-        data = {"result": "ok"}
-        await cache.put("GetNetworkConfig { }", None, data)
-        result = await cache.get("GetNetworkConfig { }", None)
-        assert result == data
-
-    async def test_expired_entry_returns_none(self) -> None:
-        cache = _QueryCache()
-        data = {"result": "ok"}
-        await cache.put("GetNetworkConfig { }", None, data)
-        # Manually expire the entry
-        key = cache._cache_key("GetNetworkConfig { }", None)
-        cache._store[key] = (time.monotonic() - 1.0, data)  # expired 1 sec ago
-        assert await cache.get("GetNetworkConfig { }", None) is None
-
-    async def test_invalidate_all_clears_store(self) -> None:
-        cache = _QueryCache()
-        await cache.put("GetNetworkConfig { }", None, {"x": 1})
-        await cache.put("GetOwner { }", None, {"y": 2})
-        assert len(cache._store) == 2
-        await cache.invalidate_all()
-        assert len(cache._store) == 0
-
-    async def test_variables_affect_cache_key(self) -> None:
-        """Different variables produce different cache keys."""
-        cache = _QueryCache()
-        q = "GetNetworkConfig($id: ID!) { network(id: $id) { name } }"
-        await cache.put(q, {"id": "1"}, {"name": "eth0"})
-        await cache.put(q, {"id": "2"}, {"name": "eth1"})
-        assert await cache.get(q, {"id": "1"}) == {"name": "eth0"}
-        assert await cache.get(q, {"id": "2"}) == {"name": "eth1"}
-
-    def test_is_cacheable_returns_true_for_known_prefixes(self) -> None:
-        assert _QueryCache.is_cacheable("GetNetworkConfig { ... }") is True
-        assert _QueryCache.is_cacheable("GetRegistrationInfo { ... }") is True
-        assert _QueryCache.is_cacheable("GetOwner { ... }") is True
-        assert _QueryCache.is_cacheable("GetFlash { ... }") is True
-
-    def test_is_cacheable_returns_false_for_mutations(self) -> None:
-        assert _QueryCache.is_cacheable('mutation { docker { start(id: "x") } }') is False
-
-    def test_is_cacheable_returns_false_for_unlisted_queries(self) -> None:
-        assert _QueryCache.is_cacheable("{ docker { containers { id } } }") is False
-        assert _QueryCache.is_cacheable("{ info { os } }") is False
-
-    def test_is_cacheable_mutation_check_is_prefix(self) -> None:
-        """Queries that start with 'mutation' after whitespace are not cacheable."""
-        assert _QueryCache.is_cacheable("  mutation { ... }") is False
-
-    def test_is_cacheable_with_explicit_query_keyword(self) -> None:
-        """Operation names after explicit 'query' keyword must be recognized."""
-        assert _QueryCache.is_cacheable("query GetNetworkConfig { network { name } }") is True
-        assert _QueryCache.is_cacheable("query GetOwner { owner { name } }") is True
-
-    def test_is_cacheable_anonymous_query_returns_false(self) -> None:
-        """Anonymous 'query { ... }' has no operation name — must not be cached."""
-        assert _QueryCache.is_cacheable("query { network { name } }") is False
-
-    async def test_expired_entry_removed_from_store(self) -> None:
-        """Accessing an expired entry should remove it from the internal store."""
-        cache = _QueryCache()
-        await cache.put("GetOwner { }", None, {"owner": "root"})
-        key = cache._cache_key("GetOwner { }", None)
-        cache._store[key] = (time.monotonic() - 1.0, {"owner": "root"})
-        assert key in cache._store
-        await cache.get("GetOwner { }", None)  # triggers deletion
-        assert key not in cache._store
 
 
 # ---------------------------------------------------------------------------

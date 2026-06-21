@@ -5,6 +5,7 @@ on:
     branches: ["main", "feat/**", "fix/**"]
   pull_request:
     branches: ["main"]
+  workflow_dispatch:  # manual trigger for the live Unraid smoke test (mcp-integration)
 
 # Least-privilege default for GITHUB_TOKEN; jobs elevate only if they need to.
 permissions:
@@ -25,6 +26,8 @@ jobs:
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Install dependencies
         run: uv sync --locked --group dev
       - name: Ruff check
@@ -41,6 +44,8 @@ jobs:
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Install dependencies
         run: uv sync --locked --group dev
       - name: ty check
@@ -55,10 +60,35 @@ jobs:
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Install dependencies
         run: uv sync --locked --group dev
       - name: Run tests with coverage (excluding integration/slow)
         run: uv run pytest -m "not slow and not integration" --cov=unraid_mcp --cov-report=term-missing --tb=short -q
+
+  e2e:
+    name: Integration & Mock Roundtrip
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "20"
+      - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
+        with:
+          version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install mock server dependencies
+        run: npm --prefix tests/mock ci
+      - name: Install Python dependencies
+        run: uv sync --locked --group dev
+      - name: Run integration & mock roundtrip tests
+        run: uv run pytest -m "integration or mockserver" --tb=short -q
 
   version-sync:
     name: Version Sync Check
@@ -73,8 +103,15 @@ jobs:
     name: MCP Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Live smoke test against the REAL Unraid box (via repo secrets). The homelab
+    # Unraid API lives on a private/Tailscale network that GitHub's cloud runners
+    # cannot reach, so this can never pass on a hosted runner — it is therefore a
+    # MANUAL job (workflow_dispatch), not an automatic PR/push check. Run it from a
+    # tailnet-connected context (e.g. a self-hosted runner) when you want live
+    # coverage. The no-secrets `e2e` job is the real automatic integration gate.
+    continue-on-error: true
     needs: [lint, typecheck, test]
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'workflow_dispatch'
     env:
       UNRAID_API_URL: ${{ secrets.UNRAID_API_URL }}
       UNRAID_API_KEY: ${{ secrets.UNRAID_API_KEY }}
@@ -83,9 +120,10 @@ jobs:
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Run integration tests
         if: env.UNRAID_API_URL != '' && env.UNRAID_API_KEY != ''
-        continue-on-error: true
         run: bash tests/test_live.sh
 
   audit:
@@ -97,6 +135,8 @@ jobs:
       - uses: astral-sh/setup-uv@e58605a9b6da7c637471fab8847a5e5a6b8df081  # v5
         with:
           version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
       - name: Install dependencies
         run: uv sync --locked
       - name: Dependency audit

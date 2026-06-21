@@ -12,7 +12,8 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
-from ..core.utils import safe_get, validate_subaction
+from ..core.pagination import cap_list
+from ..core.utils import coerce_list, safe_get, validate_subaction
 
 
 # ===========================================================================
@@ -96,8 +97,9 @@ async def _handle_notification(
             return dict(safe_get(data, "notifications", "overview", default={}))
 
         if subaction == "list":
-            # limit<=0 means "as many as the clamp allows"; otherwise clamp the
-            # caller value down to the max so it can't request thousands of rows.
+            # Server-side fetch ceiling: limit<=0 means "as many as the clamp
+            # allows", otherwise clamp the caller value down to the max so the
+            # upstream API is never asked for thousands of rows.
             effective_limit = (
                 _MAX_NOTIFICATION_LIMIT if limit <= 0 else min(limit, _MAX_NOTIFICATION_LIMIT)
             )
@@ -111,7 +113,12 @@ async def _handle_notification(
             data = await _client.make_graphql_request(
                 _NOTIFICATION_QUERIES["list"], {"filter": filter_vars}
             )
-            return {"notifications": safe_get(data, "notifications", "list", default=[])}
+            # Bound the *returned* list to the tool `limit` (default 20) via
+            # cap_list so the response can't blow past the 40 KB response cap —
+            # a 200-row payload is ~114 KB and would be silently truncated.
+            rows = coerce_list(safe_get(data, "notifications", "list", default=[]))
+            capped, page = cap_list(rows, limit)
+            return {"notifications": capped, "page": page}
 
         if subaction == "create":
             if title is None or subject is None or description is None or importance is None:

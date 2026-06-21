@@ -8,6 +8,8 @@ import ipaddress
 import os
 import secrets
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal, cast
 
 from dotenv import set_key
@@ -33,7 +35,9 @@ from .config.settings import (
 )
 from .core import middleware_refs as _middleware_refs
 from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
+from .core.client import close_http_client
 from .core.response_limit import StructuredResponseLimitingMiddleware
+from .subscriptions.manager import subscription_manager
 from .subscriptions.resources import register_subscription_resources
 from .tools.unraid import register_unraid_tool
 
@@ -96,14 +100,16 @@ _error_middleware = ErrorHandlingMiddleware(
 # tools/unraid.py imports middleware_refs, not server, avoiding the cycle.
 _middleware_refs.error_middleware = _error_middleware
 
-# 3. Rate limiting: 540 requests per 60-second sliding window.
-#    SlidingWindowRateLimitingMiddleware only supports window_minutes (int), so the
-#    upstream Unraid "100 req/10 s" burst limit cannot be enforced exactly here.
-#    540 req/min is a conservative 1-minute equivalent that prevents sustained
-#    overload while staying well under the 600 req/min ceiling.
-#    Note: this does NOT cap bursts within a 10 s window; a client can still send
-#    up to 540 requests in the first 10 s of a window. Add a sub-minute rate limiter
-#    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
+# 3. Inbound-abuse / DoS guard: 540 requests per 60-second sliding window.
+#    This is NOT the authoritative upstream rate limiter. SlidingWindowRateLimitingMiddleware
+#    only supports window_minutes (int) granularity, so it cannot bound the upstream
+#    Unraid "100 req/10 s" burst limit — a client can still send up to 540 requests in
+#    the first 10 s of a window, far exceeding what Unraid accepts. Its only job here is
+#    to cap sustained inbound request volume so a misbehaving or hostile client cannot
+#    flood this server.
+#    The AUTHORITATIVE upstream limiter is the client-side token bucket (`_RateLimiter`
+#    in core/client.py): 90 tokens at 9.0 tokens/sec models Unraid's 100 req/10 s with
+#    10% headroom and is what actually prevents the Unraid API from being overrun.
 _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
 
 # 4. Cap tool responses (default 40 KB / ~10K tokens, override via UNRAID_MCP_MAX_RESPONSE_BYTES)
@@ -114,11 +120,41 @@ _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_min
 #    signals the agent to narrow its query. See core/response_limit.py.
 _response_limiter = StructuredResponseLimitingMiddleware(max_size=UNRAID_MCP_MAX_RESPONSE_BYTES)
 
-# Note: ResponseCachingMiddleware was removed because all caching was disabled for
-# the `unraid` tool. The consolidated tool mixes reads and mutations under one name,
-# making per-subaction cache exclusion impossible. A fully disabled middleware
-# adds overhead with no benefit. Caching can be re-added if/when the tool is split
-# into separate read/write tools.
+# Note: there is no response/query caching anywhere in this server. The only thing
+# ever removed was FastMCP's ResponseCachingMiddleware: the consolidated `unraid`
+# tool mixes reads and mutations under one name, making per-subaction cache
+# exclusion impossible, so a fully disabled middleware added overhead with no
+# benefit. Caching can be re-added if/when the tool is split into separate
+# read/write tools.
+
+
+@asynccontextmanager
+async def lifespan(_server: "FastMCP") -> AsyncIterator[None]:
+    """Server lifespan: run shutdown cleanup inside the server's own event loop.
+
+    FastMCP enters this context manager on startup (before the transport begins
+    serving) and exits it on shutdown — on every transport and every exit path,
+    including a normal ``mcp.run()`` return and SIGTERM (the container stop
+    signal). Putting teardown here guarantees WebSocket subscription tasks and the
+    shared httpx connection pool are released in the SAME loop that created them,
+    instead of the old ``asyncio.run(...)``-in-a-fresh-loop dance in ``main.py``
+    that swallowed "event loop is closed" errors and never ran on SIGTERM.
+
+    Startup work (subscription auto-start) is unchanged: it is triggered lazily on
+    the first resource read via ``ensure_subscriptions_started()`` in
+    ``subscriptions/resources.py`` — nothing to do here on the startup side.
+    """
+    try:
+        yield
+    finally:
+        try:
+            await subscription_manager.stop_all()
+        except Exception:
+            logger.error("Error stopping subscriptions during shutdown", exc_info=True)
+        try:
+            await close_http_client()
+        except Exception:
+            logger.error("Error closing HTTP client during shutdown", exc_info=True)
 
 
 # Initialize FastMCP instance — ASGI-level bearer auth added at run time via
@@ -127,6 +163,7 @@ mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
+    lifespan=lifespan,
     middleware=[
         _logging_middleware,
         _error_middleware,
@@ -263,9 +300,13 @@ def run_server() -> None:
 
         if UNRAID_VERIFY_SSL is False:
             logger.warning(
-                "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
-                "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
-                "Only use this in trusted networks or for development."
+                "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false, "
+                "UNRAID_ALLOW_INSECURE_TLS=true). Connections to the Unraid API are "
+                "vulnerable to man-in-the-middle attacks. The API key is sent to an "
+                "unverified peer over BOTH the HTTP GraphQL client AND the WebSocket "
+                "subscription connection, so a MITM can capture it. Prefer a CA-bundle "
+                "path for self-signed certs. Only use this in trusted networks or for "
+                "development."
             )
 
         if is_http:

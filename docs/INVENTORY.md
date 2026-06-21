@@ -6,10 +6,7 @@ Complete listing of all plugin components.
 
 | Tool | Type | Module | Description |
 | --- | --- | --- | --- |
-| `unraid` | Primary | `tools/unraid.py` | Unified action router: 17 domains, ~160 subactions |
-| `unraid_help` | Helper | `tools/unraid.py` | Returns markdown reference for all actions |
-| `diagnose_subscriptions` | Diagnostic | `subscriptions/diagnostics.py` | Inspect subscription states, errors, WebSocket URLs |
-| `test_subscription_query` | Diagnostic | `subscriptions/diagnostics.py` | Test a GraphQL subscription query (allowlisted fields) |
+| `unraid` | Primary (only tool) | `tools/unraid.py` | Unified action/subaction router: 19 actions, 170 subactions. The Markdown reference (`help` action) and WebSocket diagnostics (`subscriptions` action, handled in `subscriptions/diagnostics.py`) are folded into this single tool. |
 
 ## MCP resources
 
@@ -30,21 +27,25 @@ Complete listing of all plugin components.
 
 | Domain | Subaction count | Module | Destructive? |
 | --- | --- | --- | --- |
-| `system` | 18 | `tools/_system.py` | No |
-| `health` | 4 | `tools/unraid.py` | No |
-| `array` | 13 | `tools/_array.py` | Yes (3) |
+| `system` | 20 | `tools/_system.py` | No |
+| `health` | 4 | `tools/_health.py` (+ handler in `tools/unraid.py`) | No |
+| `array` | 14 | `tools/_array.py` | Yes (3) |
 | `disk` | 6 | `tools/_disk.py` | Yes (1) |
-| `docker` | 7 | `tools/_docker.py` | No |
+| `docker` | 26 | `tools/_docker.py` | Yes (3) |
 | `vm` | 9 | `tools/_vm.py` | Yes (2) |
-| `notification` | 12 | `tools/_notification.py` | Yes (2) |
-| `key` | 7 | `tools/_key.py` | Yes (1) |
-| `plugin` | 3 | `tools/_plugin.py` | Yes (1) |
+| `notification` | 13 | `tools/_notification.py` | Yes (2) |
+| `key` | 13 | `tools/_key.py` | Yes (1) |
+| `plugin` | 8 | `tools/_plugin.py` | Yes (3) |
 | `rclone` | 4 | `tools/_rclone.py` | Yes (1) |
-| `setting` | 2 | `tools/_setting.py` | Yes (1) |
+| `setting` | 6 | `tools/_setting.py` | Yes (3) |
+| `connect` | 7 | `tools/_connect.py` | Yes (5) |
 | `customization` | 5 | `tools/_customization.py` | No |
 | `oidc` | 5 | `tools/_oidc.py` | No |
+| `onboarding` | 11 | `tools/_onboarding.py` | Yes (2) |
 | `user` | 1 | `tools/_user.py` | No |
-| `live` | 11 | `tools/_live.py` | No |
+| `live` | 16 | `tools/_live.py` | No |
+| `subscriptions` | 2 | `subscriptions/diagnostics.py` | No |
+| `help` | 0 | `tools/unraid.py` | No |
 
 ## Middleware chain
 
@@ -52,8 +53,8 @@ Complete listing of all plugin components.
 | --- | --- | --- |
 | 1 (outermost) | `LoggingMiddleware` | Logs every tools/call and resources/read with duration |
 | 2 | `ErrorHandlingMiddleware` | Converts unhandled exceptions to MCP errors |
-| 3 | `SlidingWindowRateLimitingMiddleware` | 540 req/min sliding window |
-| 4 (innermost) | `ResponseLimitingMiddleware` | Truncates responses > 512 KB |
+| 3 | `SlidingWindowRateLimitingMiddleware` | 540 req/min sliding window (inbound abuse/DoS guard; the authoritative upstream limiter is the token bucket in `core/client.py`) |
+| 4 (innermost) | `StructuredResponseLimitingMiddleware` | Replaces responses over the cap (40 KB default, `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a parseable JSON truncation marker |
 
 ## ASGI middleware
 

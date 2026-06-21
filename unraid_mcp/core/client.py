@@ -5,7 +5,6 @@ to the Unraid API with proper timeout handling and error management.
 """
 
 import asyncio
-import hashlib
 import json
 import re
 import time
@@ -27,11 +26,14 @@ from .utils import safe_display_url
 # Exact-match keys: short words that over-redact when used as substrings
 # (e.g. "key" would match "keyFile", "monkey", "turkey")
 _EXACT_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset({"key", "pin"})
-# Substring-match keys: compound terms safe for substring matching
+# Substring-match keys: compound terms safe for substring matching.
+# (Normalization strips _ and - before matching, so "client_secret" and
+# "clientsecret" both reduce to "clientsecret" — only one normalized form is needed.)
 _SUBSTRING_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "password",
         "secret",
+        "clientsecret",
         "token",
         "apikey",
         "authorization",
@@ -40,8 +42,24 @@ _SUBSTRING_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
         "jwt",
         "cookie",
         "session",
+        "activationcode",
+        "privatekey",
     }
 )
+
+# Length floor for treating an unkeyed string as a possible secret. Short values
+# (UUIDs aside) rarely carry meaningful entropy and over-redacting normal text is
+# worse than missing a tiny token, so be conservative.
+_MIN_SECRET_VALUE_LEN: Final[int] = 20
+
+# JWT-shaped: three base64url segments separated by dots (header.payload.signature),
+# conventionally starting with the "eyJ" base64 of a JSON "{" header.
+_JWT_RE: Final[re.Pattern[str]] = re.compile(r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+# OpenAI-style "sk-"-prefixed secret tokens (and sk-proj-/sk-ant- variants).
+_SK_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^sk-[A-Za-z0-9_-]{16,}$")
+# High-entropy opaque token: a single long run of token-charset characters with no
+# whitespace. Requires a mix of letters and digits to avoid masking ordinary words.
+_TOKEN_CHARSET_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-./+=]+$")
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -54,12 +72,41 @@ def _is_sensitive_key(key: str) -> bool:
     return k in _EXACT_SENSITIVE_KEYS or any(s in k_normalized for s in _SUBSTRING_SENSITIVE_KEYS)
 
 
+def _is_sensitive_value(value: str) -> bool:
+    """Heuristically detect a secret-shaped string regardless of its key.
+
+    Conservatively flags obvious secret tokens — JWTs (``eyJ...`` three-segment),
+    ``sk-`` prefixed API keys, and very-long high-entropy opaque tokens — while
+    leaving ordinary prose untouched. Intended only to redact debug-log values, so
+    a missed exotic format is preferable to clobbering normal text.
+    """
+    if _JWT_RE.match(value) or _SK_TOKEN_RE.match(value):
+        return True
+    # High-entropy opaque token: long, token-charset only, with both letters and
+    # digits (rules out ordinary words, paths, and pure-numeric IDs/timestamps).
+    return bool(
+        len(value) >= _MIN_SECRET_VALUE_LEN
+        and _TOKEN_CHARSET_RE.match(value)
+        and any(c.isalpha() for c in value)
+        and any(c.isdigit() for c in value)
+    )
+
+
 def redact_sensitive(obj: Any) -> Any:
-    """Recursively redact sensitive values from nested dicts/lists."""
+    """Recursively redact sensitive data from nested dicts/lists.
+
+    Scans both *keys* and *values*: a value is masked when its key name looks
+    sensitive (see ``_is_sensitive_key``) OR when the value itself is a
+    secret-shaped string (JWT, ``sk-`` token, or high-entropy opaque token — see
+    ``_is_sensitive_value``), so secrets are caught even under innocuous keys.
+    Pure function — returns a redacted copy and never mutates ``obj``.
+    """
     if isinstance(obj, dict):
         return {k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()}
     if isinstance(obj, list):
         return [redact_sensitive(item) for item in obj]
+    if isinstance(obj, str) and _is_sensitive_value(obj):
+        return "***"
     return obj
 
 
@@ -109,87 +156,6 @@ class _RateLimiter:
 
 
 _rate_limiter = _RateLimiter()
-
-
-# --- TTL Cache for stable read-only queries ---
-
-# Queries whose results change infrequently and are safe to cache.
-# Mutations and volatile queries (metrics, docker, array state) are excluded.
-_CACHEABLE_QUERY_PREFIXES = frozenset(
-    {
-        "GetNetworkConfig",
-        "GetRegistrationInfo",
-        "GetOwner",
-        "GetFlash",
-    }
-)
-
-_CACHE_TTL_SECONDS = 60.0
-_OPERATION_NAME_PATTERN = re.compile(r"^(?:query\s+)?([_A-Za-z][_0-9A-Za-z]*)\b")
-
-
-class _QueryCache:
-    """Simple TTL cache for GraphQL query responses.
-
-    Keyed by a hash of (query, variables). Entries expire after _CACHE_TTL_SECONDS.
-    Only caches responses for queries whose operation name is in _CACHEABLE_QUERY_PREFIXES.
-    Mutation requests always bypass the cache.
-
-    Thread-safe via asyncio.Lock. Bounded to _MAX_ENTRIES with FIFO eviction (oldest
-    expiry timestamp evicted first when the store is full).
-    """
-
-    _MAX_ENTRIES: Final[int] = 256
-
-    def __init__(self) -> None:
-        self._store: dict[str, tuple[float, dict[str, Any]]] = {}
-        self._lock: Final[asyncio.Lock] = asyncio.Lock()
-
-    @staticmethod
-    def _cache_key(query: str, variables: dict[str, Any] | None) -> str:
-        raw = query + json.dumps(variables or {}, sort_keys=True)
-        return hashlib.sha256(raw.encode()).hexdigest()
-
-    @staticmethod
-    def is_cacheable(query: str) -> bool:
-        """Check if a query is eligible for caching based on its operation name."""
-        normalized = query.lstrip()
-        if normalized.startswith("mutation"):
-            return False
-        match = _OPERATION_NAME_PATTERN.match(normalized)
-        if not match:
-            return False
-        return match.group(1) in _CACHEABLE_QUERY_PREFIXES
-
-    async def get(self, query: str, variables: dict[str, Any] | None) -> dict[str, Any] | None:
-        """Return cached result if present and not expired, else None."""
-        async with self._lock:
-            key = self._cache_key(query, variables)
-            entry = self._store.get(key)
-            if entry is None:
-                return None
-            expires_at, data = entry
-            if time.monotonic() > expires_at:
-                del self._store[key]
-                return None
-            return data
-
-    async def put(self, query: str, variables: dict[str, Any] | None, data: dict[str, Any]) -> None:
-        """Store a query result with TTL expiry, evicting oldest entry if at capacity."""
-        async with self._lock:
-            if len(self._store) >= self._MAX_ENTRIES:
-                oldest_key = min(self._store, key=lambda k: self._store[k][0])
-                del self._store[oldest_key]
-            key = self._cache_key(query, variables)
-            self._store[key] = (time.monotonic() + _CACHE_TTL_SECONDS, data)
-
-    async def invalidate_all(self) -> None:
-        """Clear the entire cache (called after mutations)."""
-        async with self._lock:
-            self._store.clear()
-
-
-_query_cache = _QueryCache()
 
 
 def is_idempotent_error(error_message: str, operation: str) -> bool:
@@ -309,14 +275,6 @@ async def make_graphql_request(
     if not _settings.UNRAID_API_URL or not _settings.UNRAID_API_KEY:
         raise CredentialsNotConfiguredError()
 
-    # Check TTL cache — short-circuits rate limiter on hits
-    is_mutation = query.lstrip().startswith("mutation")
-    if not is_mutation and _query_cache.is_cacheable(query):
-        cached = await _query_cache.get(query, variables)
-        if cached is not None:
-            logger.debug("Returning cached response for query")
-            return cached
-
     headers = {
         "Content-Type": "application/json",
         "X-API-Key": _settings.UNRAID_API_KEY,
@@ -394,15 +352,7 @@ async def make_graphql_request(
 
         logger.debug("GraphQL request successful.")
         data = response_data.get("data", {})
-        result = data if isinstance(data, dict) else {}  # Ensure we return dict
-
-        # Invalidate cache on mutations; cache eligible query results
-        if is_mutation:
-            await _query_cache.invalidate_all()
-        elif _query_cache.is_cacheable(query):
-            await _query_cache.put(query, variables, result)
-
-        return result
+        return data if isinstance(data, dict) else {}  # Ensure we return dict
 
     except httpx.HTTPStatusError as e:
         # Log full details internally; only expose status code to MCP client

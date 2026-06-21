@@ -22,7 +22,7 @@ lint:
 fmt:
     uv run ruff format .
 
-# Type-check (ty)
+# Type-check (ty — matches CI)
 typecheck:
     uv run ty check unraid_mcp/
 

@@ -1,6 +1,6 @@
 """MCP tools — single consolidated unraid tool with action + subaction routing.
 
-unraid - All Unraid operations (17 actions, ~160 subactions)
+unraid - All Unraid operations (19 actions, 170 subactions)
 system        - System info, metrics, UPS, network, registration
 health        - Health checks, connection test, diagnostics, setup
 array         - Parity, array state, assignable/add/remove/mount disks
@@ -18,4 +18,6 @@ oidc          - OIDC/SSO provider management
 onboarding    - First-boot/onboarding state and internal boot context
 user          - Current user info
 live          - Real-time subscription snapshots
+subscriptions - WebSocket subscription diagnostics (diagnose, test_query)
+help          - Full Markdown action/subaction reference (no subaction)
 """

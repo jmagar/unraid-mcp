@@ -60,5 +60,5 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 - [ ] `CLAUDE.md` reflects current architecture and tool counts
 - [ ] `README.md` has correct tool table and quick start examples
-- [ ] `skills/unraid/SKILL.md` documents all 17 action domains
+- [ ] `skills/unraid/SKILL.md` documents all 19 actions
 - [ ] `docs/` directory is complete and has no template placeholders

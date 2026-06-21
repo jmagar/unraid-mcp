@@ -191,6 +191,63 @@ class TestDockerActions:
             await tool_fn(action="docker", subaction="details", container_id="abcdef123456")
 
 
+class TestDockerNullNameSafety:
+    """Container name matching must survive malformed GraphQL `names` fields.
+
+    `names` is nominally `[String!]`, but partial/malformed responses can return
+    `null` for the whole list or `[null]` for an element. Matching must skip the
+    bad entries instead of raising AttributeError/TypeError on `.lower()`/`join`.
+    """
+
+    def test_find_container_skips_null_name_entry(self) -> None:
+        from unraid_mcp.tools._docker import _find_container
+
+        containers = [
+            {"id": "c1:local", "names": [None]},  # malformed element
+            {"id": "c2:local", "names": ["plex"]},  # valid neighbor
+        ]
+        # Prefix match must skip the [None] entry and still find plex.
+        assert _find_container("plex", containers) == containers[1]
+
+    def test_find_container_handles_null_names_list(self) -> None:
+        from unraid_mcp.tools._docker import _find_container
+
+        containers = [
+            {"id": "c1:local", "names": None},  # whole list is null
+            {"id": "c2:local", "names": ["sonarr"]},
+        ]
+        assert _find_container("sonarr", containers) == containers[1]
+        # No match against the broken record returns None rather than crashing.
+        assert _find_container("nope", containers) is None
+
+    async def test_resolve_container_id_skips_bad_names(self, _mock_graphql: AsyncMock) -> None:
+        # Resolve a friendly name → id while one record carries names: [null].
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {
+                "docker": {
+                    "containers": [
+                        {"id": "bad:local", "names": [None]},
+                        {"id": cid, "names": ["plex"]},
+                    ]
+                }
+            },
+            {"docker": {"start": {"id": cid, "state": "running"}}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="start", container_id="plex")
+        assert result["success"] is True
+
+    async def test_not_found_message_skips_null_names(self, _mock_graphql: AsyncMock) -> None:
+        # The "Available: ..." hint joins names — a null entry must not crash join.
+        _mock_graphql.return_value = {
+            "docker": {"containers": [{"id": "c1:local", "names": [None]}]}
+        }
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="not found"):
+            await tool_fn(action="docker", subaction="start", container_id="ghost")
+
+
 class TestDockerMutationFailures:
     """Tests for mutation responses that indicate failure or unexpected shapes."""
 
@@ -726,3 +783,18 @@ class TestDockerSuccessDerivationAndCoverage:
             action="docker", subaction="create_folder", organizer_input={"name": "X"}
         )
         assert result["success"] is False
+
+
+class TestDockerUnhandledSubaction:
+    async def test_in_subactions_but_unhandled_raises_clear_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression: a subaction present in _DOCKER_SUBACTIONS (so validate_subaction
+        # passes) but lacking an explicit handler must raise a clear ToolError instead
+        # of falling through to a bare KeyError on _DOCKER_MUTATIONS[subaction].
+        from unraid_mcp.tools import _docker
+
+        fake = "__fake_unhandled__"
+        monkeypatch.setattr(_docker, "_DOCKER_SUBACTIONS", _docker._DOCKER_SUBACTIONS | {fake})
+        with pytest.raises(ToolError, match=r"Unhandled docker subaction"):
+            await _docker._handle_docker(subaction=fake, container_id=None, network_id=None)

@@ -13,8 +13,9 @@ confirmation from the user through the client before executing a destructive act
 
 ## When elicitation is used
 
-- **Destructive operation confirmation only**: the 12 destructive subactions gate
-  execution behind explicit user acknowledgment.
+- **Destructive operation confirmation only**: the 26 destructive subactions (across 11
+  domains) gate execution behind explicit user acknowledgment. See
+  [../DESTRUCTIVE_ACTIONS.md](../DESTRUCTIVE_ACTIONS.md) for the full per-domain list.
 
 ## Destructive operation confirmation
 

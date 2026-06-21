@@ -34,11 +34,13 @@ settings.load_profile("default")
 def mock_graphql_request() -> Generator[AsyncMock, None, None]:
     """Fixture that patches make_graphql_request at the core module.
 
-    NOTE: Since each tool file imports make_graphql_request into its own
-    namespace, tool-specific tests should patch at the tool module level
-    (e.g., "unraid_mcp.tools.info.make_graphql_request") instead of using
-    this fixture. This fixture is useful for testing the core client
-    or for integration tests that reload modules.
+    This is the correct patch target. Each tool module imports the client as a
+    module (``from ..core import client as _client``) and calls
+    ``_client.make_graphql_request(...)``, resolving the attribute on the
+    ``client`` module object at call time — so patching
+    ``unraid_mcp.core.client.make_graphql_request`` intercepts every tool call.
+    Do NOT patch a per-tool name (e.g. "unraid_mcp.tools.unraid.make_graphql_request"):
+    that name is not bound in the tool module's namespace, so the patch has no effect.
     """
     with patch("unraid_mcp.core.client.make_graphql_request", new_callable=AsyncMock) as mock:
         yield mock
@@ -61,9 +63,9 @@ def make_tool_fn(
     so callers don't need to change.
 
     Args:
-        module_path: Dotted import path to the tool module (e.g., "unraid_mcp.tools.info")
-        register_fn_name: Name of the registration function (e.g., "register_info_tool")
-        tool_name: Name of the registered tool (e.g., "unraid_info")
+        module_path: Dotted import path to the tool module (e.g., "unraid_mcp.tools.unraid")
+        register_fn_name: Name of the registration function (e.g., "register_unraid_tool")
+        tool_name: Name of the registered tool (e.g., "unraid")
 
     Returns:
         The async tool function callable

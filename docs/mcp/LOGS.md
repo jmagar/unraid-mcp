@@ -78,6 +78,13 @@ The `redact_sensitive()` function processes all debug log output:
 - Substring match: `password`, `secret`, `token`, `apikey`, `authorization`, `credential`, `passphrase`, `jwt`, `cookie`, `session`
 - Normalizes keys by stripping underscores and hyphens before matching
 
+> **Caveat — avoid `DEBUG` in production.** Redaction is **best-effort** and keyed on
+> recognised names. DEBUG-level logging may include full GraphQL request payloads, and a
+> sensitive value carried under an unrecognised key (or embedded inside a larger string)
+> can slip past the redactor. Run at `INFO` or above in production; enable `DEBUG` only for
+> short, supervised troubleshooting and treat any DEBUG log file as potentially containing
+> secrets.
+
 ### URL display
 
 The `safe_display_url()` function masks sensitive parts of URLs for logging:

@@ -140,16 +140,40 @@ UNRAID_MCP_BEARER_TOKEN: str | None = os.getenv("UNRAID_MCP_BEARER_TOKEN") or No
 _raw_disable_auth = os.getenv("UNRAID_MCP_DISABLE_HTTP_AUTH", "false").lower()
 UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _raw_disable_auth in ("true", "1", "yes")
 
-# When HTTP auth is disabled, the server refuses to bind a non-loopback interface
-# unless an upstream proxy/gateway is explicitly trusted to enforce auth. Set this
-# true for the documented SWAG-fronted topology, where SWAG/Authelia front the
-# endpoint. Leaving it false fails closed on a public/LAN bind (finding S-H3).
+# Affirms that a trusted reverse proxy (e.g. SWAG) fronts this server and enforces
+# authentication. Required when UNRAID_MCP_DISABLE_HTTP_AUTH=true AND the bind host is
+# not loopback — otherwise the server would expose an unauthenticated MCP endpoint on a
+# public/LAN interface (finding S-H3). The documented topology runs behind SWAG, so the
+# operator must explicitly opt in to that arrangement; leaving it false fails closed.
 _raw_trust_proxy = os.getenv("UNRAID_MCP_TRUST_PROXY", "false").lower()
 UNRAID_MCP_TRUST_PROXY: bool = _raw_trust_proxy in ("true", "1", "yes")
 
 # SSL Configuration
+# UNRAID_VERIFY_SSL accepts: true/1/yes (verify, default), false/0/no (disable —
+# DANGEROUS), or a filesystem path to a CA bundle (the recommended way to trust a
+# self-signed cert without disabling verification entirely).
+#
+# Disabling verification is gated behind a SECOND explicit opt-in
+# (UNRAID_ALLOW_INSECURE_TLS=true). With verification off, the API key is sent to an
+# unverified peer over BOTH the httpx GraphQL client AND the WebSocket subscription
+# connection, so a man-in-the-middle can capture it. The CA-bundle path is the safe
+# alternative for self-signed certs.
+_raw_allow_insecure_tls = os.getenv("UNRAID_ALLOW_INSECURE_TLS", "false").lower()
+UNRAID_ALLOW_INSECURE_TLS: bool = _raw_allow_insecure_tls in ("true", "1", "yes")
+
 raw_verify_ssl = os.getenv("UNRAID_VERIFY_SSL", "true").lower()
 if raw_verify_ssl in ["false", "0", "no"]:
+    if not UNRAID_ALLOW_INSECURE_TLS:
+        print(
+            "FATAL: UNRAID_VERIFY_SSL is disabled but UNRAID_ALLOW_INSECURE_TLS is not set. "
+            "Disabling TLS verification sends the API key to an unverified peer over both the "
+            "HTTP and WebSocket connections, exposing it to man-in-the-middle interception. "
+            "Prefer pointing UNRAID_VERIFY_SSL at a CA-bundle path to trust a self-signed cert "
+            "without disabling verification. To proceed anyway, set "
+            "UNRAID_ALLOW_INSECURE_TLS=true.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     UNRAID_VERIFY_SSL: bool | str = False
 elif raw_verify_ssl in ["true", "1", "yes"]:
     UNRAID_VERIFY_SSL = True

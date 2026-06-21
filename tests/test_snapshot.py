@@ -139,3 +139,155 @@ def test_snapshot_actions_importable_from_subscriptions() -> None:
 
     assert "cpu" in SNAPSHOT_ACTIONS
     assert "log_tail" in COLLECT_ACTIONS
+
+
+# ---------------------------------------------------------------------------
+# Malformed-frame resilience (T-M4)
+#
+# A single bad WebSocket frame must be logged-and-skipped, not abort the whole
+# snapshot — matching the persistent manager loop's per-message resilience.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_subscribe_once_skips_non_json_frame_then_returns(mock_ws):
+    """A non-JSON text frame is skipped; a good frame that follows still returns."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_once
+
+    ack = json.dumps({"type": "connection_ack"})
+    good = _make_ws_message("snapshot-1", {"systemMetricsCpu": {"percentTotal": 7.5}})
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    # First frame is garbage, second is valid.
+    mock_ws.__aiter__ = lambda s: aiter(["this is not json {{{", good])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_once("subscription { systemMetricsCpu { percentTotal } }")
+
+    assert result == {"systemMetricsCpu": {"percentTotal": 7.5}}
+
+
+@pytest.mark.asyncio
+async def test_subscribe_once_skips_non_dict_json_frame_then_returns(mock_ws):
+    """A JSON array/string frame (where .get() would blow up) is skipped, not fatal."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_once
+
+    ack = json.dumps({"type": "connection_ack"})
+    # Valid JSON, but not an object — msg.get(...) raises AttributeError.
+    bad_list = json.dumps([1, 2, 3])
+    bad_str = json.dumps("just a string")
+    good = _make_ws_message("snapshot-1", {"systemMetricsCpu": {"percentTotal": 1.0}})
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter([bad_list, bad_str, good])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_once("subscription { systemMetricsCpu { percentTotal } }")
+
+    assert result == {"systemMetricsCpu": {"percentTotal": 1.0}}
+
+
+@pytest.mark.asyncio
+async def test_subscribe_once_skips_missing_payload_and_unknown_type(mock_ws):
+    """A data frame missing 'payload' and an unknown type are ignored; good frame wins."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_once
+
+    ack = json.dumps({"type": "connection_ack"})
+    # Matching id/type but no 'payload' key — must not raise, just yield nothing.
+    missing_payload = json.dumps({"id": "snapshot-1", "type": "next"})
+    unknown_type = json.dumps({"id": "snapshot-1", "type": "totally_unknown", "payload": {}})
+    good = _make_ws_message("snapshot-1", {"systemMetricsCpu": {"percentTotal": 99.0}})
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter([missing_payload, unknown_type, good])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_once("subscription { systemMetricsCpu { percentTotal } }")
+
+    assert result == {"systemMetricsCpu": {"percentTotal": 99.0}}
+
+
+@pytest.mark.asyncio
+async def test_subscribe_once_still_raises_on_graphql_error_after_bad_frame(mock_ws):
+    """A real GraphQL error (ToolError) still propagates even past a malformed frame."""
+    from unraid_mcp.core.exceptions import ToolError
+    from unraid_mcp.subscriptions.snapshot import subscribe_once
+
+    ack = json.dumps({"type": "connection_ack"})
+    bad = "garbage frame {{{"
+    error_msg = json.dumps(
+        {
+            "id": "snapshot-1",
+            "type": "next",
+            "payload": {"errors": [{"message": "Not authorized"}]},
+        }
+    )
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter([bad, error_msg])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with pytest.raises(ToolError, match="Not authorized"):
+            await subscribe_once("subscription { systemMetricsCpu { percentTotal } }")
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_skips_malformed_frames(mock_ws):
+    """subscribe_collect skips bad frames and still collects the valid ones."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    bad_json = "not json {{{"
+    bad_list = json.dumps([1, 2])
+    missing_payload = json.dumps({"id": "snapshot-1", "type": "next"})
+    good1 = _make_ws_message("snapshot-1", {"notificationAdded": {"id": "1", "title": "A"}})
+    good2 = _make_ws_message("snapshot-1", {"notificationAdded": {"id": "2", "title": "B"}})
+
+    async def aiter(items):
+        for item in items:
+            yield item
+        await asyncio.sleep(10)  # hang after messages so the window expires
+
+    mock_ws.__aiter__ = lambda s: aiter([bad_json, good1, bad_list, missing_payload, good2])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.snapshot.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_collect(
+            "subscription { notificationAdded { id title } }",
+            collect_for=0.1,
+        )
+
+    assert len(result) == 2
+    assert result[0]["notificationAdded"]["id"] == "1"
+    assert result[1]["notificationAdded"]["id"] == "2"

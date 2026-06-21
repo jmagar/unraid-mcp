@@ -125,14 +125,14 @@ The `SubscriptionManager` singleton manages persistent WebSocket connections:
 - Log content capped at 1 MB / 5,000 lines to prevent memory growth
 - GraphQL-over-WebSocket protocol with `connection_init` and `subscribe` messages
 
-## Diagnostic Tools
+## Diagnostic Subactions
 
-Two diagnostic tools help troubleshoot subscription issues:
+Two `subscriptions`-action subactions of the `unraid` tool help troubleshoot subscription issues:
 
-| Tool | Purpose |
+| Call | Purpose |
 |------|---------|
-| `diagnose_subscriptions` | Shows connection states, errors, WebSocket URLs, and data availability for all subscriptions |
-| `test_subscription_query` | Sends a test subscription query (allowlisted fields: `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`) |
+| `unraid(action="subscriptions", subaction="diagnose")` | Shows connection states, errors, WebSocket URLs, and data availability for all subscriptions |
+| `unraid(action="subscriptions", subaction="test_query", subscription_query=...)` | Sends a test subscription query (allowlisted fields: `containerStats`, `cpu`, `memory`, `array`, `network`, `docker`, `vm`) |
 
 ## See Also
 

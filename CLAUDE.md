@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (1 Tool)
 
 The server registers a **single MCP tool**, `unraid`, with `action` (domain) +
-`subaction` (operation) routing (19 actions / 166 subactions). Call it as
+`subaction` (operation) routing (19 actions / 170 subactions). Call it as
 `unraid(action="docker", subaction="list")`. Subscription diagnostics and the
 Markdown reference that used to be standalone tools are now actions of `unraid`:
 - **`subscriptions`** — `diagnose` (connection states, errors, WebSocket URLs) and
@@ -115,13 +115,13 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 
 | action | subactions |
 |--------|-----------|
-| **system** (18) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config |
+| **system** (20) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config, server_time, timezones |
 | **health** (4) | check, test_connection, diagnose, setup |
 | **array** (14) | parity_status, parity_history, assignable_disks, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
-| **docker** (25) | list, details, ports, start, stop, restart, unpause, networks, network_details, remove_container*, update_container, update_containers, update_all_containers, update_autostart, refresh_digests, sync_template_paths, reset_template_mappings*, create_folder, create_folder_with_items, rename_folder, set_folder_children, delete_entries*, move_entries_to_folder, move_items_to_position, update_view_preferences |
+| **docker** (26) | list, details, logs, ports, start, stop, restart, unpause, networks, network_details, remove_container*, update_container, update_containers, update_all_containers, update_autostart, refresh_digests, sync_template_paths, reset_template_mappings*, create_folder, create_folder_with_items, rename_folder, set_folder_children, delete_entries*, move_entries_to_folder, move_items_to_position, update_view_preferences |
 | **vm** (9) | list, details, start, stop, pause, resume, force_stop*, reboot, reset* |
-| **notification** (12) | overview, list, create, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
+| **notification** (13) | overview, list, create, notify_if_unique, archive, mark_unread, recalculate, archive_all, archive_many, unarchive_many, unarchive_all, delete*, delete_archived* |
 | **key** (13) | list, get, possible_roles, possible_permissions, permissions_for_roles, preview_permissions, auth_actions, creation_form_schema, create, update, delete*, add_role, remove_role |
 | **plugin** (8) | list, installed_unraid, install_operations, install_operation, add, remove*, install*, install_language* |
 | **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
@@ -189,15 +189,25 @@ The server loads environment variables from multiple locations in order:
 `server.py` wraps all tools in a 4-layer stack (order matters — outermost first):
 1. **LoggingMiddleware** — logs every `tools/call` and `resources/read` with duration
 2. **ErrorHandlingMiddleware** — converts unhandled exceptions to proper MCP errors
-3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window
+3. **SlidingWindowRateLimitingMiddleware** — 540 req/min sliding window. This is an
+   **inbound-abuse/DoS guard only**; it does NOT bound the upstream Unraid API's burst
+   limit (a 540/min window cannot prevent exceeding 100 req/10s). The authoritative
+   upstream limiter is the **httpx token bucket** in `core/client.py` (`_RateLimiter`:
+   90 tokens, 9.0 tokens/sec refill, modeling Unraid's 100 req/10s hard limit with ~10%
+   headroom) — every outbound GraphQL call `acquire()`s a token first, and 429s are
+   retried with backoff.
 4. **StructuredResponseLimitingMiddleware** (`core/response_limit.py`) — replaces responses over the cap (default 40 KB ≈ 10K tokens, override via `UNRAID_MCP_MAX_RESPONSE_BYTES`) with a complete, parseable JSON truncation marker instead of a lossy mid-JSON byte cut
 
-Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool mixes reads and mutations under one name, making per-subaction cache exclusion impossible.
+Note: there is **no query cache**. The only caching middleware ever present —
+`ResponseCachingMiddleware` — was removed because the consolidated `unraid` tool mixes
+reads and mutations under one name, making per-subaction cache exclusion impossible. The
+`health/diagnose` "caching disabled" note is simply accurate.
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
 - Selective queries to avoid GraphQL type overflow issues
-- Optional caching controls for Docker container queries
+- Upstream token-bucket rate limiting (`core/client.py`, 90 tokens / 9 rps) bounds the
+  Unraid API's 100 req/10s hard limit; no response/query cache exists
 - Log file overwrite at 10MB cap to prevent disk space issues
 
 ## Critical Gotchas
@@ -206,15 +216,21 @@ Note: `ResponseCachingMiddleware` was removed — the consolidated `unraid` tool
 **Mutation handlers MUST return before the domain query dict lookup.** Mutations are not in the domain `_*_QUERIES` dicts (e.g., `_DOCKER_QUERIES`, `_ARRAY_QUERIES`) — reaching that line for a mutation subaction causes a `KeyError`. Always add early-return `if subaction == "mutation_name": ... return` blocks BEFORE the queries lookup.
 
 ### Test Patching
-- Patch at the **tool module level**: `unraid_mcp.tools.unraid.make_graphql_request` (not core)
-- `conftest.py`'s `mock_graphql_request` patches the core module — wrong for tool-level tests
-- Use `conftest.py`'s `make_tool_fn()` helper or local `_make_tool()` pattern
+- Patch at the **core module level**: `unraid_mcp.core.client.make_graphql_request`. Tool
+  modules import the client as a module (`from ..core import client as _client`) and call
+  `_client.make_graphql_request(...)`, so they resolve the attribute on the `client` module
+  object at call time — patching the core target intercepts every call. Patching a
+  per-tool name like `unraid_mcp.tools.unraid.make_graphql_request` has **no effect** (that
+  name is not bound in the tool module's namespace). 46/47 test sites already use the core
+  target; `conftest.py`'s `mock_graphql_request` fixture patches it for you.
+- Use `conftest.py`'s `make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")`
+  helper to extract the consolidated `unraid` tool fn, or a local `_make_tool()` pattern.
 
 ### Test Suite Structure
 ```
 tests/
 ├── conftest.py           # Shared fixtures + make_tool_fn() helper
-├── test_*.py             # Unit tests (mock at tool module level)
+├── test_*.py             # Unit tests (mock at core client level)
 ├── http_layer/           # httpx-level request/response tests (respx)
 ├── integration/          # WebSocket subscription lifecycle tests (slow)
 ├── safety/               # Destructive action guard tests

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────────────────────────
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS builder
+# tag: python3.12-bookworm-slim  (digest pinned for reproducibility; Dependabot bumps it)
 
 WORKDIR /app
 
@@ -16,7 +17,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
-FROM python:3.12-slim-bookworm AS runtime
+FROM python@sha256:76d4b7b6305788c6b4c6a19d6a22a3921bf802e9af4d5e1e5bd771208dba74bf AS runtime
+# tag: python:3.12-slim-bookworm  (digest pinned for reproducibility; Dependabot bumps it)
 
 RUN groupadd --gid 1000 mcp && \
     useradd --uid 1000 --gid mcp --create-home mcp
