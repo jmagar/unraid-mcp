@@ -143,8 +143,8 @@ UNRAID_MCP_DISABLE_HTTP_AUTH: bool = _raw_disable_auth in ("true", "1", "yes")
 # Affirms that a trusted reverse proxy (e.g. SWAG) fronts this server and enforces
 # authentication. Required when UNRAID_MCP_DISABLE_HTTP_AUTH=true AND the bind host is
 # not loopback — otherwise the server would expose an unauthenticated MCP endpoint on a
-# public/LAN interface. The documented topology runs behind SWAG, so the operator must
-# explicitly opt in to that arrangement.
+# public/LAN interface (finding S-H3). The documented topology runs behind SWAG, so the
+# operator must explicitly opt in to that arrangement; leaving it false fails closed.
 _raw_trust_proxy = os.getenv("UNRAID_MCP_TRUST_PROXY", "false").lower()
 UNRAID_MCP_TRUST_PROXY: bool = _raw_trust_proxy in ("true", "1", "yes")
 
