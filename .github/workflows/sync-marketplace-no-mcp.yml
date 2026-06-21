@@ -1,0 +1,89 @@
+name: Sync marketplace-no-mcp
+
+# Regenerates the long-lived `marketplace-no-mcp` branch as a clean mirror of the
+# default branch with this repo's bundled MCP server registration stripped, for
+# environments where MCP is provided centrally via the Labby gateway. The branch
+# is a GENERATED artifact — do not hand-edit it.
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "37 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-marketplace-no-mcp
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.ref == 'refs/heads/main' || github.event_name != 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Regenerate marketplace-no-mcp from main
+        id: gen
+        run: |
+          git fetch origin main
+          old_sha=$(git rev-parse --verify -q origin/marketplace-no-mcp 2>/dev/null || echo "")
+          old_tree=$(git rev-parse --verify -q "origin/marketplace-no-mcp^{tree}" 2>/dev/null || echo "")
+          git switch -C marketplace-no-mcp origin/main
+          python3 - <<'PY'
+          import glob, json
+          def empty_servers(path):
+              try:
+                  d = json.load(open(path))
+              except Exception:
+                  return False
+              if isinstance(d, dict) and isinstance(d.get("mcpServers"), dict) and d["mcpServers"]:
+                  d["mcpServers"] = {}
+                  with open(path, "w") as h:
+                      json.dump(d, h, indent=2); h.write("\n")
+                  print("stripped", path)
+                  return True
+              return False
+          for f in sorted(set(glob.glob("plugins/*/mcp.json") + glob.glob("plugins/*/.mcp.json")
+                              + glob.glob("mcp.json") + glob.glob(".mcp.json"))):
+              empty_servers(f)
+          # defensive: inline mcpServers objects in plugin manifests
+          for f in sorted(set(glob.glob("plugins/*/.claude-plugin/plugin.json")
+                              + glob.glob(".claude-plugin/plugin.json"))):
+              empty_servers(f)
+          PY
+          git add -A
+          git commit -m "chore: regenerate marketplace-no-mcp from main" || true
+          new_tree=$(git rev-parse "HEAD^{tree}")
+          echo "old_sha=$old_sha" >> "$GITHUB_OUTPUT"
+          if [ "$new_tree" = "$old_tree" ]; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Validate no plugin ships MCP
+        run: |
+          python3 - <<'PY'
+          import glob, json, sys
+          bad = []
+          for f in set(glob.glob("plugins/*/mcp.json") + glob.glob("plugins/*/.mcp.json")
+                       + glob.glob("mcp.json") + glob.glob(".mcp.json")):
+              if json.load(open(f)).get("mcpServers"):
+                  bad.append(f)
+          if bad:
+              print("FAIL still ships MCP:", bad); sys.exit(1)
+          print("ok: no plugin ships an MCP server")
+          PY
+
+      - name: Push regenerated branch (only when changed)
+        if: steps.gen.outputs.changed == 'true'
+        run: git push --force origin HEAD:marketplace-no-mcp
