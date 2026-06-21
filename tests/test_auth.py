@@ -423,16 +423,21 @@ class TestStartupGuard:
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
 
     def test_startup_guard_skipped_when_auth_disabled(self):
-        """run_server should NOT exit when DISABLE_HTTP_AUTH=true."""
+        """run_server should NOT exit when DISABLE_HTTP_AUTH=true and a trusted proxy is
+        affirmed. The bearer-token startup guard is skipped; the non-loopback public-bind
+        guard (S-H3) is satisfied by UNRAID_MCP_TRUST_PROXY=true (the documented
+        SWAG/Authelia topology)."""
         import unraid_mcp.config.settings as s
 
         orig_transport = s.UNRAID_MCP_TRANSPORT
         orig_token = s.UNRAID_MCP_BEARER_TOKEN
         orig_disabled = s.UNRAID_MCP_DISABLE_HTTP_AUTH
+        orig_trust_proxy = s.UNRAID_MCP_TRUST_PROXY
         try:
             s.UNRAID_MCP_TRANSPORT = "streamable-http"
             s.UNRAID_MCP_BEARER_TOKEN = None
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = True
+            s.UNRAID_MCP_TRUST_PROXY = True
 
             from unraid_mcp.server import mcp as _mcp
 
@@ -449,6 +454,72 @@ class TestStartupGuard:
             s.UNRAID_MCP_TRANSPORT = orig_transport
             s.UNRAID_MCP_BEARER_TOKEN = orig_token
             s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
+            s.UNRAID_MCP_TRUST_PROXY = orig_trust_proxy
+
+    def test_startup_guard_exits_when_auth_disabled_on_public_bind_without_trust_proxy(self):
+        """run_server must sys.exit(1) when auth is disabled and bound to a non-loopback
+        interface without UNRAID_MCP_TRUST_PROXY (S-H3: refuse unauthenticated public bind)."""
+        import unraid_mcp.config.settings as s
+
+        orig_transport = s.UNRAID_MCP_TRANSPORT
+        orig_token = s.UNRAID_MCP_BEARER_TOKEN
+        orig_disabled = s.UNRAID_MCP_DISABLE_HTTP_AUTH
+        orig_trust_proxy = s.UNRAID_MCP_TRUST_PROXY
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            s.UNRAID_MCP_BEARER_TOKEN = None
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = True
+            s.UNRAID_MCP_TRUST_PROXY = False
+
+            with (
+                patch("unraid_mcp.server.UNRAID_MCP_HOST", "0.0.0.0"),  # noqa: S104 — exercises the public-bind guard
+                patch("unraid_mcp.server.ensure_token_exists"),
+                patch("unraid_mcp.server.log_configuration_status"),
+                pytest.raises(SystemExit) as exc_info,
+            ):
+                from unraid_mcp.server import run_server
+
+                run_server()
+
+            assert exc_info.value.code == 1
+        finally:
+            s.UNRAID_MCP_TRANSPORT = orig_transport
+            s.UNRAID_MCP_BEARER_TOKEN = orig_token
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
+            s.UNRAID_MCP_TRUST_PROXY = orig_trust_proxy
+
+    def test_startup_guard_allows_auth_disabled_on_loopback(self):
+        """Auth disabled is allowed without a trusted-proxy affirmation when bound to a
+        loopback host (no public exposure)."""
+        import unraid_mcp.config.settings as s
+
+        orig_transport = s.UNRAID_MCP_TRANSPORT
+        orig_token = s.UNRAID_MCP_BEARER_TOKEN
+        orig_disabled = s.UNRAID_MCP_DISABLE_HTTP_AUTH
+        orig_trust_proxy = s.UNRAID_MCP_TRUST_PROXY
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            s.UNRAID_MCP_BEARER_TOKEN = None
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = True
+            s.UNRAID_MCP_TRUST_PROXY = False
+
+            from unraid_mcp.server import mcp as _mcp
+
+            with (
+                patch("unraid_mcp.server.UNRAID_MCP_HOST", "127.0.0.1"),
+                patch("unraid_mcp.server.ensure_token_exists"),
+                patch("unraid_mcp.server.log_configuration_status"),
+                patch.object(_mcp, "run"),
+            ):
+                from unraid_mcp.server import run_server
+
+                # Should NOT raise SystemExit
+                run_server()
+        finally:
+            s.UNRAID_MCP_TRANSPORT = orig_transport
+            s.UNRAID_MCP_BEARER_TOKEN = orig_token
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = orig_disabled
+            s.UNRAID_MCP_TRUST_PROXY = orig_trust_proxy
 
 
 # ---------------------------------------------------------------------------

@@ -68,14 +68,16 @@ _error_middleware = ErrorHandlingMiddleware(
 # tools/unraid.py imports middleware_refs, not server, avoiding the cycle.
 _middleware_refs.error_middleware = _error_middleware
 
-# 3. Rate limiting: 540 requests per 60-second sliding window.
-#    SlidingWindowRateLimitingMiddleware only supports window_minutes (int), so the
-#    upstream Unraid "100 req/10 s" burst limit cannot be enforced exactly here.
-#    540 req/min is a conservative 1-minute equivalent that prevents sustained
-#    overload while staying well under the 600 req/min ceiling.
-#    Note: this does NOT cap bursts within a 10 s window; a client can still send
-#    up to 540 requests in the first 10 s of a window. Add a sub-minute rate limiter
-#    in front of this server (e.g. nginx limit_req) if tighter burst control is needed.
+# 3. Inbound-abuse / DoS guard: 540 requests per 60-second sliding window.
+#    This is NOT the authoritative upstream rate limiter. SlidingWindowRateLimitingMiddleware
+#    only supports window_minutes (int) granularity, so it cannot bound the upstream
+#    Unraid "100 req/10 s" burst limit — a client can still send up to 540 requests in
+#    the first 10 s of a window, far exceeding what Unraid accepts. Its only job here is
+#    to cap sustained inbound request volume so a misbehaving or hostile client cannot
+#    flood this server.
+#    The AUTHORITATIVE upstream limiter is the client-side token bucket (`_RateLimiter`
+#    in core/client.py): 90 tokens at 9.0 tokens/sec models Unraid's 100 req/10 s with
+#    10% headroom and is what actually prevents the Unraid API from being overrun.
 _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_minutes=1)
 
 # 4. Cap tool responses (default 40 KB / ~10K tokens, override via UNRAID_MCP_MAX_RESPONSE_BYTES)
@@ -86,11 +88,12 @@ _rate_limiter = SlidingWindowRateLimitingMiddleware(max_requests=540, window_min
 #    signals the agent to narrow its query. See core/response_limit.py.
 _response_limiter = StructuredResponseLimitingMiddleware(max_size=UNRAID_MCP_MAX_RESPONSE_BYTES)
 
-# Note: ResponseCachingMiddleware was removed because all caching was disabled for
-# the `unraid` tool. The consolidated tool mixes reads and mutations under one name,
-# making per-subaction cache exclusion impossible. A fully disabled middleware
-# adds overhead with no benefit. Caching can be re-added if/when the tool is split
-# into separate read/write tools.
+# Note: there is no response/query caching anywhere in this server. The only thing
+# ever removed was FastMCP's ResponseCachingMiddleware: the consolidated `unraid`
+# tool mixes reads and mutations under one name, making per-subaction cache
+# exclusion impossible, so a fully disabled middleware added overhead with no
+# benefit. Caching can be re-added if/when the tool is split into separate
+# read/write tools.
 
 
 # Initialize FastMCP instance — ASGI-level bearer auth added at run time via
@@ -201,6 +204,29 @@ def run_server() -> None:
             )
             sys.exit(1)
 
+        # Refuse to expose an unauthenticated MCP endpoint on a non-loopback interface.
+        # When auth is delegated to an upstream gateway (UNRAID_MCP_DISABLE_HTTP_AUTH=true)
+        # and the bind host is public/LAN-reachable, the operator must explicitly affirm a
+        # trusted proxy fronts this server (UNRAID_MCP_TRUST_PROXY=true). Otherwise this
+        # would serve an open, unauthenticated endpoint to the network.
+        _loopback_hosts = frozenset({"127.0.0.1", "::1", "localhost"})
+        if (
+            is_http
+            and _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
+            and UNRAID_MCP_HOST not in _loopback_hosts
+            and not _settings.UNRAID_MCP_TRUST_PROXY
+        ):
+            print(
+                "FATAL: HTTP auth is disabled (UNRAID_MCP_DISABLE_HTTP_AUTH=true) and the "
+                f"server is bound to a non-loopback interface ({UNRAID_MCP_HOST}). This would "
+                "expose an unauthenticated MCP endpoint to the network. Set "
+                "UNRAID_MCP_TRUST_PROXY=true to affirm a trusted reverse proxy (e.g. SWAG) "
+                "fronts this server and enforces authentication, bind to a loopback host "
+                "(127.0.0.1/::1/localhost), or leave HTTP auth enabled.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         is_valid, missing = validate_required_config()
         if not is_valid:
             logger.warning(
@@ -214,9 +240,13 @@ def run_server() -> None:
 
         if UNRAID_VERIFY_SSL is False:
             logger.warning(
-                "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false). "
-                "Connections to Unraid API are vulnerable to man-in-the-middle attacks. "
-                "Only use this in trusted networks or for development."
+                "SSL VERIFICATION DISABLED (UNRAID_VERIFY_SSL=false, "
+                "UNRAID_ALLOW_INSECURE_TLS=true). Connections to the Unraid API are "
+                "vulnerable to man-in-the-middle attacks. The API key is sent to an "
+                "unverified peer over BOTH the HTTP GraphQL client AND the WebSocket "
+                "subscription connection, so a MITM can capture it. Prefer a CA-bundle "
+                "path for self-signed certs. Only use this in trusted networks or for "
+                "development."
             )
 
         if is_http:
