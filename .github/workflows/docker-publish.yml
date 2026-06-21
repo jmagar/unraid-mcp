@@ -36,6 +36,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      # On a tag push, the published image tags come from docker/metadata-action's
+      # semver parsing of the git tag. Guard against tag<->source drift by asserting
+      # the tag matches pyproject.toml before publishing (mirrors publish-pypi.yml).
+      - name: Verify tag matches pyproject.toml version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PKG_VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch: pyproject.toml=$PKG_VERSION tag=$TAG_VERSION"
+            exit 1
+          fi
+          echo "Tag and pyproject.toml versions match: $PKG_VERSION"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
