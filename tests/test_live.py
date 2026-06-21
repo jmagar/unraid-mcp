@@ -77,9 +77,7 @@ def _seed_warm(manager, subaction: str, data: dict) -> None:
 
     from unraid_mcp.core.types import SubscriptionData
 
-    manager.resource_data[subaction] = SubscriptionData(
-        data=data, last_updated=datetime.now(UTC)
-    )
+    manager.resource_data[subaction] = SubscriptionData(data=data, last_updated=datetime.now(UTC))
 
 
 @pytest.mark.asyncio

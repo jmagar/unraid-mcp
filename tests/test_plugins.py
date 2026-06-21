@@ -158,6 +158,7 @@ async def test_install_passes_input(_mock_graphql, monkeypatch):
 # the .plg as root. The guard must reject URLs whose host resolves to a
 # private/loopback/link-local/reserved/unspecified address.
 
+
 @pytest.mark.parametrize(
     "bad_url",
     [
@@ -194,9 +195,7 @@ async def test_install_language_rejects_ssrf_targets(_mock_graphql, bad_url):
     from unraid_mcp.core.exceptions import ToolError
 
     with pytest.raises(ToolError):
-        await _make_tool()(
-            action="plugin", subaction="install_language", url=bad_url, confirm=True
-        )
+        await _make_tool()(action="plugin", subaction="install_language", url=bad_url, confirm=True)
     _mock_graphql.assert_not_called()
 
 

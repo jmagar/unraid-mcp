@@ -738,8 +738,6 @@ class TestDockerUnhandledSubaction:
         from unraid_mcp.tools import _docker
 
         fake = "__fake_unhandled__"
-        monkeypatch.setattr(
-            _docker, "_DOCKER_SUBACTIONS", _docker._DOCKER_SUBACTIONS | {fake}
-        )
+        monkeypatch.setattr(_docker, "_DOCKER_SUBACTIONS", _docker._DOCKER_SUBACTIONS | {fake})
         with pytest.raises(ToolError, match=r"Unhandled docker subaction"):
             await _docker._handle_docker(subaction=fake, container_id=None, network_id=None)
