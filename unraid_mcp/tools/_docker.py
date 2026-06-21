@@ -166,27 +166,39 @@ _DOCKER_ID_PATTERN = re.compile(r"^[a-f0-9]{64}(:[a-z0-9]+)?$", re.IGNORECASE)
 _DOCKER_SHORT_ID_PATTERN = re.compile(r"^[a-f0-9]{12,63}$", re.IGNORECASE)
 
 
+def _container_names(c: dict[str, Any]) -> list[str]:
+    """Return a container's name list, defensively dropping null/non-string entries.
+
+    The GraphQL ``names`` field is nominally a ``[String!]`` but malformed or partial
+    responses can return ``null`` for the whole list or ``[null]`` for an element.
+    Filtering here keeps every name-matching path (``.lower()``, ``startswith``,
+    ``', '.join(...)``) from raising on a ``None``.
+    """
+    return [n for n in (c.get("names") or []) if isinstance(n, str)]
+
+
 def _find_container(
     identifier: str, containers: list[dict[str, Any]], *, strict: bool = False
 ) -> dict[str, Any] | None:
     for c in containers:
-        if c.get("id") == identifier or identifier in c.get("names", []):
+        if c.get("id") == identifier or identifier in _container_names(c):
             return c
     if strict:
         return None
     id_lower = identifier.lower()
     # Collect prefix matches first, then fall back to substring matches.
+    # _container_names() filters out null/non-string names so .lower() is safe.
     prefix_matches = [
-        c for c in containers if any(n.lower().startswith(id_lower) for n in c.get("names", []))
+        c for c in containers if any(n.lower().startswith(id_lower) for n in _container_names(c))
     ]
     candidates = prefix_matches or [
-        c for c in containers if any(id_lower in n.lower() for n in c.get("names", []))
+        c for c in containers if any(id_lower in n.lower() for n in _container_names(c))
     ]
     if not candidates:
         return None
     if len(candidates) == 1:
         return candidates[0]
-    names = [n for c in candidates for n in c.get("names", [])]
+    names = [n for c in candidates for n in _container_names(c)]
     raise ToolError(
         f"Container identifier '{identifier}' is ambiguous — matches: {', '.join(names[:10])}. "
         "Use a more specific name or the full container ID."
@@ -222,7 +234,7 @@ async def _resolve_container_id(
         return str(resolved.get("id", ""))
     names: list[str] = []
     for c in containers:
-        names.extend(c.get("names", []))
+        names.extend(_container_names(c))
     msg = (
         f"Container '{container_id}' not found by exact match. Mutations require exact name or full ID."
         if strict
@@ -293,7 +305,7 @@ async def _handle_docker(
                 # since Docker state values appear in both upper- and lower-case across the API.
                 if (container.get("state") or "").upper() != "RUNNING":
                     continue
-                names = container.get("names") or []
+                names = _container_names(container)
                 container_name = names[0].lstrip("/") if names else "<unnamed>"
                 for port in container.get("ports") or []:
                     public_port = port.get("publicPort")

@@ -1,5 +1,6 @@
 """Tests for disk subactions of the consolidated unraid tool."""
 
+import posixpath
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
 
@@ -62,6 +63,77 @@ class TestFormatBytes:
 
     def test_terabytes(self) -> None:
         assert format_bytes(1099511627776) == "1.00 TB"
+
+
+class TestValidatePathBoundary:
+    """Pin the boundary-correct prefix check in disk._validate_path.
+
+    The shared helper (exact_or_prefix mode) and disk/flash_backup both rely on
+    this: `/boot` and `/boot/...` are allowed, but sibling prefixes like
+    `/bootleg` MUST be rejected. This test is the guard that stops a future
+    "simplification" from reintroducing the naive startswith("/boot") bug.
+    """
+
+    @pytest.mark.parametrize(
+        ("path", "allowed"),
+        [
+            ("/boot", True),  # exact base dir
+            ("/boot/", True),  # normalizes to /boot
+            ("/boot/config", True),  # under the base
+            ("/boot/config/network.cfg", True),  # deeply nested
+            ("/bootleg", False),  # sibling sharing the prefix — the bug
+            ("/bootleg/x", False),  # sibling subtree
+            ("/boot../etc", False),  # prefix-adjacent, not under /boot
+            ("/var/log", False),  # unrelated base
+        ],
+    )
+    def test_boot_base_exact_or_prefix(self, path: str, allowed: bool) -> None:
+        from unraid_mcp.tools._disk import _validate_path
+
+        if allowed:
+            # Returns the normalized path without raising.
+            assert _validate_path(
+                path, ("/boot",), "source_path", exact_or_prefix=True
+            ) == posixpath.normpath(path)
+        else:
+            with pytest.raises(ToolError, match="source_path must start with one of"):
+                _validate_path(path, ("/boot",), "source_path", exact_or_prefix=True)
+
+    @pytest.mark.parametrize(
+        ("path", "allowed"),
+        [
+            ("/var/log", True),  # exact log root allowed in exact_or_prefix mode
+            ("/var/log/syslog", True),
+            ("/var/logsecret", False),  # sibling sharing the prefix
+            ("/boot/logs", True),  # second allowed base
+            ("/etc/passwd", False),  # outside every base
+        ],
+    )
+    def test_log_bases_exact_or_prefix(self, path: str, allowed: bool) -> None:
+        from unraid_mcp.tools._disk import _validate_path
+
+        bases = ("/var/log", "/boot/logs")
+        if allowed:
+            assert _validate_path(
+                path, bases, "log_path", exact_or_prefix=True
+            ) == posixpath.normpath(path)
+        else:
+            with pytest.raises(ToolError, match="log_path must start with one of"):
+                _validate_path(path, bases, "log_path", exact_or_prefix=True)
+
+    def test_empty_prefixes_skips_prefix_check(self) -> None:
+        from unraid_mcp.tools._disk import _validate_path
+
+        # Remote rclone destinations have no local prefix restriction, but null
+        # bytes and traversal must still be rejected.
+        assert (
+            _validate_path("remote:backups/flash", (), "destination_path") == "remote:backups/flash"
+        )
+        # A relative path that normalizes to a leading `..` still trips traversal.
+        with pytest.raises(ToolError, match="path traversal"):
+            _validate_path("a/../../etc", (), "destination_path")
+        with pytest.raises(ToolError, match="null bytes"):
+            _validate_path("ok\x00bad", (), "destination_path")
 
 
 # --- Integration tests ---
