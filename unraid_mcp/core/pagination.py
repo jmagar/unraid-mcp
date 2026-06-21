@@ -13,7 +13,9 @@ from typing import Any
 
 
 # Default number of items returned when the caller does not specify a limit.
-DEFAULT_LIST_LIMIT: int = 50
+# Matches the tool-level ``limit`` default (20) documented in CLAUDE.md; the tool
+# always threads its own default through, so this is the fallback for direct callers.
+DEFAULT_LIST_LIMIT: int = 20
 
 
 def cap_list(

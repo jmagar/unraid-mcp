@@ -6,6 +6,7 @@ to the Unraid API with proper timeout handling and error management.
 
 import asyncio
 import json
+import re
 import time
 from typing import Any, Final
 
@@ -25,11 +26,14 @@ from .utils import safe_display_url
 # Exact-match keys: short words that over-redact when used as substrings
 # (e.g. "key" would match "keyFile", "monkey", "turkey")
 _EXACT_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset({"key", "pin"})
-# Substring-match keys: compound terms safe for substring matching
+# Substring-match keys: compound terms safe for substring matching.
+# (Normalization strips _ and - before matching, so "client_secret" and
+# "clientsecret" both reduce to "clientsecret" — only one normalized form is needed.)
 _SUBSTRING_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
     {
         "password",
         "secret",
+        "clientsecret",
         "token",
         "apikey",
         "authorization",
@@ -38,8 +42,24 @@ _SUBSTRING_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
         "jwt",
         "cookie",
         "session",
+        "activationcode",
+        "privatekey",
     }
 )
+
+# Length floor for treating an unkeyed string as a possible secret. Short values
+# (UUIDs aside) rarely carry meaningful entropy and over-redacting normal text is
+# worse than missing a tiny token, so be conservative.
+_MIN_SECRET_VALUE_LEN: Final[int] = 20
+
+# JWT-shaped: three base64url segments separated by dots (header.payload.signature),
+# conventionally starting with the "eyJ" base64 of a JSON "{" header.
+_JWT_RE: Final[re.Pattern[str]] = re.compile(r"^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+# OpenAI-style "sk-"-prefixed secret tokens (and sk-proj-/sk-ant- variants).
+_SK_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^sk-[A-Za-z0-9_-]{16,}$")
+# High-entropy opaque token: a single long run of token-charset characters with no
+# whitespace. Requires a mix of letters and digits to avoid masking ordinary words.
+_TOKEN_CHARSET_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-./+=]+$")
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -52,12 +72,41 @@ def _is_sensitive_key(key: str) -> bool:
     return k in _EXACT_SENSITIVE_KEYS or any(s in k_normalized for s in _SUBSTRING_SENSITIVE_KEYS)
 
 
+def _is_sensitive_value(value: str) -> bool:
+    """Heuristically detect a secret-shaped string regardless of its key.
+
+    Conservatively flags obvious secret tokens — JWTs (``eyJ...`` three-segment),
+    ``sk-`` prefixed API keys, and very-long high-entropy opaque tokens — while
+    leaving ordinary prose untouched. Intended only to redact debug-log values, so
+    a missed exotic format is preferable to clobbering normal text.
+    """
+    if _JWT_RE.match(value) or _SK_TOKEN_RE.match(value):
+        return True
+    # High-entropy opaque token: long, token-charset only, with both letters and
+    # digits (rules out ordinary words, paths, and pure-numeric IDs/timestamps).
+    return bool(
+        len(value) >= _MIN_SECRET_VALUE_LEN
+        and _TOKEN_CHARSET_RE.match(value)
+        and any(c.isalpha() for c in value)
+        and any(c.isdigit() for c in value)
+    )
+
+
 def redact_sensitive(obj: Any) -> Any:
-    """Recursively redact sensitive values from nested dicts/lists."""
+    """Recursively redact sensitive data from nested dicts/lists.
+
+    Scans both *keys* and *values*: a value is masked when its key name looks
+    sensitive (see ``_is_sensitive_key``) OR when the value itself is a
+    secret-shaped string (JWT, ``sk-`` token, or high-entropy opaque token — see
+    ``_is_sensitive_value``), so secrets are caught even under innocuous keys.
+    Pure function — returns a redacted copy and never mutates ``obj``.
+    """
     if isinstance(obj, dict):
         return {k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()}
     if isinstance(obj, list):
         return [redact_sensitive(item) for item in obj]
+    if isinstance(obj, str) and _is_sensitive_value(obj):
+        return "***"
     return obj
 
 
