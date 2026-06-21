@@ -117,7 +117,7 @@ _rate_limiter = _RateLimiter()
 # Mutations and volatile queries (metrics, docker, array state) are excluded.
 _CACHEABLE_QUERY_PREFIXES = frozenset(
     {
-        "GetNetworkConfig",
+        "GetNetworkInfo",
         "GetRegistrationInfo",
         "GetOwner",
         "GetFlash",

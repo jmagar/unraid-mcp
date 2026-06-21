@@ -593,11 +593,70 @@ class TestQueryCache:
         assert await cache.get(q, {"id": "1"}) == {"name": "eth0"}
         assert await cache.get(q, {"id": "2"}) == {"name": "eth1"}
 
-    def test_is_cacheable_returns_true_for_known_prefixes(self) -> None:
-        assert _QueryCache.is_cacheable("GetNetworkConfig { ... }") is True
-        assert _QueryCache.is_cacheable("GetRegistrationInfo { ... }") is True
-        assert _QueryCache.is_cacheable("GetOwner { ... }") is True
-        assert _QueryCache.is_cacheable("GetFlash { ... }") is True
+    def test_every_cacheable_prefix_matches_an_emitted_operation(self) -> None:
+        """Each entry in _CACHEABLE_QUERY_PREFIXES must name a query operation that is
+        actually emitted by some tool. A prefix that matches no real ``query <Name>``
+        is dead — the cache can never fire for it.
+
+        This is a cross-check against the source of truth (the per-domain query dicts),
+        NOT a restatement of the constant. It fails if a prefix is misspelled relative
+        to the operation the tool issues (e.g. GetNetworkConfig vs GetNetworkInfo).
+        """
+        import importlib
+        import re
+
+        from unraid_mcp.core.client import _CACHEABLE_QUERY_PREFIXES
+
+        # Per-domain query dicts that hold the GraphQL strings tools actually send.
+        domain_modules = [
+            "_array",
+            "_connect",
+            "_customization",
+            "_disk",
+            "_docker",
+            "_health",
+            "_key",
+            "_notification",
+            "_oidc",
+            "_onboarding",
+            "_plugin",
+            "_rclone",
+            "_system",
+            "_user",
+            "_vm",
+        ]
+
+        op_name_pattern = re.compile(r"\bquery\s+([_A-Za-z]\w*)")
+
+        def _iter_query_strings(value: object):
+            """Recursively yield every string leaf in a (possibly nested) query dict."""
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, dict):
+                for v in value.values():
+                    yield from _iter_query_strings(v)
+            elif isinstance(value, (list, tuple)):
+                for v in value:
+                    yield from _iter_query_strings(v)
+
+        emitted_ops: set[str] = set()
+        for mod_name in domain_modules:
+            mod = importlib.import_module(f"unraid_mcp.tools.{mod_name}")
+            for attr in dir(mod):
+                if not attr.endswith("_QUERIES"):
+                    continue
+                for query_str in _iter_query_strings(getattr(mod, attr)):
+                    emitted_ops.update(op_name_pattern.findall(query_str))
+
+        # Sanity guard: we actually discovered query operations to cross-check against.
+        assert emitted_ops, "no GraphQL query operations found in per-domain query dicts"
+
+        dead_prefixes = sorted(_CACHEABLE_QUERY_PREFIXES - emitted_ops)
+        assert not dead_prefixes, (
+            f"dead cache prefix(es) {dead_prefixes}: each is in _CACHEABLE_QUERY_PREFIXES "
+            "but matches no actually-emitted 'query <Name>' in any _*_QUERIES dict, so the "
+            "cache can never fire for it. Fix the spelling to match the real operation name."
+        )
 
     def test_is_cacheable_returns_false_for_mutations(self) -> None:
         assert _QueryCache.is_cacheable('mutation { docker { start(id: "x") } }') is False
@@ -612,7 +671,7 @@ class TestQueryCache:
 
     def test_is_cacheable_with_explicit_query_keyword(self) -> None:
         """Operation names after explicit 'query' keyword must be recognized."""
-        assert _QueryCache.is_cacheable("query GetNetworkConfig { network { name } }") is True
+        assert _QueryCache.is_cacheable("query GetNetworkInfo { network { name } }") is True
         assert _QueryCache.is_cacheable("query GetOwner { owner { name } }") is True
 
     def test_is_cacheable_anonymous_query_returns_false(self) -> None:
