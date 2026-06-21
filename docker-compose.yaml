@@ -3,9 +3,17 @@ services:
     build: .
     container_name: unraid-mcp
     restart: unless-stopped
+    # The credentials volume (unraid-mcp-credentials) is created chmod-700 owned by
+    # uid 1000, so PUID must remain 1000 unless you re-chown the volume to match.
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
-      - "${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
+      # Published on loopback only by default: the MCP tool surface includes
+      # destructive actions and is commonly run with DISABLE_HTTP_AUTH=true behind
+      # SWAG, so it must NOT be reachable directly from the network.
+      # Publishing on a non-loopback interface REQUIRES auth enabled (a bearer
+      # token via UNRAID_MCP_TOKEN). Behind a reverse proxy, prefer joining the
+      # proxy's docker network over publishing the port at all.
+      - "127.0.0.1:${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
     env_file:
       - ~/.claude-homelab/.env
     volumes:
