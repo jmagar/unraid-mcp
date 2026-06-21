@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────────────────────────
-FROM ghcr.io/astral-sh/uv@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS builder
+FROM ghcr.io/astral-sh/uv@sha256:d0a0a753ab981624b49c97abc98821c1c09f4ca69d1ef5cee69c501be3d88479 AS builder
 # tag: python3.12-bookworm-slim  (digest pinned for reproducibility; Dependabot bumps it)
 
 WORKDIR /app
