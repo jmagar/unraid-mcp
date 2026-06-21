@@ -128,13 +128,13 @@ async def _handle_key(
         if subaction == "create":
             if not name:
                 raise ToolError("name is required for key/create")
-            input_data: dict[str, Any] = {"name": name}
+            create_input: dict[str, Any] = {"name": name}
             if roles is not None:
-                input_data["roles"] = roles
+                create_input["roles"] = roles
             if permissions is not None:
-                input_data["permissions"] = permissions
+                create_input["permissions"] = permissions
             data = await _client.make_graphql_request(
-                _KEY_MUTATIONS["create"], {"input": input_data}
+                _KEY_MUTATIONS["create"], {"input": create_input}
             )
             created_key = safe_get(data, "apiKey", "create")
             if not created_key:
@@ -144,15 +144,15 @@ async def _handle_key(
         if subaction == "update":
             if not key_id:
                 raise ToolError("key_id is required for key/update")
-            input_data: dict[str, Any] = {"id": key_id}
+            update_input: dict[str, Any] = {"id": key_id}
             if name:
-                input_data["name"] = name
+                update_input["name"] = name
             if roles is not None:
-                input_data["roles"] = roles
+                update_input["roles"] = roles
             if permissions is not None:
-                input_data["permissions"] = permissions
+                update_input["permissions"] = permissions
             data = await _client.make_graphql_request(
-                _KEY_MUTATIONS["update"], {"input": input_data}
+                _KEY_MUTATIONS["update"], {"input": update_input}
             )
             updated_key = safe_get(data, "apiKey", "update")
             if not updated_key:

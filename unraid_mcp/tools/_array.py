@@ -21,6 +21,12 @@ from ..core.utils import coerce_list, safe_get, validate_subaction
 # ARRAY
 # ===========================================================================
 
+# NOTE: `parityHistory` and `assignableDisks` take no arguments in the Unraid
+# GraphQL schema — there is no server-side limit/offset/pagination to push the
+# bound down into. Both return `[T!]!` with an empty Argument column in the schema
+# reference (docs/unraid/UNRAID-API-COMPLETE-REFERENCE.md, `query.parityhistory`
+# and `query.assignabledisks`), unlike e.g. `notifications.list(filter:)`. So we
+# fetch the full upstream list and bound it client-side via cap_list below.
 _ARRAY_QUERIES: dict[str, str] = {
     "parity_status": "query GetParityStatus { array { parityCheckStatus { progress speed errors status paused running correcting } } }",
     "parity_history": "query GetParityHistory { parityHistory { date duration speed status errors progress correcting paused running } }",

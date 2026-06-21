@@ -896,7 +896,7 @@ class TestHealthQueries:
         query = """
         query ComprehensiveHealthCheck {
           info {
-            machineId time
+            time
             versions { core { unraid } }
             os { uptime }
           }

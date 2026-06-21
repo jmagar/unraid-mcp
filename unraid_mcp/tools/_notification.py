@@ -250,11 +250,11 @@ async def _handle_notification(
             return {"success": True, "subaction": "unarchive_many", "data": result}
 
         if subaction == "unarchive_all":
-            vars_: dict[str, Any] | None = (
+            variables: dict[str, Any] | None = (
                 {"importance": importance.upper()} if importance else None
             )
             data = await _client.make_graphql_request(
-                _NOTIFICATION_MUTATIONS["unarchive_all"], vars_
+                _NOTIFICATION_MUTATIONS["unarchive_all"], variables
             )
             result = safe_get(data, _NOTIFICATION_RESULT_FIELD["unarchive_all"])
             return {"success": True, "subaction": "unarchive_all", "data": result}
