@@ -726,3 +726,20 @@ class TestDockerSuccessDerivationAndCoverage:
             action="docker", subaction="create_folder", organizer_input={"name": "X"}
         )
         assert result["success"] is False
+
+
+class TestDockerUnhandledSubaction:
+    async def test_in_subactions_but_unhandled_raises_clear_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Regression: a subaction present in _DOCKER_SUBACTIONS (so validate_subaction
+        # passes) but lacking an explicit handler must raise a clear ToolError instead
+        # of falling through to a bare KeyError on _DOCKER_MUTATIONS[subaction].
+        from unraid_mcp.tools import _docker
+
+        fake = "__fake_unhandled__"
+        monkeypatch.setattr(
+            _docker, "_DOCKER_SUBACTIONS", _docker._DOCKER_SUBACTIONS | {fake}
+        )
+        with pytest.raises(ToolError, match=r"Unhandled docker subaction"):
+            await _docker._handle_docker(subaction=fake, container_id=None, network_id=None)

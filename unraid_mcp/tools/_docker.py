@@ -470,6 +470,8 @@ async def _handle_docker(
             }
 
         # Single-id namespaced lifecycle mutations: start, stop, unpause, update_container.
+        if subaction not in _DOCKER_MUTATIONS:
+            raise ToolError(f"Unhandled docker subaction '{subaction}' — this is a bug")
         actual_id = await _resolve_container_id(container_id or "", strict=True)
         data = await _client.make_graphql_request(
             _DOCKER_MUTATIONS[subaction],
