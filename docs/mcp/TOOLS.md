@@ -2,16 +2,13 @@
 
 ## Design Philosophy
 
-unraid-mcp exposes four MCP tools:
+unraid-mcp exposes a single MCP tool, `unraid`, with `action` (domain) + `subaction` (operation) routing:
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
-| `unraid` | Primary tool -- action+subaction dispatch for 17 domains | `action`, `subaction`, plus domain-specific params |
-| `unraid_help` | Returns markdown reference for all actions | _(none)_ |
-| `diagnose_subscriptions` | Inspect WebSocket subscription states | _(none)_ |
-| `test_subscription_query` | Test a GraphQL subscription query | `query` (allowlisted fields only) |
+| `unraid` | The only tool -- action+subaction dispatch across 19 actions / 170 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
 
-The consolidated action pattern keeps the MCP surface small (4 tools) while supporting ~160 subactions across 17 domains. Clients call `unraid_help` first to discover available operations, then call `unraid` with the appropriate action and subaction.
+The consolidated action pattern keeps the MCP surface to one tool while supporting 170 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
 
 ## Primary Tool: `unraid`
 
@@ -30,7 +27,7 @@ unraid(
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `action` | `Literal[17 values]` | yes | Domain to operate on |
+| `action` | `Literal[19 values]` | yes | Domain to operate on |
 | `subaction` | `str` | yes | Operation within the domain |
 | `confirm` | `bool` | no | Set `True` for destructive subactions (default: `False`) |
 | `container_id` | `str` | no | Docker container ID or name (fuzzy match supported) |
@@ -47,7 +44,7 @@ unraid(
 
 ### Actions and Subactions
 
-#### `system` (18 subactions)
+#### `system` (20 subactions)
 
 Server information, metrics, network, and UPS management.
 
@@ -71,6 +68,8 @@ Server information, metrics, network, and UPS management.
 | `ups_devices` | List all UPS devices | -- |
 | `ups_device` | Single UPS device details | `device_id` |
 | `ups_config` | UPS configuration | -- |
+| `server_time` | Current server time, time zone, and NTP config | -- |
+| `timezones` | Available IANA time-zone options (capped) | -- |
 
 #### `health` (4 subactions)
 
@@ -117,7 +116,7 @@ Shares, physical disks, log files.
 | `logs` | Read log content | `log_path`, `tail_lines` | -- |
 | `flash_backup` | Trigger a flash backup | `remote_name`, `source_path`, `destination_path`, `backup_options` | Yes |
 
-#### `docker` (25 subactions)
+#### `docker` (26 subactions)
 
 Container lifecycle, image updates, template/digest maintenance, organizer
 folders, and network inspection.
@@ -126,6 +125,7 @@ folders, and network inspection.
 |-----------|-------------|-------------|-------------|
 | `list` | All containers with status, image, state | -- | -- |
 | `details` | Single container details | `container_id` | -- |
+| `logs` | Not available via the Unraid GraphQL API -- returns guidance to use `docker logs` on the host | `container_id` | -- |
 | `ports` | All host port bindings across running containers, sorted by host port | -- | -- |
 | `start` | Start a container | `container_id` | -- |
 | `stop` | Stop a container | `container_id` | -- |
@@ -173,7 +173,7 @@ Virtual machine lifecycle.
 | `force_stop` | Force stop a VM (no graceful shutdown) | `vm_id` | Yes |
 | `reset` | Hard reset a VM | `vm_id` | Yes |
 
-#### `notification` (12 subactions)
+#### `notification` (13 subactions)
 
 System notification management.
 
@@ -182,6 +182,7 @@ System notification management.
 | `overview` | Notification counts (unread, archived by type) | -- | -- |
 | `list` | List notifications | `list_type`, `limit`, `offset` | -- |
 | `create` | Create a notification | `title`, `subject`, `description`, `importance` | -- |
+| `notify_if_unique` | Create a notification only if an identical one does not already exist | `title`, `subject`, `description`, `importance` | -- |
 | `archive` | Archive a notification | `notification_id` | -- |
 | `mark_unread` | Mark a notification as unread | `notification_id` | -- |
 | `recalculate` | Recalculate notification counts | -- | -- |
@@ -338,6 +339,23 @@ Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder o
 | `plugin_install_updates` | Live plugin-install progress stream | `operation_id` (required), `collect_for` |
 
 > Note: `plugin_install_updates` requires `operation_id` — get one from `plugin/install`, then poll/stream by that id.
+
+#### `subscriptions` (2 subactions)
+
+WebSocket subscription diagnostics (formerly the standalone `diagnose_subscriptions` / `test_subscription_query` tools).
+
+| Subaction | Description | Extra params |
+|-----------|-------------|-------------|
+| `diagnose` | Full diagnostic dump of the WebSocket subscription system (connection states, error counts, reconnect status, troubleshooting hints) | -- |
+| `test_query` | Send a raw GraphQL subscription string over the WebSocket to debug schema/field issues (allowlisted fields only) | `subscription_query` (required) |
+
+#### `help` (no subaction)
+
+Returns this document as Markdown (formerly the standalone `unraid_help` tool).
+
+```python
+unraid(action="help")
+```
 
 ## Destructive Operations
 

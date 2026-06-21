@@ -8,12 +8,10 @@ This guide covers how to publish `unraid-mcp` to PyPI so it can be installed via
 **Entry point binary:** `unraid-mcp-server` (also aliased as `unraid-mcp`)
 **Current version:** `1.1.2`
 
-The package ships a FastMCP server exposing **3 MCP tools**:
-- `unraid` — primary tool with `action` + `subaction` routing (~~160 subactions, 17 domains)
-- `diagnose_subscriptions` — WebSocket subscription diagnostics
-- `test_subscription_query` — test individual GraphQL subscription queries
+The package ships a FastMCP server exposing **a single MCP tool**:
+- `unraid` — the only tool, with `action` + `subaction` routing (19 actions, 170 subactions). The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions of this tool.
 
-Tool call convention: `unraid(action="docker", subaction="list")`
+Tool call convention: `unraid(action="docker", subaction="list")`. Discover the full surface with `unraid(action="help")`; run WebSocket diagnostics via `unraid(action="subscriptions", subaction="diagnose")`.
 
 ### Version Sync Requirement
 

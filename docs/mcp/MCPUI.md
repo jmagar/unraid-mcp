@@ -16,11 +16,11 @@ The `unraid` tool includes an ASCII table in its docstring that MCP clients rend
 +-------------------+----------------------------------------------------------------------+
 ```
 
-This helps clients display the full action matrix without requiring a separate `unraid_help` call.
+This helps clients display the full action matrix without requiring a separate `unraid(action="help")` call.
 
-## Help tool
+## Help action
 
-The `unraid_help` tool returns a complete markdown document with:
+The `unraid(action="help")` call returns a complete markdown document with:
 - Table of all actions and subactions
 - Destructive action markers (`*`)
 - Parameter reference table

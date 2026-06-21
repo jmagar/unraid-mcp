@@ -2,7 +2,7 @@
 
 ## Status
 
-unraid-mcp does not currently define any agents. The `unraid` MCP tool with its 17 action domains provides sufficient coverage for all Unraid operations without requiring specialized agent behavior.
+unraid-mcp does not currently define any agents. The `unraid` MCP tool with its 19 actions provides sufficient coverage for all Unraid operations without requiring specialized agent behavior.
 
 ## Symlinks
 

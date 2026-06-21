@@ -4,25 +4,24 @@
 
 [![PyPI](https://img.shields.io/pypi/v/unraid-mcp)](https://pypi.org/project/unraid-mcp/) [![ghcr.io](https://img.shields.io/badge/ghcr.io-jmagar%2Funraid--mcp-blue?logo=docker)](https://github.com/jmagar/unraid-mcp/pkgs/container/unraid-mcp)
 
-MCP server for Unraid NAS management. Exposes a unified `unraid` action router with 17 action domains and ~160 subactions, plus `unraid_help` and two diagnostic tools, all backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
+MCP server for Unraid NAS management. Exposes a single unified `unraid` tool with 19 action domains and 170 subactions, backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
 
 ## Overview
 
-Four MCP tools are exposed:
+A single MCP tool is exposed:
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action router for all Unraid operations (17 domains, ~160 subactions) |
-| `unraid_help` | Returns markdown documentation for all actions and parameters |
-| `diagnose_subscriptions` | Inspect WebSocket subscription connection states and errors |
-| `test_subscription_query` | Test a specific GraphQL subscription query against allowlisted fields |
+| `unraid` | Unified action/subaction router for all operations (19 actions, 170 subactions). The Markdown reference and WebSocket diagnostics, which used to be standalone tools, are now the `help` and `subscriptions` actions of this tool. |
+
+Discover the full surface with `unraid(action="help")`. WebSocket subscription diagnostics are available via `unraid(action="subscriptions", subaction="diagnose")` and `unraid(action="subscriptions", subaction="test_query", subscription_query=...)`.
 
 The server supports streamable-http (default), SSE (deprecated), and stdio transports. HTTP transports require RFC 6750 bearer authentication via `UNRAID_MCP_BEARER_TOKEN`.
 
 ## What this repository ships
 
 - `unraid_mcp/server.py`: FastMCP server with 4-layer middleware chain and ASGI bearer auth
-- `unraid_mcp/tools/`: 16 domain modules (array, customization, disk, docker, health, key, live, notification, oidc, plugin, rclone, setting, system, user, vm) plus the consolidated `unraid.py` router
+- `unraid_mcp/tools/`: 17 domain modules (array, connect, customization, disk, docker, health, key, live, notification, oidc, onboarding, plugin, rclone, setting, system, user, vm) plus the consolidated `unraid.py` router
 - `unraid_mcp/subscriptions/`: WebSocket subscription manager, resource registration, diagnostics, and snapshot queries
 - `unraid_mcp/core/`: GraphQL client, plugin-option credential setup, destructive action guards, auth middleware
 - `unraid_mcp/config/`: Settings management and structured logging
@@ -40,30 +39,34 @@ Single entry point for all Unraid operations. Select the operation with `action`
 
 | Action | Subactions | Description |
 | --- | --- | --- |
-| `system` (18) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config` | Server info, metrics, network, UPS |
+| `system` (20) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | Server info, metrics, network, UPS |
 | `health` (4) | `check`, `test_connection`, `diagnose`, `setup` | Health checks, connection test, credential setup |
-| `array` (13) | `parity_status`, `parity_history`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`\*, `add_disk`, `remove_disk`\*, `mount_disk`, `unmount_disk`, `clear_disk_stats`\* | Parity checks, array lifecycle, disk operations |
+| `array` (14) | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`\*, `add_disk`, `remove_disk`\*, `mount_disk`, `unmount_disk`, `clear_disk_stats`\* | Parity checks, array lifecycle, disk operations |
 | `disk` (6) | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`\* | Shares, physical disks, log files |
-| `docker` (8) | `list`, `details`, `ports`, `start`, `stop`, `restart`, `networks`, `network_details` | Container lifecycle and network inspection |
+| `docker` (26) | `list`, `details`, `logs`, `ports`, `start`, `stop`, `restart`, `unpause`, `networks`, `network_details`, `remove_container`\*, `update_container`, `update_containers`, `update_all_containers`, `update_autostart`, `refresh_digests`, `sync_template_paths`, `reset_template_mappings`\*, `create_folder`, `create_folder_with_items`, `rename_folder`, `set_folder_children`, `delete_entries`\*, `move_entries_to_folder`, `move_items_to_position`, `update_view_preferences` | Container lifecycle, updates, organizer folders, network inspection |
 | `vm` (9) | `list`, `details`, `start`, `stop`, `pause`, `resume`, `force_stop`\*, `reboot`, `reset`\* | Virtual machine lifecycle |
-| `notification` (12) | `overview`, `list`, `create`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`\*, `delete_archived`\* | Notification CRUD |
-| `key` (7) | `list`, `get`, `create`, `update`, `delete`\*, `add_role`, `remove_role` | API key management |
-| `plugin` (3) | `list`, `add`, `remove`\* | Plugin management |
+| `notification` (13) | `overview`, `list`, `create`, `notify_if_unique`, `archive`, `mark_unread`, `recalculate`, `archive_all`, `archive_many`, `unarchive_many`, `unarchive_all`, `delete`\*, `delete_archived`\* | Notification CRUD |
+| `key` (13) | `list`, `get`, `possible_roles`, `possible_permissions`, `permissions_for_roles`, `preview_permissions`, `auth_actions`, `creation_form_schema`, `create`, `update`, `delete`\*, `add_role`, `remove_role` | API key and permission management |
+| `plugin` (8) | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`\*, `install`\*, `install_language`\* | Plugin management and async installs |
 | `rclone` (4) | `list_remotes`, `config_form`, `create_remote`, `delete_remote`\* | Cloud storage remotes |
-| `setting` (2) | `update`, `configure_ups`\* | System settings and UPS config |
-| `customization` (5) | `theme`, `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme` | Theme and UI customization |
+| `setting` (6) | `update`, `configure_ups`\*, `update_ssh`\*, `update_temperature`, `update_system_time`\*, `update_server_identity` | System settings, UPS, SSH, time, identity |
+| `connect` (7) | `remote_access`, `cloud`, `update_api_settings`\*, `sign_in`\*, `sign_out`\*, `setup_remote_access`\*, `enable_dynamic_remote_access`\* | Unraid Connect / remote access |
+| `customization` (5) | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`, `set_locale` | Theme, locale, and UI customization |
 | `oidc` (5) | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | OIDC/SSO provider management |
+| `onboarding` (11) | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`\*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`\* | First-boot / onboarding state |
 | `user` (1) | `me` | Current authenticated user |
-| `live` (11) | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notification_feed`, `log_tail`, `owner`, `server_status` | Real-time WebSocket subscription snapshots |
+| `live` (16) | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `notification_feed`, `log_tail`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `plugin_install_updates` | Real-time WebSocket subscription snapshots |
+| `subscriptions` (2) | `diagnose`, `test_query` (needs `subscription_query=`) | WebSocket subscription diagnostics |
+| `help` (0) | _(no subaction)_ | Returns the full Markdown action/subaction reference |
 
 \* Destructive -- requires `confirm=True`
 
-### `unraid_help`
+### `help` action
 
 Returns the full action reference as Markdown. Call this to discover available actions.
 
 ```python
-unraid_help()
+unraid(action="help")
 ```
 
 ## Installation

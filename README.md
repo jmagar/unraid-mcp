@@ -50,7 +50,7 @@ reference are themselves actions of that tool (`subscriptions` and `help`).
 
 All operations go through one tool. Pick an `action`, then a `subaction` within it.
 
-#### `system` — 18 subactions
+#### `system` — 20 subactions
 
 Server information, metrics, network, and UPS.
 
@@ -74,6 +74,8 @@ Server information, metrics, network, and UPS.
 | `ups_devices` | All UPS devices with battery and power metrics | — |
 | `ups_device` | Single UPS device details | `device_id` |
 | `ups_config` | UPS daemon configuration | — |
+| `server_time` | Current server time, time zone, and NTP config | — |
+| `timezones` | Available IANA time-zone options (capped) | — |
 
 #### `health` — 4 subactions
 
@@ -122,7 +124,7 @@ Shares, physical disks, log files, and flash backup. Destructive subactions mark
 
 **`flash_backup` details:** Calls the Unraid `initiateFlashBackup` GraphQL mutation, which triggers an rclone copy from the flash drive to a configured rclone remote. The destination on the remote is overwritten if it exists. Returns `{ status, jobId }`. To restore: use rclone to copy the backup back to the flash drive, or extract individual config files. Configure the rclone remote first via `rclone/create_remote`.
 
-#### `docker` — 25 subactions
+#### `docker` — 26 subactions
 
 Container lifecycle, image updates, template/digest maintenance, organizer folders, and network inspection. Destructive subactions marked with *.
 
@@ -130,6 +132,7 @@ Container lifecycle, image updates, template/digest maintenance, organizer folde
 | --- | --- | --- | --- |
 | `list` | All containers: ID, names, image, state, status, autoStart | — | — |
 | `details` | Full container detail: ports, mounts, labels, network settings | `container_id` | — |
+| `logs` | Not available via the Unraid GraphQL API — returns guidance to use `docker logs` on the host | `container_id` | — |
 | `ports` | All host port bindings across running containers, sorted by `(host_port, protocol)`. | — | — |
 | `start` | Start a container | `container_id` | — |
 | `stop` | Stop a container | `container_id` | — |
@@ -174,7 +177,7 @@ Virtual machine lifecycle. Destructive subactions marked with *.
 
 `vm_id` accepts UUID, prefixed ID, or VM name.
 
-#### `notification` — 12 subactions
+#### `notification` — 13 subactions
 
 System notification CRUD. Destructive subactions marked with *.
 
@@ -183,6 +186,7 @@ System notification CRUD. Destructive subactions marked with *.
 | `overview` | Unread and archive counts by importance (INFO/WARNING/ALERT) | — | — |
 | `list` | Paginated notification list | `list_type` (UNREAD or ARCHIVE, default UNREAD); optional `importance`, `offset`, `limit` | — |
 | `create` | Create a notification | `title` (≤200), `subject` (≤500), `description` (≤2000), `importance` (INFO/WARNING/ALERT) | — |
+| `notify_if_unique` | Create a notification only if an identical one does not already exist | `title`, `subject`, `description`, `importance` | — |
 | `archive` | Archive a single notification | `notification_id` | — |
 | `mark_unread` | Move an archived notification back to unread | `notification_id` | — |
 | `recalculate` | Recalculate the overview counts | — | — |
