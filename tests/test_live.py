@@ -25,8 +25,65 @@ def _mock_subscribe_collect():
         yield m
 
 
+@pytest.fixture
+def _cold_cache():
+    """Force the snapshot warm-cache path off so live/* falls back to a fresh WS.
+
+    The module-level subscription_manager singleton may have auto-start enabled
+    (default) and could even hold warm data from another test; this fixture
+    guarantees the live (fresh-WS) path is exercised by disabling auto-start and
+    clearing any cached resource data, restoring both afterward.
+    """
+    from unraid_mcp.subscriptions.manager import subscription_manager
+
+    saved_enabled = subscription_manager.auto_start_enabled
+    saved_data = dict(subscription_manager.resource_data)
+    subscription_manager.auto_start_enabled = False
+    subscription_manager.resource_data.clear()
+    try:
+        yield subscription_manager
+    finally:
+        subscription_manager.auto_start_enabled = saved_enabled
+        subscription_manager.resource_data.clear()
+        subscription_manager.resource_data.update(saved_data)
+
+
+@pytest.fixture
+def _warm_cache():
+    """Provide a manager with auto-start enabled and a clean resource_data dict.
+
+    Tests seed ``subscription_manager.resource_data[<subaction>]`` with a
+    SubscriptionData entry to simulate warm persistent-subscription data, then
+    assert the live/* tool serves it without opening a fresh WebSocket. Original
+    state is restored afterward.
+    """
+    from unraid_mcp.subscriptions.manager import subscription_manager
+
+    saved_enabled = subscription_manager.auto_start_enabled
+    saved_data = dict(subscription_manager.resource_data)
+    subscription_manager.auto_start_enabled = True
+    subscription_manager.resource_data.clear()
+    try:
+        yield subscription_manager
+    finally:
+        subscription_manager.auto_start_enabled = saved_enabled
+        subscription_manager.resource_data.clear()
+        subscription_manager.resource_data.update(saved_data)
+
+
+def _seed_warm(manager, subaction: str, data: dict) -> None:
+    """Seed the manager's warm resource cache for *subaction*."""
+    from datetime import UTC, datetime
+
+    from unraid_mcp.core.types import SubscriptionData
+
+    manager.resource_data[subaction] = SubscriptionData(
+        data=data, last_updated=datetime.now(UTC)
+    )
+
+
 @pytest.mark.asyncio
-async def test_cpu_returns_snapshot(_mock_subscribe_once):
+async def test_cpu_returns_snapshot(_mock_subscribe_once, _cold_cache):
     _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": 23.5, "cpus": []}}
     result = await _make_tool()(action="live", subaction="cpu")
     assert result["success"] is True
@@ -34,12 +91,13 @@ async def test_cpu_returns_snapshot(_mock_subscribe_once):
 
 
 @pytest.mark.asyncio
-async def test_memory_returns_snapshot(_mock_subscribe_once):
+async def test_memory_returns_snapshot(_mock_subscribe_once, _cold_cache):
     _mock_subscribe_once.return_value = {
         "systemMetricsMemory": {"total": 32000000000, "used": 10000000000, "percentTotal": 31.2}
     }
     result = await _make_tool()(action="live", subaction="memory")
     assert result["success"] is True
+    assert result["source"] == "live"
 
 
 @pytest.mark.asyncio
@@ -143,7 +201,7 @@ async def test_invalid_subaction_raises():
 
 
 @pytest.mark.asyncio
-async def test_snapshot_propagates_tool_error(_mock_subscribe_once):
+async def test_snapshot_propagates_tool_error(_mock_subscribe_once, _cold_cache):
     """Non-event-driven (streaming) actions still propagate timeout as ToolError."""
     from unraid_mcp.core.exceptions import ToolError
 
@@ -153,7 +211,7 @@ async def test_snapshot_propagates_tool_error(_mock_subscribe_once):
 
 
 @pytest.mark.asyncio
-async def test_event_driven_timeout_returns_no_recent_events(_mock_subscribe_once):
+async def test_event_driven_timeout_returns_no_recent_events(_mock_subscribe_once, _cold_cache):
     """Event-driven subscriptions return a graceful no_recent_events response on timeout."""
     from unraid_mcp.core.exceptions import ToolError
 
@@ -165,7 +223,7 @@ async def test_event_driven_timeout_returns_no_recent_events(_mock_subscribe_onc
 
 
 @pytest.mark.asyncio
-async def test_event_driven_non_timeout_error_propagates(_mock_subscribe_once):
+async def test_event_driven_non_timeout_error_propagates(_mock_subscribe_once, _cold_cache):
     """Non-timeout ToolErrors from event-driven subscriptions still propagate."""
     from unraid_mcp.core.exceptions import ToolError
 
@@ -183,7 +241,7 @@ async def test_log_tail_rejects_invalid_path(_mock_subscribe_collect):
 
 
 @pytest.mark.asyncio
-async def test_snapshot_wraps_bare_exception(_mock_subscribe_once):
+async def test_snapshot_wraps_bare_exception(_mock_subscribe_once, _cold_cache):
     """Bare exceptions from subscribe_once are wrapped in ToolError by tool_error_handler."""
     from unraid_mcp.core.exceptions import ToolError
 
@@ -263,7 +321,7 @@ async def test_log_tail_no_level_unchanged(_mock_subscribe_collect):
 
 
 @pytest.mark.asyncio
-async def test_display_returns_snapshot(_mock_subscribe_once):
+async def test_display_returns_snapshot(_mock_subscribe_once, _cold_cache):
     _mock_subscribe_once.return_value = {
         "displaySubscription": {"theme": "white", "locale": "en_US"}
     }
@@ -273,7 +331,7 @@ async def test_display_returns_snapshot(_mock_subscribe_once):
 
 
 @pytest.mark.asyncio
-async def test_notifications_warnings_returns_snapshot(_mock_subscribe_once):
+async def test_notifications_warnings_returns_snapshot(_mock_subscribe_once, _cold_cache):
     _mock_subscribe_once.return_value = {
         "notificationsWarningsAndAlerts": [{"id": "n1", "importance": "ALERT"}]
     }
@@ -309,7 +367,7 @@ async def test_plugin_install_updates_passes_operation_id(_mock_subscribe_collec
 
 
 @pytest.mark.asyncio
-async def test_snapshot_actions_all_handled():
+async def test_snapshot_actions_all_handled(_cold_cache):
     """Every SNAPSHOT_ACTIONS key must route through _handle_live without error.
 
     Guards against adding a subscription key but forgetting the handler branch.
@@ -323,3 +381,72 @@ async def test_snapshot_actions_all_handled():
         for action in SNAPSHOT_ACTIONS:
             result = await _make_tool()(action="live", subaction=action, timeout=1.0)
             assert result["subaction"] == action
+            assert result["source"] == "live"
+
+
+# ---------------------------------------------------------------------------
+# Warm persistent-subscription cache fast path (P-H1 / T-H2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_snapshot_served_from_warm_cache(_warm_cache, _mock_subscribe_once):
+    """When warm persistent data exists + auto-start on, live/cpu reads cache.
+
+    The fresh-WS function (subscribe_once) MUST NOT be called — that is the whole
+    point of the fix: avoid a full WS handshake when the persistent manager
+    already holds fresh data.
+    """
+    _seed_warm(_warm_cache, "cpu", {"systemMetricsCpu": {"percentTotal": 42.0, "cpus": []}})
+    # If the live path were taken it would return this very different value.
+    _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": -1, "cpus": []}}
+
+    result = await _make_tool()(action="live", subaction="cpu")
+
+    assert result["success"] is True
+    assert result["source"] == "cache"
+    assert result["data"]["systemMetricsCpu"]["percentTotal"] == 42.0
+    _mock_subscribe_once.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_event_driven_snapshot_served_from_warm_cache(_warm_cache, _mock_subscribe_once):
+    """Event-driven snapshots (e.g. display) are also served from warm cache."""
+    _seed_warm(_warm_cache, "display", {"displaySubscription": {"theme": "black"}})
+    _mock_subscribe_once.return_value = {"displaySubscription": {"theme": "white"}}
+
+    result = await _make_tool()(action="live", subaction="display")
+
+    assert result["source"] == "cache"
+    assert result["data"]["displaySubscription"]["theme"] == "black"
+    _mock_subscribe_once.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cold_cache_falls_back_to_fresh_ws(_warm_cache, _mock_subscribe_once):
+    """Auto-start on but no warm data → fall back to fresh WS (subscribe_once)."""
+    # _warm_cache enables auto-start and clears resource_data; do NOT seed it.
+    _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": 7.0, "cpus": []}}
+
+    result = await _make_tool()(action="live", subaction="cpu")
+
+    assert result["source"] == "live"
+    assert result["data"]["systemMetricsCpu"]["percentTotal"] == 7.0
+    _mock_subscribe_once.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_auto_start_disabled_ignores_warm_cache(_cold_cache, _mock_subscribe_once):
+    """Auto-start disabled → never read warm cache, always use fresh WS.
+
+    Even with seeded resource_data, a disabled manager must not short-circuit to
+    the cache (the persistent subscriptions aren't being maintained).
+    """
+    _seed_warm(_cold_cache, "cpu", {"systemMetricsCpu": {"percentTotal": 99.0, "cpus": []}})
+    _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": 3.0, "cpus": []}}
+
+    result = await _make_tool()(action="live", subaction="cpu")
+
+    assert result["source"] == "live"
+    assert result["data"]["systemMetricsCpu"]["percentTotal"] == 3.0
+    _mock_subscribe_once.assert_called_once()
