@@ -157,7 +157,19 @@ class BearerAuthMiddleware:
     # ------------------------------------------------------------------
 
     def _get_client_ip(self, scope: Scope) -> str:
-        """Extract and sanitize the client IP from the ASGI scope."""
+        """Extract and sanitize the client IP from the ASGI scope.
+
+        The IP comes ONLY from the ASGI transport scope (``scope["client"]``),
+        never from ``X-Forwarded-For``/``X-Real-IP`` headers. Those headers are
+        client-controlled and trivially spoofable, so trusting them would let an
+        attacker forge a fresh IP per request and bypass the per-IP failure
+        rate limiter entirely — the exact control this method feeds. The trade-off
+        is that behind a reverse proxy (e.g. SWAG) every request appears to come
+        from the proxy's IP, so all real clients share ONE rate-limit/failure
+        bucket. That is acceptable here: a trusted proxy fronts the server and the
+        bucket is generous, and failing closed (one shared bucket) is safer than
+        trusting a spoofable header.
+        """
         client = scope.get("client")
         if client and isinstance(client, (list, tuple)) and len(client) >= 1:
             raw = str(client[0])
@@ -286,6 +298,16 @@ class WellKnownMiddleware:
     Place this OUTSIDE BearerAuthMiddleware (before it in the middleware list) so
     the discovery endpoint is reachable without a token.  Only GET is handled for
     the well-known paths; all other requests fall through to the auth layer.
+
+    Host handling (defense-in-depth): the ``resource`` URI is, by RFC 9728 §2,
+    self-referential — it must point back at this server.  The client-supplied
+    ``Host`` header is reflected into it because that is how the client addressed
+    us, but it is otherwise untrusted.  The value is only ever JSON-serialized
+    (``separators`` + ``json.dumps`` escape control chars), so it cannot inject
+    headers or break out of the body.  When a ``public_host`` is configured
+    (the operator's known public hostname/identity), it is used verbatim and the
+    request Host is ignored entirely; otherwise we fall back to the sanitized
+    request Host so the endpoint keeps working in the default no-config case.
     """
 
     # Paths defined by RFC 9728 §3.1 that MCP clients probe.
@@ -296,8 +318,11 @@ class WellKnownMiddleware:
         }
     )
 
-    def __init__(self, app: ASGIApp) -> None:
+    def __init__(self, app: ASGIApp, *, public_host: str | None = None) -> None:
         self.app = app
+        # Authoritative public host/identity, if the operator configured one. When
+        # set, the client Host header is ignored when building the resource URI.
+        self._public_host: str | None = public_host.strip() if public_host else None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -311,12 +336,19 @@ class WellKnownMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Derive the resource URI from the request Host header (RFC 9728 §2).
-        host = "localhost"
-        for key, val in scope.get("headers", []):
-            if key.lower() == b"host":
-                host = val.decode("latin-1")
-                break
+        # Derive the resource URI (RFC 9728 §2). Prefer the operator-configured
+        # public host; otherwise fall back to the client-supplied Host header,
+        # sanitized as defense-in-depth (it is only JSON-serialized, so this just
+        # keeps the self-referential URI tidy and free of control chars).
+        if self._public_host:
+            host = self._public_host
+        else:
+            host = "localhost"
+            for key, val in scope.get("headers", []):
+                if key.lower() == b"host":
+                    # Drop any chars that aren't valid in a host[:port] before reflecting.
+                    host = _SAFE_HOST_RE.sub("", val.decode("latin-1")) or "localhost"
+                    break
 
         scheme = scope.get("scheme", "http")
         resource = f"{scheme}://{host}"

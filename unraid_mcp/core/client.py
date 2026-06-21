@@ -158,6 +158,40 @@ class _RateLimiter:
 _rate_limiter = _RateLimiter()
 
 
+# --------------------------------------------------------------------------
+# Idempotent-error signatures.
+#
+# These substrings track the upstream Unraid/Docker API error *prose* — they are
+# matched (case-insensitively) against the human-readable message returned by the
+# GraphQL API. As such they are LOCALE-FRAGILE: if the upstream changes its
+# wording or returns a localized message, prose matching silently stops working.
+#
+# Prefer the numeric ``HTTP code 304`` signal (Docker returns 304 Not Modified for
+# a no-op start/stop) over prose where feasible — it is shared by both operations
+# and far more stable than English phrasing. The phrase variants below are kept as
+# a best-effort fallback for APIs that surface prose without an HTTP code.
+# --------------------------------------------------------------------------
+
+# Docker returns "HTTP code 304" (Not Modified) for a no-op start/stop. Stable,
+# operation-agnostic numeric signal — preferred over the prose matches below.
+_HTTP_CODE_304: Final[str] = "http code 304"
+
+# Locale-fragile English prose returned when a container is already in the
+# requested state for a "start" operation.
+_START_IDEMPOTENT_PHRASES: Final[tuple[str, ...]] = (
+    "already started",
+    "container already running",
+)
+
+# Locale-fragile English prose returned when a container is already in the
+# requested state for a "stop" operation.
+_STOP_IDEMPOTENT_PHRASES: Final[tuple[str, ...]] = (
+    "already stopped",
+    "container already stopped",
+    "container not running",
+)
+
+
 def is_idempotent_error(error_message: str, operation: str) -> bool:
     """Check if a GraphQL error represents an idempotent operation that should be treated as success.
 
@@ -170,19 +204,14 @@ def is_idempotent_error(error_message: str, operation: str) -> bool:
     """
     error_lower = error_message.lower()
 
-    # Docker container operation patterns
+    # Prefer the stable numeric signal; fall back to locale-fragile prose matches.
     if operation == "start":
-        return (
-            "already started" in error_lower
-            or "container already running" in error_lower
-            or "http code 304" in error_lower
+        return _HTTP_CODE_304 in error_lower or any(
+            phrase in error_lower for phrase in _START_IDEMPOTENT_PHRASES
         )
     if operation == "stop":
-        return (
-            "already stopped" in error_lower
-            or "container already stopped" in error_lower
-            or "container not running" in error_lower
-            or "http code 304" in error_lower
+        return _HTTP_CODE_304 in error_lower or any(
+            phrase in error_lower for phrase in _STOP_IDEMPOTENT_PHRASES
         )
 
     return False

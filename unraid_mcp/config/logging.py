@@ -21,7 +21,14 @@ console = Console(stderr=True)
 class OverwriteFileHandler(logging.FileHandler):
     """Custom file handler that overwrites the log file when it reaches max size."""
 
-    def __init__(self, filename, max_bytes=10 * 1024 * 1024, mode="a", encoding=None, delay=False):
+    def __init__(
+        self,
+        filename: str | Path,
+        max_bytes: int = 10 * 1024 * 1024,
+        mode: str = "a",
+        encoding: str | None = None,
+        delay: bool = False,
+    ) -> None:
         """Initialize the handler.
 
         Args:
@@ -36,7 +43,7 @@ class OverwriteFileHandler(logging.FileHandler):
         self._check_interval = 100
         super().__init__(filename, mode, encoding, delay)
 
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         """Emit a record, checking file size periodically and overwriting if needed."""
         self._emit_count += 1
         if (

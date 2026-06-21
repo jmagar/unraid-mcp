@@ -108,3 +108,51 @@ async def test_other_tools_skipped_when_tools_filter_set():
 def test_non_positive_max_size_rejected():
     with pytest.raises(ValueError):
         StructuredResponseLimitingMiddleware(max_size=0)
+
+
+# ---------------------------------------------------------------------------
+# _measure — single-TextContent fast path vs full-serialization fallback
+# ---------------------------------------------------------------------------
+
+
+def test_measure_single_text_content_uses_text_bytes():
+    """A single TextContent block is measured by its encoded text length."""
+    mw = StructuredResponseLimitingMiddleware(max_size=131072)
+    text = "héllo wörld"  # multi-byte chars: len(str) != len(bytes)
+    result = _text_result(text)
+
+    assert mw._measure(result) == len(text.encode("utf-8"))
+
+
+def test_measure_multi_content_falls_back_to_full_serialization():
+    """Multi-block results fall back to full pydantic serialization."""
+    import pydantic_core
+
+    mw = StructuredResponseLimitingMiddleware(max_size=131072)
+    result = ToolResult(
+        content=[
+            TextContent(type="text", text="a"),
+            TextContent(type="text", text="b"),
+        ]
+    )
+
+    assert mw._measure(result) == len(pydantic_core.to_json(result, fallback=str))
+
+
+async def test_single_text_content_cap_decision_matches_text_bytes():
+    """The cap decision for a single TextContent keys off the text byte length."""
+    cap = 100
+    mw = StructuredResponseLimitingMiddleware(max_size=cap)
+
+    # Just under the cap (text bytes only) → passes through untouched.
+    under = _text_result("u" * (cap - 1))
+    out_under = await mw.on_call_tool(_context(), _call_next_returning(under))
+    assert out_under is under
+
+    # Just over the cap (text bytes only) → replaced with marker.
+    over = _text_result("o" * (cap + 1))
+    out_over = await mw.on_call_tool(_context(), _call_next_returning(over))
+    assert out_over is not over
+    block = out_over.content[0]
+    assert isinstance(block, TextContent)
+    assert json.loads(block.text)["truncated"] is True
