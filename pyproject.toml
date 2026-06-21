@@ -238,10 +238,15 @@ addopts = [
     "-v",
 ]
 markers = [
+    # NOTE: `slow` is currently applied to zero tests, so the CI `-m "not slow"`
+    # filter is presently inert. It is kept registered (rather than removed) so
+    # that filter continues to resolve under --strict-config/--strict-markers and
+    # so future slow tests can adopt it without re-registration.
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "mockserver: round trips against the local mock GraphQL server (tests/mock; needs `npm --prefix tests/mock install`)",
+    "live: marks tests that run against a live, running server (Justfile `test-live` uses `-m live`)",
 ]
 filterwarnings = [
     "error",
@@ -300,7 +305,9 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "respx>=0.22.0",
-    "ty>=0.0.15",
+    # Pinned exactly: ty is pre-1.0 (0.0.x) and is CI's sole type-check authority,
+    # so a point release can break CI on unchanged code. Bump deliberately (Dependabot).
+    "ty==0.0.23",
     "ruff>=0.12.8",
     "build>=1.2.2",
     "twine>=6.0.1",
