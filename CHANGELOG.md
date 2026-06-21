@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0](https://github.com/jmagar/unraid-mcp/compare/v2.0.1...v2.1.0) (2026-06-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** deployments running UNRAID_VERIFY_SSL=false must now also set UNRAID_ALLOW_INSECURE_TLS=true, and deployments running UNRAID_MCP_DISABLE_HTTP_AUTH=true on a non-loopback host must now also set UNRAID_MCP_TRUST_PROXY=true, or the server refuses to start.
+
+### Features
+
+* **core:** remove unused query cache; gate insecure TLS and unauthenticated public bind ([9d6bc15](https://github.com/jmagar/unraid-mcp/commit/9d6bc15f2501ba4e909026bd4d85560d2d9ac506))
+
+
+### Bug Fixes
+
+* **cache:** correct dead query-cache prefix and replace tautological test ([679a14e](https://github.com/jmagar/unraid-mcp/commit/679a14e92d7d2c64728d4f8e749e8529756c2410))
+* **core:** classify bug-vs-upstream errors, fix pagination default, scan secret values ([eca1a69](https://github.com/jmagar/unraid-mcp/commit/eca1a69312c5765dbdca41b79d8d6a5e9fb481db))
+* **core:** isolate idempotency patterns, sanitize Host reflection, faster size check, annotate log handler ([284b668](https://github.com/jmagar/unraid-mcp/commit/284b6689366a9cf554cd62ae23380c58b0b4072d))
+* **docker:** guard unhandled subaction to prevent masked KeyError ([4d0d22a](https://github.com/jmagar/unraid-mcp/commit/4d0d22a0802162f8cbafb3dcd70f1b0c2fdbf39e))
+* repair drifted Justfile recipes (check-contract + typecheck) ([f0f7e23](https://github.com/jmagar/unraid-mcp/commit/f0f7e23ce0eb024ce420d07bdf3a40630400a52e))
+* repair drifted Justfile recipes (check-contract + typecheck) ([9c9d43a](https://github.com/jmagar/unraid-mcp/commit/9c9d43a31150b9ae48800d4f74c8867ce752d440))
+* **security:** add SSRF guard to plugin install and bound notification/list size ([375db66](https://github.com/jmagar/unraid-mcp/commit/375db662f52a01314dd141b0a62f2391f5050cb2))
+* **server:** refuse unauthenticated HTTP endpoint on non-loopback bind (S-H3) ([84c86c4](https://github.com/jmagar/unraid-mcp/commit/84c86c403b306785ac530d740cb9e4399b6f359f))
+* **server:** refuse unauthenticated HTTP endpoint on non-loopback bind (S-H3) ([e87afe1](https://github.com/jmagar/unraid-mcp/commit/e87afe11f5e89ac8ea70a7f042348c913385c383))
+* **server:** run shutdown cleanup via FastMCP lifespan ([3571da6](https://github.com/jmagar/unraid-mcp/commit/3571da6d6f09f83104dc0fb39e688f3cdbbcb1e5))
+* **subscriptions:** resilient snapshot frame parsing + coverage for malformed frames, concurrency, diagnostics ([25d9393](https://github.com/jmagar/unraid-mcp/commit/25d93937dfc08252cc92b1b7f11e66d0a5199509))
+* **subscriptions:** restore best-effort subscribe_collect; harden protocol; correct lock docstrings ([9d38b93](https://github.com/jmagar/unraid-mcp/commit/9d38b93ce4685d1c4b4d187283df5b394bfa7101))
+* **tools:** drop machineId from health summary; tidy naming; note parity-history bound ([daf825a](https://github.com/jmagar/unraid-mcp/commit/daf825a4c8dae3a056d84690311371022bc6ff8c))
+* **tools:** None-safe container name matching and consolidated /boot path boundary ([6a565de](https://github.com/jmagar/unraid-mcp/commit/6a565de0f4fe2397f289ceac01258c9c7b13eae8))
+* **tools:** project mutation responses to the result subtree, not raw GraphQL data ([ed0184a](https://github.com/jmagar/unraid-mcp/commit/ed0184a6ee0a650ecb301cce5e9027ae1b8b00c9))
+
+
+### Performance Improvements
+
+* **subscriptions:** serve live/* snapshots from warm persistent cache ([bb5f36f](https://github.com/jmagar/unraid-mcp/commit/bb5f36f17de381fa8cf434f18754c5f8195fdff6))
+
+
+### Documentation
+
+* correct action/subaction tables and drop pre-2.0.0 tool surface ([9b7a60c](https://github.com/jmagar/unraid-mcp/commit/9b7a60ce2df623445800342c128c4e8602a0bca4))
+* correct subscription allowlist, env-var coverage, and DEBUG-logging caveat ([078e9ca](https://github.com/jmagar/unraid-mcp/commit/078e9ca5fc99e468894826e8a70ecad24de413b3))
+* fix destructive/cache/rate-limit/response-size docs and patch-target guidance ([5623f05](https://github.com/jmagar/unraid-mcp/commit/5623f059bfc8013fd0f45f9f2e7b5a144d37c212))
+* save session log ([f47740c](https://github.com/jmagar/unraid-mcp/commit/f47740ce43e3e94969947e12f8b983d2d82d215c))
+* save session log (Justfile recipe drift fix) ([7c4444b](https://github.com/jmagar/unraid-mcp/commit/7c4444b1352a25ec2204581c0a6eefe8a133b090))
+
+
+### Miscellaneous Chores
+
+* release as 2.1.0 ([010f683](https://github.com/jmagar/unraid-mcp/commit/010f683905537135377f92eee3c6b971b48c6b05))
+
 ## [2.0.1](https://github.com/jmagar/unraid-mcp/compare/v2.0.0...v2.0.1) (2026-06-20)
 
 
