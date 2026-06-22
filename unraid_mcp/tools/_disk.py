@@ -194,8 +194,13 @@ async def _handle_disk(
             variables = {"path": log_path, "lines": tail_lines}
 
         logger.info(f"Executing unraid action=disk subaction={subaction}")
+        # Guard the lookup so an unhandled subaction raises the clean guard below
+        # instead of a raw KeyError (#5).
+        query = _DISK_QUERIES.get(subaction)
+        if query is None:
+            raise ToolError(f"Unhandled disk subaction '{subaction}' — this is a bug")
         data = await _client.make_graphql_request(
-            _DISK_QUERIES[subaction], variables, custom_timeout=custom_timeout
+            query, variables, custom_timeout=custom_timeout
         )
 
         if subaction == "shares":

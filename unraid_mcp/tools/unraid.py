@@ -941,70 +941,15 @@ def register_unraid_tool(mcp: FastMCP) -> None:
 
         # Pack the flat keyword args into the structured input model. The tool
         # signature stays flat (so the MCP input schema is unchanged), but the
-        # rest of the routing operates on the validated model.
-        inp = UnraidInput(
-            action=action,
-            subaction=subaction,
-            confirm=confirm,
-            device_id=device_id,
-            disk_id=disk_id,
-            correct=correct,
-            slot=slot,
-            log_path=log_path,
-            tail_lines=tail_lines,
-            remote_name=remote_name,
-            source_path=source_path,
-            destination_path=destination_path,
-            backup_options=backup_options,
-            container_id=container_id,
-            network_id=network_id,
-            container_ids=container_ids,
-            with_image=with_image,
-            autostart_entries=autostart_entries,
-            organizer_input=organizer_input,
-            vm_id=vm_id,
-            notification_id=notification_id,
-            notification_ids=notification_ids,
-            notification_type=notification_type,
-            importance=importance,
-            offset=offset,
-            limit=limit,
-            list_type=list_type,
-            title=title,
-            subject=subject,
-            description=description,
-            key_id=key_id,
-            name=name,
-            roles=roles,
-            permissions=permissions,
-            permissions_input=permissions_input,
-            names=names,
-            bundled=bundled,
-            restart=restart,
-            url=url,
-            plugin_name=plugin_name,
-            forced=forced,
-            operation_id=operation_id,
-            provider_type=provider_type,
-            config_data=config_data,
-            settings_input=settings_input,
-            ups_config=ups_config,
-            config_input=config_input,
-            comment=comment,
-            sys_model=sys_model,
-            connect_input=connect_input,
-            onboarding_input=onboarding_input,
-            theme_name=theme_name,
-            locale=locale,
-            provider_id=provider_id,
-            token=token,
-            subscription_query=subscription_query,
-            path=path,
-            collect_for=collect_for,
-            timeout=timeout,
-            level=level,
-            context=context,
-        )
+        # rest of the routing operates on the validated model. Build the model
+        # straight from the bound parameters instead of restating all ~60 names by
+        # hand (#4): at this point locals() holds exactly the tool parameters, so
+        # we drop `ctx` (not a model field) and pass the rest. `extra="forbid"`
+        # still catches any signature/model drift, and a contract test asserts the
+        # two field sets stay identical. (locals() is captured into a variable
+        # first because a comprehension has its own scope.)
+        _params = locals()
+        inp = UnraidInput(**{k: v for k, v in _params.items() if k != "ctx"})
 
         handler = _ACTION_DISPATCH.get(action)
         if handler is None:

@@ -48,7 +48,12 @@ async def _handle_oidc(
 
     with tool_error_handler("oidc", subaction, logger):
         logger.info(f"Executing unraid action=oidc subaction={subaction}")
-        data = await _client.make_graphql_request(_OIDC_QUERIES[subaction], variables)
+        # Guard the lookup so an unhandled subaction raises the clean guard below
+        # instead of a KeyError masked as "likely a bug" (#5).
+        query = _OIDC_QUERIES.get(subaction)
+        if query is None:
+            raise ToolError(f"Unhandled oidc subaction '{subaction}' — this is a bug")
+        data = await _client.make_graphql_request(query, variables)
 
         if subaction == "providers":
             providers = data.get("oidcProviders") or []

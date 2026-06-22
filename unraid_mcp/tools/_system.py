@@ -135,7 +135,11 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
     if subaction == "ups_device" and not device_id:
         raise ToolError("device_id is required for system/ups_device")
 
-    query = _SYSTEM_QUERIES[subaction]
+    # Guard the lookup so an in-set-but-unhandled subaction raises a clean error
+    # instead of a raw KeyError (#5). Every real system subaction is a query.
+    query = _SYSTEM_QUERIES.get(subaction)
+    if query is None:
+        raise ToolError(f"Unhandled system subaction '{subaction}' — this is a bug")
     variables: dict[str, Any] | None = {"id": device_id} if subaction == "ups_device" else None
 
     with tool_error_handler("system", subaction, logger):
