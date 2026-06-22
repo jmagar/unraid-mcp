@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/jmagar/unraid-mcp/compare/v2.1.0...v2.1.1) (2026-06-22)
+
+
+### Bug Fixes
+
+* **docker:** pin uv builder to python3.12-bookworm-slim tag ([#86](https://github.com/jmagar/unraid-mcp/issues/86)) ([d0cad00](https://github.com/jmagar/unraid-mcp/commit/d0cad00d2f060868f836fdb7b711292252a6019f))
+
 ## [2.1.0](https://github.com/jmagar/unraid-mcp/compare/v2.0.1...v2.1.0) (2026-06-21)
 
 
