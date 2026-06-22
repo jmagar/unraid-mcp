@@ -78,16 +78,16 @@ test-live:
 
 # Run HTTP end-to-end smoke-test against the local server (auto-reads token from ~/.unraid-mcp/.env)
 test-http:
-    bash tests/mcporter/test-http.sh
+    bash tests/test_live.sh --mode http
 
 # Run HTTP e2e test with auth disabled (for gateway-protected deployments)
 test-http-no-auth:
-    bash tests/mcporter/test-http.sh --skip-auth
+    bash tests/test_live.sh --mode http --skip-auth
 
 # Run HTTP e2e test against a remote URL
 # Usage: just test-http-remote https://unraid.tootie.tv/mcp
 test-http-remote url:
-    bash tests/mcporter/test-http.sh --url {{url}} --skip-auth
+    bash tests/test_live.sh --mode http --url {{url}} --skip-auth
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 

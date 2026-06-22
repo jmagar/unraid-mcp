@@ -175,9 +175,10 @@ count only), both in `unraid_mcp/core/utils.py`.
 The server loads environment variables from multiple locations in order:
 1. `~/.unraid-mcp/.env` (primary — canonical credentials dir, all runtimes)
 2. `~/.unraid-mcp/.env.local` (local overrides, only used if primary is absent)
-3. `../.env.local` (project root local overrides)
-4. `../.env` (project root fallback)
-5. `unraid_mcp/.env` (last resort)
+3. `/app/.env.local` (Docker compat mount)
+4. `<project root>/.env.local` (project root local overrides)
+5. `<project root>/.env` (project root fallback)
+6. `unraid_mcp/.env` (last resort)
 
 ### Error Handling Strategy
 - GraphQL errors are converted to ToolError with descriptive messages
@@ -250,11 +251,14 @@ uv run pytest -x                     # Fail fast on first error
 
 ### Scripts
 ```bash
-# HTTP smoke-test against a live server (non-destructive actions, all domains)
-./tests/mcporter/test-actions.sh [MCP_URL]  # default: http://localhost:6970/mcp
-
-# stdio smoke-test, no running server needed (good for CI)
-./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
+# Canonical live integration test — exercises the full HTTP stack and optionally
+# docker/stdio modes. Direct JSON-RPC for HTTP (no mcporter dependency).
+./tests/test_live.sh                                  # --mode all (default)
+./tests/test_live.sh --mode http                      # http|docker|stdio|all
+./tests/test_live.sh --url http://localhost:6970/mcp --token <tok>
+./tests/test_live.sh --skip-auth                      # OAuth gateway deployments
+./tests/test_live.sh --skip-tools                     # no live Unraid API needed
+./tests/test_live.sh --verbose
 
 # Destructive action smoke-test (confirms guard blocks without confirm=True)
 ./tests/mcporter/test-destructive.sh [MCP_URL]
