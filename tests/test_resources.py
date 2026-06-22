@@ -188,15 +188,46 @@ class TestEnsureSubscriptionsStarted:
             res._subscriptions_started = False
             res._last_startup_error = None
 
-    async def test_failed_autostart_latches_and_records_error(self, _reset_startup_state) -> None:
+    async def test_failed_autostart_without_spawned_loops_retries(
+        self, _reset_startup_state
+    ) -> None:
+        """No loops spawned (config/programming error) -> do NOT latch, retry every call."""
         res = _reset_startup_state
         mock = AsyncMock(side_effect=RuntimeError("ws backend down"))
-        with patch.object(res, "autostart_subscriptions", mock):
+        # No subscription loops were actually spawned.
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            patch.object(res.subscription_manager, "active_subscriptions", {}),
+        ):
             await res.ensure_subscriptions_started()
             await res.ensure_subscriptions_started()
             await res.ensure_subscriptions_started()
-        # Latched after the first attempt — no per-call autostart stampede (PERF-H1).
+        # Flag left unset -> autostart retried on every call (no permanent brick).
+        assert mock.call_count == 3
+        assert res._subscriptions_started is False
+        # Error still recorded and observable instead of swallowed (C1).
+        err = res.get_last_startup_error()
+        assert err is not None and "ws backend down" in err
+
+    async def test_failed_autostart_with_spawned_loops_latches(
+        self, _reset_startup_state
+    ) -> None:
+        """At least one loop spawned (self-healing) -> latch, no per-call stampede (PERF-H1)."""
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=RuntimeError("ws backend down"))
+        # A subscription loop was spawned before the failure -> active_subscriptions non-empty.
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            patch.object(
+                res.subscription_manager, "active_subscriptions", {"systemMetricsCpu": object()}
+            ),
+        ):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        # Latched after the first attempt — spawned loops self-heal via reconnect.
         assert mock.call_count == 1
+        assert res._subscriptions_started is True
         # Error recorded and observable instead of swallowed (C1).
         err = res.get_last_startup_error()
         assert err is not None and "ws backend down" in err

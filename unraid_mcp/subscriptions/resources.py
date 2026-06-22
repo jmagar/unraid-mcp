@@ -38,12 +38,16 @@ def get_last_startup_error() -> str | None:
 async def ensure_subscriptions_started() -> None:
     """Ensure subscriptions are started, called from async context.
 
-    Autostart is attempted at most once. The ``_subscriptions_started`` flag is
-    latched even when the attempt fails, because the per-subscription loops that
-    autostart spawns handle their own reconnection/backoff — re-running the full
-    fan-out on every call when the backend is down would stampede WebSocket
-    connects (PERF-H1). A failure is recorded in ``_last_startup_error`` and
-    surfaced via diagnose and the live resources rather than swallowed (C1).
+    Autostart is attempted at most once on success. On failure the
+    ``_subscriptions_started`` flag is latched **only if at least one subscription
+    loop was actually spawned**: those loops handle their own reconnection/backoff,
+    so re-running the full fan-out on every call (the backend-down case) would only
+    stampede WebSocket connects (PERF-H1). If autostart fails *before* spawning any
+    loop (a config/programming error, never a transient outage — the pre-spawn path
+    is pure in-memory), the flag is left unset so a later call can retry rather than
+    bricking the live resources until a restart. Either way the failure is recorded
+    in ``_last_startup_error`` and surfaced via diagnose / the live resources rather
+    than swallowed (C1).
     """
     global _subscriptions_started, _last_startup_error
 
@@ -64,12 +68,18 @@ async def ensure_subscriptions_started() -> None:
             # later (post-restart) call can retry.
             raise
         except Exception as e:
-            # Real failure: record it and latch anyway. The persistent loops (if any
-            # were spawned) self-heal via reconnect; a config-level failure is now
-            # visible through diagnose / the live resources instead of stampeding.
             _last_startup_error = repr(e)
-            _subscriptions_started = True
-            logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
+            # Latch only if loops were spawned (they self-heal via reconnect). If none
+            # were spawned, leave the flag unset so a later call retries instead of
+            # permanently surfacing the error for the process lifetime.
+            spawned = len(subscription_manager.active_subscriptions) > 0
+            _subscriptions_started = spawned
+            logger.error(
+                "[STARTUP] Failed to start subscriptions (loops spawned=%s): %s",
+                spawned,
+                e,
+                exc_info=True,
+            )
         else:
             _last_startup_error = None
             _subscriptions_started = True
@@ -140,7 +150,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                 f"Subscription autostart failed: {_last_startup_error}. "
                 "Live data is unavailable — check server logs."
             )
-        return json.dumps(fallback)
+        return json.dumps(fallback, indent=2)
 
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
