@@ -20,6 +20,7 @@ from ..core.utils import (
     format_bytes,
     validate_subaction,
 )
+from ..core.validation import validate_str_param
 
 
 # ===========================================================================
@@ -86,6 +87,9 @@ def _validate_path(
 
     Returns the normalized path. Raises ToolError on any violation.
     """
+    # Bound the length (SEC-M2). Applies to every path, including remote rclone
+    # destinations that intentionally skip the prefix check below.
+    validate_str_param(path, label)
     # Reject null bytes — they can truncate strings at the OS layer.
     if "\x00" in path:
         raise ToolError(f"{label} must not contain null bytes")
