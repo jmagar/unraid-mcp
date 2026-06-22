@@ -114,6 +114,14 @@ def redact_sensitive(obj: Any) -> Any:
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
 DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG["disk_operations"], connect=5.0)
 
+# Module-global singletons: the shared connection pool (_http_client) and the
+# upstream token bucket (_rate_limiter, defined below). This in-process state is
+# correct for the single-process (stdio) deployment but is a HORIZONTAL-SCALING
+# BARRIER: N replicas would each open their own pool and run an independent token
+# bucket, so the modeled "100 req/10s" upstream limit would be violated N-fold
+# (each replica thinks it owns the full budget). Scaling horizontally would require
+# a shared/distributed limiter (e.g. Redis-backed) rather than this per-process one.
+#
 # Global connection pool (module-level singleton)
 # Python 3.12+ asyncio.Lock() is safe at module level — no running event loop required
 _http_client: httpx.AsyncClient | None = None
@@ -155,6 +163,10 @@ class _RateLimiter:
             await asyncio.sleep(wait_time)
 
 
+# Module-global singleton (see the horizontal-scaling note near _http_client above):
+# one per-process token bucket. With N replicas each runs its own, so the upstream
+# "100 req/10s" cap is enforced per-process, not fleet-wide — a distributed limiter
+# would be required to bound the aggregate rate across replicas.
 _rate_limiter = _RateLimiter()
 
 
@@ -346,9 +358,7 @@ def _synthesize_idempotent_success(
     if not is_idempotent_error(error_details, operation):
         return None
 
-    logger.warning(
-        f"Idempotent operation '{operation}' - treating as success: {error_details}"
-    )
+    logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
     # Return a success response with the current state information
     return {
         "idempotent_success": True,
