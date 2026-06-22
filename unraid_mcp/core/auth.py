@@ -116,9 +116,7 @@ class BearerAuthMiddleware:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _check_auth(
-        self, headers: list[tuple[bytes, bytes]]
-    ) -> tuple[str, bytes, bytes] | None:
+    def _check_auth(self, headers: list[tuple[bytes, bytes]]) -> tuple[str, bytes, bytes] | None:
         """Validate the Authorization header for a request.
 
         Returns ``None`` when authentication succeeds. On failure, returns a

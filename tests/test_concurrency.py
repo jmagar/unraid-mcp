@@ -36,9 +36,7 @@ class TestAutostartDoubleCheckedLock:
                 # Reset the latch so the slow-path actually runs.
                 res._subscriptions_started = False
 
-                await asyncio.gather(
-                    *[res.ensure_subscriptions_started() for _ in range(20)]
-                )
+                await asyncio.gather(*[res.ensure_subscriptions_started() for _ in range(20)])
 
                 # Despite 20 racing callers, the fan-out fired exactly once.
                 mock_autostart.assert_awaited_once()
@@ -56,9 +54,7 @@ class TestAutostartDoubleCheckedLock:
             ) as mock_autostart:
                 res._subscriptions_started = True
 
-                await asyncio.gather(
-                    *[res.ensure_subscriptions_started() for _ in range(10)]
-                )
+                await asyncio.gather(*[res.ensure_subscriptions_started() for _ in range(10)])
 
                 mock_autostart.assert_not_awaited()
         finally:

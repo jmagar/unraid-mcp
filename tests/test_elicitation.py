@@ -46,9 +46,7 @@ class TestElicitDestructiveConfirmation:
 
     async def test_accept_with_confirmed_true_returns_true(self) -> None:
         """An accept result carrying confirmed=True -> True."""
-        elicit_result = SimpleNamespace(
-            action="accept", data=SimpleNamespace(confirmed=True)
-        )
+        elicit_result = SimpleNamespace(action="accept", data=SimpleNamespace(confirmed=True))
         elicit = AsyncMock(return_value=elicit_result)
         ctx = _make_ctx(elicit)
 
@@ -59,9 +57,7 @@ class TestElicitDestructiveConfirmation:
 
     async def test_accept_with_confirmed_false_returns_false(self) -> None:
         """An accept result with the box unchecked (confirmed=False) -> False."""
-        elicit_result = SimpleNamespace(
-            action="accept", data=SimpleNamespace(confirmed=False)
-        )
+        elicit_result = SimpleNamespace(action="accept", data=SimpleNamespace(confirmed=False))
         elicit = AsyncMock(return_value=elicit_result)
         ctx = _make_ctx(elicit)
 
@@ -102,9 +98,7 @@ class TestGateDestructiveActionElicitationIntegration:
 
     async def test_accept_confirmed_passes_gate(self) -> None:
         """An accepted+confirmed elicitation lets the gate return without raising."""
-        elicit_result = SimpleNamespace(
-            action="accept", data=SimpleNamespace(confirmed=True)
-        )
+        elicit_result = SimpleNamespace(action="accept", data=SimpleNamespace(confirmed=True))
         ctx = _make_ctx(AsyncMock(return_value=elicit_result))
 
         # No exception means the gate passed.
