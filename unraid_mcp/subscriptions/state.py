@@ -171,9 +171,3 @@ class _StateFieldView[V](MutableMapping[str, V]):
 
     def __repr__(self) -> str:
         return f"_StateFieldView({dict(self)!r})"
-
-    def get(self, name: str, default: Any = None) -> Any:
-        try:
-            return self[name]
-        except KeyError:
-            return default
