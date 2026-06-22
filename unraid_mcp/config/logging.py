@@ -53,17 +53,22 @@ class OverwriteFileHandler(logging.FileHandler):
         except OSError:
             self._bytes_written = 0
 
-    def _rotate_if_needed(self) -> None:
+    def _rotate_if_needed(self) -> bool:
         """Overwrite the log file if the accumulated byte count crossed the cap.
 
         Opens a fresh stream (deleting the old file first), atomically swaps it in,
         resets the in-process byte counter, and writes a reset marker. On repeated
         open failure, logging silently continues on the existing stream.
+
+        Returns ``True`` if the file was actually overwritten (the byte counter was
+        reset), so the caller can re-account the in-flight record against the fresh
+        file — the record is written to the *new* file but was counted against the
+        old one before the reset.
         """
         if self._bytes_written < self.max_bytes:
-            return
+            return False
         if not (self.stream and hasattr(self.stream, "name")):
-            return
+            return False
 
         base_path = Path(self.baseFilename)
         # Open new file FIRST, then swap — self.stream is never None.
@@ -83,7 +88,8 @@ class OverwriteFileHandler(logging.FileHandler):
                 )
                 new_stream = None
 
-        if new_stream is not None:
+        rotated = new_stream is not None
+        if rotated:
             old_stream = self.stream
             self.stream = new_stream  # atomic swap
             if old_stream is not None:
@@ -104,6 +110,8 @@ class OverwriteFileHandler(logging.FileHandler):
             super().emit(reset_record)
             self._account_for(reset_record)
 
+        return rotated
+
     def _account_for(self, record: logging.LogRecord) -> None:
         """Add the byte size of a formatted record to the in-process counter."""
         try:
@@ -119,11 +127,18 @@ class OverwriteFileHandler(logging.FileHandler):
         """Emit a record, checking accumulated size periodically and overwriting if needed."""
         self._emit_count += 1
         self._account_for(record)
+        rotated = False
         if self._emit_count == 1 or self._emit_count % self._check_interval == 0:
-            self._rotate_if_needed()
+            rotated = self._rotate_if_needed()
 
         # Emit the original record
         super().emit(record)
+
+        if rotated:
+            # This record was counted against the pre-rotation file but is physically
+            # written to the fresh file above. Re-account it so the new file's counter
+            # reflects what it actually holds (fixes a one-record undercount per cycle).
+            self._account_for(record)
 
 
 def _create_shared_file_handler() -> OverwriteFileHandler:

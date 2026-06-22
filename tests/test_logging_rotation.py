@@ -78,6 +78,36 @@ def test_no_overwrite_below_cap(tmp_path: Path) -> None:
     handler.close()
 
 
+def test_byte_counter_tracks_disk_size_across_overwrite(tmp_path: Path) -> None:
+    """The in-process byte counter must not drift from the real file size, even
+    across an overwrite.
+
+    Writing past the cap forces at least one overwrite; a handful more records are
+    written after. The counter (_bytes_written) must stay within a couple of bytes
+    of the physical file size. Under the pre-fix one-record undercount (the in-flight
+    record written to the fresh file was never re-accounted), this drifts and fails.
+    """
+    log_path = tmp_path / "test.log"
+    # Small cap so a few records cross it and force an overwrite.
+    handler = _make_handler(log_path, max_bytes=200)
+
+    # Enough records to force at least one overwrite...
+    for _ in range(50):
+        handler.emit(_record("A" * 100))
+    # ...then a handful more after the overwrite.
+    for i in range(5):
+        handler.emit(_record(f"tail {i}"))
+    handler.flush()
+
+    disk_size = log_path.stat().st_size
+    drift = abs(handler._bytes_written - disk_size)
+    assert drift <= 2, (
+        f"byte counter drifted from disk size: counter={handler._bytes_written}, "
+        f"disk={disk_size}, drift={drift}"
+    )
+    handler.close()
+
+
 def test_seeds_byte_counter_from_existing_file(tmp_path: Path) -> None:
     """An already-large existing file triggers an overwrite on the first emit."""
     log_path = tmp_path / "test.log"
