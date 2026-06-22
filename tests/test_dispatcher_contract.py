@@ -47,8 +47,10 @@ def test_unraid_input_fields_match_tool_signature() -> None:
 # Domains whose handler ends with an explicit "Unhandled <domain> subaction ...
 # — this is a bug" guard, plus the module + subactions-set attribute to monkeypatch
 # so an in-set-but-unhandled subaction reaches that guard. (vm/user have no guard:
-# they are structurally exhaustive. live/health use special dispatch and are
-# covered by their own suites.)
+# they are structurally exhaustive.) live and health ALSO have this guard but use
+# special dispatch (live validates against SNAPSHOT_ACTIONS | COLLECT_ACTIONS; health
+# against _HEALTH_SUBACTIONS) that the generic sweep can't drive, so they get the two
+# dedicated tests below — they are NOT exercised by this parametrized sweep.
 _GUARDED_DOMAINS = {
     "system": ("unraid_mcp.tools._system", "_SYSTEM_SUBACTIONS"),
     "array": ("unraid_mcp.tools._array", "_ARRAY_SUBACTIONS"),
@@ -85,3 +87,47 @@ async def test_domain_fallthrough_guard_fires(
     tool_fn = _make_tool()
     with pytest.raises(ToolError, match=rf"Unhandled {domain} subaction"):
         await tool_fn(action=domain, subaction=fake, confirm=True)
+
+
+async def test_live_fallthrough_guard_fires(
+    monkeypatch: pytest.MonkeyPatch, mock_graphql_request
+) -> None:
+    """live validates against SNAPSHOT_ACTIONS | COLLECT_ACTIONS, then dispatches by
+    explicit subaction branches. A fake key in COLLECT_ACTIONS passes validation but
+    matches none of the real branches (log_tail / notification_feed /
+    plugin_install_updates), so it falls through to the clean fall-through guard with
+    NO WebSocket/network call. (Injecting into SNAPSHOT_ACTIONS instead would hit the
+    `subaction in SNAPSHOT_ACTIONS` branch and attempt a real subscription.)"""
+    from unraid_mcp.subscriptions import queries
+
+    fake = "__unhandled_live_probe__"
+    monkeypatch.setattr(queries, "COLLECT_ACTIONS", queries.COLLECT_ACTIONS | {fake: ""})
+
+    mock_graphql_request.return_value = {}
+    tool_fn = _make_tool()
+    with pytest.raises(ToolError, match=r"Unhandled live subaction"):
+        await tool_fn(action="live", subaction=fake)
+
+
+async def test_health_fallthrough_guard_fires(
+    monkeypatch: pytest.MonkeyPatch, mock_graphql_request
+) -> None:
+    """health validates against _HEALTH_SUBACTIONS, then dispatches by explicit
+    subaction branches. A fake added to the set passes validation but is none of
+    setup / test_connection / check / diagnose, so it falls through to the clean
+    fall-through guard with NO network call."""
+    import unraid_mcp.tools._health as _health
+    import unraid_mcp.tools.unraid as _unraid
+
+    fake = "__unhandled_health_probe__"
+    augmented = _health._HEALTH_SUBACTIONS | {fake}
+    # `unraid.py` does `from ._health import _HEALTH_SUBACTIONS`, binding the name in
+    # its own namespace — patch the source module AND the read site so validation sees
+    # the fake regardless of which reference the handler resolves.
+    monkeypatch.setattr(_health, "_HEALTH_SUBACTIONS", augmented)
+    monkeypatch.setattr(_unraid, "_HEALTH_SUBACTIONS", augmented)
+
+    mock_graphql_request.return_value = {}
+    tool_fn = _make_tool()
+    with pytest.raises(ToolError, match=r"Unhandled health subaction"):
+        await tool_fn(action="health", subaction=fake)

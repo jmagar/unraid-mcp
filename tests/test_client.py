@@ -858,3 +858,43 @@ class TestRateLimitRetry:
             pytest.raises(ToolError, match="10 seconds"),
         ):
             await make_graphql_request("{ info }")
+
+
+# ---------------------------------------------------------------------------
+# make_graphql_request — rate limiter wiring
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiterWiring:
+    """Pin that make_graphql_request actually goes through the singleton limiter."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_config(self):
+        with (
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
+        ):
+            yield
+
+    async def test_acquire_awaited_once_on_success(self) -> None:
+        """A normal successful request must acquire exactly one rate-limiter token.
+
+        Guards against the acquire() call being dropped: without this assertion,
+        removing `await _rate_limiter.acquire()` from make_graphql_request would
+        pass the whole suite silently.
+        """
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"info": {"os": "Unraid"}}}
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+
+        with (
+            patch("unraid_mcp.core.client._rate_limiter.acquire", new_callable=AsyncMock) as acquire,
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+        ):
+            result = await make_graphql_request("{ info { os } }")
+
+        assert result == {"info": {"os": "Unraid"}}
+        acquire.assert_awaited_once()

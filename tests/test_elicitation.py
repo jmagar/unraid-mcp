@@ -124,3 +124,38 @@ class TestGateDestructiveActionElicitationIntegration:
             await gate_destructive_action(
                 ctx, "stop_array", self._DESTRUCTIVE, confirm=False, description=self._DESC
             )
+
+    async def test_dict_description_present_key_used_in_message(self) -> None:
+        """A dict description keyed by the gated subaction feeds that text to elicit."""
+        marker = "ZAPP_BRANNIGAN_DELETES_THE_ARRAY_UNIQUE_MARKER"
+        elicit_result = SimpleNamespace(action="accept", data=SimpleNamespace(confirmed=True))
+        elicit = AsyncMock(return_value=elicit_result)
+        ctx = _make_ctx(elicit)
+
+        await gate_destructive_action(
+            ctx,
+            "stop_array",
+            self._DESTRUCTIVE,
+            confirm=False,
+            description={"stop_array": marker},
+        )
+
+        elicit.assert_awaited_once()
+        message = elicit.await_args.kwargs["message"]
+        assert marker in message
+
+    async def test_dict_description_missing_key_raises_before_elicit(self) -> None:
+        """A dict missing the gated subaction's key raises ToolError, never eliciting."""
+        elicit = AsyncMock()
+        ctx = _make_ctx(elicit)
+
+        with pytest.raises(ToolError, match="Missing destructive-action description"):
+            await gate_destructive_action(
+                ctx,
+                "stop_array",
+                self._DESTRUCTIVE,
+                confirm=False,
+                description={"some_other_action": "Not for stop_array."},
+            )
+
+        elicit.assert_not_awaited()
