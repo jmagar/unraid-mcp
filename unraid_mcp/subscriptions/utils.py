@@ -72,10 +72,13 @@ def build_connection_init() -> dict[str, Any]:
     return msg
 
 
-def _analyze_subscription_status(
+def analyze_subscription_status(
     status: dict[str, Any],
 ) -> tuple[int, list[dict[str, Any]]]:
     """Analyze subscription status dict, returning error count and connection issues.
+
+    Public helper (#19): the tools layer consumes this across the package boundary,
+    so it carries no leading underscore.
 
     Only reports connection_issues for subscriptions that are currently in a
     failure state (not recovered ones that happen to have a stale last_error).

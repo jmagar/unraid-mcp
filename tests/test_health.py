@@ -188,7 +188,7 @@ class TestHealthActions:
             patch("unraid_mcp.subscriptions.manager.subscription_manager", mock_manager),
             patch("unraid_mcp.subscriptions.resources.ensure_subscriptions_started", AsyncMock()),
             patch(
-                "unraid_mcp.subscriptions.utils._analyze_subscription_status",
+                "unraid_mcp.subscriptions.utils.analyze_subscription_status",
                 return_value=(0, []),
             ),
             patch("unraid_mcp.server._error_middleware", mock_error),
@@ -209,7 +209,7 @@ class TestHealthActions:
             patch("unraid_mcp.subscriptions.manager.subscription_manager", mock_manager),
             patch("unraid_mcp.subscriptions.resources.ensure_subscriptions_started", AsyncMock()),
             patch(
-                "unraid_mcp.subscriptions.utils._analyze_subscription_status",
+                "unraid_mcp.subscriptions.utils.analyze_subscription_status",
                 return_value=(0, []),
             ),
             pytest.raises(ToolError, match="Failed to execute health/diagnose"),

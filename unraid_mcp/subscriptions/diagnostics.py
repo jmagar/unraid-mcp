@@ -38,7 +38,7 @@ from .protocol import (
 )
 from .resources import ensure_subscriptions_started, get_last_startup_error
 from .utils import (
-    _analyze_subscription_status,
+    analyze_subscription_status,
     build_ws_ssl_context,
     build_ws_url,
 )
@@ -254,7 +254,7 @@ async def diagnose_subscriptions() -> dict[str, Any]:
 
         # Analyze connection issues and error counts via shared helper.
         # Gates connection_issues on current failure state (Bug 5 fix).
-        error_count, connection_issues = _analyze_subscription_status(status)
+        error_count, connection_issues = analyze_subscription_status(status)
 
         # Calculate WebSocket URL — apply safe_display_url to avoid leaking
         # credentials (user:pass@host) or the raw API key embedded in the URL.

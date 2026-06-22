@@ -125,7 +125,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
         is_configured,
     )
     from ..core.utils import safe_display_url
-    from ..subscriptions.utils import _analyze_subscription_status
+    from ..subscriptions.utils import analyze_subscription_status
 
     if subaction == "setup":
         if is_configured():
@@ -191,7 +191,7 @@ async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] 
 
             await ensure_subscriptions_started()
             status = await subscription_manager.get_subscription_status()
-            error_count, connection_issues = _analyze_subscription_status(status)
+            error_count, connection_issues = analyze_subscription_status(status)
             return {
                 "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
                 "environment": {
