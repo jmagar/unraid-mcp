@@ -89,7 +89,27 @@ jobs:
           sbom: true
           provenance: mode=max
 
-      - name: Scan image for vulnerabilities
+      # Pre-merge (pull_request) gate: the build above runs with push:false, so the
+      # image only exists locally and nothing has shipped yet. Scan it here with a
+      # non-zero exit-code so CRITICAL/HIGH CVEs *block the merge* before they can
+      # ever reach the registry. ignore-unfixed avoids failing on CVEs with no
+      # available patch (those are tracked via the advisory SARIF upload below).
+      - name: Scan image for vulnerabilities (blocking, pre-merge)
+        if: github.event_name == 'pull_request'
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      # Post-push (tag/branch) scan is intentionally ADVISORY (non-blocking): the image
+      # was already pushed above (push:true), so this can only report — not gate — and it
+      # only uploads SARIF to GitHub Security. This push-then-scan ordering is deliberate:
+      # it keeps releases fast (publish immediately, surface CVEs afterwards). The blocking
+      # gate that actually stops vulnerable images lives in the pull_request step above.
+      - name: Scan image for vulnerabilities (advisory, post-push)
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
