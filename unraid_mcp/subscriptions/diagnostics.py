@@ -162,8 +162,8 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
         ssl_context = build_ws_ssl_context(ws_url)
 
         # Shared handshake: connect -> connection_init -> connection_ack -> subscribe.
-        # ack_timeout=None keeps the historical bare recv() (no deadline) on the ack;
-        # ping_interval=30 matches the original probe configuration.
+        # ack_timeout=None gives the ack recv() no deadline; the probe uses the slower
+        # _WS_PROBE_PING_INTERVAL keepalive cadence (vs the manager's _WS_PING_INTERVAL).
         try:
             async with graphql_ws_session(
                 ws_url,
@@ -175,9 +175,9 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
                 ping_interval=_WS_PROBE_PING_INTERVAL,
                 ping_timeout=_WS_PING_TIMEOUT,
             ) as session:
-                # Wait for the first response with a timeout. The probe deliberately
-                # does NOT normalize the frame — it returns whatever the server sent
-                # first so a developer can inspect the raw subscription response.
+                # Wait for the first frame with a timeout. By default the raw frame is
+                # withheld (SEC-M1, see below) — only its receipt is reported; set the
+                # UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE flag to echo the upstream payload.
                 try:
                     response = await asyncio.wait_for(
                         session.ws.recv(), timeout=_WS_FIRST_FRAME_TIMEOUT

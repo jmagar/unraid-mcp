@@ -303,7 +303,8 @@ async def _post_with_429_retry(
         post_kwargs: Keyword args for ``client.post`` (json/headers/timeout)
 
     Returns:
-        The first non-429 response (or the final 429 only via the persisted-429 error path)
+        The first non-429 response. A 429 that persists past all retries raises
+        instead of returning (see Raises).
 
     Raises:
         ToolError: If no response is received, or 429 persists after 3 retries
