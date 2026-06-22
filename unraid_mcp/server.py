@@ -10,6 +10,7 @@ import secrets
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import set_key
@@ -69,10 +70,10 @@ def _is_loopback_host(host: str) -> bool:
     return bool(mapped is not None and mapped.is_loopback)
 
 
-def _chmod_safe(path: object, mode: int, *, strict: bool = False) -> None:
+def _chmod_safe(path: Path, mode: int, *, strict: bool = False) -> None:
     """Best-effort chmod, with optional fail-closed behavior for secrets."""
     try:
-        path.chmod(mode)  # type: ignore[union-attr]
+        path.chmod(mode)
     except PermissionError as exc:
         if strict:
             raise RuntimeError(f"Failed to secure permissions on {path}") from exc
@@ -351,10 +352,10 @@ def run_server() -> None:
                     #    no auth.  MCP clients probe this after a 401 to discover how to
                     #    authenticate; responding correctly stops the 401 cascade.
                     # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
-                    ASGIMiddleware(HealthMiddleware),  # type: ignore
-                    ASGIMiddleware(WellKnownMiddleware),  # type: ignore
+                    ASGIMiddleware(HealthMiddleware),
+                    ASGIMiddleware(WellKnownMiddleware),
                     ASGIMiddleware(
-                        BearerAuthMiddleware,  # type: ignore
+                        BearerAuthMiddleware,
                         token=_settings.UNRAID_MCP_BEARER_TOKEN or "",
                         disabled=_settings.UNRAID_MCP_DISABLE_HTTP_AUTH,
                     ),
