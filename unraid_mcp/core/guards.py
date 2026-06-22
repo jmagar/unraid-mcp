@@ -87,8 +87,13 @@ async def gate_destructive_action(
         destructive_actions: Set of action names considered destructive.
         confirm: When True, bypasses elicitation and proceeds immediately.
         description: Human-readable description of the action's impact.
-            Pass a str when one description covers all destructive actions.
-            Pass a dict[action_name, description] when descriptions differ.
+            Convention: prefer the dict[subaction, description] form, keyed by
+            subaction, so each destructive action carries its own message — this
+            is what the multi-destructive domains pass. A bare str is the
+            single-action shorthand: it applies to whichever destructive action
+            is gated (typically a domain with exactly one). When a dict is
+            passed, the gated subaction MUST have an entry; a missing key raises
+            ToolError (see below) rather than silently proceeding.
     """
     if action not in destructive_actions:
         return

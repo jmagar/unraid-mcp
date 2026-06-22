@@ -101,6 +101,28 @@ _SYSTEM_QUERIES: dict[str, str] = {
 
 _SYSTEM_SUBACTIONS: set[str] = set(_SYSTEM_QUERIES)
 
+# Subactions whose response is a single object echoed back under a stable key.
+# Hoisted to module scope so the dispatch table isn't rebuilt on every call.
+_SYSTEM_SIMPLE_KEYS: dict[str, str] = {
+    "registration": "registration",
+    "variables": "vars",
+    "metrics": "metrics",
+    "config": "config",
+    "owner": "owner",
+    "flash": "flash",
+    "ups_config": "upsConfiguration",
+    "server_time": "systemTime",
+}
+
+# Subactions returning a list: maps subaction -> (response_key, output_key).
+# Hoisted to module scope (see above).
+_SYSTEM_LIST_ACTIONS: dict[str, tuple[str, str]] = {
+    "services": ("services", "services"),
+    "servers": ("servers", "servers"),
+    "ups_devices": ("upsDevices", "ups_devices"),
+    "timezones": ("timeZoneOptions", "timezones"),
+}
+
 
 def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     counts = {
@@ -276,18 +298,8 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 raise ToolError(f"UPS device '{device_id}' not found")
             return dict(result)
 
-        simple_dict = {
-            "registration": "registration",
-            "variables": "vars",
-            "metrics": "metrics",
-            "config": "config",
-            "owner": "owner",
-            "flash": "flash",
-            "ups_config": "upsConfiguration",
-            "server_time": "systemTime",
-        }
-        if subaction in simple_dict:
-            result = data.get(simple_dict[subaction])
+        if subaction in _SYSTEM_SIMPLE_KEYS:
+            result = data.get(_SYSTEM_SIMPLE_KEYS[subaction])
             if result is None:
                 if subaction == "registration":
                     raise ToolError(
@@ -297,14 +309,8 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 return {}
             return dict(result)
 
-        list_actions = {
-            "services": ("services", "services"),
-            "servers": ("servers", "servers"),
-            "ups_devices": ("upsDevices", "ups_devices"),
-            "timezones": ("timeZoneOptions", "timezones"),
-        }
-        if subaction in list_actions:
-            response_key, output_key = list_actions[subaction]
+        if subaction in _SYSTEM_LIST_ACTIONS:
+            response_key, output_key = _SYSTEM_LIST_ACTIONS[subaction]
             raw_items = data.get(response_key) or []
             items = list(raw_items) if isinstance(raw_items, list) else []
             # timezones returns 400+ unbounded IANA entries — cap it and surface

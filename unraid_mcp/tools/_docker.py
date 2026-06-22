@@ -342,6 +342,13 @@ async def _handle_docker(
             )
 
         if subaction == "restart":
+            # Resolution is by name (or short id), which `docker.container(id:)`
+            # cannot do — that field takes a full PrefixedID! and offers no
+            # name lookup. Unlike docker/details (which used the single-container
+            # field only to skip the *heavy* detail payload), restart's stop/start
+            # mutations take a PrefixedID! and have no payload to trim, so the
+            # minimal `{ id names }` resolve scan is the smallest correct fetch.
+            # A full prefixed id short-circuits below with no request at all.
             actual_id = await _resolve_container_id(container_id or "", strict=True)
             stop_data = await _client.make_graphql_request(
                 _DOCKER_MUTATIONS["stop"],
