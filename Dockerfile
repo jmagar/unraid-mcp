@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 # ── Stage 1: Build ──────────────────────────────────────────────────────────────
-FROM ghcr.io/astral-sh/uv@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS builder
-# tag: python3.12-bookworm-slim  (digest pinned for reproducibility; Dependabot bumps it)
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS builder
+# Tag in the ref pins Dependabot to the python3.12-bookworm-slim variant (has a shell
+# for `RUN uv sync`). Without the tag, Dependabot tracks :latest — a FROM-scratch,
+# binary-only image with no /bin/sh — and the build breaks. Digest pinned for reproducibility.
 
 WORKDIR /app
 
