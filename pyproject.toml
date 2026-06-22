@@ -71,13 +71,21 @@ classifiers = [
 # ============================================================================
 dependencies = [
     "python-dotenv>=1.1.1",
-    "fastmcp>=3.0.0",
+    # Upper-bounds on the two churn-prone deps: fastmcp and websockets have both
+    # shipped breaking changes across majors, and the WS layer is version-sensitive.
+    # Caps prevent `uv lock` from silently jumping a major (uv.lock pins the exact
+    # resolved version within the range).
+    "fastmcp>=3.0.0,<4.0.0",
     "httpx>=0.28.1",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.35.0",
-    "websockets>=15.0.1",
+    "websockets>=15.0.1,<17.0.0",
     "rich>=14.1.0",
     "pydantic-settings>=2.0",
+    # Runtime dependency for AST-based validation of the raw GraphQL subscription
+    # string accepted by `subscriptions/test_query` — the allowlist is enforced on
+    # the parsed operation (every top-level field), not a regex. (Was dev-only.)
+    "graphql-core>=3.2.0",
 ]
 
 # ============================================================================
@@ -261,7 +269,11 @@ filterwarnings = [
 [tool.coverage.run]
 source = ["unraid_mcp"]
 branch = true
-parallel = true
+# `parallel` is intentionally OFF: CI runs a single pytest process, so per-process
+# `.coverage.<suffix>` files (which need an explicit `coverage combine`) would only
+# add a silent-empty-report failure mode. Re-enable ONLY alongside a `coverage
+# combine` step if the suite is ever split (e.g. pytest-xdist `-n auto`).
+parallel = false
 data_file = ".cache/.coverage"
 omit = [
     "*/tests/*",
@@ -312,6 +324,5 @@ dev = [
     "ruff>=0.12.8",
     "build>=1.2.2",
     "twine>=6.0.1",
-    "graphql-core>=3.2.0",
     "hypothesis>=6.151.9",
 ]
