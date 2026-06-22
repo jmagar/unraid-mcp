@@ -170,3 +170,55 @@ class TestAutoStartDisabledFallback:
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
         assert json.loads(result)["status"] == "connecting"
+
+
+class TestEnsureSubscriptionsStarted:
+    """C1 / PERF-H1: a failed autostart must latch (no stampede) and surface the
+    error, instead of being silently swallowed and re-attempted on every call."""
+
+    @pytest.fixture
+    def _reset_startup_state(self):
+        import unraid_mcp.subscriptions.resources as res
+
+        res._subscriptions_started = False
+        res._last_startup_error = None
+        try:
+            yield res
+        finally:
+            res._subscriptions_started = False
+            res._last_startup_error = None
+
+    async def test_failed_autostart_latches_and_records_error(self, _reset_startup_state) -> None:
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=RuntimeError("ws backend down"))
+        with patch.object(res, "autostart_subscriptions", mock):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        # Latched after the first attempt — no per-call autostart stampede (PERF-H1).
+        assert mock.call_count == 1
+        # Error recorded and observable instead of swallowed (C1).
+        err = res.get_last_startup_error()
+        assert err is not None and "ws backend down" in err
+
+    async def test_successful_autostart_clears_error(self, _reset_startup_state) -> None:
+        res = _reset_startup_state
+        mock = AsyncMock()
+        with patch.object(res, "autostart_subscriptions", mock):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        assert mock.call_count == 1
+        assert res.get_last_startup_error() is None
+
+    async def test_cancellation_does_not_latch(self, _reset_startup_state) -> None:
+        import asyncio
+
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=asyncio.CancelledError())
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await res.ensure_subscriptions_started()
+        # Shutdown path: flag NOT latched so a later call can retry.
+        assert res._subscriptions_started is False

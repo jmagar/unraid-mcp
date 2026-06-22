@@ -1,7 +1,10 @@
 """Tests for _validate_subscription_query in diagnostics.py.
 
 Security-critical: this function is the only guard against arbitrary GraphQL
-operations (mutations, queries) being sent over the WebSocket subscription channel.
+operations (mutations, queries) or non-allowlisted subscription fields being sent
+over the authenticated WebSocket subscription channel. Validation runs on the
+parsed GraphQL AST (graphql-core), which closes the multi-field / alias /
+argument smuggling bypasses a first-field-only regex allowlist permits (SEC-H1).
 """
 
 import pytest
@@ -14,124 +17,127 @@ from unraid_mcp.subscriptions.diagnostics import (
 
 
 class TestValidateSubscriptionQueryAllowed:
-    """All whitelisted subscription names must be accepted."""
+    """All whitelisted subscription field names must be accepted."""
 
     @pytest.mark.parametrize("sub_name", sorted(_ALLOWED_SUBSCRIPTION_FIELDS))
     def test_all_allowed_names_accepted(self, sub_name: str) -> None:
         query = f"subscription {{ {sub_name} {{ data }} }}"
-        result = _validate_subscription_query(query)
-        assert result == sub_name
+        assert _validate_subscription_query(query) == sub_name
 
     def test_returns_extracted_subscription_name(self) -> None:
-        query = "subscription { cpu { usage } }"
-        assert _validate_subscription_query(query) == "cpu"
+        assert _validate_subscription_query("subscription { cpu { usage } }") == "cpu"
 
     def test_leading_whitespace_accepted(self) -> None:
-        query = "  subscription { memory { free } }"
-        assert _validate_subscription_query(query) == "memory"
+        assert _validate_subscription_query("  subscription { memory { free } }") == "memory"
 
     def test_multiline_query_accepted(self) -> None:
         query = "subscription {\n  cpu {\n    used\n  }\n}"
         assert _validate_subscription_query(query) == "cpu"
 
-    def test_case_insensitive_subscription_keyword(self) -> None:
-        """'SUBSCRIPTION' should be accepted (regex uses IGNORECASE)."""
-        query = "SUBSCRIPTION { cpu { usage } }"
-        assert _validate_subscription_query(query) == "cpu"
+    def test_subfield_named_like_keyword_accepted(self) -> None:
+        """A *subfield* literally named like 'mutation'/'query' is fine — only the
+        operation type matters. (The old bare-word regex false-rejected these.)"""
+        assert _validate_subscription_query("subscription { cpu { mutationField } }") == "cpu"
+        assert _validate_subscription_query("subscription { cpu { queryResult } }") == "cpu"
 
 
-class TestValidateSubscriptionQueryForbiddenKeywords:
-    """Queries containing 'mutation' or 'query' as standalone keywords must be rejected."""
+class TestValidateSubscriptionQueryWrongOperation:
+    """Non-subscription operations must be rejected."""
 
-    def test_mutation_keyword_rejected(self) -> None:
-        query = 'mutation { docker { start(id: "abc") } }'
-        with pytest.raises(ToolError, match="must be a subscription"):
-            _validate_subscription_query(query)
+    def test_mutation_operation_rejected(self) -> None:
+        with pytest.raises(ToolError, match="not a mutation or query"):
+            _validate_subscription_query('mutation { docker { start(id: "abc") } }')
 
-    def test_query_keyword_rejected(self) -> None:
-        query = "query { info { os { platform } } }"
-        with pytest.raises(ToolError, match="must be a subscription"):
-            _validate_subscription_query(query)
+    def test_query_operation_rejected(self) -> None:
+        with pytest.raises(ToolError, match="not a mutation or query"):
+            _validate_subscription_query("query { info { os { platform } } }")
 
-    def test_mutation_embedded_in_subscription_rejected(self) -> None:
-        """'mutation' anywhere in the string triggers rejection."""
-        query = "subscription { cpuSubscription { mutation data } }"
-        with pytest.raises(ToolError, match="must be a subscription"):
-            _validate_subscription_query(query)
-
-    def test_query_embedded_in_subscription_rejected(self) -> None:
-        query = "subscription { cpuSubscription { query data } }"
-        with pytest.raises(ToolError, match="must be a subscription"):
-            _validate_subscription_query(query)
-
-    def test_mutation_case_insensitive_rejection(self) -> None:
-        query = 'MUTATION { docker { start(id: "abc") } }'
-        with pytest.raises(ToolError, match="must be a subscription"):
-            _validate_subscription_query(query)
-
-    def test_mutation_field_identifier_not_rejected(self) -> None:
-        """'mutationField' as an identifier must NOT be rejected — only standalone 'mutation'."""
-        # This tests the \b word boundary in _FORBIDDEN_KEYWORDS
-        query = "subscription { cpu { mutationField } }"
-        # Should not raise — "mutationField" is an identifier, not the keyword
-        result = _validate_subscription_query(query)
-        assert result == "cpu"
-
-    def test_query_field_identifier_not_rejected(self) -> None:
-        """'queryResult' as an identifier must NOT be rejected."""
-        query = "subscription { cpu { queryResult } }"
-        result = _validate_subscription_query(query)
-        assert result == "cpu"
+    def test_uppercase_operation_keyword_rejected(self) -> None:
+        """GraphQL is case-sensitive: 'SUBSCRIPTION' is not a valid operation
+        keyword, so the document fails to parse (the old IGNORECASE regex wrongly
+        accepted it and would have forwarded an invalid query upstream)."""
+        with pytest.raises(ToolError, match="not a valid GraphQL document"):
+            _validate_subscription_query("SUBSCRIPTION { cpu { usage } }")
 
 
 class TestValidateSubscriptionQueryInvalidFormat:
-    """Queries that don't match the expected subscription format must be rejected."""
+    """Syntactically invalid documents must be rejected as such."""
 
-    def test_empty_string_rejected(self) -> None:
-        with pytest.raises(ToolError, match="must start with 'subscription'"):
-            _validate_subscription_query("")
-
-    def test_plain_identifier_rejected(self) -> None:
-        with pytest.raises(ToolError, match="must start with 'subscription'"):
-            _validate_subscription_query("cpuSubscription { usage }")
-
-    def test_missing_operation_body_rejected(self) -> None:
-        with pytest.raises(ToolError, match="must start with 'subscription'"):
-            _validate_subscription_query("subscription")
-
-    def test_subscription_without_field_rejected(self) -> None:
-        """subscription { } with no field name doesn't match the pattern."""
-        with pytest.raises(ToolError, match="must start with 'subscription'"):
-            _validate_subscription_query("subscription {  }")
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "",
+            "cpuSubscription { usage }",
+            "subscription",
+            "subscription {  }",
+        ],
+    )
+    def test_invalid_graphql_rejected(self, bad: str) -> None:
+        with pytest.raises(ToolError, match="not a valid GraphQL document"):
+            _validate_subscription_query(bad)
 
 
 class TestValidateSubscriptionQueryUnknownName:
-    """Subscription names not in the whitelist must be rejected even if format is valid."""
+    """Valid subscriptions selecting a non-allowlisted field must be rejected."""
 
     def test_unknown_subscription_name_rejected(self) -> None:
-        query = "subscription { unknownSubscription { data } }"
         with pytest.raises(ToolError, match="not allowed"):
-            _validate_subscription_query(query)
+            _validate_subscription_query("subscription { unknownSubscription { data } }")
 
     def test_error_message_includes_allowed_list(self) -> None:
-        """Error message must list the allowed subscription field names for usability."""
-        query = "subscription { badSub { data } }"
         with pytest.raises(ToolError, match="Allowed fields"):
-            _validate_subscription_query(query)
+            _validate_subscription_query("subscription { badSub { data } }")
 
     def test_arbitrary_field_name_rejected(self) -> None:
-        query = "subscription { users { id email } }"
         with pytest.raises(ToolError, match="not allowed"):
-            _validate_subscription_query(query)
+            _validate_subscription_query("subscription { users { id email } }")
 
     def test_logfile_rejected_security(self) -> None:
         """logFile allows arbitrary file reads via path argument — must be blocked."""
-        query = 'subscription { logFile(path: "/etc/shadow") { content } }'
         with pytest.raises(ToolError, match="not allowed"):
-            _validate_subscription_query(query)
+            _validate_subscription_query(
+                'subscription { logFile(path: "/etc/shadow") { content } }'
+            )
 
     def test_close_but_not_whitelisted_rejected(self) -> None:
         """'cpuSubscription' (old operation-style name) is not in the field allow-list."""
-        query = "subscription { cpuSubscription { usage } }"
         with pytest.raises(ToolError, match="not allowed"):
+            _validate_subscription_query("subscription { cpuSubscription { usage } }")
+
+
+class TestValidateSubscriptionQueryBypassRegression:
+    """SEC-H1: a regex allowlist that checks only the first selected field is
+    bypassable. The AST validator must reject every smuggling vector below.
+
+    These tests would PASS validation (i.e. fail to reject) under the old
+    first-field-only regex — they pin the fix.
+    """
+
+    def test_second_disallowed_field_rejected(self) -> None:
+        """The PoC: an allowed first field plus a disallowed second field. The old
+        regex returned 'cpu' and forwarded the whole query to the authed WS."""
+        with pytest.raises(ToolError, match="exactly one top-level field"):
+            _validate_subscription_query("subscription { cpu { used } secretAdminField { token } }")
+
+    def test_two_allowlisted_fields_still_rejected(self) -> None:
+        """Even two *allowed* fields are rejected — the probe tests exactly one."""
+        with pytest.raises(ToolError, match="exactly one top-level field"):
+            _validate_subscription_query("subscription { cpu { used } memory { free } }")
+
+    def test_alias_smuggling_rejected(self) -> None:
+        """An allowed-looking alias over a disallowed *real* field must be rejected —
+        the real field name is what is validated."""
+        with pytest.raises(ToolError, match="not allowed"):
+            _validate_subscription_query("subscription { cpu: secretAdminField { token } }")
+
+    def test_alias_over_allowed_field_accepted(self) -> None:
+        """An alias over an allowed real field is fine (real name is allowlisted)."""
+        assert _validate_subscription_query("subscription { myCpu: cpu { used } }") == "cpu"
+
+    def test_top_level_fragment_spread_rejected(self) -> None:
+        """A top-level fragment spread could smuggle a disallowed field — reject it."""
+        query = (
+            "subscription { ...evil } fragment evil on Subscription { secretAdminField { token } }"
+        )
+        with pytest.raises(ToolError):
             _validate_subscription_query(query)

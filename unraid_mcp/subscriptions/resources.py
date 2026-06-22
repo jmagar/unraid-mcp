@@ -21,14 +21,31 @@ from .snapshot import subscribe_once
 
 # Global flag to track subscription startup
 _subscriptions_started = False
+# Most recent autostart failure (repr), or None if the last attempt succeeded.
+# Surfaced via get_last_startup_error() so a failed startup is observable instead
+# of silently swallowed (C1).
+_last_startup_error: str | None = None
 _startup_lock: Final[asyncio.Lock] = asyncio.Lock()
 
 _terminal_states = frozenset({"failed", "auth_failed", "max_retries_exceeded"})
 
 
+def get_last_startup_error() -> str | None:
+    """Return the most recent autostart failure (repr), or None if it succeeded."""
+    return _last_startup_error
+
+
 async def ensure_subscriptions_started() -> None:
-    """Ensure subscriptions are started, called from async context."""
-    global _subscriptions_started
+    """Ensure subscriptions are started, called from async context.
+
+    Autostart is attempted at most once. The ``_subscriptions_started`` flag is
+    latched even when the attempt fails, because the per-subscription loops that
+    autostart spawns handle their own reconnection/backoff — re-running the full
+    fan-out on every call when the backend is down would stampede WebSocket
+    connects (PERF-H1). A failure is recorded in ``_last_startup_error`` and
+    surfaced via diagnose and the live resources rather than swallowed (C1).
+    """
+    global _subscriptions_started, _last_startup_error
 
     # Fast-path: skip lock if already started
     if _subscriptions_started:
@@ -42,10 +59,21 @@ async def ensure_subscriptions_started() -> None:
         logger.info("[STARTUP] First async operation detected, starting subscriptions...")
         try:
             await autostart_subscriptions()
+        except asyncio.CancelledError:
+            # Shutdown in progress — do NOT latch; let cancellation propagate so a
+            # later (post-restart) call can retry.
+            raise
+        except Exception as e:
+            # Real failure: record it and latch anyway. The persistent loops (if any
+            # were spawned) self-heal via reconnect; a config-level failure is now
+            # visible through diagnose / the live resources instead of stampeding.
+            _last_startup_error = repr(e)
+            _subscriptions_started = True
+            logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
+        else:
+            _last_startup_error = None
             _subscriptions_started = True
             logger.info("[STARTUP] Subscriptions started successfully")
-        except Exception as e:
-            logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
 
 
 async def autostart_subscriptions() -> None:
@@ -101,12 +129,18 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         if result is not None:
             data, fetched_at = result
             return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
-        return json.dumps(
-            {
-                "status": "No subscription data yet",
-                "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
-            }
-        )
+        fallback: dict[str, Any] = {
+            "status": "No subscription data yet",
+            "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
+        }
+        if _last_startup_error is not None:
+            fallback["status"] = "error"
+            fallback["startup_error"] = _last_startup_error
+            fallback["message"] = (
+                f"Subscription autostart failed: {_last_startup_error}. "
+                "Live data is unavailable — check server logs."
+            )
+        return json.dumps(fallback)
 
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
@@ -137,12 +171,20 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                         return json.dumps(fallback_data, indent=2)
                 except Exception as e:
                     logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
-            return json.dumps(
-                {
-                    "status": "connecting",
-                    "message": f"Subscription '{action}' is starting. Retry in a moment.",
-                }
-            )
+            placeholder: dict[str, Any] = {
+                "status": "connecting",
+                "message": f"Subscription '{action}' is starting. Retry in a moment.",
+            }
+            if _last_startup_error is not None:
+                # Autostart failed permanently — surface it instead of a perpetual
+                # "connecting" placeholder that hides the dead feature (C1).
+                placeholder["status"] = "error"
+                placeholder["startup_error"] = _last_startup_error
+                placeholder["message"] = (
+                    f"Subscription '{action}' unavailable: autostart failed "
+                    f"({_last_startup_error}). Check server logs."
+                )
+            return json.dumps(placeholder, indent=2)
 
         _live_resource.__name__ = f"{action}_resource"
         _live_resource.__doc__ = (
