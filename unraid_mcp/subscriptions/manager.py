@@ -8,6 +8,7 @@ error handling, reconnection logic, and authentication.
 import asyncio
 import json
 import os
+import random
 import re
 import time
 from datetime import UTC, datetime
@@ -28,8 +29,21 @@ from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 # Resource data size limits to prevent unbounded memory growth
 _MAX_RESOURCE_DATA_BYTES = 1_048_576  # 1MB
 _MAX_RESOURCE_DATA_LINES = 5_000
-# Minimum stable connection duration (seconds) before resetting reconnect counter
+
+# Reconnect backoff tuning (PERF-H2). Two thresholds decouple "reset backoff" from
+# "reset the give-up counter" so a backend that flaps just past the stable mark
+# can neither pin the reconnect cadence at the floor nor dodge the give-up ceiling:
+#   * >= _HEALTHY_CONNECTION_SECONDS  -> proven healthy: reset backoff to the floor
+#                                        AND clear the attempt counter.
+#   * >= _STABLE_CONNECTION_SECONDS   -> briefly stable (flapping): keep the attempt
+#                                        counter reset (we DID connect, don't abandon
+#                                        it) but ESCALATE backoff so we stop hammering.
+#   * <  _STABLE_CONNECTION_SECONDS   -> never stable: escalate backoff and let the
+#                                        attempt counter climb toward give-up.
 _STABLE_CONNECTION_SECONDS = 30
+_HEALTHY_CONNECTION_SECONDS = 120
+_INITIAL_RETRY_DELAY: float = 5
+_MAX_RETRY_DELAY: float = 300  # 5 minutes max
 
 
 # Subscription names that carry log content and therefore need _cap_log_content.
@@ -434,12 +448,35 @@ class SubscriptionManager:
                 logger.error(f"[SHUTDOWN] Error stopping subscription '{name}': {e}", exc_info=True)
         logger.info(f"[SHUTDOWN] Stopped {len(subscription_names)} subscription(s)")
 
+    @staticmethod
+    def _compute_reconnect_delay(
+        connected_duration: float, current_delay: float
+    ) -> tuple[float, bool]:
+        """Decide the next reconnect backoff and whether to reset the give-up counter.
+
+        Returns ``(next_delay, reset_attempts)``. Pure function of the just-ended
+        connection's duration and the current backoff — extracted from the
+        reconnect loop so the PERF-H2 invariant is unit-testable:
+
+        * A connection that flaps just past ``_STABLE_CONNECTION_SECONDS`` keeps the
+          attempt counter reset (so we don't abandon a backend we *can* reach) but
+          still escalates backoff — it can no longer pin the cadence at the floor.
+        * Only a genuinely healthy connection (``>= _HEALTHY_CONNECTION_SECONDS``)
+          resets backoff to the floor.
+        * A connection that never stabilizes escalates backoff *and* lets the
+          attempt counter climb toward the give-up ceiling.
+        """
+        if connected_duration >= _HEALTHY_CONNECTION_SECONDS:
+            return _INITIAL_RETRY_DELAY, True
+        if connected_duration >= _STABLE_CONNECTION_SECONDS:
+            return min(current_delay * 1.5, _MAX_RETRY_DELAY), True
+        return min(current_delay * 1.5, _MAX_RETRY_DELAY), False
+
     async def _subscription_loop(
         self, subscription_name: str, query: str, variables: dict[str, Any] | None
     ) -> None:
         """Main loop for maintaining a GraphQL subscription with comprehensive logging."""
-        retry_delay: int | float = 5
-        max_retry_delay = 300  # 5 minutes max
+        retry_delay: float = _INITIAL_RETRY_DELAY
 
         while True:
             attempt = self.reconnect_attempts.get(subscription_name, 0) + 1
@@ -663,35 +700,33 @@ class SubscriptionManager:
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}", exc_info=True)
                 self._set_connection_state(subscription_name, "error", error_msg)
 
-            # Check if connection was stable before deciding on retry behavior
+            # Decide retry behavior from how long the just-ended connection lasted.
             start_time = self._connection_start_times.pop(subscription_name, None)
-            if start_time is not None:
-                connected_duration = time.monotonic() - start_time
-                if connected_duration >= _STABLE_CONNECTION_SECONDS:
-                    # Connection was stable — reset retry counter and backoff
-                    logger.info(
-                        f"[WEBSOCKET:{subscription_name}] Connection was stable "
-                        f"({connected_duration:.0f}s >= {_STABLE_CONNECTION_SECONDS}s), "
-                        f"resetting retry counter"
-                    )
-                    self.reconnect_attempts[subscription_name] = 0
-                    retry_delay = 5
-                else:
-                    logger.warning(
-                        f"[WEBSOCKET:{subscription_name}] Connection was unstable "
-                        f"({connected_duration:.0f}s < {_STABLE_CONNECTION_SECONDS}s), "
-                        f"keeping retry counter at {self.reconnect_attempts.get(subscription_name, 0)}"
-                    )
-                    # Only escalate backoff when connection was NOT stable
-                    retry_delay = min(retry_delay * 1.5, max_retry_delay)
+            connected_duration = (time.monotonic() - start_time) if start_time is not None else 0.0
+            retry_delay, reset_attempts = self._compute_reconnect_delay(
+                connected_duration, retry_delay
+            )
+            if reset_attempts:
+                self.reconnect_attempts[subscription_name] = 0
+                logger.info(
+                    f"[WEBSOCKET:{subscription_name}] Connection lasted {connected_duration:.0f}s "
+                    f"(>= {_STABLE_CONNECTION_SECONDS}s) — reset attempt counter"
+                )
             else:
-                # No connection was established — escalate backoff
-                retry_delay = min(retry_delay * 1.5, max_retry_delay)
+                logger.warning(
+                    f"[WEBSOCKET:{subscription_name}] Connection lasted {connected_duration:.0f}s "
+                    f"(< {_STABLE_CONNECTION_SECONDS}s) — attempt counter climbing toward give-up"
+                )
+
+            # Full jitter on the actual sleep decorrelates the ~14 concurrent loops so a
+            # shared-backend outage doesn't produce synchronized reconnect bursts (PERF-H2).
+            sleep_for = random.uniform(retry_delay * 0.5, retry_delay)  # noqa: S311 — jitter, not crypto
             logger.info(
-                f"[WEBSOCKET:{subscription_name}] Reconnecting in {retry_delay:.1f} seconds..."
+                f"[WEBSOCKET:{subscription_name}] Reconnecting in {sleep_for:.1f}s "
+                f"(backoff {retry_delay:.1f}s)..."
             )
             self._set_connection_state(subscription_name, "reconnecting")
-            await asyncio.sleep(retry_delay)
+            await asyncio.sleep(sleep_for)
 
         # The while loop exited (via break or max_retries exceeded).
         # Remove from active_subscriptions so start_subscription() can restart it.

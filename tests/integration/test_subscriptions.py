@@ -589,11 +589,15 @@ class TestReconnection:
 
         sleep_mock = AsyncMock()
 
+        # Pin the jitter (PERF-H2) to its upper bound so the recorded sleep equals
+        # the underlying backoff — this test asserts the backoff *escalation*, which
+        # full-jitter randomization would otherwise mask.
         with (
             patch(_WS_CONNECT, side_effect=ConnectionRefusedError("refused")),
             patch(_API_URL, "https://test.local"),
             patch(_API_KEY, "key"),
             patch(_SSL_CTX, return_value=None),
+            patch("unraid_mcp.subscriptions.manager.random.uniform", new=lambda lo, hi: hi),
             patch(_SLEEP, sleep_mock),
         ):
             await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
