@@ -71,8 +71,7 @@ class StructuredResponseLimitingMiddleware(Middleware):
         self.max_size = max_size
         self.tools = set(tools) if tools is not None else None
 
-    @staticmethod
-    def _measure(result: ToolResult) -> int:
+    def _measure(self, result: ToolResult) -> int:
         """Return the serialized byte size of a ToolResult.
 
         The ``unraid`` tool's payload is a JSON string in a single ``TextContent``
@@ -83,12 +82,37 @@ class StructuredResponseLimitingMiddleware(Middleware):
         escaping can add more than a wrapper's worth of bytes for quote/backslash-
         heavy content), so the fast path under-counts and is therefore conservative:
         it never truncates a response that full serialization would have kept under
-        the cap. Multi-content or other result shapes fall back to full
-        serialization.
+        the cap.
+
+        For multi-block results we avoid serializing an over-cap payload in full
+        just to reject it. The raw text bytes of all ``TextContent`` blocks are a
+        strict lower bound on the full ``to_json`` size (which adds the content
+        wrapper plus JSON escaping, both non-negative). So if that running sum alone
+        already exceeds ``max_size``, full serialization would too — we return the
+        partial sum early (still ``> max_size``, preserving the exact over-cap
+        decision) without serializing the rest. Only when the text bytes stay within
+        the cap — or the result carries genuinely opaque (non-text) blocks — do we
+        fall back to the full ``pydantic_core.to_json`` measurement.
         """
         content = result.content
         if len(content) == 1 and isinstance(content[0], TextContent):
             return len(content[0].text.encode())
+
+        # Sum text-block byte lengths as a lower bound, bailing out as soon as the
+        # running total exceeds the cap. Any non-text block makes the result opaque
+        # to this cheap estimate, so defer to full serialization for an exact size.
+        running = 0
+        for block in content:
+            if not isinstance(block, TextContent):
+                break
+            running += len(block.text.encode())
+            if running > self.max_size:
+                return running
+        else:
+            # All blocks were text and their total stayed within the cap; the
+            # wrapper/escaping could still push the full payload over, so measure it.
+            return len(pydantic_core.to_json(result, fallback=str))
+
         return len(pydantic_core.to_json(result, fallback=str))
 
     def _marker_result(self, original_bytes: int) -> ToolResult:
