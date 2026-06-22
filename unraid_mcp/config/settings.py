@@ -367,15 +367,23 @@ def is_configured() -> bool:
 
 
 def apply_bearer_token(token: str) -> None:
-    """Store the generated bearer token in the module global.
+    """Store the generated bearer token in both config surfaces.
 
     Called by ``ensure_token_exists()`` in server.py after writing the token
     to disk.  We do NOT set os.environ here — the caller is responsible for
     calling ``os.environ.pop("UNRAID_MCP_BEARER_TOKEN", None)`` immediately
     after, so the token is no longer accessible via os.environ.
+
+    The bearer token has two read surfaces — the ``UNRAID_MCP_BEARER_TOKEN``
+    module global and the live ``_settings.unraid_mcp_bearer_token`` instance
+    field — so we update BOTH here to keep them consistent; otherwise the
+    instance field goes stale while the global advances. This is a one-shot
+    startup-time write (no concurrent readers yet), and any reader must go
+    through one consistent surface rather than mixing the two.
     """
     global UNRAID_MCP_BEARER_TOKEN
     UNRAID_MCP_BEARER_TOKEN = token
+    _settings.unraid_mcp_bearer_token = token
 
 
 def get_config_summary() -> dict[str, Any]:
