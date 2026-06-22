@@ -24,6 +24,8 @@ from typing import Any
 from ..config.logging import logger
 from ..core.exceptions import ToolError
 from .protocol import (
+    _WS_PING_INTERVAL,
+    _WS_PING_TIMEOUT,
     DataEvent,
     ErrorEvent,
     ProtocolError,
@@ -62,8 +64,8 @@ async def _ws_handshake(
             ssl_context=ssl_context,
             open_timeout=timeout,
             ack_timeout=timeout,
-            ping_interval=20,
-            ping_timeout=10,
+            ping_interval=_WS_PING_INTERVAL,
+            ping_timeout=_WS_PING_TIMEOUT,
         ) as session:
             yield session
     except ProtocolError as e:

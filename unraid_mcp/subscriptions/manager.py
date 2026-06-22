@@ -21,7 +21,17 @@ from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.client import redact_sensitive
 from ..core.types import SubscriptionData
-from .protocol import CompleteEvent, DataEvent, ErrorEvent, iter_messages
+from .protocol import (
+    _WS_ACK_TIMEOUT,
+    _WS_CLOSE_TIMEOUT,
+    _WS_CONNECT_TIMEOUT,
+    _WS_PING_INTERVAL,
+    _WS_PING_TIMEOUT,
+    CompleteEvent,
+    DataEvent,
+    ErrorEvent,
+    iter_messages,
+)
 from .state import SubscriptionState, _StateFieldView
 from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 
@@ -503,7 +513,7 @@ class SubscriptionManager:
                 ssl_context = build_ws_ssl_context(ws_url)
 
                 # Connection with timeout
-                connect_timeout = 10
+                connect_timeout = _WS_CONNECT_TIMEOUT
                 logger.debug(
                     f"[WEBSOCKET:{subscription_name}] Connection timeout: {connect_timeout}s"
                 )
@@ -512,9 +522,9 @@ class SubscriptionManager:
                     ws_url,
                     subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
                     open_timeout=connect_timeout,
-                    ping_interval=20,
-                    ping_timeout=10,
-                    close_timeout=10,
+                    ping_interval=_WS_PING_INTERVAL,
+                    ping_timeout=_WS_PING_TIMEOUT,
+                    close_timeout=_WS_CLOSE_TIMEOUT,
                     ssl=ssl_context,
                 ) as websocket:
                     selected_proto = websocket.subprotocol or "none"
@@ -544,7 +554,7 @@ class SubscriptionManager:
 
                     # Wait for connection acknowledgment
                     logger.debug(f"[PROTOCOL:{subscription_name}] Waiting for connection_ack...")
-                    init_raw = await asyncio.wait_for(websocket.recv(), timeout=30)
+                    init_raw = await asyncio.wait_for(websocket.recv(), timeout=_WS_ACK_TIMEOUT)
 
                     try:
                         init_data = json.loads(init_raw)

@@ -28,7 +28,14 @@ from ..config.logging import logger
 from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
-from .protocol import ProtocolError, graphql_ws_session
+from .protocol import (
+    _WS_FIRST_FRAME_TIMEOUT,
+    _WS_OPEN_TIMEOUT,
+    _WS_PING_TIMEOUT,
+    _WS_PROBE_PING_INTERVAL,
+    ProtocolError,
+    graphql_ws_session,
+)
 from .resources import ensure_subscriptions_started, get_last_startup_error
 from .utils import (
     _analyze_subscription_status,
@@ -163,16 +170,18 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
                 subscription_query,
                 sub_id="test",
                 ssl_context=ssl_context,
-                open_timeout=10,
+                open_timeout=_WS_OPEN_TIMEOUT,
                 ack_timeout=None,
-                ping_interval=30,
-                ping_timeout=10,
+                ping_interval=_WS_PROBE_PING_INTERVAL,
+                ping_timeout=_WS_PING_TIMEOUT,
             ) as session:
                 # Wait for the first response with a timeout. The probe deliberately
                 # does NOT normalize the frame — it returns whatever the server sent
                 # first so a developer can inspect the raw subscription response.
                 try:
-                    response = await asyncio.wait_for(session.ws.recv(), timeout=5.0)
+                    response = await asyncio.wait_for(
+                        session.ws.recv(), timeout=_WS_FIRST_FRAME_TIMEOUT
+                    )
                     result = json.loads(response)
 
                     # Do NOT log or return the raw upstream frame by default — it can

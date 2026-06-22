@@ -59,6 +59,33 @@ _SUBPROTOCOLS: tuple[Subprotocol, ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# WebSocket connect / keepalive / handshake timeout constants
+# ---------------------------------------------------------------------------
+# Named lifts of the previously-hardcoded magic numbers spread across this module,
+# the snapshot helpers, the diagnostics probe, and the manager loop. Values are
+# preserved exactly per call site — where two sites legitimately differ (the ping
+# cadence is 20s for the manager/snapshot but 30s for the diagnostics probe), the
+# difference is kept as two distinct constants rather than unified.
+
+# websockets.connect open_timeout — connect deadline (manager + diagnostics probe).
+_WS_OPEN_TIMEOUT: float = 10.0
+# Manager-loop connect timeout (historically a bare int 10, kept as int).
+_WS_CONNECT_TIMEOUT: int = 10
+# Keepalive ping deadline forwarded to websockets.connect.
+_WS_PING_TIMEOUT: float = 10.0
+# Keepalive ping cadence — most call sites (session default, snapshot, manager).
+_WS_PING_INTERVAL: float = 20.0
+# Keepalive ping cadence used only by the diagnostics probe.
+_WS_PROBE_PING_INTERVAL: float = 30.0
+# websockets.connect close_timeout (manager loop only).
+_WS_CLOSE_TIMEOUT: int = 10
+# Timeout waiting for connection_ack (session default + manager handshake).
+_WS_ACK_TIMEOUT: float = 30.0
+# Deadline for the diagnostics probe's first post-subscribe frame recv().
+_WS_FIRST_FRAME_TIMEOUT: float = 5.0
+
+
 class ProtocolError(Exception):
     """Raised when the graphql-ws handshake fails (no ack / connection_error).
 
@@ -211,10 +238,10 @@ async def graphql_ws_session(
     sub_id: str,
     variables: dict[str, Any] | None = None,
     ssl_context: _ssl.SSLContext | None = None,
-    open_timeout: float = 10.0,
-    ack_timeout: float | None = 30.0,
-    ping_interval: float = 20.0,
-    ping_timeout: float = 10.0,
+    open_timeout: float = _WS_OPEN_TIMEOUT,
+    ack_timeout: float | None = _WS_ACK_TIMEOUT,
+    ping_interval: float = _WS_PING_INTERVAL,
+    ping_timeout: float = _WS_PING_TIMEOUT,
     close_timeout: float | None = None,
 ) -> AsyncIterator[GraphqlWsSession]:
     """Connect, authenticate, and subscribe over a graphql-ws WebSocket.
