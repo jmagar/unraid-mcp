@@ -34,6 +34,7 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 For the complete current action/subaction reference, call `unraid(action="help")`.
 
 #### `system` — Server Information
+
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Complete system summary (recommended starting point) |
@@ -61,6 +62,7 @@ For the complete current action/subaction reference, call `unraid(action="help")
 | `timezones` | Available IANA time-zone options |
 
 #### `health` — Diagnostics
+
 | Subaction | Description |
 |-----------|-------------|
 | `check` | Comprehensive health check — connectivity, array, disks, containers, VMs, resources |
@@ -69,6 +71,7 @@ For the complete current action/subaction reference, call `unraid(action="help")
 | `setup` | Report credential status and setup instructions |
 
 #### `array` — Array & Parity
+
 | Subaction | Description |
 |-----------|-------------|
 | `parity_status` | Current parity check progress and status |
@@ -86,6 +89,7 @@ For the complete current action/subaction reference, call `unraid(action="help")
 | `clear_disk_stats` | ⚠️ Clear disk statistics (requires `confirm=True`) |
 
 #### `disk` — Storage & Logs
+
 | Subaction | Description |
 |-----------|-------------|
 | `shares` | List network shares |
@@ -111,6 +115,7 @@ For the complete current action/subaction reference, call `unraid(action="help")
 Container identification: name, ID, or partial name (fuzzy match).
 
 #### `vm` — Virtual Machines
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All VMs with state |
@@ -124,6 +129,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `reset` | ⚠️ Hard reset a VM (requires `vm_id`, `confirm=True`) |
 
 #### `notification` — Notifications
+
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Notification counts (unread, archived by type) |
@@ -140,6 +146,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `delete_archived` | ⚠️ Delete all archived (requires `confirm=True`) |
 
 #### `key` — API Keys
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All API keys |
@@ -151,6 +158,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `remove_role` | Remove roles from a key (requires `key_id`, `roles`) |
 
 #### `plugin` — Plugins
+
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All installed plugins |
@@ -158,6 +166,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `remove` | ⚠️ Uninstall plugins (requires `names` list, `confirm=True`) |
 
 #### `rclone` — Cloud Storage
+
 | Subaction | Description |
 |-----------|-------------|
 | `list_remotes` | List configured rclone remotes |
@@ -166,12 +175,14 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `delete_remote` | ⚠️ Delete a remote (requires `name`, `confirm=True`) |
 
 #### `setting` — System Settings
+
 | Subaction | Description |
 |-----------|-------------|
 | `update` | Update system settings (requires `settings_input` object) |
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
 
 #### `connect` — Unraid Connect / Remote Access
+
 | Subaction | Description |
 |-----------|-------------|
 | `remote_access` | Current remote-access settings (access/forward type, port) |
@@ -184,6 +195,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `enable_dynamic_remote_access` | ⚠️ Toggle dynamic remote access (requires `connect_input`, `confirm=True`) |
 
 #### `customization` — Theme & Appearance
+
 | Subaction | Description |
 |-----------|-------------|
 | `public_theme` | Public-facing theme |
@@ -196,6 +208,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settings.values`, and raw activation-code values are not returned by the safe read subactions (`system/server_details`, `connect/status`, `customization/details`).
 
 #### `oidc` — SSO / OpenID Connect
+
 | Subaction | Description |
 |-----------|-------------|
 | `providers` | List configured OIDC providers |
@@ -205,11 +218,13 @@ Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settin
 | `validate_session` | Validate current SSO session (requires `token`) |
 
 #### `user` — Current User
+
 | Subaction | Description |
 |-----------|-------------|
 | `me` | Current authenticated user info |
 
 #### `live` — Real-Time Subscriptions
+
 Persistent WebSocket connections. Returns `{"status": "connecting"}` on first call — retry momentarily.
 
 | Subaction | Description |
