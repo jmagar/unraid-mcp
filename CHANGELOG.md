@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2](https://github.com/jmagar/unraid-mcp/compare/v2.1.1...v2.1.2) (2026-06-23)
+
+
+### Bug Fixes
+
+* code-review remediation — 44 fixes, hardening, and tests ([#88](https://github.com/jmagar/unraid-mcp/issues/88)) ([80f4b02](https://github.com/jmagar/unraid-mcp/commit/80f4b02e031409537fe841c7546c6f26bcacce30))
+* pin Docker runtime to Python 3.12 ([2f6033a](https://github.com/jmagar/unraid-mcp/commit/2f6033a148cfa45a2c55f5847b40d545dc8c662f)), closes [#89](https://github.com/jmagar/unraid-mcp/issues/89)
+
 ## [2.1.1](https://github.com/jmagar/unraid-mcp/compare/v2.1.0...v2.1.1) (2026-06-22)
 
 
