@@ -8,6 +8,8 @@ overwritten (not grown unbounded), and a reset marker is emitted.
 import logging
 from pathlib import Path
 
+import pytest
+
 from unraid_mcp.config.logging import OverwriteFileHandler
 
 
@@ -123,4 +125,33 @@ def test_seeds_byte_counter_from_existing_file(tmp_path: Path) -> None:
     assert "Z" * 500 not in contents
     assert "LOG FILE RESET" in contents
     assert "first line after restart" in contents
+    handler.close()
+
+
+def test_failed_rotation_writes_no_marker_and_keeps_old_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If reopen fails on overwrite, do NOT emit a reset marker and do NOT swap the
+    stream (the marker only belongs on a successfully-opened fresh file)."""
+    handler = _make_handler(tmp_path / "test.log", max_bytes=200)
+    old_stream = handler.stream
+
+    # Spy on every record the handler actually writes (super().emit) so we can assert
+    # the reset marker is never emitted on a failed rotation.
+    written: list[str] = []
+    monkeypatch.setattr(
+        logging.FileHandler, "emit", lambda self, rec: written.append(rec.getMessage())
+    )
+
+    def _boom() -> object:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(handler, "_open", _boom)  # both reopen attempts fail
+
+    handler._bytes_written = handler.max_bytes  # force a rotation attempt
+    rotated = handler._rotate_if_needed()
+
+    assert rotated is False  # reopen failed → no rotation
+    assert handler.stream is old_stream  # stream not swapped
+    assert not any("LOG FILE RESET" in m for m in written)  # marker NOT emitted
     handler.close()
