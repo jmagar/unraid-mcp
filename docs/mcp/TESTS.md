@@ -107,9 +107,10 @@ scripts/report_api_parity.py --json
 ```
 
 The parity report compares the vendored Unraid SDL root query/mutation/
-subscription fields against the exposed operation inventory. Missing mutation
-roots fail the schema tests unless explicitly classified; current query and
-subscription gaps are documented as intentional in `tests/schema/api_parity.py`.
+subscription fields against the emitted GraphQL inventory, including internal
+helper queries and live subscription queries. Missing mutation/subscription
+roots fail the schema tests unless explicitly classified; current query gaps are
+documented as intentional in `unraid_mcp/devtools/api_parity.py`.
 
 ### HTTP layer tests (`tests/http_layer/`)
 

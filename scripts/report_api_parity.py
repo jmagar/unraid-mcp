@@ -13,7 +13,7 @@ from typing import Any
 def _load_report() -> dict[str, Any]:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
-    from tests.schema.api_parity import api_parity_report
+    from unraid_mcp.devtools.api_parity import api_parity_report
 
     return api_parity_report()
 
@@ -29,7 +29,7 @@ def main() -> int:
         return 0
 
     print("Unraid GraphQL API parity")
-    print(f"owned operations: {report['operation_count']}")
+    print(f"tracked GraphQL documents: {report['operation_count']}")
     print()
     for section in ("query", "mutation", "subscription"):
         data = report[section]

@@ -1,7 +1,14 @@
-"""Complete GraphQL operation inventory used by schema contract tests."""
+"""GraphQL operation inventory shared by tests and maintenance scripts."""
 
-from collections.abc import Iterable
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+from unraid_mcp.subscriptions.queries import COLLECT_ACTIONS, SNAPSHOT_ACTIONS
 from unraid_mcp.tools._array import _ARRAY_MUTATIONS, _ARRAY_QUERIES
 from unraid_mcp.tools._connect import _CONNECT_MUTATIONS, _CONNECT_QUERIES
 from unraid_mcp.tools._customization import _CUSTOMIZATION_MUTATIONS, _CUSTOMIZATION_QUERIES
@@ -11,6 +18,7 @@ from unraid_mcp.tools._docker import (
     _DOCKER_MUTATIONS,
     _DOCKER_ORGANIZER,
     _DOCKER_QUERIES,
+    _DOCKER_RESOLVE_QUERY,
     _DOCKER_ROOT_MUTATIONS,
 )
 from unraid_mcp.tools._health import _HEALTH_QUERIES
@@ -30,7 +38,8 @@ from unraid_mcp.tools._user import _USER_QUERIES
 from unraid_mcp.tools._vm import _VM_MUTATIONS, _VM_QUERIES
 
 
-def operation_dicts() -> Iterable[tuple[str, dict[str, str]]]:
+def public_operation_dicts() -> Iterable[tuple[str, dict[str, str]]]:
+    """Return action/subaction operations exposed through the consolidated tool."""
     docker_organizer = {name: spec["mutation"] for name, spec in _DOCKER_ORGANIZER.items()}
     return (
         ("system", _SYSTEM_QUERIES),
@@ -67,9 +76,27 @@ def operation_dicts() -> Iterable[tuple[str, dict[str, str]]]:
     )
 
 
-def all_operation_cases() -> list[tuple[str, str, str]]:
+def schema_operation_dicts() -> Iterable[tuple[str, dict[str, str]]]:
+    """Return every GraphQL document emitted by runtime code paths."""
+    yield from public_operation_dicts()
+    yield ("docker_internal", {"resolve_container_id": _DOCKER_RESOLVE_QUERY})
+    yield ("live_snapshot", SNAPSHOT_ACTIONS)
+    yield ("live_collect", COLLECT_ACTIONS)
+
+
+def dispatch_operation_cases() -> list[tuple[str, str, str]]:
+    """Return public action/subaction cases that can be driven through dispatch."""
     cases: list[tuple[str, str, str]] = []
-    for action, operations in operation_dicts():
-        for subaction, query in operations.items():
-            cases.append((action, subaction, query))
+    for action, operations in public_operation_dicts():
+        for subaction, operation in operations.items():
+            cases.append((action, subaction, operation))
+    return cases
+
+
+def all_operation_cases() -> list[tuple[str, str, str]]:
+    """Return all known GraphQL documents as ``(source, name, operation)`` rows."""
+    cases: list[tuple[str, str, str]] = []
+    for source, operations in schema_operation_dicts():
+        for name, operation in operations.items():
+            cases.append((source, name, operation))
     return cases

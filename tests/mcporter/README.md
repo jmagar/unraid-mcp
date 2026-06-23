@@ -9,7 +9,7 @@ Live integration smoke-tests for the unraid-mcp server.
 Use the generated inventory before adding or updating live smoke tests. It is
 derived from the same action/subaction query and mutation dictionaries that the
 schema dispatch contract tests exercise, so it includes **all** GraphQL reads and
-mutations:
+mutations plus internal helper queries and live subscription documents:
 
 ```bash
 scripts/list_graphql_operations.py

@@ -46,11 +46,11 @@ def _schema_shaped_response(query: str) -> dict[str, Any]:
         for definition in doc.definitions
         if isinstance(definition, OperationDefinitionNode)
     )
-    root_type = (
-        graphql_schema.mutation_type
-        if op.operation.value == "mutation"
-        else graphql_schema.query_type
-    )
+    root_type = {
+        "query": graphql_schema.query_type,
+        "mutation": graphql_schema.mutation_type,
+        "subscription": graphql_schema.subscription_type,
+    }[op.operation.value]
     assert root_type is not None
     return _selection_object(root_type, op.selection_set.selections, ())
 
@@ -92,10 +92,10 @@ def _sample_value(graphql_type: Any, selections: Any, path: tuple[str, ...]) -> 
 def _sample_scalar(name: str, path: tuple[str, ...]) -> Any:
     field = path[-1]
     joined = ".".join(path)
-    if field == "id" and "docker" in path:
-        return CONTAINER_ID
     if field == "id" and "network" in joined.lower():
         return "network-1"
+    if field == "id" and "docker" in path:
+        return CONTAINER_ID
     if field == "id" and "upsDeviceById" in path:
         return "server-1"
     if field == "id" and "disk" in joined.lower():

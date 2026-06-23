@@ -18,7 +18,7 @@ from graphql import (
 )
 
 from tests.schema.mock_unraid import SCENARIOS, mock_graphql_response
-from tests.schema.test_dispatch_contract import _all_operation_cases
+from unraid_mcp.devtools.graphql_inventory import all_operation_cases
 
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
@@ -32,7 +32,7 @@ def test_mock_scenarios_conform_to_selected_graphql_shapes() -> None:
     schema = _schema()
     errors: list[str] = []
 
-    for action, subaction, query in _all_operation_cases():
+    for action, subaction, query in all_operation_cases():
         doc = parse(query)
         validation_errors = validate(schema, doc)
         assert not validation_errors, f"{action}/{subaction} query is invalid: {validation_errors}"
@@ -42,7 +42,11 @@ def test_mock_scenarios_conform_to_selected_graphql_shapes() -> None:
             for definition in doc.definitions
             if isinstance(definition, OperationDefinitionNode)
         )
-        root_type = schema.mutation_type if op.operation.value == "mutation" else schema.query_type
+        root_type = {
+            "query": schema.query_type,
+            "mutation": schema.mutation_type,
+            "subscription": schema.subscription_type,
+        }[op.operation.value]
         assert root_type is not None
         for scenario in SCENARIOS:
             response = mock_graphql_response(query, scenario=scenario)

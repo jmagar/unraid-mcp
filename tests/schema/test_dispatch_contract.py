@@ -13,16 +13,12 @@ import pytest
 from conftest import make_tool_fn
 
 from tests.schema.mock_unraid import CONTAINER_ID, mock_graphql_response
-from tests.schema.operation_inventory import all_operation_cases
-from unraid_mcp.tools._docker import _DOCKER_ORGANIZER
+from unraid_mcp.devtools.graphql_inventory import dispatch_operation_cases
+from unraid_mcp.tools._docker import _DOCKER_ORGANIZER, _DOCKER_RESOLVE_QUERY
 
 
 def _make_tool():
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
-
-
-def _all_operation_cases() -> list[tuple[str, str, str]]:
-    return all_operation_cases()
 
 
 def _call_kwargs(action: str, subaction: str) -> dict[str, Any]:
@@ -108,13 +104,13 @@ def _organizer_input(subaction: str) -> dict[str, Any]:
     return {key: defaults[key] for key in allowed}
 
 
-def _mock_graphql_response(query: str) -> dict[str, Any]:
+def _mock_graphql_response(query: str, *_args: Any, **_kwargs: Any) -> dict[str, Any]:
     return mock_graphql_response(query)
 
 
 @pytest.mark.parametrize(
     ("action", "subaction", "expected_query"),
-    _all_operation_cases(),
+    dispatch_operation_cases(),
     ids=lambda value: value if isinstance(value, str) else None,
 )
 async def test_every_graphql_operation_is_emitted_by_dispatch(
@@ -126,11 +122,26 @@ async def test_every_graphql_operation_is_emitted_by_dispatch(
     """Every query/mutation dict entry is reachable through real tool dispatch."""
     mock_graphql_request.side_effect = _mock_graphql_response
 
-    try:
-        await _make_tool()(**_call_kwargs(action, subaction))
-    except Exception:
-        if not mock_graphql_request.call_args_list:
-            raise
+    await _make_tool()(**_call_kwargs(action, subaction))
 
     emitted_queries = [call.args[0] for call in mock_graphql_request.call_args_list]
     assert expected_query in emitted_queries
+
+
+async def test_docker_name_resolution_query_is_emitted_by_dispatch(
+    mock_graphql_request: AsyncMock,
+) -> None:
+    """Docker name/short-ID paths emit the internal resolver query."""
+    mock_graphql_request.side_effect = _mock_graphql_response
+
+    await _make_tool()(
+        **{
+            **_call_kwargs("docker", "details"),
+            "action": "docker",
+            "subaction": "details",
+            "container_id": "value",
+        }
+    )
+
+    emitted_queries = [call.args[0] for call in mock_graphql_request.call_args_list]
+    assert _DOCKER_RESOLVE_QUERY in emitted_queries

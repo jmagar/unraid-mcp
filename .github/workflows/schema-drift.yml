@@ -40,22 +40,22 @@ jobs:
       - name: Open or update drift issue
         if: steps.diff.outputs.drift == 'true'
         run: |
-          title='Unraid GraphQL schema drift detected'
+          title="Unraid GraphQL schema drift detected"
           {
-            echo 'The vendored `docs/unraid/UNRAID-SCHEMA.graphql` no longer matches'
+            echo "The vendored \`docs/unraid/UNRAID-SCHEMA.graphql\` no longer matches"
             echo "Unraid's published SDL at \`unraid/api@main\`."
             echo
-            echo 'Re-vendor the schema, then run the schema and dispatch contract tests'
-            echo 'to surface which queries, mutations, and mock responses need updates.'
+            echo "Re-vendor the schema, then run the schema and dispatch contract tests"
+            echo "to surface which queries, mutations, and mock responses need updates."
             echo
-            echo '<details><summary>diff</summary>'
+            echo "<details><summary>diff</summary>"
             echo
-            echo '```diff'
+            echo "\`\`\`diff"
             head -c 60000 schema.diff
             echo
-            echo '```'
+            echo "\`\`\`"
             echo
-            echo '</details>'
+            echo "</details>"
           } > issue-body.md
 
           existing="$(
@@ -63,10 +63,28 @@ jobs:
               --state open \
               --search "$title in:title" \
               --json number \
-              --jq '.[0].number // ""'
+              --jq ".[0].number // \"\""
           )"
           if [ -n "$existing" ]; then
             gh issue edit "$existing" --body-file issue-body.md
           else
             gh issue create --title "$title" --body-file issue-body.md
+          fi
+
+      - name: Close resolved drift issue
+        if: steps.diff.outputs.drift == 'false'
+        run: |
+          title="Unraid GraphQL schema drift detected"
+          existing="$(
+            gh issue list \
+              --state open \
+              --search "$title in:title" \
+              --json number \
+              --jq ".[0].number // \"\""
+          )"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" \
+              --body "The vendored Unraid SDL now matches \`unraid/api@main\`; closing this drift report."
+            gh issue close "$existing" \
+              --comment "Schema drift resolved by the current vendored SDL."
           fi

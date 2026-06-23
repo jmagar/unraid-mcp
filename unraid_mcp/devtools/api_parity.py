@@ -1,15 +1,28 @@
-"""Root-field parity report between Unraid GraphQL schema and exposed operations."""
+"""Root-field parity report between Unraid GraphQL schema and emitted operations."""
 
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
-from graphql import FieldNode, GraphQLObjectType, OperationDefinitionNode, parse
+from graphql import (
+    FieldNode,
+    FragmentDefinitionNode,
+    FragmentSpreadNode,
+    GraphQLObjectType,
+    InlineFragmentNode,
+    OperationDefinitionNode,
+    SelectionNode,
+    SelectionSetNode,
+    build_schema,
+    parse,
+)
 
-from tests.schema.mock_unraid import schema
-from tests.schema.operation_inventory import all_operation_cases
+from unraid_mcp.devtools.graphql_inventory import all_operation_cases
 
+
+SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
 
 INTENTIONAL_QUERY_GAPS: dict[str, str] = {
     "connect": (
@@ -24,33 +37,8 @@ INTENTIONAL_QUERY_GAPS: dict[str, str] = {
     "network": "Network data is exposed through system/network via servers/vars.",
     "server": "Server data is exposed through system/server, system/servers, and related info roots.",
 }
-
-_SUBSCRIPTION_GAP_REASON = (
-    "Subscription roots are covered by live resources and subscription diagnostics, "
-    "not by the owned query/mutation operation inventory."
-)
-INTENTIONAL_SUBSCRIPTION_GAPS: dict[str, str] = dict.fromkeys(
-    (
-        "arraySubscription",
-        "displaySubscription",
-        "dockerContainerStats",
-        "logFile",
-        "notificationAdded",
-        "notificationsOverview",
-        "notificationsWarningsAndAlerts",
-        "ownerSubscription",
-        "parityHistorySubscription",
-        "pluginInstallUpdates",
-        "serversSubscription",
-        "systemMetricsCpu",
-        "systemMetricsCpuTelemetry",
-        "systemMetricsMemory",
-        "systemMetricsTemperature",
-        "upsUpdates",
-    ),
-    _SUBSCRIPTION_GAP_REASON,
-)
 INTENTIONAL_MUTATION_GAPS: dict[str, str] = {}
+INTENTIONAL_SUBSCRIPTION_GAPS: dict[str, str] = {}
 
 
 def api_parity_report() -> dict[str, Any]:
@@ -99,7 +87,7 @@ def _section(
 
 
 def _root_fields(kind: str) -> set[str]:
-    graphql_schema = schema()
+    graphql_schema = build_schema(SCHEMA_PATH.read_text())
     root_type = {
         "query": graphql_schema.query_type,
         "mutation": graphql_schema.mutation_type,
@@ -112,13 +100,42 @@ def _root_fields(kind: str) -> set[str]:
 
 def _used_root_fields_by_kind() -> dict[str, set[str]]:
     used: dict[str, set[str]] = defaultdict(set)
-    for _action, _subaction, operation in all_operation_cases():
+    for _source, _name, operation in all_operation_cases():
         doc = parse(operation)
+        fragments = {
+            definition.name.value: definition
+            for definition in doc.definitions
+            if isinstance(definition, FragmentDefinitionNode)
+        }
         for definition in doc.definitions:
             if not isinstance(definition, OperationDefinitionNode):
                 continue
             kind = definition.operation.value
-            for selection in definition.selection_set.selections:
-                if isinstance(selection, FieldNode):
-                    used[kind].add(selection.name.value)
+            used[kind].update(_root_field_names(definition.selection_set, fragments))
     return used
+
+
+def _root_field_names(
+    selection_set: SelectionSetNode,
+    fragments: dict[str, FragmentDefinitionNode],
+) -> set[str]:
+    names: set[str] = set()
+    for selection in selection_set.selections:
+        names.update(_selection_root_field_names(selection, fragments))
+    return names
+
+
+def _selection_root_field_names(
+    selection: SelectionNode,
+    fragments: dict[str, FragmentDefinitionNode],
+) -> set[str]:
+    if isinstance(selection, FieldNode):
+        return {selection.name.value}
+    if isinstance(selection, InlineFragmentNode):
+        return _root_field_names(selection.selection_set, fragments)
+    if isinstance(selection, FragmentSpreadNode):
+        fragment = fragments.get(selection.name.value)
+        if fragment is None:
+            return set()
+        return _root_field_names(fragment.selection_set, fragments)
+    return set()

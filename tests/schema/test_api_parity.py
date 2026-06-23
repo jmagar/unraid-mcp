@@ -1,6 +1,6 @@
 """API root-field parity checks for exposed GraphQL operations."""
 
-from tests.schema.api_parity import (
+from unraid_mcp.devtools.api_parity import (
     INTENTIONAL_QUERY_GAPS,
     INTENTIONAL_SUBSCRIPTION_GAPS,
     api_parity_report,
@@ -30,8 +30,8 @@ def test_mutation_root_field_parity_is_complete() -> None:
     assert report["mutation"]["intentional"] == {}
 
 
-def test_subscription_roots_are_tracked_separately_from_owned_operations() -> None:
+def test_subscription_root_field_parity_is_complete() -> None:
     report = api_parity_report()
 
-    assert report["subscription"]["missing"] == sorted(INTENTIONAL_SUBSCRIPTION_GAPS)
-    assert set(report["subscription"]["intentional"]) == set(INTENTIONAL_SUBSCRIPTION_GAPS)
+    assert report["subscription"]["missing"] == []
+    assert report["subscription"]["intentional"] == INTENTIONAL_SUBSCRIPTION_GAPS

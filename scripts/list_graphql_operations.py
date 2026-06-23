@@ -8,11 +8,13 @@ import json
 import sys
 from pathlib import Path
 
+from graphql import OperationDefinitionNode, parse
+
 
 def _load_cases() -> list[tuple[str, str, str]]:
     repo_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(repo_root))
-    from tests.schema.operation_inventory import all_operation_cases
+    from unraid_mcp.devtools.graphql_inventory import all_operation_cases
 
     return all_operation_cases()
 
@@ -44,10 +46,15 @@ def main() -> int:
 
 
 def _operation_name(query: str) -> str:
-    words = query.strip().split()
-    if len(words) >= 2 and words[0] in {"query", "mutation", "subscription"}:
-        return words[1].split("(", 1)[0]
-    return words[0] if words else ""
+    doc = parse(query)
+    operation = next(
+        definition
+        for definition in doc.definitions
+        if isinstance(definition, OperationDefinitionNode)
+    )
+    if operation.name is not None:
+        return operation.name.value
+    return f"anonymous_{operation.operation.value}"
 
 
 if __name__ == "__main__":
