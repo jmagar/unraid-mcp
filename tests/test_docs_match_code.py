@@ -16,6 +16,7 @@ If this test fails after you add or rename a subaction, update:
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from unraid_mcp import tools as _tools_pkg
 from unraid_mcp.subscriptions.diagnostics import _SUBSCRIPTIONS_SUBACTIONS
@@ -79,6 +80,7 @@ LIVE_SUBACTIONS: dict[str, set[str]] = {
 # `help` is an action with no subactions.
 LIVE_ACTION_COUNT = len(LIVE_SUBACTIONS) + 1  # + help
 LIVE_SUBACTION_TOTAL = sum(len(s) for s in LIVE_SUBACTIONS.values())
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _help_row_subactions(action: str) -> set[str]:
@@ -182,3 +184,23 @@ class TestSpecificDriftedSubactions:
             assert subaction in _help_row_subactions(action), (
                 f"{action}/{subaction} is missing from the `_HELP_TEXT` table"
             )
+
+
+class TestShippedDocCounts:
+    def test_shipped_docs_do_not_publish_stale_total_counts(self) -> None:
+        expected = f"{LIVE_ACTION_COUNT} actions, {LIVE_SUBACTION_TOTAL} subactions"
+        stale = []
+        for relpath in (
+            "docs/INVENTORY.md",
+            "docs/mcp/CLAUDE.md",
+            "docs/PUBLISHING.md",
+            "docs/MARKETPLACE.md",
+            "docs/stack/ARCH.md",
+        ):
+            text = (REPO_ROOT / relpath).read_text()
+            if re.search(r"\b19 actions, 170 subactions\b", text):
+                stale.append(relpath)
+        assert not stale, (
+            "shipped docs still publish stale action/subaction totals; "
+            f"expected {expected}. Stale files: {stale}"
+        )

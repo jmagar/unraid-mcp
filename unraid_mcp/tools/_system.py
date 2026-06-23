@@ -1,8 +1,9 @@
 """System domain handler for the Unraid MCP tool.
 
 Covers: overview, array, network, registration, variables, metrics, services,
-display, config, online, owner, settings, server, servers, flash, ups_devices,
-ups_device, ups_config, server_time, timezones (20 subactions).
+display, display_details, config, online, owner, settings, server,
+server_details, servers, network_access_urls, flash, ups_devices, ups_device,
+ups_config, server_time, timezones (23 subactions).
 """
 
 from typing import Any
@@ -77,6 +78,28 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "metrics": "query GetMetrics { metrics { cpu { percentTotal } memory { total used free available buffcache percentTotal } } }",
     "services": "query GetServices { services { name online version } }",
     "display": "query GetDisplay { info { display { theme } } }",
+    "display_details": """
+        query GetDisplayDetails {
+          display {
+            id
+            case { id url icon error }
+            theme
+            unit
+            scale
+            tabs
+            resize
+            wwn
+            total
+            usage
+            text
+            warning
+            critical
+            hot
+            max
+            locale
+          }
+        }
+    """,
     "config": "query GetConfig { config { valid error } }",
     "online": "query GetOnline { online }",
     "owner": "query GetOwner { owner { username avatar url } }",
@@ -91,6 +114,30 @@ _SYSTEM_QUERIES: dict[str, str] = {
         }
     """,
     "servers": "query GetServers { servers { id name status wanip lanip localurl remoteurl } }",
+    "network_access_urls": """
+        query GetNetworkAccessUrls {
+          network {
+            id
+            accessUrls { type name ipv4 ipv6 }
+          }
+        }
+    """,
+    "server_details": """
+        query GetServerDetails {
+          server {
+            id
+            owner { id username url avatar }
+            guid
+            name
+            comment
+            status
+            wanip
+            lanip
+            localurl
+            remoteurl
+          }
+        }
+    """,
     "flash": "query GetFlash { flash { id vendor product } }",
     "ups_devices": "query GetUpsDevices { upsDevices { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
     "ups_device": "query GetUpsDevice($id: String!) { upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
@@ -122,6 +169,27 @@ _SYSTEM_LIST_ACTIONS: dict[str, tuple[str, str]] = {
     "ups_devices": ("upsDevices", "ups_devices"),
     "timezones": ("timeZoneOptions", "timezones"),
 }
+
+_SYSTEM_DIRECT_ROOTS: dict[str, str] = {
+    "display_details": "display",
+    "network_access_urls": "network",
+    "server_details": "server",
+}
+
+
+def _required_direct_root(data: dict[str, Any], subaction: str) -> dict[str, Any]:
+    root_name = _SYSTEM_DIRECT_ROOTS[subaction]
+    root = data.get(root_name)
+    if root is None:
+        raise ToolError(
+            f"Unraid API returned no {root_name!r} root for system/{subaction}. "
+            "Check API version, permissions, and server logs."
+        )
+    if not isinstance(root, dict):
+        raise ToolError(
+            f"Unraid API returned unexpected {root_name!r} payload for system/{subaction}"
+        )
+    return root
 
 
 def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
@@ -249,6 +317,9 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
 
         if subaction == "display":
             return dict(safe_get(data, "info", "display", default={}))
+        if subaction in _SYSTEM_DIRECT_ROOTS:
+            root_name = _SYSTEM_DIRECT_ROOTS[subaction]
+            return {root_name: _required_direct_root(data, subaction)}
         if subaction == "online":
             return {"online": data.get("online")}
         if subaction == "settings":
@@ -291,7 +362,6 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 "localTld": vars_data.get("localTld"),
                 "useSsl": vars_data.get("useSsl"),
             }
-
         if subaction == "ups_device":
             result = data.get("upsDeviceById")
             if result is None:

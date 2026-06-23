@@ -6,6 +6,145 @@
 
 GraphQL-backed MCP server for Unraid. Exposes a unified `unraid` tool for system inspection, management operations, live telemetry, and destructive actions gated by explicit confirmation.
 
+## Installation
+
+The plugin lives at `plugins/unraid/` and launches the server with
+`uvx unraid-mcp` (the published [PyPI package](https://pypi.org/project/unraid-mcp/)),
+so no local checkout is required once it's installed. You'll need
+[`uv`](https://docs.astral.sh/uv/) on your `PATH`.
+
+### Claude Code (plugin + marketplace)
+
+Add this repo as a marketplace, then install the plugin:
+
+```text
+/plugin marketplace add jmagar/unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
+```
+
+`marketplace add` accepts the `owner/repo` shorthand (or a full git URL / local
+path). After install, Claude Code prompts for **Unraid GraphQL API URL** and
+**Unraid API Key** (the plugin's `userConfig`); they're passed to the server and
+persisted to `~/.unraid-mcp/.env` by the SessionStart hook.
+
+### Codex (plugin + marketplace)
+
+The repo ships a Codex marketplace manifest at `.agents/plugins/marketplace.json`:
+
+```bash
+codex plugin marketplace add jmagar/unraid-mcp
+# then enable `unraid-mcp@unraid-mcp` from the Codex `/plugins` view
+```
+
+Codex does not expand plugin-config placeholders into the MCP env, so export your
+credentials in the shell that launches Codex (the manifest forwards them by name):
+
+```bash
+export UNRAID_API_URL="https://tower.local/graphql"
+export UNRAID_API_KEY="your-api-key"
+```
+
+Alternatively, populate `~/.unraid-mcp/.env` (run `uvx unraid-mcp setup`) — the
+server reads it automatically.
+
+### Gemini CLI (extension)
+
+Install the extension straight from the repo (`gemini extensions install` reads
+`gemini-extension.json` from the repo root):
+
+```bash
+gemini extensions install https://github.com/jmagar/unraid-mcp
+```
+
+Gemini prompts for the `UNRAID_API_URL` and `UNRAID_API_KEY` settings on install
+and exports them to the server's environment.
+
+### Run the server directly with uvx
+
+No clone needed — run the published package on demand:
+
+```bash
+export UNRAID_API_URL="https://tower.local/graphql"
+export UNRAID_API_KEY="your-api-key"
+uvx unraid-mcp
+```
+
+### Local development
+
+```bash
+uv sync --dev
+uv run unraid-mcp-server
+```
+
+Equivalent entrypoints:
+
+```bash
+uv run unraid-mcp
+uv run python -m unraid_mcp
+```
+
+### Docker
+
+```bash
+docker compose up -d
+```
+
+### Claude Desktop
+
+Newer Claude Desktop builds may reject the raw `streamable-http` URL config when the
+server runs in Docker. Connect through the `mcp-remote` proxy instead — see
+[docs/mcp/CONNECT.md](docs/mcp/CONNECT.md#claude-desktop-via-mcp-remote-proxy) for the
+macOS/Linux and Windows config snippets.
+
+## Configuration
+
+Create `.env` from `.env.example`:
+
+```bash
+just setup
+```
+
+### Environment variables
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `UNRAID_API_URL` | Yes | — | GraphQL endpoint URL, e.g. `https://tower.local/graphql` |
+| `UNRAID_API_KEY` | Yes | — | Unraid API key (see below) |
+| `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or `sse` (deprecated) |
+| `UNRAID_MCP_HOST` | No | `0.0.0.0` | Bind address for HTTP transports |
+| `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
+| `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
+| `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |
+| `DOCKER_NETWORK` | No | — | External Docker network to join; leave blank for default bridge |
+| `PGID` | No | `1000` | Container process GID |
+| `PUID` | No | `1000` | Container process UID |
+
+### How to find UNRAID_API_KEY
+
+1. Open the Unraid web UI.
+2. Go to **Settings → Management Access → API Keys**.
+3. Create a new key or copy an existing one.
+4. Paste the value into `UNRAID_API_KEY`.
+
+### UNRAID_API_KEY vs UNRAID_MCP_BEARER_TOKEN
+
+These are two separate credentials with different purposes:
+
+- `UNRAID_API_KEY` — authenticates the MCP server to the **Unraid GraphQL API**. Every GraphQL request carries this key as a header. Obtained from the Unraid web UI.
+- `UNRAID_MCP_BEARER_TOKEN` — authenticates **MCP clients** (Claude Code, Claude Desktop, etc.) to **this MCP server**. Clients must send `Authorization: Bearer <token>` on every HTTP request. Generate with `openssl rand -hex 32` or `just gen-token`.
+
+### UNRAID_MCP_DISABLE_HTTP_AUTH
+
+Set this to `true` when a reverse proxy (nginx, Caddy, Traefik, SWAG) already handles authentication before requests reach the MCP server. Disabling the built-in check removes the Bearer token requirement at the MCP layer. Do not expose the server directly to untrusted networks with this flag enabled.
+
+### Transport modes
+
+- `streamable-http` — default; exposes an HTTP endpoint, requires Bearer token unless auth is disabled
+- `stdio` — subprocess mode for Claude Code local plugin; no Bearer token needed
+- `sse` — legacy Server-Sent Events; deprecated but functional
+
+Credential files are loaded in priority order: `~/.unraid-mcp/.env` first, then project `.env` as a fallback.
+
 ## Overview
 
 The server translates MCP tool calls into Unraid GraphQL queries and mutations over HTTP and WebSocket. All operations share a single `unraid` tool routed by `action` + `subaction`. Live telemetry uses WebSocket subscriptions that stream real-time data from the Unraid API.
@@ -50,7 +189,7 @@ reference are themselves actions of that tool (`subscriptions` and `help`).
 
 All operations go through one tool. Pick an `action`, then a `subaction` within it.
 
-#### `system` — 20 subactions
+#### `system` — 23 subactions
 
 Server information, metrics, network, and UPS.
 
@@ -64,12 +203,15 @@ Server information, metrics, network, and UPS.
 | `metrics` | Live CPU % and memory usage | — |
 | `services` | Running services with name, online status, version | — |
 | `display` | Current UI theme name | — |
+| `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale | — |
 | `config` | Config validity and error state | — |
 | `online` | Boolean reachability check | — |
 | `owner` | Owner username, avatar, profile URL | — |
 | `settings` | Unified settings key/value map | — |
 | `server` | Single-call summary: hostname, uptime, Unraid version, array state | — |
+| `server_details` | Direct `server` root details with owner and URLs; API key omitted | — |
 | `servers` | All registered servers with LAN/WAN IPs and URLs | — |
+| `network_access_urls` | Direct `network.accessUrls` entries with type, name, IPv4, and IPv6 | — |
 | `flash` | Flash drive vendor and product info | — |
 | `ups_devices` | All UPS devices with battery and power metrics | — |
 | `ups_device` | Single UPS device details | `device_id` |
@@ -256,7 +398,7 @@ System settings, UPS, SSH, time, and server identity. Destructive subactions mar
 | `update_system_time` | Update timezone / NTP / manual time — can invalidate TLS certs | `config_input`, `confirm=True` | * |
 | `update_server_identity` | Update server name, comment, and model | `name`; optional `comment`, `sys_model` | — |
 
-#### `connect` — 7 subactions
+#### `connect` — 8 subactions
 
 Unraid Connect / remote-access state and control. Destructive subactions marked with *.
 
@@ -264,13 +406,14 @@ Unraid Connect / remote-access state and control. Destructive subactions marked 
 | --- | --- | --- | --- |
 | `remote_access` | Current remote-access settings (type, forward, port) | — | — |
 | `cloud` | Unraid Connect / cloud status (relay, minigraph, key validity) | — | — |
+| `status` | Direct `connect` root status: dynamic remote access and settings schema; settings values omitted | — | — |
 | `update_api_settings` | Update Connect API settings (affects internet reachability) | `connect_input` (`{accessType?, forwardType?, port?}`), `confirm=True` | * |
 | `sign_in` | Sign the server in to Unraid Connect — registers with the cloud | `connect_input` (`{apiKey, userInfo?}`), `confirm=True` | * |
 | `sign_out` | Sign the server out of Unraid Connect | `confirm=True` | * |
 | `setup_remote_access` | Configure remote access — can expose the server to the internet | `connect_input`, `confirm=True` | * |
 | `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`), `confirm=True` | * |
 
-#### `customization` — 5 subactions
+#### `customization` — 6 subactions
 
 UI theme, locale, and SSO state.
 
@@ -279,6 +422,7 @@ UI theme, locale, and SSO state.
 | `public_theme` | Public-facing theme (also the server's current theme) | — |
 | `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) | — |
 | `sso_enabled` | Whether SSO is enabled | — |
+| `details` | Direct `customization` root onboarding/language details; activation-code values omitted | — |
 | `set_theme` | Set the active UI theme | `theme_name` |
 | `set_locale` | Set the UI locale | `locale` |
 
@@ -474,145 +618,6 @@ All destructive actions require `confirm=True`. Omitting it or passing `confirm=
 | `collect_for` | float (default `5.0`) | `live` collect-mode subactions |
 | `timeout` | float (default `10.0`) | `live` all subactions |
 
-## Installation
-
-The plugin lives at `plugins/unraid/` and launches the server with
-`uvx unraid-mcp` (the published [PyPI package](https://pypi.org/project/unraid-mcp/)),
-so no local checkout is required once it's installed. You'll need
-[`uv`](https://docs.astral.sh/uv/) on your `PATH`.
-
-### Claude Code (plugin + marketplace)
-
-Add this repo as a marketplace, then install the plugin:
-
-```text
-/plugin marketplace add jmagar/unraid-mcp
-/plugin install unraid-mcp@unraid-mcp
-```
-
-`marketplace add` accepts the `owner/repo` shorthand (or a full git URL / local
-path). After install, Claude Code prompts for **Unraid GraphQL API URL** and
-**Unraid API Key** (the plugin's `userConfig`); they're passed to the server and
-persisted to `~/.unraid-mcp/.env` by the SessionStart hook.
-
-### Codex (plugin + marketplace)
-
-The repo ships a Codex marketplace manifest at `.agents/plugins/marketplace.json`:
-
-```bash
-codex plugin marketplace add jmagar/unraid-mcp
-# then enable `unraid-mcp@unraid-mcp` from the Codex `/plugins` view
-```
-
-Codex does not expand plugin-config placeholders into the MCP env, so export your
-credentials in the shell that launches Codex (the manifest forwards them by name):
-
-```bash
-export UNRAID_API_URL="https://tower.local/graphql"
-export UNRAID_API_KEY="your-api-key"
-```
-
-Alternatively, populate `~/.unraid-mcp/.env` (run `uvx unraid-mcp setup`) — the
-server reads it automatically.
-
-### Gemini CLI (extension)
-
-Install the extension straight from the repo (`gemini extensions install` reads
-`gemini-extension.json` from the repo root):
-
-```bash
-gemini extensions install https://github.com/jmagar/unraid-mcp
-```
-
-Gemini prompts for the `UNRAID_API_URL` and `UNRAID_API_KEY` settings on install
-and exports them to the server's environment.
-
-### Run the server directly with uvx
-
-No clone needed — run the published package on demand:
-
-```bash
-export UNRAID_API_URL="https://tower.local/graphql"
-export UNRAID_API_KEY="your-api-key"
-uvx unraid-mcp
-```
-
-### Local development
-
-```bash
-uv sync --dev
-uv run unraid-mcp-server
-```
-
-Equivalent entrypoints:
-
-```bash
-uv run unraid-mcp
-uv run python -m unraid_mcp
-```
-
-### Docker
-
-```bash
-docker compose up -d
-```
-
-### Claude Desktop
-
-Newer Claude Desktop builds may reject the raw `streamable-http` URL config when the
-server runs in Docker. Connect through the `mcp-remote` proxy instead — see
-[docs/mcp/CONNECT.md](docs/mcp/CONNECT.md#claude-desktop-via-mcp-remote-proxy) for the
-macOS/Linux and Windows config snippets.
-
-## Configuration
-
-Create `.env` from `.env.example`:
-
-```bash
-just setup
-```
-
-### Environment variables
-
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `UNRAID_API_URL` | Yes | — | GraphQL endpoint URL, e.g. `https://tower.local/graphql` |
-| `UNRAID_API_KEY` | Yes | — | Unraid API key (see below) |
-| `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or `sse` (deprecated) |
-| `UNRAID_MCP_HOST` | No | `0.0.0.0` | Bind address for HTTP transports |
-| `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
-| `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
-| `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |
-| `DOCKER_NETWORK` | No | — | External Docker network to join; leave blank for default bridge |
-| `PGID` | No | `1000` | Container process GID |
-| `PUID` | No | `1000` | Container process UID |
-
-### How to find UNRAID_API_KEY
-
-1. Open the Unraid web UI.
-2. Go to **Settings → Management Access → API Keys**.
-3. Create a new key or copy an existing one.
-4. Paste the value into `UNRAID_API_KEY`.
-
-### UNRAID_API_KEY vs UNRAID_MCP_BEARER_TOKEN
-
-These are two separate credentials with different purposes:
-
-- `UNRAID_API_KEY` — authenticates the MCP server to the **Unraid GraphQL API**. Every GraphQL request carries this key as a header. Obtained from the Unraid web UI.
-- `UNRAID_MCP_BEARER_TOKEN` — authenticates **MCP clients** (Claude Code, Claude Desktop, etc.) to **this MCP server**. Clients must send `Authorization: Bearer <token>` on every HTTP request. Generate with `openssl rand -hex 32` or `just gen-token`.
-
-### UNRAID_MCP_DISABLE_HTTP_AUTH
-
-Set this to `true` when a reverse proxy (nginx, Caddy, Traefik, SWAG) already handles authentication before requests reach the MCP server. Disabling the built-in check removes the Bearer token requirement at the MCP layer. Do not expose the server directly to untrusted networks with this flag enabled.
-
-### Transport modes
-
-- `streamable-http` — default; exposes an HTTP endpoint, requires Bearer token unless auth is disabled
-- `stdio` — subprocess mode for Claude Code local plugin; no Bearer token needed
-- `sse` — legacy Server-Sent Events; deprecated but functional
-
-Credential files are loaded in priority order: `~/.unraid-mcp/.env` first, then project `.env` as a fallback.
-
 ## Usage examples
 
 ### System inspection
@@ -751,7 +756,10 @@ The server issues queries and mutations against the Unraid GraphQL API. Key quer
 | `vars` | `system/network`, `system/variables` |
 | `metrics` | `system/metrics` |
 | `services` | `system/services` |
+| `display` | `system/display_details` (safe direct root) |
 | `servers` | `system/servers`, `system/network` |
+| `network` | `system/network_access_urls` (safe direct root) |
+| `server` | `system/server_details` (safe direct root; API key omitted) |
 | `registration` | `system/registration` |
 | `online` | `system/online`, `health/test_connection` |
 | `owner` | `system/owner` |
@@ -769,7 +777,8 @@ The server issues queries and mutations against the Unraid GraphQL API. Key quer
 | `apiKeys` / `apiKey` | `key/*` |
 | `plugins` | `plugin/list` |
 | `rclone` | `rclone/*` |
-| `customization` | `customization/*` |
+| `connect` | `connect/status` (safe direct root; settings values omitted), `connect/*` |
+| `customization` | `customization/details` (safe direct root; activation-code values omitted), `customization/*` |
 | `oidcProviders` / `oidcConfiguration` | `oidc/*` |
 | `me` | `user/me` |
 

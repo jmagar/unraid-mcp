@@ -25,6 +25,7 @@ from fastmcp.exceptions import ToolError
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from unraid_mcp.tools._key import _KEY_SUBACTIONS
 from unraid_mcp.tools.unraid import UNRAID_ACTIONS
 
 
@@ -454,8 +455,7 @@ class TestKeysInputFuzzing:
     @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
     def test_invalid_action_raises_tool_error(self, subaction: str) -> None:
         """Invalid subaction names for keys domain raise ToolError."""
-        valid_subactions = {"list", "get", "create", "update", "delete", "add_role", "remove_role"}
-        if subaction in valid_subactions:
+        if subaction in _KEY_SUBACTIONS:
             return
 
         async def _run_test() -> None:

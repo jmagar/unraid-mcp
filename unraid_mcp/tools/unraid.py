@@ -4,7 +4,7 @@ Provides the `unraid` tool with 19 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
-  system       - Server info, metrics, network, UPS (20 subactions)
+  system       - Server info, metrics, network, UPS (23 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
   array        - Parity checks, array state, disk operations (14 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
@@ -15,8 +15,8 @@ Actions:
   plugin       - Plugin management and async installs (8 subactions)
   rclone       - Cloud storage remote management (4 subactions)
   setting      - System settings, UPS, SSH, time, identity (6 subactions)
-  connect      - Unraid Connect / remote access (7 subactions)
-  customization - Theme, locale and UI customization (5 subactions)
+  connect      - Unraid Connect / remote access (8 subactions)
+  customization - Theme, locale and UI customization (6 subactions)
   oidc         - OIDC/SSO provider management (5 subactions)
   onboarding   - First-boot/onboarding state (11 subactions)
   user         - Current authenticated user (1 subaction)
@@ -231,7 +231,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 
 | Action | Subactions | Notes |
 |--------|-----------|-------|
-| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | |
+| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | |
 | `health` | `check`, `test_connection`, `diagnose`, `setup` | |
 | `array` | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
 | `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
@@ -242,8 +242,8 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `plugin` | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`*, `install`*, `install_language`* | install runs a .plg as root |
 | `rclone` | `list_remotes`, `config_form`, `create_remote`, `delete_remote`* | |
 | `setting` | `update`, `configure_ups`*, `update_ssh`*, `update_temperature`, `update_system_time`*, `update_server_identity` | |
-| `connect` | `remote_access`, `cloud`, `update_api_settings`*, `sign_in`*, `sign_out`*, `setup_remote_access`*, `enable_dynamic_remote_access`* | Unraid Connect; all mutations destructive; inputs via `connect_input` |
-| `customization` | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`, `set_locale` | |
+| `connect` | `remote_access`, `cloud`, `status`, `update_api_settings`*, `sign_in`*, `sign_out`*, `setup_remote_access`*, `enable_dynamic_remote_access`* | Unraid Connect; all mutations destructive; inputs via `connect_input` |
+| `customization` | `public_theme`, `is_initial_setup`, `sso_enabled`, `details`, `set_theme`, `set_locale` | |
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `onboarding` | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`* | inputs via `onboarding_input` |
 | `user` | `me` | |
@@ -859,9 +859,9 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │ action          │ subactions                                                           │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ system          │ overview, array, network, registration, variables, metrics,          │
-        │                 │ services, display, config, online, owner, settings, server,          │
-        │                 │ servers, flash, ups_devices, ups_device, ups_config, server_time,    │
-        │                 │ timezones                                                            │
+        │                 │ services, display, display_details, config, online, owner, settings, │
+        │                 │ server, server_details, servers, network_access_urls, flash,         │
+        │                 │ ups_devices, ups_device, ups_config, server_time, timezones          │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ health          │ check, test_connection, diagnose, setup                              │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
@@ -899,10 +899,11 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │ setting         │ update, configure_ups*, update_ssh*, update_temperature,             │
         │                 │ update_system_time*, update_server_identity                          │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ connect         │ remote_access, cloud, update_api_settings*, sign_in*, sign_out*,     │
-        │                 │ setup_remote_access*, enable_dynamic_remote_access*                  │
+        │ connect         │ remote_access, cloud, status, update_api_settings*, sign_in*,        │
+        │                 │ sign_out*, setup_remote_access*, enable_dynamic_remote_access*       │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
-        │ customization   │ public_theme, is_initial_setup, sso_enabled, set_theme, set_locale   │
+        │ customization   │ public_theme, is_initial_setup, sso_enabled, details, set_theme,     │
+        │                 │ set_locale                                                           │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ oidc            │ providers, provider, configuration, public_providers,                │
         │                 │ validate_session                                                     │

@@ -30,7 +30,7 @@ The plugin registers **a single MCP tool**:
 
 | Tool | Purpose |
 |------|---------|
-| `unraid` | The only tool — `action` (domain) + `subaction` (operation) routing, 170 subactions across 19 actions. WebSocket diagnostics and the Markdown reference are the `subscriptions` and `help` actions of this tool. |
+| `unraid` | The only tool — `action` (domain) + `subaction` (operation) routing, 175 subactions across 19 actions. WebSocket diagnostics and the Markdown reference are the `subscriptions` and `help` actions of this tool. |
 
 ### Calling Convention
 

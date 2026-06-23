@@ -24,19 +24,7 @@ from unraid_mcp.devtools.graphql_inventory import all_operation_cases
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
 
-INTENTIONAL_QUERY_GAPS: dict[str, str] = {
-    "connect": (
-        "Connect reads are exposed through narrower remoteAccess/cloud actions; "
-        "connect mutations cover the write surface."
-    ),
-    "customization": (
-        "Customization reads use publicTheme/isFreshInstall/isSSOEnabled roots, "
-        "with writes routed through the customization mutation namespace."
-    ),
-    "display": "Display data is exposed through system/display via info.display.",
-    "network": "Network data is exposed through system/network via servers/vars.",
-    "server": "Server data is exposed through system/server, system/servers, and related info roots.",
-}
+INTENTIONAL_QUERY_GAPS: dict[str, str] = {}
 INTENTIONAL_MUTATION_GAPS: dict[str, str] = {}
 INTENTIONAL_SUBSCRIPTION_GAPS: dict[str, str] = {}
 

@@ -13,6 +13,10 @@ unraid(action="health",  subaction="test_connection")  # Quick connectivity test
 unraid(action="system",  subaction="overview")         # Complete server summary
 unraid(action="system",  subaction="metrics")          # CPU / RAM / I/O usage
 unraid(action="system",  subaction="online")           # Online status
+unraid(action="system",  subaction="server_details")   # Direct server root; API key omitted
+unraid(action="system",  subaction="network_access_urls")  # Direct network access URLs
+unraid(action="connect", subaction="status")           # Connect status; settings values omitted
+unraid(action="customization", subaction="details")    # Onboarding/languages; activation codes omitted
 ```
 
 ### Array & Disks
@@ -119,6 +123,7 @@ unraid(action="live", subaction="ups_status")
 | `unraid_plugins` | `plugin` |
 | `unraid_rclone` | `rclone` |
 | `unraid_settings` | `setting` |
+| `unraid_connect` | `connect` |
 | `unraid_customization` | `customization` |
 | `unraid_oidc` | `oidc` |
 | `unraid_users` | `user` |

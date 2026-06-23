@@ -6,7 +6,7 @@ Complete listing of all plugin components.
 
 | Tool | Type | Module | Description |
 | --- | --- | --- | --- |
-| `unraid` | Primary (only tool) | `tools/unraid.py` | Unified action/subaction router: 19 actions, 170 subactions. The Markdown reference (`help` action) and WebSocket diagnostics (`subscriptions` action, handled in `subscriptions/diagnostics.py`) are folded into this single tool. |
+| `unraid` | Primary (only tool) | `tools/unraid.py` | Unified action/subaction router: 19 actions, 175 subactions. The Markdown reference (`help` action) and WebSocket diagnostics (`subscriptions` action, handled in `subscriptions/diagnostics.py`) are folded into this single tool. |
 
 ## MCP resources
 
@@ -27,7 +27,7 @@ Complete listing of all plugin components.
 
 | Domain | Subaction count | Module | Destructive? |
 | --- | --- | --- | --- |
-| `system` | 20 | `tools/_system.py` | No |
+| `system` | 23 | `tools/_system.py` | No |
 | `health` | 4 | `tools/_health.py` (+ handler in `tools/unraid.py`) | No |
 | `array` | 14 | `tools/_array.py` | Yes (3) |
 | `disk` | 6 | `tools/_disk.py` | Yes (1) |
@@ -38,8 +38,8 @@ Complete listing of all plugin components.
 | `plugin` | 8 | `tools/_plugin.py` | Yes (3) |
 | `rclone` | 4 | `tools/_rclone.py` | Yes (1) |
 | `setting` | 6 | `tools/_setting.py` | Yes (3) |
-| `connect` | 7 | `tools/_connect.py` | Yes (5) |
-| `customization` | 5 | `tools/_customization.py` | No |
+| `connect` | 8 | `tools/_connect.py` | Yes (5) |
+| `customization` | 6 | `tools/_customization.py` | No |
 | `oidc` | 5 | `tools/_oidc.py` | No |
 | `onboarding` | 11 | `tools/_onboarding.py` | Yes (2) |
 | `user` | 1 | `tools/_user.py` | No |
