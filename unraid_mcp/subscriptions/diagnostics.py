@@ -70,6 +70,12 @@ _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
 # channel for whatever the upstream returns (SEC-M1).
 _RAW_PROBE_ENV = "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE"
 
+# Cap the caller-supplied query before parsing. graphql-core's parse() is
+# synchronous and roughly linear in input size (~seconds per MB), so an
+# unbounded query would stall the event loop (CWE-400). 4096 chars is generous
+# for any real single-field subscription.
+_MAX_SUBSCRIPTION_QUERY_CHARS = 4096
+
 
 def _raw_subscription_probe_enabled() -> bool:
     """Whether test_query may echo the raw upstream frame (debug only)."""
@@ -84,9 +90,10 @@ def _validate_subscription_query(query: str) -> str:
     (a regex allowlist is bypassable via multi-field, alias, and argument
     smuggling — SEC-H1). The document must:
 
+    * be within the length cap (so an oversized query can't stall the event loop);
     * parse as valid GraphQL;
-    * contain exactly one operation, and that operation must be a ``subscription``
-      (not a query/mutation);
+    * contain exactly one definition, which must be a single ``subscription``
+      operation (no extra/orphan fragment definitions, no query/mutation);
     * select exactly one top-level field, whose **real** name (alias resolved)
       is in :data:`_ALLOWED_SUBSCRIPTION_FIELDS`.
 
@@ -96,10 +103,22 @@ def _validate_subscription_query(query: str) -> str:
     Raises:
         ToolError: If the query fails validation.
     """
+    if len(query) > _MAX_SUBSCRIPTION_QUERY_CHARS:
+        raise ToolError(
+            f"Query rejected: exceeds the maximum length "
+            f"({_MAX_SUBSCRIPTION_QUERY_CHARS} characters)."
+        )
+
     try:
         document = parse(query)
     except GraphQLError as exc:
         raise ToolError("Query rejected: not a valid GraphQL document.") from exc
+
+    # Exactly one definition — rejects orphan/extra fragment definitions that would
+    # otherwise ride along to the upstream WS unused (the validator's intent is one
+    # subscription selecting one field, with no fragments).
+    if len(document.definitions) != 1:
+        raise ToolError("Query rejected: must contain exactly one subscription operation.")
 
     operations = [d for d in document.definitions if isinstance(d, OperationDefinitionNode)]
     if len(operations) != 1:

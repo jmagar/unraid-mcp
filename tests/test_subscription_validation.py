@@ -141,3 +141,24 @@ class TestValidateSubscriptionQueryBypassRegression:
         )
         with pytest.raises(ToolError):
             _validate_subscription_query(query)
+
+
+class TestValidateSubscriptionQuerySizeAndFragments:
+    """PR-review hardening: input size cap (DoS) and orphan-fragment rejection."""
+
+    def test_oversized_query_rejected_before_parse(self) -> None:
+        # Over the char cap → rejected WITHOUT invoking the linear-time GraphQL
+        # parser, preventing an event-loop stall on a multi-MB input (CWE-400).
+        huge = "subscription { cpu { " + "x " * 5000 + "} }"
+        with pytest.raises(ToolError, match="exceeds the maximum length"):
+            _validate_subscription_query(huge)
+
+    def test_orphan_fragment_definition_rejected(self) -> None:
+        # An extra (orphan) fragment definition rides along to the upstream WS
+        # unused — the document must contain exactly one (subscription) definition.
+        query = (
+            "subscription { cpu { used } } "
+            "fragment Evil on Subscription { notificationsWarningsAndAlerts { message } }"
+        )
+        with pytest.raises(ToolError, match="exactly one subscription operation"):
+            _validate_subscription_query(query)
