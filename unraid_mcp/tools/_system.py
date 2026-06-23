@@ -82,7 +82,7 @@ _SYSTEM_QUERIES: dict[str, str] = {
         query GetDisplayDetails {
           display {
             id
-            case { id url icon error base64 }
+            case { id url icon error }
             theme
             unit
             scale

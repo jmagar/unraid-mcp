@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (1 Tool)
 
 The server registers a **single MCP tool**, `unraid`, with `action` (domain) +
-`subaction` (operation) routing (19 actions / 170 subactions). Call it as
+`subaction` (operation) routing (19 actions / 175 subactions). Call it as
 `unraid(action="docker", subaction="list")`. Subscription diagnostics and the
 Markdown reference that used to be standalone tools are now actions of `unraid`:
 - **`subscriptions`** — `diagnose` (connection states, errors, WebSocket URLs) and
@@ -115,7 +115,7 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 
 | action | subactions |
 |--------|-----------|
-| **system** (20) | overview, array, network, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, ups_device, ups_config, server_time, timezones |
+| **system** (23) | overview, array, network, registration, variables, metrics, services, display, display_details, config, online, owner, settings, server, server_details, servers, network_access_urls, flash, ups_devices, ups_device, ups_config, server_time, timezones |
 | **health** (4) | check, test_connection, diagnose, setup |
 | **array** (14) | parity_status, parity_history, assignable_disks, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
@@ -126,8 +126,8 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 | **plugin** (8) | list, installed_unraid, install_operations, install_operation, add, remove*, install*, install_language* |
 | **rclone** (4) | list_remotes, config_form, create_remote, delete_remote* |
 | **setting** (6) | update, configure_ups*, update_ssh*, update_temperature, update_system_time*, update_server_identity |
-| **connect** (7) | remote_access, cloud, update_api_settings*, sign_in*, sign_out*, setup_remote_access*, enable_dynamic_remote_access* |
-| **customization** (5) | public_theme, is_initial_setup, sso_enabled, set_theme, set_locale |
+| **connect** (8) | remote_access, cloud, status, update_api_settings*, sign_in*, sign_out*, setup_remote_access*, enable_dynamic_remote_access* |
+| **customization** (6) | public_theme, is_initial_setup, sso_enabled, details, set_theme, set_locale |
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
 | **onboarding** (11) | internal_boot_context, complete, open, close, resume, bypass, reset*, set_override, clear_override, refresh_internal_boot_context, create_internal_boot_pool* |
 | **user** (1) | me |

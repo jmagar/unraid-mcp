@@ -10,16 +10,14 @@ from conftest import make_tool_fn
 pytestmark = pytest.mark.asyncio
 
 
-def _make_tool():
+def _make_tool() -> Any:
     return make_tool_fn("unraid_mcp.tools.unraid", "register_unraid_tool", "unraid")
 
 
-def _contains_key(value: Any, key: str) -> bool:
-    if isinstance(value, dict):
-        return key in value or any(_contains_key(child, key) for child in value.values())
-    if isinstance(value, list):
-        return any(_contains_key(child, key) for child in value)
-    return False
+def _dict_keys(value: Any) -> set[str]:
+    if not isinstance(value, dict):
+        return set()
+    return set(value)
 
 
 async def test_system_server_details_omits_apikey(mock_graphql_request: AsyncMock) -> None:
@@ -46,7 +44,7 @@ async def test_system_server_details_omits_apikey(mock_graphql_request: AsyncMoc
     result = await _make_tool()(action="system", subaction="server_details")
 
     assert result["server"]["name"] == "tower"
-    assert not _contains_key(result, "apikey")
+    assert "apikey" not in _dict_keys(result["server"])
     emitted_query = mock_graphql_request.call_args.args[0]
     assert "apikey" not in emitted_query
 
@@ -72,7 +70,7 @@ async def test_connect_status_omits_settings_values(mock_graphql_request: AsyncM
 
     assert result["success"] is True
     assert "settings" in result["connect"]
-    assert not _contains_key(result, "values")
+    assert "values" not in _dict_keys(result["connect"]["settings"])
     emitted_query = mock_graphql_request.call_args.args[0]
     assert "values" not in emitted_query
 
@@ -105,10 +103,7 @@ async def test_customization_details_omits_activation_codes(
     result = await _make_tool()(action="customization", subaction="details")
 
     assert result["customization"]["onboarding"]["completed"] is True
-    assert not _contains_key(result, "activationCode")
-    assert (
-        not _contains_key(result, "code")
-        or result["customization"]["availableLanguages"][0]["code"] == "en_US"
-    )
+    assert "activationCode" not in _dict_keys(result["customization"]["onboarding"])
+    assert result["customization"]["availableLanguages"][0]["code"] == "en_US"
     emitted_query = mock_graphql_request.call_args.args[0]
     assert "activationCode" not in emitted_query

@@ -25,9 +25,10 @@ Credentials are stored at `~/.unraid-mcp/.env`. Get an API key from **Unraid Web
 
 ## Tools
 
-### `unraid` — Primary Tool (175 subactions, 19 domains)
+### `unraid` — Primary Tool
 
 Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
+For the complete current action/subaction reference, call `unraid(action="help")`.
 
 #### `system` — Server Information
 | Subaction | Description |
