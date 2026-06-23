@@ -1,7 +1,7 @@
 """Customization domain handler for the Unraid MCP tool.
 
-Covers: public_theme, is_initial_setup, sso_enabled, set_theme, set_locale
-(5 subactions).
+Covers: public_theme, is_initial_setup, sso_enabled, details, set_theme,
+set_locale (6 subactions).
 
 Schema notes (Unraid 7.3 / unraid-api 4.35):
 - The old ``customization { theme partnerInfo }`` shape was removed upstream, so the
@@ -30,6 +30,27 @@ _CUSTOMIZATION_QUERIES: dict[str, str] = {
     "public_theme": "query GetPublicTheme { publicTheme { name showBannerImage showBannerGradient showHeaderDescription headerBackgroundColor headerPrimaryTextColor headerSecondaryTextColor } }",
     "is_initial_setup": "query IsFreshInstall { isFreshInstall }",
     "sso_enabled": "query IsSSOEnabled { isSSOEnabled }",
+    "details": """
+        query GetCustomizationDetails {
+          customization {
+            onboarding {
+              status
+              isPartnerBuild
+              completed
+              completedAtVersion
+              shouldOpen
+              onboardingState {
+                registrationState
+                isRegistered
+                isFreshInstall
+                hasActivationCode
+                activationRequired
+              }
+            }
+            availableLanguages { code name url }
+          }
+        }
+    """,
 }
 
 _CUSTOMIZATION_MUTATIONS: dict[str, str] = {
@@ -47,6 +68,10 @@ async def _handle_customization(
 
     with tool_error_handler("customization", subaction, logger):
         logger.info(f"Executing unraid action=customization subaction={subaction}")
+
+        if subaction == "details":
+            data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES["details"])
+            return {"customization": data.get("customization") or {}}
 
         if subaction in _CUSTOMIZATION_QUERIES:
             data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES[subaction])

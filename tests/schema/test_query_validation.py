@@ -157,12 +157,15 @@ class TestInfoQueries:
             "metrics",
             "services",
             "display",
+            "display_details",
             "config",
             "online",
             "owner",
             "settings",
             "server",
+            "server_details",
             "servers",
+            "network_access_urls",
             "flash",
             "ups_devices",
             "ups_device",
@@ -839,7 +842,7 @@ class TestHealthQueries:
 
 
 # ============================================================================
-# Customization Tool (3 queries + 1 mutation)
+# Customization Tool (4 queries + 1 mutation)
 # ============================================================================
 class TestCustomizationQueries:
     """Validate queries from unraid_mcp/tools/_customization.py."""
@@ -868,7 +871,12 @@ class TestCustomizationQueries:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_QUERIES as QUERIES
 
         # `theme` was removed: `customization { theme partnerInfo }` no longer exists.
-        assert set(QUERIES.keys()) == {"public_theme", "is_initial_setup", "sso_enabled"}
+        assert set(QUERIES.keys()) == {
+            "public_theme",
+            "is_initial_setup",
+            "sso_enabled",
+            "details",
+        }
 
 
 class TestCustomizationMutations:

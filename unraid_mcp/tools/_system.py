@@ -1,8 +1,9 @@
 """System domain handler for the Unraid MCP tool.
 
 Covers: overview, array, network, registration, variables, metrics, services,
-display, config, online, owner, settings, server, servers, flash, ups_devices,
-ups_device, ups_config, server_time, timezones (20 subactions).
+display, display_details, config, online, owner, settings, server,
+server_details, servers, network_access_urls, flash, ups_devices, ups_device,
+ups_config, server_time, timezones (23 subactions).
 """
 
 from typing import Any
@@ -77,6 +78,28 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "metrics": "query GetMetrics { metrics { cpu { percentTotal } memory { total used free available buffcache percentTotal } } }",
     "services": "query GetServices { services { name online version } }",
     "display": "query GetDisplay { info { display { theme } } }",
+    "display_details": """
+        query GetDisplayDetails {
+          display {
+            id
+            case { id url icon error base64 }
+            theme
+            unit
+            scale
+            tabs
+            resize
+            wwn
+            total
+            usage
+            text
+            warning
+            critical
+            hot
+            max
+            locale
+          }
+        }
+    """,
     "config": "query GetConfig { config { valid error } }",
     "online": "query GetOnline { online }",
     "owner": "query GetOwner { owner { username avatar url } }",
@@ -91,6 +114,30 @@ _SYSTEM_QUERIES: dict[str, str] = {
         }
     """,
     "servers": "query GetServers { servers { id name status wanip lanip localurl remoteurl } }",
+    "network_access_urls": """
+        query GetNetworkAccessUrls {
+          network {
+            id
+            accessUrls { type name ipv4 ipv6 }
+          }
+        }
+    """,
+    "server_details": """
+        query GetServerDetails {
+          server {
+            id
+            owner { id username url avatar }
+            guid
+            name
+            comment
+            status
+            wanip
+            lanip
+            localurl
+            remoteurl
+          }
+        }
+    """,
     "flash": "query GetFlash { flash { id vendor product } }",
     "ups_devices": "query GetUpsDevices { upsDevices { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
     "ups_device": "query GetUpsDevice($id: String!) { upsDeviceById(id: $id) { id name model status battery { chargeLevel estimatedRuntime health } power { loadPercentage inputVoltage outputVoltage } } }",
@@ -249,6 +296,8 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
 
         if subaction == "display":
             return dict(safe_get(data, "info", "display", default={}))
+        if subaction == "display_details":
+            return {"display": data.get("display") or {}}
         if subaction == "online":
             return {"online": data.get("online")}
         if subaction == "settings":
@@ -291,6 +340,10 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 "localTld": vars_data.get("localTld"),
                 "useSsl": vars_data.get("useSsl"),
             }
+        if subaction == "network_access_urls":
+            return {"network": data.get("network") or {}}
+        if subaction == "server_details":
+            return {"server": data.get("server") or {}}
 
         if subaction == "ups_device":
             result = data.get("upsDeviceById")

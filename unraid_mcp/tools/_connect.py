@@ -2,7 +2,7 @@
 
 Covers Unraid Connect / remote-access state and control:
 remote_access, cloud, update_api_settings, sign_in, sign_out*,
-setup_remote_access*, enable_dynamic_remote_access* (7 subactions).
+setup_remote_access*, enable_dynamic_remote_access*, status (8 subactions).
 """
 
 from typing import Any
@@ -24,6 +24,15 @@ from ..core.validation import validate_input_mapping
 _CONNECT_QUERIES: dict[str, str] = {
     "remote_access": "query GetRemoteAccess { remoteAccess { accessType forwardType port } }",
     "cloud": "query GetCloud { cloud { error apiKey { valid error } relay { status timeout error } minigraphql { status timeout error } cloud { status ip error } allowedOrigins } }",
+    "status": """
+        query GetConnectStatus {
+          connect {
+            id
+            dynamicRemoteAccess { enabledType runningType error }
+            settings { id dataSchema uiSchema }
+          }
+        }
+    """,
 }
 
 _CONNECT_MUTATIONS: dict[str, str] = {
@@ -111,6 +120,14 @@ async def _handle_connect(
         if subaction == "cloud":
             data = await _client.make_graphql_request(_CONNECT_QUERIES["cloud"])
             return {"success": True, "subaction": subaction, "cloud": data.get("cloud")}
+
+        if subaction == "status":
+            data = await _client.make_graphql_request(_CONNECT_QUERIES["status"])
+            return {
+                "success": True,
+                "subaction": subaction,
+                "connect": data.get("connect") or {},
+            }
 
         if subaction == "sign_out":
             data = await _client.make_graphql_request(_CONNECT_MUTATIONS["sign_out"])
