@@ -8,7 +8,7 @@ updates:
     schedule:
       interval: "weekly"
 
-  # Keep the Dockerfile base images fresh (digest-pinned FROM lines).
+  # Keep the Dockerfile base images fresh.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

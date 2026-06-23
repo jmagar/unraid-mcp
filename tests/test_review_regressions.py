@@ -36,6 +36,13 @@ def test_container_configs_use_runtime_port_variable() -> None:
     assert "${UNRAID_MCP_PORT:-6970}" in dockerfile
 
 
+def test_docker_runtime_python_matches_builder_minor_version() -> None:
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
+    assert "uv:python3.12-bookworm-slim" in dockerfile
+    assert "FROM python:3.12-slim-bookworm AS runtime" in dockerfile
+    assert "FROM python@sha256:" not in dockerfile
+
+
 def test_test_live_script_uses_safe_counters_and_resource_failures() -> None:
     script = (PROJECT_ROOT / "tests" / "test_live.sh").read_text()
     assert "(( PASS++ ))" in script
