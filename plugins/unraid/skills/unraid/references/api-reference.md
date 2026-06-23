@@ -7,6 +7,12 @@
 **API Type:** GraphQL  
 **Base URL:** `https://YOUR-UNRAID-SERVER/graphql`  
 
+This reference documents raw GraphQL schema behavior. The MCP tool exposes safe
+read subactions for direct roots separately: `system/display_details`,
+`system/network_access_urls`, `system/server_details`, `connect/status`, and
+`customization/details`; those omit `server.apikey`, `connect.settings.values`,
+and raw activation-code values by default.
+
 ---
 
 ## 📊 Summary

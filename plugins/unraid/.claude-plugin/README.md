@@ -25,11 +25,11 @@ Credentials are stored at `~/.unraid-mcp/.env`. Get an API key from **Unraid Web
 
 ## Tools
 
-### `unraid` — Primary Tool (108 subactions, 15 domains)
+### `unraid` — Primary Tool (175 subactions, 19 domains)
 
 Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 
-#### `system` — Server Information (18 subactions)
+#### `system` — Server Information
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Complete system summary (recommended starting point) |
@@ -42,16 +42,21 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 | `metrics` | Real-time CPU, memory, I/O usage |
 | `services` | Running services status |
 | `display` | Display settings |
+| `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale |
 | `config` | System configuration |
 | `online` | Quick online status check |
 | `owner` | Server owner information |
 | `settings` | User settings and preferences |
+| `server_details` | Direct `server` root details with owner and URLs; API key omitted |
+| `network_access_urls` | Direct `network.accessUrls` entries with type, name, IPv4, and IPv6 |
 | `flash` | USB flash drive details |
 | `ups_devices` | List all UPS devices |
 | `ups_device` | Single UPS device (requires `device_id`) |
 | `ups_config` | UPS configuration |
+| `server_time` | Current server time, time zone, and NTP config |
+| `timezones` | Available IANA time-zone options |
 
-#### `health` — Diagnostics (4 subactions)
+#### `health` — Diagnostics
 | Subaction | Description |
 |-----------|-------------|
 | `check` | Comprehensive health check — connectivity, array, disks, containers, VMs, resources |
@@ -59,7 +64,7 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 | `diagnose` | Detailed diagnostic report with troubleshooting recommendations |
 | `setup` | Configure credentials interactively (stores to `~/.unraid-mcp/.env`) |
 
-#### `array` — Array & Parity (13 subactions)
+#### `array` — Array & Parity
 | Subaction | Description |
 |-----------|-------------|
 | `parity_status` | Current parity check progress and status |
@@ -76,7 +81,7 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 | `unmount_disk` | Unmount a disk |
 | `clear_disk_stats` | ⚠️ Clear disk statistics (requires `confirm=True`) |
 
-#### `disk` — Storage & Logs (6 subactions)
+#### `disk` — Storage & Logs
 | Subaction | Description |
 |-----------|-------------|
 | `shares` | List network shares |
@@ -86,7 +91,7 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 | `logs` | Read log content (requires `log_path`; optional `tail_lines`) |
 | `flash_backup` | ⚠️ Trigger a flash backup (requires `confirm=True`) |
 
-#### `docker` — Containers (8 subactions)
+#### `docker` — Containers
 
 | Subaction | Description |
 |-----------|-------------|
@@ -101,7 +106,7 @@ Call as `unraid(action="<domain>", subaction="<operation>", [params])`.
 
 Container identification: name, ID, or partial name (fuzzy match).
 
-#### `vm` — Virtual Machines (9 subactions)
+#### `vm` — Virtual Machines
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All VMs with state |
@@ -114,7 +119,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `force_stop` | ⚠️ Force stop a VM (requires `vm_id`, `confirm=True`) |
 | `reset` | ⚠️ Hard reset a VM (requires `vm_id`, `confirm=True`) |
 
-#### `notification` — Notifications (12 subactions)
+#### `notification` — Notifications
 | Subaction | Description |
 |-----------|-------------|
 | `overview` | Notification counts (unread, archived by type) |
@@ -130,7 +135,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `delete` | ⚠️ Delete a notification (requires `notification_id`, `notification_type`, `confirm=True`) |
 | `delete_archived` | ⚠️ Delete all archived (requires `confirm=True`) |
 
-#### `key` — API Keys (7 subactions)
+#### `key` — API Keys
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All API keys |
@@ -141,14 +146,14 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `add_role` | Add roles to a key (requires `key_id`, `roles`) |
 | `remove_role` | Remove roles from a key (requires `key_id`, `roles`) |
 
-#### `plugin` — Plugins (3 subactions)
+#### `plugin` — Plugins
 | Subaction | Description |
 |-----------|-------------|
 | `list` | All installed plugins |
 | `add` | Install plugins (requires `names` list) |
 | `remove` | ⚠️ Uninstall plugins (requires `names` list, `confirm=True`) |
 
-#### `rclone` — Cloud Storage (4 subactions)
+#### `rclone` — Cloud Storage
 | Subaction | Description |
 |-----------|-------------|
 | `list_remotes` | List configured rclone remotes |
@@ -156,22 +161,37 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `create_remote` | Create a new remote (requires `name`, `provider_type`, `config_data`) |
 | `delete_remote` | ⚠️ Delete a remote (requires `name`, `confirm=True`) |
 
-#### `setting` — System Settings (2 subactions)
+#### `setting` — System Settings
 | Subaction | Description |
 |-----------|-------------|
 | `update` | Update system settings (requires `settings_input` object) |
 | `configure_ups` | ⚠️ Configure UPS settings (requires `confirm=True`) |
 
-#### `customization` — Theme & Appearance (5 subactions)
+#### `connect` — Unraid Connect / Remote Access
 | Subaction | Description |
 |-----------|-------------|
-| `theme` | Current theme settings |
-| `public_theme` | Public-facing theme |
-| `is_initial_setup` | Check if initial setup is complete |
-| `sso_enabled` | Check SSO status |
-| `set_theme` | Update theme (requires theme parameters) |
+| `remote_access` | Current remote-access settings (access/forward type, port) |
+| `cloud` | Unraid Connect / cloud status (relay, minigraph, API key validity) |
+| `status` | Direct `connect` root status: dynamic remote access and settings schema; settings values omitted |
+| `update_api_settings` | ⚠️ Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`, `confirm=True`) |
+| `sign_in` | ⚠️ Sign the server in to Unraid Connect (requires `connect_input`, `confirm=True`) |
+| `sign_out` | ⚠️ Sign the server out of Unraid Connect (requires `confirm=True`) |
+| `setup_remote_access` | ⚠️ Configure remote access (requires `connect_input`, `confirm=True`) |
+| `enable_dynamic_remote_access` | ⚠️ Toggle dynamic remote access (requires `connect_input`, `confirm=True`) |
 
-#### `oidc` — SSO / OpenID Connect (5 subactions)
+#### `customization` — Theme & Appearance
+| Subaction | Description |
+|-----------|-------------|
+| `public_theme` | Public-facing theme |
+| `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) |
+| `sso_enabled` | Check SSO status |
+| `details` | Direct `customization` root onboarding/language details; activation-code values omitted |
+| `set_theme` | Update theme (requires `theme_name`) |
+| `set_locale` | Update UI locale (requires `locale`) |
+
+Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settings.values`, and raw activation-code values are not returned by the safe read subactions (`system/server_details`, `connect/status`, `customization/details`).
+
+#### `oidc` — SSO / OpenID Connect
 | Subaction | Description |
 |-----------|-------------|
 | `providers` | List configured OIDC providers |
@@ -180,12 +200,12 @@ Container identification: name, ID, or partial name (fuzzy match).
 | `public_providers` | Public-facing provider list |
 | `validate_session` | Validate current SSO session (requires `token`) |
 
-#### `user` — Current User (1 subaction)
+#### `user` — Current User
 | Subaction | Description |
 |-----------|-------------|
 | `me` | Current authenticated user info |
 
-#### `live` — Real-Time Subscriptions (11 subactions)
+#### `live` — Real-Time Subscriptions
 Persistent WebSocket connections. Returns `{"status": "connecting"}` on first call — retry momentarily.
 
 | Subaction | Description |

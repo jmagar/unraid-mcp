@@ -6,9 +6,9 @@ unraid-mcp exposes a single MCP tool, `unraid`, with `action` (domain) + `subact
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
-| `unraid` | The only tool -- action+subaction dispatch across 19 actions / 170 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
+| `unraid` | The only tool -- action+subaction dispatch across 19 actions / 175 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
 
-The consolidated action pattern keeps the MCP surface to one tool while supporting 170 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
+The consolidated action pattern keeps the MCP surface to one tool while supporting 175 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
 
 ## Primary Tool: `unraid`
 
@@ -44,7 +44,7 @@ unraid(
 
 ### Actions and Subactions
 
-#### `system` (20 subactions)
+#### `system` (23 subactions)
 
 Server information, metrics, network, and UPS management.
 
@@ -60,10 +60,13 @@ Server information, metrics, network, and UPS management.
 | `metrics` | Real-time CPU, memory, I/O usage | -- |
 | `services` | Running services status | -- |
 | `display` | Display settings | -- |
+| `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale | -- |
 | `config` | System configuration | -- |
 | `online` | Quick online status check | -- |
 | `owner` | Server owner information | -- |
 | `settings` | User settings and preferences | -- |
+| `server_details` | Direct `server` root details with owner and URLs; API key omitted | -- |
+| `network_access_urls` | Direct `network.accessUrls` entries with type, name, IPv4, and IPv6 | -- |
 | `flash` | USB flash drive details | -- |
 | `ups_devices` | List all UPS devices | -- |
 | `ups_device` | Single UPS device details | `device_id` |
@@ -252,7 +255,7 @@ System settings, UPS, SSH, time, and server identity.
 | `update_system_time` | Update timezone / NTP / manual time — can invalidate TLS certs | `config_input` | Yes |
 | `update_server_identity` | Update server name/comment/model | `name`, `comment`, `sys_model` | -- |
 
-#### `connect` (7 subactions)
+#### `connect` (8 subactions)
 
 Unraid Connect / remote-access state and control.
 
@@ -260,13 +263,14 @@ Unraid Connect / remote-access state and control.
 |-----------|-------------|-------------|-------------|
 | `remote_access` | Current remote-access settings | -- | -- |
 | `cloud` | Unraid Connect / cloud status | -- | -- |
+| `status` | Direct `connect` root status: dynamic remote access and settings schema; settings values omitted | -- | -- |
 | `update_api_settings` | Update Connect API settings (affects internet reachability) | `connect_input` | Yes |
 | `sign_in` | Sign the server in to Unraid Connect — registers with the cloud | `connect_input` (`{apiKey, userInfo?}`) | Yes |
 | `sign_out` | Sign the server out of Unraid Connect | -- | Yes |
 | `setup_remote_access` | Configure remote access (can expose server) | `connect_input` | Yes |
 | `enable_dynamic_remote_access` | Toggle dynamic remote access | `connect_input` (`{url, enabled}`) | Yes |
 
-#### `customization` (5 subactions)
+#### `customization` (6 subactions)
 
 Theme, locale, and UI customization.
 
@@ -275,8 +279,11 @@ Theme, locale, and UI customization.
 | `public_theme` | Public-facing theme (also the server's current theme) | -- |
 | `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) | -- |
 | `sso_enabled` | Check SSO status | -- |
+| `details` | Direct `customization` root onboarding/language details; activation-code values omitted | -- |
 | `set_theme` | Update theme | `theme_name` |
 | `set_locale` | Update UI locale | `locale` |
+
+Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settings.values`, and raw activation-code values are not returned by the safe read subactions (`system/server_details`, `connect/status`, `customization/details`).
 
 #### `oidc` (5 subactions)
 

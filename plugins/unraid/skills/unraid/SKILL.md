@@ -72,14 +72,19 @@ unraid(action="live",    subaction="cpu")
 | `metrics` | Real-time CPU, memory, I/O usage |
 | `services` | Running services status |
 | `display` | Display settings |
+| `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale |
 | `config` | System configuration |
 | `online` | Quick online status check |
 | `owner` | Server owner information |
 | `settings` | User settings and preferences |
+| `server_details` | Direct `server` root details with owner and URLs; API key omitted |
+| `network_access_urls` | Direct `network.accessUrls` entries with type, name, IPv4, and IPv6 |
 | `flash` | USB flash drive details |
 | `ups_devices` | List all UPS devices |
 | `ups_device` | Single UPS device (requires `device_id`) |
 | `ups_config` | UPS configuration |
+| `server_time` | Current server time, time zone, and NTP config |
+| `timezones` | Available IANA time-zone options |
 
 ### `health` — Diagnostics
 
@@ -241,6 +246,7 @@ All mutations change the server's cloud/remote-access posture and require `confi
 |-----------|-------------|
 | `remote_access` | Current remote-access settings (access/forward type, port) |
 | `cloud` | Unraid Connect / cloud status (relay, minigraph, API key validity) |
+| `status` | Direct `connect` root status: dynamic remote access and settings schema; settings values omitted |
 | `update_api_settings` | ⚠️ Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`, `confirm=True`) |
 | `sign_in` | ⚠️ Sign the server in to Unraid Connect — registers with the cloud (requires `connect_input`: `{apiKey, userInfo?}`, `confirm=True`) |
 | `sign_out` | ⚠️ Sign the server out of Unraid Connect (requires `confirm=True`) |
@@ -254,8 +260,11 @@ All mutations change the server's cloud/remote-access posture and require `confi
 | `public_theme` | Public-facing theme (also the server's current theme; or use `system/display`) |
 | `is_initial_setup` | Whether this is a fresh install (`isFreshInstall`) |
 | `sso_enabled` | Check SSO status |
+| `details` | Direct `customization` root onboarding/language details; activation-code values omitted |
 | `set_theme` | Update theme (requires `theme_name`) |
 | `set_locale` | Update UI locale (requires `locale`) |
+
+Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settings.values`, and raw activation-code values are not returned by the safe read subactions (`system/server_details`, `connect/status`, `customization/details`).
 
 ### `oidc` — SSO / OpenID Connect
 

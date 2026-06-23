@@ -4,7 +4,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/unraid-mcp)](https://pypi.org/project/unraid-mcp/) [![ghcr.io](https://img.shields.io/badge/ghcr.io-jmagar%2Funraid--mcp-blue?logo=docker)](https://github.com/jmagar/unraid-mcp/pkgs/container/unraid-mcp)
 
-MCP server for Unraid NAS management. Exposes a single unified `unraid` tool with 19 action domains and 170 subactions, backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
+MCP server for Unraid NAS management. Exposes a single unified `unraid` tool with 19 action domains and 175 subactions, backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
 
 ## Overview
 
@@ -12,7 +12,7 @@ A single MCP tool is exposed:
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action/subaction router for all operations (19 actions, 170 subactions). The Markdown reference and WebSocket diagnostics, which used to be standalone tools, are now the `help` and `subscriptions` actions of this tool. |
+| `unraid` | Unified action/subaction router for all operations (19 actions, 175 subactions). The Markdown reference and WebSocket diagnostics, which used to be standalone tools, are now the `help` and `subscriptions` actions of this tool. |
 
 Discover the full surface with `unraid(action="help")`. WebSocket subscription diagnostics are available via `unraid(action="subscriptions", subaction="diagnose")` and `unraid(action="subscriptions", subaction="test_query", subscription_query=...)`.
 
@@ -39,7 +39,7 @@ Single entry point for all Unraid operations. Select the operation with `action`
 
 | Action | Subactions | Description |
 | --- | --- | --- |
-| `system` (20) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `config`, `online`, `owner`, `settings`, `server`, `servers`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | Server info, metrics, network, UPS |
+| `system` (23) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | Server info, metrics, network, UPS |
 | `health` (4) | `check`, `test_connection`, `diagnose`, `setup` | Health checks, connection test, credential setup |
 | `array` (14) | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`\*, `add_disk`, `remove_disk`\*, `mount_disk`, `unmount_disk`, `clear_disk_stats`\* | Parity checks, array lifecycle, disk operations |
 | `disk` (6) | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`\* | Shares, physical disks, log files |
@@ -50,8 +50,8 @@ Single entry point for all Unraid operations. Select the operation with `action`
 | `plugin` (8) | `list`, `installed_unraid`, `install_operations`, `install_operation`, `add`, `remove`\*, `install`\*, `install_language`\* | Plugin management and async installs |
 | `rclone` (4) | `list_remotes`, `config_form`, `create_remote`, `delete_remote`\* | Cloud storage remotes |
 | `setting` (6) | `update`, `configure_ups`\*, `update_ssh`\*, `update_temperature`, `update_system_time`\*, `update_server_identity` | System settings, UPS, SSH, time, identity |
-| `connect` (7) | `remote_access`, `cloud`, `update_api_settings`\*, `sign_in`\*, `sign_out`\*, `setup_remote_access`\*, `enable_dynamic_remote_access`\* | Unraid Connect / remote access |
-| `customization` (5) | `public_theme`, `is_initial_setup`, `sso_enabled`, `set_theme`, `set_locale` | Theme, locale, and UI customization |
+| `connect` (8) | `remote_access`, `cloud`, `status`, `update_api_settings`\*, `sign_in`\*, `sign_out`\*, `setup_remote_access`\*, `enable_dynamic_remote_access`\* | Unraid Connect / remote access |
+| `customization` (6) | `public_theme`, `is_initial_setup`, `sso_enabled`, `details`, `set_theme`, `set_locale` | Theme, locale, and UI customization |
 | `oidc` (5) | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | OIDC/SSO provider management |
 | `onboarding` (11) | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`\*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`\* | First-boot / onboarding state |
 | `user` (1) | `me` | Current authenticated user |
@@ -60,6 +60,8 @@ Single entry point for all Unraid operations. Select the operation with `action`
 | `help` (0) | _(no subaction)_ | Returns the full Markdown action/subaction reference |
 
 \* Destructive -- requires `confirm=True`
+
+Secret-sensitive fields are omitted by default: `server.apikey`, `connect.settings.values`, and raw activation-code values are not returned by the safe read subactions (`system/server_details`, `connect/status`, `customization/details`).
 
 ### `help` action
 
