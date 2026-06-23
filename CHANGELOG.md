@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0](https://github.com/jmagar/unraid-mcp/compare/v2.1.2...v2.2.0) (2026-06-23)
+
+
+### Features
+
+* add safe direct Unraid query root reads ([7a40f4a](https://github.com/jmagar/unraid-mcp/commit/7a40f4ac2f448eb5812dc8539c0d6b595fcf64dc))
+* expose safe direct Unraid query-root reads ([fe43dc3](https://github.com/jmagar/unraid-mcp/commit/fe43dc3c30eeda9b2a2ad9d57f057360369d0d25))
+
+
+### Bug Fixes
+
+* address pr review findings ([93c4b5e](https://github.com/jmagar/unraid-mcp/commit/93c4b5e9a960ed7cf7df993753cbf52d221556bd))
+* address safe query root review findings ([72699f8](https://github.com/jmagar/unraid-mcp/commit/72699f82d41f1ab5e232d8a0659444dd684b274a))
+
+
+### Documentation
+
+* correct stale hook/script references across docs tree ([5b7e879](https://github.com/jmagar/unraid-mcp/commit/5b7e8791320b902a4af94e79d8f5502dcb0d919e))
+* document safe query root reads ([7caac0f](https://github.com/jmagar/unraid-mcp/commit/7caac0f27f556a59512c91f3c8a5d50d78ac9ad0))
+* fix plugin readme markdown spacing ([8b7cab1](https://github.com/jmagar/unraid-mcp/commit/8b7cab1409c545cb8eb325c406f0d9fcafd2113b))
+* save session log ([c69ce3d](https://github.com/jmagar/unraid-mcp/commit/c69ce3d01515a35c8a67d3376dc378c1a4444d37))
+* save session log ([0774a20](https://github.com/jmagar/unraid-mcp/commit/0774a20e14a2794aed75371cdbc9da35c27c1111))
+
 ## [2.1.2](https://github.com/jmagar/unraid-mcp/compare/v2.1.1...v2.1.2) (2026-06-23)
 
 
