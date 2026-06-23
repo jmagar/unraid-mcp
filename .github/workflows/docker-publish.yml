@@ -109,7 +109,7 @@ jobs:
       # base bump.
       - name: Scan image for vulnerabilities (blocking, pre-merge)
         if: github.event_name == 'pull_request'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
           format: 'table'
@@ -125,7 +125,7 @@ jobs:
       # gate that actually stops vulnerable images lives in the pull_request step above.
       - name: Scan image for vulnerabilities (advisory, post-push)
         if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: 'sarif'
