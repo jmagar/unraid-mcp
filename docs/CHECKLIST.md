@@ -54,7 +54,7 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 ## Hooks
 
-- [ ] `hooks/hooks.json` registers SessionStart hook (`bin/sync-uv.sh`)
+- [ ] `hooks/hooks.json` registers `SessionStart` + `ConfigChange` hooks (`scripts/plugin-setup.sh`)
 
 ## Documentation
 

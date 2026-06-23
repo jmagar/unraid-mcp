@@ -17,7 +17,7 @@ Documentation for the unraid-mcp MCP server.
 | [TESTS.md](TESTS.md) | Unit, schema, safety, property, and contract test suites |
 | [MCPORTER.md](MCPORTER.md) | End-to-end HTTP and stdio smoke tests |
 | [CICD.md](CICD.md) | GitHub Actions workflows for CI, Docker publish, and PyPI release |
-| [PRE-COMMIT.md](PRE-COMMIT.md) | Ruff lint/format and PostToolUse hook enforcement |
+| [PRE-COMMIT.md](PRE-COMMIT.md) | Ruff lint/format and the lefthook pre-commit suite |
 | [PUBLISH.md](PUBLISH.md) | Versioning, PyPI, Docker, and MCP registry publishing |
 | [CONNECT.md](CONNECT.md) | Client connection guides for Claude Code, Codex, Gemini, and direct HTTP |
 | [DEV.md](DEV.md) | Day-to-day development workflow with uv and Justfile recipes |
@@ -41,6 +41,24 @@ Documentation for the unraid-mcp MCP server.
 - ENV.md for configuration reference
 - PATTERNS.md for code conventions
 - TESTS.md for test suite structure
+
+## At a glance
+
+- **One tool**, `unraid`, routed by `action` (domain) + `subaction` (operation):
+  `unraid(action="docker", subaction="list")`. 19 actions / 170 subactions.
+- **Destructive subactions require `confirm=True`** (e.g. `array/stop_array`,
+  `docker/remove_container`); without it, an MCP elicitation form is raised.
+- **List subactions are capped** via the `limit` param (default 20; `limit<=0` =
+  everything). Capped responses carry a `page` meta dict.
+- **Default transport is `streamable-http`**; production runs `stdio`. HTTP bearer
+  auth (`core/auth.py`) is inert under stdio.
+
+## Editing the tool surface (gotchas)
+
+- **Mutation handlers must early-return before the domain `_*_QUERIES` lookup** —
+  mutations aren't in the queries dicts, so falling through raises `KeyError`.
+- **Patch `make_graphql_request` at `unraid_mcp.core.client`**, never at tool level —
+  tool modules resolve it on the `client` module object at call time.
 
 ## Cross-References
 

@@ -1,18 +1,23 @@
 # Scripts Reference -- unraid-mcp
 
-## Hook scripts (`hooks/scripts/`)
+## Plugin hook scripts (`plugins/unraid/scripts/`)
 
-No hook scripts remain — the hooks directory only contains `hooks.json` registering `bin/sync-uv.sh` at SessionStart.
+`hooks.json` registers `plugin-setup.sh` on both `SessionStart` and `ConfigChange`
+(`user_settings` matcher). It runs `uvx unraid-mcp setup plugin-hook` to persist
+credentials to `~/.unraid-mcp/.env`, is idempotent, and always exits 0 (advisory —
+never blocks the session). The old `sync-uv.sh` hook was removed.
 
-## bin/ scripts
+## Repo-maintenance scripts (`scripts/`)
 
-### `bin/validate-marketplace.sh`
+These run from CI, git hooks, and the Justfile — **not** shipped to plugin runtimes.
+
+### `scripts/validate-marketplace.sh`
 
 Validates the Claude Code marketplace and plugin structure. Checks JSON manifests, required files, plugin listing, marketplace metadata, and version sync between `pyproject.toml` and `.claude-plugin/plugin.json`.
 
 **Usage:**
 ```bash
-bash bin/validate-marketplace.sh [repo-root]
+bash scripts/validate-marketplace.sh [repo-root]   # or: just validate-marketplace
 ```
 
 Run from the repo root (no arguments needed in that case). Exits 0 if all checks pass, 1 on any failure. Prints a summary of passed/failed checks.
@@ -24,7 +29,17 @@ Run from the repo root (no arguments needed in that case). Exits 0 if all checks
 - Plugin is listed in the marketplace manifest
 - Version in `pyproject.toml` matches version in `.claude-plugin/plugin.json`
 
-### `bin/generate_unraid_api_reference.py`
+### `scripts/check-version-sync.sh`
+
+Verifies the version is consistent across `pyproject.toml` and the three plugin
+manifests (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`,
+`gemini-extension.json`). Run by CI; also exposed as `just check-contract`.
+
+### `scripts/block-env-commits.sh`
+
+lefthook pre-commit guard that blocks committing `.env` files.
+
+### `scripts/generate_unraid_api_reference.py`
 
 Generates canonical Unraid GraphQL documentation from API introspection. Connects to the Unraid GraphQL endpoint, runs a full introspection query, and writes several output files under `docs/unraid/`:
 
@@ -39,10 +54,10 @@ The reference and change report are rendered by official GraphQL tooling invoked
 **Usage:**
 ```bash
 # From a live API (default)
-uv run python bin/generate_unraid_api_reference.py
+uv run python scripts/generate_unraid_api_reference.py
 
 # Offline, from a saved introspection payload (reproducible; used by tests)
-uv run python bin/generate_unraid_api_reference.py \
+uv run python scripts/generate_unraid_api_reference.py \
   --from-introspection docs/unraid/UNRAID-API-INTROSPECTION.json
 ```
 

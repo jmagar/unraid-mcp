@@ -109,7 +109,7 @@ Install from a specific branch or commit:
 To verify the marketplace and plugin structure is valid before publishing:
 
 ```bash
-bash bin/validate-marketplace.sh [repo-root]
+bash scripts/validate-marketplace.sh [repo-root]   # or: just validate-marketplace
 ```
 
 The script checks:
@@ -130,13 +130,15 @@ unraid-mcp/
 ├── unraid_mcp/              # Python package (the actual MCP server)
 │   ├── main.py              # Entry point
 │   ├── server.py            # FastMCP server registration
-│   ├── tools/unraid.py      # Consolidated tool (all 3 tools registered here)
+│   ├── tools/unraid.py      # Consolidated `unraid` tool (single tool, action-routed)
 │   ├── config/              # Settings management
 │   ├── core/                # GraphQL client, exceptions, shared types
 │   └── subscriptions/       # Real-time WebSocket subscription manager
-└── bin/
-    ├── sync-uv.sh               # Sync uv environment at SessionStart
-    └── validate-marketplace.sh  # Validate marketplace/plugin structure
+└── scripts/
+    ├── validate-marketplace.sh         # Validate marketplace/plugin structure
+    ├── check-version-sync.sh           # Verify version sync across manifests
+    ├── block-env-commits.sh            # lefthook guard against committing .env
+    └── generate_unraid_api_reference.py  # Regenerate GraphQL API docs
 ```
 
 ## Marketplace Metadata

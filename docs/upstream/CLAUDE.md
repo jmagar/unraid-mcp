@@ -76,10 +76,10 @@ The full Unraid GraphQL schema is available in:
 
 ### Regenerating the schema docs
 
-All schema docs are generated from live introspection by `bin/generate_unraid_api_reference.py`. Run it whenever the Unraid API changes:
+All schema docs are generated from live introspection by `scripts/generate_unraid_api_reference.py`. Run it whenever the Unraid API changes:
 
 ```bash
-uv run python bin/generate_unraid_api_reference.py
+uv run python scripts/generate_unraid_api_reference.py
 ```
 
 Requires `UNRAID_API_URL` and `UNRAID_API_KEY` in the environment (or pass `--api-url` / `--api-key`). The script writes all five output files under `docs/unraid/` and prints each path on success. It also computes a diff against the previous introspection snapshot and writes it to `UNRAID-API-CHANGES.md`.
@@ -97,7 +97,7 @@ Queries are organized into domain dicts in each `tools/_<domain>.py` module:
 
 | Domain | Queries dict | Mutations dict |
 |--------|-------------|----------------|
-| system | `_SYSTEM_QUERIES` (18 entries) | -- |
+| system | `_SYSTEM_QUERIES` (20 entries) | -- |
 | array | `_ARRAY_QUERIES` | `_ARRAY_MUTATIONS` |
 | disk | `_DISK_QUERIES` | `_DISK_MUTATIONS` |
 | docker | `_DOCKER_QUERIES` | `_DOCKER_MUTATIONS` |
@@ -107,6 +107,8 @@ Queries are organized into domain dicts in each `tools/_<domain>.py` module:
 | plugin | `_PLUGIN_QUERIES` | `_PLUGIN_MUTATIONS` |
 | rclone | `_RCLONE_QUERIES` | `_RCLONE_MUTATIONS` |
 | setting | -- | `_SETTING_MUTATIONS` |
+| connect | `_CONNECT_QUERIES` | `_CONNECT_MUTATIONS` |
+| onboarding | `_ONBOARDING_QUERIES` | -- |
 | customization | `_CUSTOMIZATION_QUERIES` | `_CUSTOMIZATION_MUTATIONS` |
 | oidc | `_OIDC_QUERIES` | -- |
 | user | `_USER_QUERIES` | -- |

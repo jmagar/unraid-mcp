@@ -16,4 +16,13 @@ plugin-hook` to persist the plugin's userConfig credentials to
 (published PyPI package), there is no bundled uv project to sync — the old
 `sync-uv.sh` hook was removed.
 
+**Advisory contract — these hooks must never block the session.** Credential
+persistence is a convenience; the server also receives credentials directly via the
+plugin's `.mcp.json` env. So `plugin-setup.sh` is idempotent (rewriting identical
+creds is a no-op) and **always exits 0** — a missing `uvx`, no network, or a setup
+error warns to stderr (greppable `plugin-setup.sh:` prefix) and continues.
+
+`ConfigChange` uses a `user_settings` matcher so it re-runs only when plugin settings
+change, propagating updated credentials without a restart.
+
 When changing hook wiring, edit `hooks.json` only; the manifest picks it up.

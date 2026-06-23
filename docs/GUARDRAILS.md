@@ -154,6 +154,10 @@ Two independent limiters cover two different concerns:
 
 Subscription data with log content is capped at 1 MB / 5,000 lines to prevent unbounded memory growth from persistent WebSocket streams.
 
-## Hooks enforcement
+## Hooks
 
-PostToolUse hooks run after every Write, Edit, MultiEdit, or Bash operation. See `docs/plugin/HOOKS.md` for current hook configuration.
+The plugin's only hooks are `SessionStart` + `ConfigChange`, which persist credentials
+to `~/.unraid-mcp/.env` (advisory, never-blocking). They enforce **no** guardrails — the
+safety mechanisms above (destructive-action confirmation, rate limiting, response/log
+capping) live in the server code, not in hooks. Git-side enforcement is the lefthook
+pre-commit suite (`lefthook.yml`). See `docs/plugin/HOOKS.md` and `docs/mcp/PRE-COMMIT.md`.

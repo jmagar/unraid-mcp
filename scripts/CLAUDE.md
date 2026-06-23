@@ -7,13 +7,15 @@ shipped to plugin runtimes. (Plugin-runtime hook scripts live in
 ## Contents
 
 - `check-version-sync.sh` — verify the version is consistent across `pyproject.toml`
-  and the three plugin manifests under `plugins/unraid/`. Run by CI.
+  and the three plugin manifests under `plugins/unraid/`. Run by CI; also exposed as
+  `just check-contract`.
 - `validate-marketplace.sh` — validate the Claude Code marketplace
   (`.claude-plugin/marketplace.json`) and the plugin manifest/skill structure under
   `plugins/unraid/`. Exposed as `just validate-marketplace`.
 - `block-env-commits.sh` — lefthook pre-commit guard against committing `.env` files.
 - `generate_unraid_api_reference.py` — regenerate the GraphQL API docs from live
-  introspection (`uv run python scripts/generate_unraid_api_reference.py`).
+  introspection (`uv run python scripts/generate_unraid_api_reference.py`). Requires
+  `UNRAID_API_URL` + `UNRAID_API_KEY` in env; writes five files under `docs/unraid/`.
 
 ## Expectations
 

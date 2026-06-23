@@ -1,6 +1,6 @@
 # Pre-commit Hook Configuration
 
-Pre-commit checks and PostToolUse hooks for unraid-mcp.
+Pre-commit checks (via lefthook) for unraid-mcp.
 
 ## Code Quality Tools
 
@@ -40,16 +40,23 @@ uv run ty check unraid_mcp/
 
 Configured for Python 3.12 with respect for `type: ignore` comments.
 
-## PostToolUse Hooks
+## Git pre-commit hooks (lefthook)
 
-The `.claude-plugin/hooks/hooks.json` registers hooks that run after Write, Edit, MultiEdit, or Bash operations:
+`lefthook.yml` defines the pre-commit suite (run in parallel):
 
-### ensure-ignore-files.sh
+| Command | Action |
+|---------|--------|
+| `diff_check` | `git diff --check --cached` (whitespace/conflict markers) |
+| `yaml` | parse staged `*.yml`/`*.yaml` with PyYAML |
+| `lint` | `just lint` (ruff check) |
+| `format` | `just fmt` (ruff format) |
+| `typecheck` | `just typecheck` (ty) |
+| `skills` | `just validate-skills` |
+| `env_guard` | `bash scripts/block-env-commits.sh` — blocks committing `.env` files |
 
-Keeps `.gitignore` and `.dockerignore` aligned:
-- Ensures sensitive patterns are never committed
-- Prevents credential files from being included in Docker images
-- Runs in check mode (no modifications) during CI
+> Note: the **plugin's** `hooks.json` (`SessionStart` + `ConfigChange`) is unrelated —
+> it persists credentials at runtime, not a git/PostToolUse hook. See
+> [../plugin/HOOKS.md](../plugin/HOOKS.md).
 
 ## Justfile Integration
 
@@ -72,4 +79,4 @@ All three must pass for the CI pipeline to succeed.
 
 - [CICD.md](CICD.md) -- CI workflow details
 - [DEV.md](DEV.md) -- Development workflow
-- [../GUARDRAILS.md](../GUARDRAILS.md) -- Security enforcement via hooks
+- [../GUARDRAILS.md](../GUARDRAILS.md) -- Destructive-action and security patterns (in code)

@@ -75,18 +75,22 @@ unraid-mcp/
 |       +-- _user.py                   # Current user
 |       +-- _vm.py                     # Virtual machine lifecycle
 |
-+-- skills/
++-- plugins/
 |   +-- unraid/
-|       +-- SKILL.md                   # Client-facing skill documentation
+|       +-- .claude-plugin/plugin.json   # Claude plugin manifest
+|       +-- .codex-plugin/plugin.json    # Codex plugin manifest
+|       +-- .mcp.json                     # MCP server registration (uvx unraid-mcp)
+|       +-- hooks/
+|       |   +-- hooks.json                # SessionStart + ConfigChange hook wiring
+|       |   +-- CLAUDE.md                  # AI instructions for hook config
+|       +-- scripts/
+|       |   +-- plugin-setup.sh           # Credential-setup hook (uvx unraid-mcp setup plugin-hook)
+|       +-- skills/
+|           +-- unraid/SKILL.md           # Client-facing skill documentation
 |
-+-- hooks/
-|   +-- hooks.json                     # PostToolUse hook definitions
-|   +-- scripts/
-|
-+-- bin/
-|   +-- CLAUDE.md                      # AI assistant instructions for bin/ scripts
-|   +-- sync-uv.sh                     # SessionStart hook: sync uv virtual environment
-|   +-- block-env-commits.sh           # Pre-commit hook: block .env file commits
++-- scripts/                           # Repo-maintenance scripts (CI, git hooks, Justfile)
+|   +-- CLAUDE.md                      # AI assistant instructions for scripts/
+|   +-- block-env-commits.sh           # lefthook pre-commit: block .env file commits
 |   +-- check-version-sync.sh          # Verify version consistency across manifest files
 |   +-- validate-marketplace.sh        # Validate marketplace/plugin manifest structure
 |   +-- generate_unraid_api_reference.py  # Generate GraphQL API docs from live introspection

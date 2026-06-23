@@ -6,7 +6,7 @@
 |------|-------------|
 | [PLUGINS.md](PLUGINS.md) | Plugin manifest reference (plugin.json for Claude, Codex, Gemini) |
 | [SKILLS.md](SKILLS.md) | Skill definitions and SKILL.md format |
-| [HOOKS.md](HOOKS.md) | PostToolUse hook configuration |
+| [HOOKS.md](HOOKS.md) | SessionStart + ConfigChange credential-setup hooks |
 | [COMMANDS.md](COMMANDS.md) | Slash command definitions (none currently) |
 | [AGENTS.md](AGENTS.md) | Agent definitions (none currently) |
 | [CHANNELS.md](CHANNELS.md) | Channel integrations (none currently) |
@@ -21,12 +21,26 @@
 |-----------|-------|--------|
 | MCP servers | 1 (`unraid`) | Active |
 | Skills | 1 (`unraid`) | Active |
-| Hooks | 2 (PostToolUse) | Active |
+| Hooks | 2 (SessionStart, ConfigChange) | Active |
 | Commands | 0 | -- |
 | Agents | 0 | -- |
 | Channels | 0 | -- |
 | Output styles | 0 | -- |
 | Schedules | 0 | -- |
+
+## Version sync (gotcha)
+
+The plugin ships **three** manifests that must all match `pyproject.toml`:
+`plugins/unraid/.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
+`gemini-extension.json`. release-please keeps them in sync from Conventional Commits —
+**never hand-edit version strings.** Verify with `just check-contract`.
+
+## Validating the plugin surface
+
+```bash
+just validate-marketplace   # marketplace.json + manifest/skill structure
+just validate-skills        # SKILL.md frontmatter and structure
+```
 
 ## Cross-References
 
