@@ -75,25 +75,32 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
 
+      # On a pull_request the image is NOT pushed; instead it is loaded into the local
+      # docker daemon (load:true) so the blocking Trivy scan below can read it. load
+      # requires a single platform, so PR builds are amd64-only (CVEs live in the base
+      # layers and are arch-independent for this gate); SBOM/provenance attestations
+      # are registry-only and unsupported by the local docker exporter, so they are
+      # disabled on the PR path. Tag/branch/tag-push builds stay multi-arch + pushed.
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          sbom: true
-          provenance: mode=max
+          sbom: ${{ github.event_name != 'pull_request' }}
+          provenance: ${{ github.event_name == 'pull_request' && 'false' || 'mode=max' }}
 
-      # Pre-merge (pull_request) gate: the build above runs with push:false, so the
-      # image only exists locally and nothing has shipped yet. Scan it here with a
-      # non-zero exit-code so CRITICAL/HIGH CVEs *block the merge* before they can
-      # ever reach the registry. ignore-unfixed avoids failing on CVEs with no
-      # available patch (those are tracked via the advisory SARIF upload below).
+      # Pre-merge (pull_request) gate: the build above ran with load:true, so the image
+      # is in the local docker daemon. Scan it with a non-zero exit-code so CRITICAL/HIGH
+      # CVEs *block the merge* before they can ever reach the registry. ignore-unfixed
+      # avoids failing on CVEs with no available patch (those are tracked via the
+      # advisory SARIF upload below).
       - name: Scan image for vulnerabilities (blocking, pre-merge)
         if: github.event_name == 'pull_request'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
