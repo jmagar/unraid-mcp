@@ -90,7 +90,26 @@ Validate GraphQL query strings against the Unraid API schema (119 tests):
 uv run pytest tests/schema/
 ```
 
-Uses `graphql-core` to parse and validate all query dicts.
+Uses `graphql-core` to parse and validate all query/mutation dicts, drives the
+real consolidated `unraid` tool dispatch to verify every GraphQL operation is
+actually emitted by the action/subaction path, and validates the offline mock
+Unraid scenarios against the selected response shapes. The dispatch contract
+covers reads and mutations.
+
+To print the complete generated GraphQL operation inventory or the API root-field
+parity report:
+
+```bash
+scripts/list_graphql_operations.py
+scripts/list_graphql_operations.py --json
+scripts/report_api_parity.py
+scripts/report_api_parity.py --json
+```
+
+The parity report compares the vendored Unraid SDL root query/mutation/
+subscription fields against the exposed operation inventory. Missing mutation
+roots fail the schema tests unless explicitly classified; current query and
+subscription gaps are documented as intentional in `tests/schema/api_parity.py`.
 
 ### HTTP layer tests (`tests/http_layer/`)
 

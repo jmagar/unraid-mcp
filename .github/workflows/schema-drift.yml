@@ -1,0 +1,72 @@
+name: Schema drift
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    name: Compare vendored Unraid SDL to upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Fetch upstream SDL
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/unraid/api/main/api/generated-schema.graphql \
+            -o upstream-schema.graphql
+
+      - name: Diff vendored schema
+        id: diff
+        run: |
+          if diff -u docs/unraid/UNRAID-SCHEMA.graphql upstream-schema.graphql > schema.diff; then
+            echo "drift=false" >> "$GITHUB_OUTPUT"
+            echo "Vendored Unraid SDL is up to date."
+          else
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            echo "Unraid SDL has drifted from the vendored copy:"
+            cat schema.diff
+          fi
+
+      - name: Open or update drift issue
+        if: steps.diff.outputs.drift == 'true'
+        run: |
+          title='Unraid GraphQL schema drift detected'
+          {
+            echo 'The vendored `docs/unraid/UNRAID-SCHEMA.graphql` no longer matches'
+            echo "Unraid's published SDL at \`unraid/api@main\`."
+            echo
+            echo 'Re-vendor the schema, then run the schema and dispatch contract tests'
+            echo 'to surface which queries, mutations, and mock responses need updates.'
+            echo
+            echo '<details><summary>diff</summary>'
+            echo
+            echo '```diff'
+            head -c 60000 schema.diff
+            echo
+            echo '```'
+            echo
+            echo '</details>'
+          } > issue-body.md
+
+          existing="$(
+            gh issue list \
+              --state open \
+              --search "$title in:title" \
+              --json number \
+              --jq '.[0].number // ""'
+          )"
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file issue-body.md
+          else
+            gh issue create --title "$title" --body-file issue-body.md
+          fi
