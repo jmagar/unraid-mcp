@@ -209,9 +209,7 @@ class TestEnsureSubscriptionsStarted:
         err = res.get_last_startup_error()
         assert err is not None and "ws backend down" in err
 
-    async def test_failed_autostart_with_spawned_loops_latches(
-        self, _reset_startup_state
-    ) -> None:
+    async def test_failed_autostart_with_spawned_loops_latches(self, _reset_startup_state) -> None:
         """At least one loop spawned (self-healing) -> latch, no per-call stampede (PERF-H1)."""
         res = _reset_startup_state
         mock = AsyncMock(side_effect=RuntimeError("ws backend down"))

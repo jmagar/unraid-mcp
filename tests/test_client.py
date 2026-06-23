@@ -891,7 +891,9 @@ class TestRateLimiterWiring:
         mock_client.post.return_value = mock_response
 
         with (
-            patch("unraid_mcp.core.client._rate_limiter.acquire", new_callable=AsyncMock) as acquire,
+            patch(
+                "unraid_mcp.core.client._rate_limiter.acquire", new_callable=AsyncMock
+            ) as acquire,
             patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
         ):
             result = await make_graphql_request("{ info { os } }")

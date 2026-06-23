@@ -135,10 +135,7 @@ def test_byte_budget_zero_disables_ceiling():
         "returned": 5,
         "total": 10,
         "truncated": True,
-        "hint": (
-            "showing 5 of 10 items; pass a larger limit= "
-            "to see more (limit=0 for all)"
-        ),
+        "hint": ("showing 5 of 10 items; pass a larger limit= to see more (limit=0 for all)"),
     }
 
 
