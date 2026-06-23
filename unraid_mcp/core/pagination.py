@@ -20,10 +20,14 @@ DEFAULT_LIST_LIMIT: int = 20
 
 
 def _item_bytes(item: Any) -> int:
-    """Serialized byte size of a single item for byte-budget accounting.
+    """Approximate serialized byte size of a single item for byte-budget accounting.
 
-    Uses the same compact JSON serialization the tool response uses, falling back
-    to ``str`` for anything non-JSON-serializable so a quirky item can never raise.
+    A separate, cheap JSON serialization used only to *measure* — the response
+    itself is serialized again by the response encoder, so this is a deliberate
+    extra pass whose cost is bounded by the byte budget. Falls back to ``str`` for
+    anything non-JSON-serializable so a quirky item can never raise. The estimate
+    need not match the encoder's exact wire size; callers leave headroom (see
+    ``_LIVE_EVENT_BYTE_BUDGET`` = half the response cap) to absorb the difference.
     """
     try:
         return len(json.dumps(item, default=str).encode())
@@ -50,10 +54,13 @@ def cap_list(
             (the default) preserves the count-only behavior — fully backward
             compatible. When set, items are added until the running serialized
             size would exceed the budget, then truncation stops early; this keeps
-            a single huge item (e.g. a multi-KB log event) from tripping the
-            response-size backstop and discarding the entire response. A value
-            ``<= 0`` disables the byte ceiling. The byte cap is applied *after*
-            the count cap, so it only ever returns fewer items, never more.
+            a handful of multi-KB items (e.g. log events) from collectively
+            tripping the response-size backstop and discarding the entire
+            response. At least one item is always returned, so a *single* item
+            larger than the whole budget is still returned in full (and may then
+            hit the backstop) — the budget bounds aggregate size, not max item
+            size. A value ``<= 0`` disables the byte ceiling. The byte cap is
+            applied *after* the count cap, so it only ever returns fewer items.
 
     Returns:
         A ``(capped_items, meta)`` tuple. ``meta`` always carries ``returned``,

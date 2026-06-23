@@ -248,4 +248,7 @@ async def _handle_disk(
                 out["filter"] = {"level": level, "context": context}
             return out
 
+        # Distinct from the guard above the query lookup: this catches a subaction
+        # that IS in _DISK_QUERIES but has no render branch here (a future query
+        # added without a handler) — the request ran but nothing shaped the result.
         raise ToolError(f"Unhandled disk subaction '{subaction}' — this is a bug")

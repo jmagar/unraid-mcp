@@ -99,20 +99,20 @@ class StructuredResponseLimitingMiddleware(Middleware):
             return len(content[0].text.encode())
 
         # Sum text-block byte lengths as a lower bound, bailing out as soon as the
-        # running total exceeds the cap. Any non-text block makes the result opaque
-        # to this cheap estimate, so defer to full serialization for an exact size.
+        # running total exceeds the cap.
         running = 0
         for block in content:
             if not isinstance(block, TextContent):
+                # A non-text block is opaque to the cheap estimate — fall through
+                # to the exact measurement below.
                 break
             running += len(block.text.encode())
             if running > self.max_size:
                 return running
-        else:
-            # All blocks were text and their total stayed within the cap; the
-            # wrapper/escaping could still push the full payload over, so measure it.
-            return len(pydantic_core.to_json(result, fallback=str))
 
+        # Either a non-text block was hit, or all blocks were text but stayed within
+        # the cap (wrapper/escaping could still push the full payload over) — in both
+        # cases a full serialization is the only exact measure.
         return len(pydantic_core.to_json(result, fallback=str))
 
     def _marker_result(self, original_bytes: int) -> ToolResult:

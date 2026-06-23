@@ -69,9 +69,8 @@ _SUBPROTOCOLS: tuple[Subprotocol, ...] = (
 # difference is kept as two distinct constants rather than unified.
 
 # websockets.connect open_timeout — connect deadline (manager + diagnostics probe).
+# One constant for the single concept; websockets/asyncio accept the float fine.
 _WS_OPEN_TIMEOUT: float = 10.0
-# Manager-loop connect timeout (historically a bare int 10, kept as int).
-_WS_CONNECT_TIMEOUT: int = 10
 # Keepalive ping deadline forwarded to websockets.connect.
 _WS_PING_TIMEOUT: float = 10.0
 # Keepalive ping cadence — most call sites (session default, snapshot, manager).

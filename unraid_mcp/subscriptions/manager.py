@@ -24,7 +24,7 @@ from ..core.types import SubscriptionData
 from .protocol import (
     _WS_ACK_TIMEOUT,
     _WS_CLOSE_TIMEOUT,
-    _WS_CONNECT_TIMEOUT,
+    _WS_OPEN_TIMEOUT,
     _WS_PING_INTERVAL,
     _WS_PING_TIMEOUT,
     CompleteEvent,
@@ -513,7 +513,7 @@ class SubscriptionManager:
                 ssl_context = build_ws_ssl_context(ws_url)
 
                 # Connection with timeout
-                connect_timeout = _WS_CONNECT_TIMEOUT
+                connect_timeout = _WS_OPEN_TIMEOUT
                 logger.debug(
                     f"[WEBSOCKET:{subscription_name}] Connection timeout: {connect_timeout}s"
                 )

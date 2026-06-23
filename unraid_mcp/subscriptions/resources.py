@@ -124,6 +124,23 @@ async def autostart_subscriptions() -> None:
         logger.info("[AUTOSTART] No log file path configured for auto-start")
 
 
+def _apply_startup_error(base: dict[str, Any], subject: str) -> dict[str, Any]:
+    """Overlay the autostart failure onto a fallback/placeholder payload, if any.
+
+    Returns ``base`` unchanged when autostart succeeded. ``subject`` is the leading
+    clause of the surfaced message (e.g. "Subscription autostart failed" or
+    "Subscription 'cpu' unavailable: autostart failed").
+    """
+    if _last_startup_error is None:
+        return base
+    return {
+        **base,
+        "status": "error",
+        "startup_error": _last_startup_error,
+        "message": f"{subject} ({_last_startup_error}). Check server logs.",
+    }
+
+
 def register_subscription_resources(mcp: FastMCP) -> None:
     """Register all subscription resources with the FastMCP instance.
 
@@ -143,14 +160,7 @@ def register_subscription_resources(mcp: FastMCP) -> None:
             "status": "No subscription data yet",
             "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
         }
-        if _last_startup_error is not None:
-            fallback["status"] = "error"
-            fallback["startup_error"] = _last_startup_error
-            fallback["message"] = (
-                f"Subscription autostart failed: {_last_startup_error}. "
-                "Live data is unavailable — check server logs."
-            )
-        return json.dumps(fallback, indent=2)
+        return json.dumps(_apply_startup_error(fallback, "Subscription autostart failed"), indent=2)
 
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
@@ -181,20 +191,18 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                         return json.dumps(fallback_data, indent=2)
                 except Exception as e:
                     logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
+            # Autostart failure is surfaced here instead of a perpetual "connecting"
+            # placeholder that would hide the dead feature (C1).
             placeholder: dict[str, Any] = {
                 "status": "connecting",
                 "message": f"Subscription '{action}' is starting. Retry in a moment.",
             }
-            if _last_startup_error is not None:
-                # Autostart failed permanently — surface it instead of a perpetual
-                # "connecting" placeholder that hides the dead feature (C1).
-                placeholder["status"] = "error"
-                placeholder["startup_error"] = _last_startup_error
-                placeholder["message"] = (
-                    f"Subscription '{action}' unavailable: autostart failed "
-                    f"({_last_startup_error}). Check server logs."
-                )
-            return json.dumps(placeholder, indent=2)
+            return json.dumps(
+                _apply_startup_error(
+                    placeholder, f"Subscription '{action}' unavailable: autostart failed"
+                ),
+                indent=2,
+            )
 
         _live_resource.__name__ = f"{action}_resource"
         _live_resource.__doc__ = (
