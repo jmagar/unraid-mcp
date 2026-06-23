@@ -4,6 +4,8 @@ import re
 from typing import Any
 from urllib.parse import urlparse
 
+from .exceptions import ToolError
+
 
 _MISSING: object = object()
 
@@ -215,6 +217,22 @@ def mutation_success(result: Any, *, boolean: bool) -> bool:
     return bool(result) if boolean else result is not None
 
 
+def _coerce_int(value: Any) -> int | None:
+    """Coerce ``value`` to ``int`` for the size formatters, or None on failure.
+
+    Returns None for ``None`` input and for anything ``int()`` rejects, so callers
+    can map None → ``"N/A"`` uniformly. Shared by :func:`format_bytes` and
+    :func:`format_kb` to keep their coercion behavior identical.
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError, OverflowError):
+        # OverflowError: int(inf) / int(very-large-float) — map to None like the rest.
+        return None
+
+
 def format_bytes(bytes_value: int | None) -> str:
     """Format byte values into human-readable sizes.
 
@@ -224,12 +242,10 @@ def format_bytes(bytes_value: int | None) -> str:
     Returns:
         Human-readable string like "1.00 GB" or "N/A" if input is None/invalid.
     """
-    if bytes_value is None:
+    coerced = _coerce_int(bytes_value)
+    if coerced is None:
         return "N/A"
-    try:
-        value = float(int(bytes_value))
-    except (ValueError, TypeError):
-        return "N/A"
+    value = float(coerced)
     for unit in ["B", "KB", "MB", "GB", "TB", "PB"]:
         if value < 1024.0:
             return f"{value:.2f} {unit}"
@@ -268,11 +284,8 @@ def format_kb(k: Any) -> str:
     Returns:
         Human-readable string like "1.00 GB" or "N/A" if input is None/invalid.
     """
-    if k is None:
-        return "N/A"
-    try:
-        kb = int(k)
-    except (ValueError, TypeError):
+    kb = _coerce_int(k)
+    if kb is None:
         return "N/A"
     return format_bytes(kb * 1024)
 
@@ -285,8 +298,6 @@ def validate_subaction(subaction: str, valid_set: set[str], domain: str) -> None
         valid_set: Set of valid subaction names.
         domain: The domain name for error messages (e.g. "docker").
     """
-    from .exceptions import ToolError
-
     if subaction not in valid_set:
         raise ToolError(
             f"Invalid subaction '{subaction}' for {domain}. Must be one of: {sorted(valid_set)}"

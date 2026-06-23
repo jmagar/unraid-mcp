@@ -63,7 +63,7 @@ async def _handle_key(
         subaction,
         _KEY_DESTRUCTIVE,
         confirm,
-        f"Delete API key **{key_id}**. Any clients using this key will lose access.",
+        {"delete": f"Delete API key **{key_id}**. Any clients using this key will lose access."},
     )
 
     with tool_error_handler("key", subaction, logger):

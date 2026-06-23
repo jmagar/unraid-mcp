@@ -11,28 +11,43 @@ tool routes ``action="subscriptions"`` to (subactions ``diagnose`` and
 
 import asyncio
 import json
-import re
+import os
 from datetime import UTC, datetime
 from typing import Any
+
+from graphql import (
+    FieldNode,
+    GraphQLError,
+    OperationDefinitionNode,
+    OperationType,
+    parse,
+)
 
 from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.exceptions import ToolError
 from ..core.utils import safe_display_url
 from .manager import subscription_manager
-from .protocol import ProtocolError, graphql_ws_session
-from .resources import ensure_subscriptions_started
+from .protocol import (
+    _WS_FIRST_FRAME_TIMEOUT,
+    _WS_OPEN_TIMEOUT,
+    _WS_PING_TIMEOUT,
+    _WS_PROBE_PING_INTERVAL,
+    ProtocolError,
+    graphql_ws_session,
+)
+from .resources import ensure_subscriptions_started, get_last_startup_error
 from .utils import (
-    _analyze_subscription_status,
+    analyze_subscription_status,
     build_ws_ssl_context,
     build_ws_url,
 )
 
 
-# Schema field names that appear inside the selection set of allowed subscriptions.
-# The regex _SUBSCRIPTION_NAME_PATTERN extracts the first identifier after the
-# opening "{", so we list the actual field names used in queries (e.g. "logFile"),
-# NOT the operation-level names (e.g. "logFileSubscription").
+# Schema field names that appear as the top-level selection of allowed subscriptions.
+# These are the actual field names used in queries (e.g. "cpu", "logFile"), NOT the
+# operation-level names (e.g. "logFileSubscription"). The validator below enforces
+# this allowlist against the *parsed* GraphQL AST — see _validate_subscription_query.
 _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
     {
         "containerStats",
@@ -50,36 +65,86 @@ _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
     }
 )
 
-# Pattern: must start with "subscription" keyword, then extract the first selected
-# field name (the word immediately after "{").
-_SUBSCRIPTION_NAME_PATTERN = re.compile(r"^\s*subscription\b[^{]*\{\s*(\w+)", re.IGNORECASE)
-# Reject any query that contains a bare "mutation" or "query" operation keyword.
-_FORBIDDEN_KEYWORDS = re.compile(r"\b(mutation|query)\b", re.IGNORECASE)
+# Env flag (debug only): when truthy, test_query echoes the upstream's raw first
+# frame back to the caller. Off by default so the probe never becomes an exfil
+# channel for whatever the upstream returns (SEC-M1).
+_RAW_PROBE_ENV = "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE"
+
+# Cap the caller-supplied query before parsing. graphql-core's parse() is
+# synchronous and roughly linear in input size (~seconds per MB), so an
+# unbounded query would stall the event loop (CWE-400). 4096 chars is generous
+# for any real single-field subscription.
+_MAX_SUBSCRIPTION_QUERY_CHARS = 4096
+
+
+def _raw_subscription_probe_enabled() -> bool:
+    """Whether test_query may echo the raw upstream frame (debug only)."""
+    return os.getenv(_RAW_PROBE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _validate_subscription_query(query: str) -> str:
     """Validate that a subscription query is safe to execute.
 
-    Only allows subscription operations targeting whitelisted schema field names.
-    Rejects any query containing mutation/query keywords.
+    This is the **only** place the server accepts a caller-authored GraphQL
+    document, so validation is done on the parsed AST rather than a regex
+    (a regex allowlist is bypassable via multi-field, alias, and argument
+    smuggling — SEC-H1). The document must:
+
+    * be within the length cap (so an oversized query can't stall the event loop);
+    * parse as valid GraphQL;
+    * contain exactly one definition, which must be a single ``subscription``
+      operation (no extra/orphan fragment definitions, no query/mutation);
+    * select exactly one top-level field, whose **real** name (alias resolved)
+      is in :data:`_ALLOWED_SUBSCRIPTION_FIELDS`.
 
     Returns:
-        The extracted field name (e.g. "logFile").
+        The validated top-level field name (e.g. "cpu").
 
     Raises:
         ToolError: If the query fails validation.
     """
-    if _FORBIDDEN_KEYWORDS.search(query):
-        raise ToolError("Query rejected: must be a subscription, not a mutation or query.")
-
-    match = _SUBSCRIPTION_NAME_PATTERN.match(query)
-    if not match:
+    if len(query) > _MAX_SUBSCRIPTION_QUERY_CHARS:
         raise ToolError(
-            "Query rejected: must start with 'subscription' and contain a valid "
-            "subscription field. Example: subscription { cpu { used idle system } }"
+            f"Query rejected: exceeds the maximum length "
+            f"({_MAX_SUBSCRIPTION_QUERY_CHARS} characters)."
         )
 
-    field_name = match.group(1)
+    try:
+        document = parse(query)
+    except GraphQLError as exc:
+        raise ToolError("Query rejected: not a valid GraphQL document.") from exc
+
+    # Exactly one definition — rejects orphan/extra fragment definitions that would
+    # otherwise ride along to the upstream WS unused (the validator's intent is one
+    # subscription selecting one field, with no fragments).
+    if len(document.definitions) != 1:
+        raise ToolError("Query rejected: must contain exactly one subscription operation.")
+
+    operations = [d for d in document.definitions if isinstance(d, OperationDefinitionNode)]
+    if len(operations) != 1:
+        raise ToolError("Query rejected: must contain exactly one subscription operation.")
+
+    operation = operations[0]
+    if operation.operation is not OperationType.SUBSCRIPTION:
+        raise ToolError("Query rejected: must be a subscription, not a mutation or query.")
+
+    selections = operation.selection_set.selections
+    if len(selections) != 1:
+        # Reject multi-field selections outright — the probe tests a single field,
+        # and allowing more is exactly the multi-field smuggling vector (SEC-H1).
+        raise ToolError(
+            "Query rejected: a subscription test must select exactly one top-level field."
+        )
+
+    selection = selections[0]
+    if not isinstance(selection, FieldNode):
+        # Fragment spreads / inline fragments at the top level could smuggle a
+        # disallowed field past a name check — only a plain field is permitted.
+        raise ToolError(
+            "Query rejected: the top-level selection must be a plain field (no fragments)."
+        )
+
+    field_name = selection.name.value  # real field name — ignores any alias
     if field_name not in _ALLOWED_SUBSCRIPTION_FIELDS:
         raise ToolError(
             f"Subscription field '{field_name}' is not allowed. "
@@ -116,36 +181,55 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
         ssl_context = build_ws_ssl_context(ws_url)
 
         # Shared handshake: connect -> connection_init -> connection_ack -> subscribe.
-        # ack_timeout=None keeps the historical bare recv() (no deadline) on the ack;
-        # ping_interval=30 matches the original probe configuration.
+        # ack_timeout=None gives the ack recv() no deadline; the probe uses the slower
+        # _WS_PROBE_PING_INTERVAL keepalive cadence (vs the manager's _WS_PING_INTERVAL).
         try:
             async with graphql_ws_session(
                 ws_url,
                 subscription_query,
                 sub_id="test",
                 ssl_context=ssl_context,
-                open_timeout=10,
+                open_timeout=_WS_OPEN_TIMEOUT,
                 ack_timeout=None,
-                ping_interval=30,
-                ping_timeout=10,
+                ping_interval=_WS_PROBE_PING_INTERVAL,
+                ping_timeout=_WS_PING_TIMEOUT,
             ) as session:
-                # Wait for the first response with a timeout. The probe deliberately
-                # does NOT normalize the frame — it returns whatever the server sent
-                # first so a developer can inspect the raw subscription response.
+                # Wait for the first frame with a timeout. By default the raw frame is
+                # withheld (SEC-M1, see below) — only its receipt is reported; set the
+                # UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE flag to echo the upstream payload.
                 try:
-                    response = await asyncio.wait_for(session.ws.recv(), timeout=5.0)
+                    response = await asyncio.wait_for(
+                        session.ws.recv(), timeout=_WS_FIRST_FRAME_TIMEOUT
+                    )
                     result = json.loads(response)
 
-                    logger.info(f"[TEST_SUBSCRIPTION] Response: {result}")
-                    return {
+                    # Do NOT log or return the raw upstream frame by default — it can
+                    # carry sensitive data, and test_query is the one caller-controlled
+                    # GraphQL surface (SEC-M1). Echo it only when explicitly enabled.
+                    logger.info(
+                        "[TEST_SUBSCRIPTION] First frame received for field '%s'", field_name
+                    )
+                    payload: dict[str, Any] = {
                         "success": True,
-                        "response": result,
+                        "first_frame_received": True,
+                        "validated_field": field_name,
                         "query_tested": subscription_query,
+                        "note": "Connection succeeded and a first frame was received.",
                     }
+                    if _raw_subscription_probe_enabled():
+                        payload["response"] = result
+                    else:
+                        payload["response"] = (
+                            f"<withheld> set {_RAW_PROBE_ENV}=true to include the raw "
+                            "upstream frame (debug only)."
+                        )
+                    return payload
 
                 except TimeoutError:
                     return {
                         "success": True,
+                        "first_frame_received": False,
+                        "validated_field": field_name,
                         "response": "No immediate response (subscriptions may only send data on changes)",
                         "query_tested": subscription_query,
                         "note": "Connection successful, subscription may be waiting for events",
@@ -189,7 +273,7 @@ async def diagnose_subscriptions() -> dict[str, Any]:
 
         # Analyze connection issues and error counts via shared helper.
         # Gates connection_issues on current failure state (Bug 5 fix).
-        error_count, connection_issues = _analyze_subscription_status(status)
+        error_count, connection_issues = analyze_subscription_status(status)
 
         # Calculate WebSocket URL — apply safe_display_url to avoid leaking
         # credentials (user:pass@host) or the raw API key embedded in the URL.
@@ -209,6 +293,7 @@ async def diagnose_subscriptions() -> dict[str, Any]:
                 "unraid_api_url": safe_display_url(_settings.UNRAID_API_URL),
                 "api_key_configured": bool(_settings.UNRAID_API_KEY),
                 "websocket_url": ws_url_display,
+                "startup_error": get_last_startup_error(),
             },
             "subscriptions": status,
             "summary": {
@@ -227,6 +312,13 @@ async def diagnose_subscriptions() -> dict[str, Any]:
         if not diagnostic_info["environment"]["api_key_configured"]:
             recommendations.append(
                 "CRITICAL: No API key configured. Set UNRAID_API_KEY environment variable."
+            )
+
+        if diagnostic_info["environment"]["startup_error"] is not None:
+            recommendations.append(
+                "Subscription autostart failed at startup "
+                f"({diagnostic_info['environment']['startup_error']}). Live data may be "
+                "unavailable; check server logs for the root cause."
             )
 
         if diagnostic_info["summary"]["in_error_state"] > 0:

@@ -380,6 +380,8 @@ unraid(action="subscriptions", subaction="test_query", subscription_query="subsc
 
 All destructive actions require `confirm=True`. Omitting it or passing `confirm=False` raises a `ToolError` before any network request is made.
 
+> 26 destructive subactions total; `plugin` `install` / `install_language` share a row below.
+
 | Action | Subaction | Notes |
 | --- | --- | --- |
 | `array` | `stop_array` | Unmounts shares; stop containers and VMs first |
@@ -705,7 +707,7 @@ unraid(
 | `just test` | Run full test suite |
 | `just lint` | Run ruff linter |
 | `just fmt` | Run ruff formatter |
-| `just typecheck` | Run pyright or mypy |
+| `just typecheck` | Run the `ty` type checker (`uv run ty check unraid_mcp/`, matches CI) |
 | `just test-live` | Run live integration tests (requires a running Unraid server) |
 | `just up` | Start via Docker Compose |
 | `just down` | Stop Docker Compose containers |

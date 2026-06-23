@@ -170,3 +170,84 @@ class TestAutoStartDisabledFallback:
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
         assert json.loads(result)["status"] == "connecting"
+
+
+class TestEnsureSubscriptionsStarted:
+    """C1 / PERF-H1: a failed autostart must latch (no stampede) and surface the
+    error, instead of being silently swallowed and re-attempted on every call."""
+
+    @pytest.fixture
+    def _reset_startup_state(self):
+        import unraid_mcp.subscriptions.resources as res
+
+        res._subscriptions_started = False
+        res._last_startup_error = None
+        try:
+            yield res
+        finally:
+            res._subscriptions_started = False
+            res._last_startup_error = None
+
+    async def test_failed_autostart_without_spawned_loops_retries(
+        self, _reset_startup_state
+    ) -> None:
+        """No loops spawned (config/programming error) -> do NOT latch, retry every call."""
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=RuntimeError("ws backend down"))
+        # No subscription loops were actually spawned.
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            patch.object(res.subscription_manager, "active_subscriptions", {}),
+        ):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        # Flag left unset -> autostart retried on every call (no permanent brick).
+        assert mock.call_count == 3
+        assert res._subscriptions_started is False
+        # Error still recorded and observable instead of swallowed (C1).
+        err = res.get_last_startup_error()
+        assert err is not None and "ws backend down" in err
+
+    async def test_failed_autostart_with_spawned_loops_latches(self, _reset_startup_state) -> None:
+        """At least one loop spawned (self-healing) -> latch, no per-call stampede (PERF-H1)."""
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=RuntimeError("ws backend down"))
+        # A subscription loop was spawned before the failure -> active_subscriptions non-empty.
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            patch.object(
+                res.subscription_manager, "active_subscriptions", {"systemMetricsCpu": object()}
+            ),
+        ):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        # Latched after the first attempt — spawned loops self-heal via reconnect.
+        assert mock.call_count == 1
+        assert res._subscriptions_started is True
+        # Error recorded and observable instead of swallowed (C1).
+        err = res.get_last_startup_error()
+        assert err is not None and "ws backend down" in err
+
+    async def test_successful_autostart_clears_error(self, _reset_startup_state) -> None:
+        res = _reset_startup_state
+        mock = AsyncMock()
+        with patch.object(res, "autostart_subscriptions", mock):
+            await res.ensure_subscriptions_started()
+            await res.ensure_subscriptions_started()
+        assert mock.call_count == 1
+        assert res.get_last_startup_error() is None
+
+    async def test_cancellation_does_not_latch(self, _reset_startup_state) -> None:
+        import asyncio
+
+        res = _reset_startup_state
+        mock = AsyncMock(side_effect=asyncio.CancelledError())
+        with (
+            patch.object(res, "autostart_subscriptions", mock),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await res.ensure_subscriptions_started()
+        # Shutdown path: flag NOT latched so a later call can retry.
+        assert res._subscriptions_started is False

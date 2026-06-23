@@ -15,7 +15,8 @@ services:
       # proxy's docker network over publishing the port at all.
       - "127.0.0.1:${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
     env_file:
-      - ~/.claude-homelab/.env
+      - path: ~/.claude-homelab/.env
+        required: false
     volumes:
       - ./logs:/app/logs
       - ./backups:/app/backups
@@ -34,7 +35,7 @@ services:
           if [ "${UNRAID_MCP_TRANSPORT:-streamable-http}" = "stdio" ]; then
             exit 0
           fi
-          wget -qO- "http://localhost:${UNRAID_MCP_PORT:-6970}/health" > /dev/null
+          python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/health', timeout=5).status==200 else 1)"
       interval: 30s
       timeout: 5s
       start_period: 30s

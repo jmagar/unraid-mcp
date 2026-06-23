@@ -129,7 +129,11 @@ class Settings(BaseSettings):
 
     # Server Configuration
     unraid_mcp_port: int = Field(default=6970, alias="UNRAID_MCP_PORT")
-    unraid_mcp_host: str = Field(default="0.0.0.0", alias="UNRAID_MCP_HOST")  # noqa: S104
+    # Default to loopback so a bare-metal HTTP run is not LAN-exposed unless the
+    # operator explicitly opts in (S-H3 / SEC-M3). The Docker image sets
+    # UNRAID_MCP_HOST=0.0.0.0 itself, since the container must bind all interfaces
+    # for the (loopback-published) port to be reachable from the host.
+    unraid_mcp_host: str = Field(default="127.0.0.1", alias="UNRAID_MCP_HOST")
     unraid_mcp_transport: str = Field(default="streamable-http", alias="UNRAID_MCP_TRANSPORT")
 
     # Maximum serialized tool-response size in bytes. Responses larger than this are
@@ -363,12 +367,19 @@ def is_configured() -> bool:
 
 
 def apply_bearer_token(token: str) -> None:
-    """Store the generated bearer token in the module global.
+    """Store the generated bearer token in the authoritative config surface.
 
     Called by ``ensure_token_exists()`` in server.py after writing the token
     to disk.  We do NOT set os.environ here — the caller is responsible for
     calling ``os.environ.pop("UNRAID_MCP_BEARER_TOKEN", None)`` immediately
     after, so the token is no longer accessible via os.environ.
+
+    The single authoritative read surface for the bearer token is the
+    ``UNRAID_MCP_BEARER_TOKEN`` module global: every reader (the auth
+    middleware via ``server.py``, the startup gate, ``get_config_summary``)
+    goes through it. The ``Settings`` instance field is only read once at
+    import to seed this global, so this one-shot startup-time write updates the
+    global only.
     """
     global UNRAID_MCP_BEARER_TOKEN
     UNRAID_MCP_BEARER_TOKEN = token

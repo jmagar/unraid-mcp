@@ -114,6 +114,14 @@ def redact_sensitive(obj: Any) -> Any:
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, read=30.0, connect=5.0)
 DISK_TIMEOUT = httpx.Timeout(10.0, read=TIMEOUT_CONFIG["disk_operations"], connect=5.0)
 
+# Module-global singletons: the shared connection pool (_http_client) and the
+# upstream token bucket (_rate_limiter, defined below). This in-process state is
+# correct for the single-process (stdio) deployment but is a HORIZONTAL-SCALING
+# BARRIER: N replicas would each open their own pool and run an independent token
+# bucket, so the modeled "100 req/10s" upstream limit would be violated N-fold
+# (each replica thinks it owns the full budget). Scaling horizontally would require
+# a shared/distributed limiter (e.g. Redis-backed) rather than this per-process one.
+#
 # Global connection pool (module-level singleton)
 # Python 3.12+ asyncio.Lock() is safe at module level — no running event loop required
 _http_client: httpx.AsyncClient | None = None
@@ -155,6 +163,10 @@ class _RateLimiter:
             await asyncio.sleep(wait_time)
 
 
+# Module-global singleton (see the horizontal-scaling note near _http_client above):
+# one per-process token bucket. With N replicas each runs its own, so the upstream
+# "100 req/10s" cap is enforced per-process, not fleet-wide — a distributed limiter
+# would be required to bound the aggregate rate across replicas.
 _rate_limiter = _RateLimiter()
 
 
@@ -275,6 +287,80 @@ async def close_http_client() -> None:
             logger.info("Closed shared HTTP client")
 
 
+async def _post_with_429_retry(
+    client: httpx.AsyncClient,
+    url: str,
+    post_kwargs: dict[str, Any],
+) -> httpx.Response:
+    """POST a GraphQL request, retrying with exponential backoff on HTTP 429.
+
+    Retries up to 3 times (backoff 1s, 2s, 4s) when the Unraid API responds 429.
+    Raises ToolError if no response is received or if 429 persists after retries.
+
+    Args:
+        client: Shared HTTP client with connection pooling
+        url: Unraid GraphQL endpoint URL
+        post_kwargs: Keyword args for ``client.post`` (json/headers/timeout)
+
+    Returns:
+        The first non-429 response. A 429 that persists past all retries raises
+        instead of returning (see Raises).
+
+    Raises:
+        ToolError: If 429 persists after 3 retries
+    """
+    for attempt in range(3):
+        response = await client.post(url, **post_kwargs)
+        if response.status_code != 429:
+            return response
+        backoff = 2**attempt
+        logger.warning(
+            f"Rate limited (429) by Unraid API, retrying in {backoff}s (attempt {attempt + 1}/3)"
+        )
+        await asyncio.sleep(backoff)
+
+    # All 3 attempts returned 429.
+    logger.error("Rate limit (429) persisted after 3 retries — request aborted")
+    raise ToolError("Unraid API is rate limiting requests. Wait ~10 seconds before retrying.")
+
+
+def _synthesize_idempotent_success(
+    error_details: str,
+    response_data: dict[str, Any],
+    operation_context: dict[str, str] | None,
+) -> dict[str, Any] | None:
+    """Synthesize a success response for an idempotent GraphQL error, else None.
+
+    When the operation is already in its requested state (e.g. starting an
+    already-running container), the upstream returns an error that should be
+    treated as success. Returns a synthesized success dict in that case;
+    otherwise returns None so the caller raises the GraphQL error.
+
+    Args:
+        error_details: Joined GraphQL error message(s)
+        response_data: The full decoded GraphQL response (for ``original_errors``)
+        operation_context: Optional context carrying an 'operation' key
+
+    Returns:
+        A success dict when the error is idempotent for the operation, else None
+    """
+    if not (operation_context and operation_context.get("operation")):
+        return None
+
+    operation = operation_context["operation"]
+    if not is_idempotent_error(error_details, operation):
+        return None
+
+    logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
+    # Return a success response with the current state information
+    return {
+        "idempotent_success": True,
+        "operation": operation,
+        "message": error_details,
+        "original_errors": response_data["errors"],
+    }
+
+
 async def make_graphql_request(
     query: str,
     variables: dict[str, Any] | None = None,
@@ -325,32 +411,12 @@ async def make_graphql_request(
         # Get the shared HTTP client with connection pooling
         client = await get_http_client()
 
-        # Retry loop for 429 rate limit responses
+        # POST with retry/backoff for 429 rate limit responses
         post_kwargs: dict[str, Any] = {"json": payload, "headers": headers}
         if custom_timeout is not None:
             post_kwargs["timeout"] = custom_timeout
 
-        response: httpx.Response | None = None
-        for attempt in range(3):
-            response = await client.post(_settings.UNRAID_API_URL, **post_kwargs)
-            if response.status_code == 429:
-                backoff = 2**attempt
-                logger.warning(
-                    f"Rate limited (429) by Unraid API, retrying in {backoff}s (attempt {attempt + 1}/3)"
-                )
-                await asyncio.sleep(backoff)
-                continue
-            break
-
-        if response is None:  # pragma: no cover — guaranteed by loop
-            raise ToolError("No response received after retry attempts")
-
-        # Provide a clear message when all retries are exhausted on 429
-        if response.status_code == 429:
-            logger.error("Rate limit (429) persisted after 3 retries — request aborted")
-            raise ToolError(
-                "Unraid API is rate limiting requests. Wait ~10 seconds before retrying."
-            )
+        response = await _post_with_429_retry(client, _settings.UNRAID_API_URL, post_kwargs)
 
         response.raise_for_status()  # Raise an exception for HTTP error codes 4xx/5xx
 
@@ -361,19 +427,11 @@ async def make_graphql_request(
             )
 
             # Check if this is an idempotent error that should be treated as success
-            if operation_context and operation_context.get("operation"):
-                operation = operation_context["operation"]
-                if is_idempotent_error(error_details, operation):
-                    logger.warning(
-                        f"Idempotent operation '{operation}' - treating as success: {error_details}"
-                    )
-                    # Return a success response with the current state information
-                    return {
-                        "idempotent_success": True,
-                        "operation": operation,
-                        "message": error_details,
-                        "original_errors": response_data["errors"],
-                    }
+            idempotent_result = _synthesize_idempotent_success(
+                error_details, response_data, operation_context
+            )
+            if idempotent_result is not None:
+                return idempotent_result
 
             logger.error(f"GraphQL API returned errors: {response_data['errors']}")
             # Use ToolError for GraphQL errors to provide better feedback to LLM

@@ -79,21 +79,24 @@ Complete listing of all plugin components.
 | --- | --- | --- |
 | `skills/unraid/SKILL.md` | unraid | Client-facing skill with all domains, subactions, and workflows |
 
-## bin/ scripts
+## scripts/
 
 | Path | Language | Description |
 | --- | --- | --- |
-| `bin/sync-uv.sh` | Bash | SessionStart hook: sync uv virtual environment |
-| `bin/block-env-commits.sh` | Bash | Pre-commit hook: block accidental .env file commits |
-| `bin/check-version-sync.sh` | Bash | Verify version consistency across pyproject.toml and manifests |
-| `bin/validate-marketplace.sh` | Bash | Validate Claude Code marketplace and plugin manifest structure |
-| `bin/generate_unraid_api_reference.py` | Python | Generate canonical GraphQL API docs from live Unraid introspection |
+| `scripts/block-env-commits.sh` | Bash | Pre-commit hook: block accidental .env file commits |
+| `scripts/check-version-sync.sh` | Bash | Verify version consistency across pyproject.toml and manifests |
+| `scripts/validate-marketplace.sh` | Bash | Validate Claude Code marketplace and plugin manifest structure |
+| `scripts/generate_unraid_api_reference.py` | Python | Generate canonical GraphQL API docs from live Unraid introspection |
+| `plugins/unraid/scripts/plugin-setup.sh` | Bash | Plugin SessionStart/ConfigChange hook: persist userConfig credentials to `~/.unraid-mcp/.env` via `uvx unraid-mcp setup plugin-hook` |
 
 ## Hooks
 
+Configured in `plugins/unraid/hooks/hooks.json` (referenced by the Claude plugin manifest).
+
 | Hook | Trigger | Script |
 | --- | --- | --- |
-| Sync uv environment | SessionStart | `bin/sync-uv.sh` |
+| Credential setup | SessionStart | `plugins/unraid/scripts/plugin-setup.sh` |
+| Credential setup | ConfigChange (`user_settings`) | `plugins/unraid/scripts/plugin-setup.sh` |
 
 ## CI/CD workflows
 
@@ -108,7 +111,7 @@ Complete listing of all plugin components.
 
 | Directory | Focus | Count |
 | --- | --- | --- |
-| `tests/` (root) | Unit tests per domain | 28 test files |
+| `tests/` (root) | Unit tests per domain | 40 test files |
 | `tests/safety/` | Destructive action guards | guard verification |
 | `tests/schema/` | GraphQL query validation | 119 tests |
 | `tests/http_layer/` | httpx request/response | HTTP client tests |

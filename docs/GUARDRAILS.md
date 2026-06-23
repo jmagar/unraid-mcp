@@ -25,7 +25,9 @@ The server loads from the first `.env` file found:
 
 The `redact_sensitive()` function in `core/client.py` recursively replaces values for keys matching:
 - Exact: `key`, `pin`
-- Substring: `password`, `secret`, `token`, `apikey`, `authorization`, `credential`, `passphrase`, `jwt`, `cookie`, `session`
+- Substring: `password`, `secret`, `clientsecret`, `token`, `apikey`, `authorization`, `credential`, `passphrase`, `jwt`, `cookie`, `session`, `activationcode`, `privatekey`
+
+Beyond key-name matching, the function also redacts by **value shape** (`_is_sensitive_value`): any string value that looks like a JWT (`eyJ...` three-segment token), an `sk-`-prefixed API key, or a high-entropy opaque token (>=20 chars, token-charset only, mixing letters and digits) is masked even under an innocuous key name.
 
 All debug logging passes through this function.
 
@@ -105,7 +107,7 @@ When the MCP client does not support elicitation:
 
 ### Log path validation
 
-Log file paths are restricted to allowed prefixes (`/var/log/`, `/boot/logs/`, `/mnt/`) to prevent path traversal.
+Log file paths are restricted to allowed prefixes (`/var/log/`, `/boot/logs/`) to prevent path traversal.
 
 ### GraphQL injection prevention
 

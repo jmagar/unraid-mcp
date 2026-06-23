@@ -20,6 +20,7 @@ from ..core.utils import (
     format_bytes,
     validate_subaction,
 )
+from ..core.validation import validate_str_param
 
 
 # ===========================================================================
@@ -86,6 +87,9 @@ def _validate_path(
 
     Returns the normalized path. Raises ToolError on any violation.
     """
+    # Bound the length (SEC-M2). Applies to every path, including remote rclone
+    # destinations that intentionally skip the prefix check below.
+    validate_str_param(path, label)
     # Reject null bytes — they can truncate strings at the OS layer.
     if "\x00" in path:
         raise ToolError(f"{label} must not contain null bytes")
@@ -130,10 +134,13 @@ async def _handle_disk(
         subaction,
         _DISK_DESTRUCTIVE,
         confirm,
-        f"Back up flash drive to **{remote_name}:{destination_path}**. Existing backups will be overwritten.",
+        {
+            "flash_backup": f"Back up flash drive to **{remote_name}:{destination_path}**. Existing backups will be overwritten.",
+        },
     )
 
     with tool_error_handler("disk", subaction, logger):
+        logger.info(f"Executing unraid action=disk subaction={subaction}")
         if subaction == "disk_details" and not disk_id:
             raise ToolError("disk_id is required for disk/disk_details")
 
@@ -171,9 +178,6 @@ async def _handle_disk(
             }
             if backup_options is not None:
                 input_data["options"] = backup_options
-            logger.info(
-                f"Executing unraid action=disk subaction={subaction} remote={remote_name!r} source={source_path!r} dest={destination_path!r}"
-            )
             data = await _client.make_graphql_request(
                 _DISK_MUTATIONS["flash_backup"], {"input": input_data}
             )
@@ -189,10 +193,12 @@ async def _handle_disk(
         elif subaction == "logs":
             variables = {"path": log_path, "lines": tail_lines}
 
-        logger.info(f"Executing unraid action=disk subaction={subaction}")
-        data = await _client.make_graphql_request(
-            _DISK_QUERIES[subaction], variables, custom_timeout=custom_timeout
-        )
+        # Guard the lookup so an unhandled subaction raises the clean guard below
+        # instead of a raw KeyError (#5).
+        query = _DISK_QUERIES.get(subaction)
+        if query is None:
+            raise ToolError(f"Unhandled disk subaction '{subaction}' — this is a bug")
+        data = await _client.make_graphql_request(query, variables, custom_timeout=custom_timeout)
 
         if subaction == "shares":
             shares = data.get("shares", []) or []
@@ -242,4 +248,7 @@ async def _handle_disk(
                 out["filter"] = {"level": level, "context": context}
             return out
 
+        # Distinct from the guard above the query lookup: this catches a subaction
+        # that IS in _DISK_QUERIES but has no render branch here (a future query
+        # added without a handler) — the request ran but nothing shaped the result.
         raise ToolError(f"Unhandled disk subaction '{subaction}' — this is a bug")

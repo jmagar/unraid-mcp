@@ -50,15 +50,13 @@ ENV UNRAID_MCP_TRANSPORT=streamable-http \
 
 EXPOSE 6970
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
-
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 USER mcp
 
+# Shell-form CMD: /bin/sh expands ${UNRAID_MCP_PORT:-6970} before python runs.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD wget --quiet --tries=1 --spider \
-        "http://localhost:${UNRAID_MCP_PORT:-6970}/health" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/health', timeout=5).status==200 else 1)" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

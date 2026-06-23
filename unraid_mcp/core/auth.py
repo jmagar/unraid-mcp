@@ -96,56 +96,16 @@ class BearerAuthMiddleware:
             )
             return
 
-        # Extract Authorization header from raw ASGI headers list
-        auth_header: bytes | None = None
-        for key, val in scope.get("headers", []):
-            if key.lower() == b"authorization":
-                auth_header = val
-                break
-
-        if auth_header is None:
-            # No Authorization header at all — prompt client per RFC 6750
+        failure = self._check_auth(scope.get("headers", []))
+        if failure is not None:
+            reason, body, www_authenticate = failure
             self._record_failure(client_ip)
-            self._maybe_warn(client_ip, "missing authorization header")
+            self._maybe_warn(client_ip, reason)
             await self._send_response(
                 send,
                 status=401,
-                body=self._body_401_missing,
-                extra_headers=[(b"www-authenticate", b'Bearer realm="unraid-mcp"')],
-            )
-            return
-
-        # Headers are latin-1 per RFC 7230; decode before string operations
-        auth_str = auth_header.decode("latin-1")
-        if not auth_str.lower().startswith("bearer "):
-            # Wrong scheme — treat as missing (don't hint that bearer exists)
-            self._record_failure(client_ip)
-            self._maybe_warn(client_ip, "non-bearer auth scheme")
-            await self._send_response(
-                send,
-                status=401,
-                body=self._body_401_missing,
-                extra_headers=[(b"www-authenticate", b'Bearer realm="unraid-mcp"')],
-            )
-            return
-
-        # Extract token from original string (value is verbatim after scheme)
-        provided: bytes = auth_str[len("bearer ") :].strip().encode()
-
-        # Constant-time comparison prevents timing side-channel attacks
-        if not hmac.compare_digest(provided, self._token):
-            self._record_failure(client_ip)
-            self._maybe_warn(client_ip, "invalid token")
-            await self._send_response(
-                send,
-                status=401,
-                body=self._body_401_invalid,
-                extra_headers=[
-                    (
-                        b"www-authenticate",
-                        b'Bearer realm="unraid-mcp", error="invalid_token"',
-                    )
-                ],
+                body=body,
+                extra_headers=[(b"www-authenticate", www_authenticate)],
             )
             return
 
@@ -155,6 +115,53 @@ class BearerAuthMiddleware:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _check_auth(self, headers: list[tuple[bytes, bytes]]) -> tuple[str, bytes, bytes] | None:
+        """Validate the Authorization header for a request.
+
+        Returns ``None`` when authentication succeeds. On failure, returns a
+        ``(reason, body, www_authenticate)`` tuple the caller uses to emit the
+        appropriate 401 response: ``reason`` is the throttled-warning string,
+        ``body`` the JSON error body, and ``www_authenticate`` the
+        ``WWW-Authenticate`` header value (per RFC 6750).
+        """
+        # Extract Authorization header from raw ASGI headers list
+        auth_header: bytes | None = None
+        for key, val in headers:
+            if key.lower() == b"authorization":
+                auth_header = val
+                break
+
+        if auth_header is None:
+            # No Authorization header at all — prompt client per RFC 6750
+            return (
+                "missing authorization header",
+                self._body_401_missing,
+                b'Bearer realm="unraid-mcp"',
+            )
+
+        # Headers are latin-1 per RFC 7230; decode before string operations
+        auth_str = auth_header.decode("latin-1")
+        if not auth_str.lower().startswith("bearer "):
+            # Wrong scheme — treat as missing (don't hint that bearer exists)
+            return (
+                "non-bearer auth scheme",
+                self._body_401_missing,
+                b'Bearer realm="unraid-mcp"',
+            )
+
+        # Extract token from original string (value is verbatim after scheme)
+        provided: bytes = auth_str[len("bearer ") :].strip().encode()
+
+        # Constant-time comparison prevents timing side-channel attacks
+        if not hmac.compare_digest(provided, self._token):
+            return (
+                "invalid token",
+                self._body_401_invalid,
+                b'Bearer realm="unraid-mcp", error="invalid_token"',
+            )
+
+        return None
 
     def _get_client_ip(self, scope: Scope) -> str:
         """Extract and sanitize the client IP from the ASGI scope.

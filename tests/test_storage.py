@@ -49,6 +49,12 @@ class TestFormatBytes:
     def test_none(self) -> None:
         assert format_bytes(None) == "N/A"
 
+    def test_non_finite_floats_return_na(self) -> None:
+        # int(inf) raises OverflowError, int(nan) raises ValueError — _coerce_int
+        # maps both to None → "N/A" rather than letting them escape.
+        assert format_bytes(float("inf")) == "N/A"
+        assert format_bytes(float("nan")) == "N/A"
+
     def test_bytes(self) -> None:
         assert format_bytes(512) == "512.00 B"
 

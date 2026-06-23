@@ -9,6 +9,7 @@ plugin_install_updates (16 subactions).
 from typing import Any
 
 from ..config.logging import logger
+from ..config.settings import UNRAID_MCP_MAX_RESPONSE_BYTES
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.pagination import cap_list
 from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
@@ -17,6 +18,15 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 # ===========================================================================
 # LIVE (subscriptions)
 # ===========================================================================
+
+# Byte budget for the collected-event lists (log_tail / notification_feed).
+# Each event can be large (multi-KB log ``content``), so bounding item *count*
+# alone (cap_list's primary cap) is not enough — a few huge events can still trip
+# the response-size backstop, which discards the ENTIRE response. We derive a
+# conservative ceiling from the response cap (half of it) so the surrounding
+# wrapper fields (success/subaction/path/page/...) plus JSON escaping comfortably
+# fit under the hard cap with margin to spare.
+_LIVE_EVENT_BYTE_BUDGET: int = max(1, UNRAID_MCP_MAX_RESPONSE_BYTES // 2)
 
 
 def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[str, Any]:
@@ -126,8 +136,9 @@ async def _handle_live(
             if level is not None:
                 events = [_filter_log_event(e, level, context) for e in events]
             # Hard-cap the number of collected events so a noisy log over the
-            # window can't flood the agent's context.
-            capped, meta = cap_list(events, limit)
+            # window can't flood the agent's context. The byte budget additionally
+            # stops a few multi-KB log events from tripping the response backstop.
+            capped, meta = cap_list(events, limit, byte_budget=_LIVE_EVENT_BYTE_BUDGET)
             return {
                 "success": True,
                 "subaction": subaction,
@@ -153,8 +164,9 @@ async def _handle_live(
                 collect_for=collect_for,
                 timeout=timeout,
             )
-            # Hard-cap the number of collected events (see log_tail above).
-            capped, meta = cap_list(events, limit)
+            # Hard-cap the number of collected events (see log_tail above), plus
+            # the byte budget so large events can't nuke the whole response.
+            capped, meta = cap_list(events, limit, byte_budget=_LIVE_EVENT_BYTE_BUDGET)
             return {
                 "success": True,
                 "subaction": subaction,

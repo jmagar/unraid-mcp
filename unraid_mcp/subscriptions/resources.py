@@ -21,14 +21,35 @@ from .snapshot import subscribe_once
 
 # Global flag to track subscription startup
 _subscriptions_started = False
+# Most recent autostart failure (repr), or None if the last attempt succeeded.
+# Surfaced via get_last_startup_error() so a failed startup is observable instead
+# of silently swallowed (C1).
+_last_startup_error: str | None = None
 _startup_lock: Final[asyncio.Lock] = asyncio.Lock()
 
 _terminal_states = frozenset({"failed", "auth_failed", "max_retries_exceeded"})
 
 
+def get_last_startup_error() -> str | None:
+    """Return the most recent autostart failure (repr), or None if it succeeded."""
+    return _last_startup_error
+
+
 async def ensure_subscriptions_started() -> None:
-    """Ensure subscriptions are started, called from async context."""
-    global _subscriptions_started
+    """Ensure subscriptions are started, called from async context.
+
+    Autostart is attempted at most once on success. On failure the
+    ``_subscriptions_started`` flag is latched **only if at least one subscription
+    loop was actually spawned**: those loops handle their own reconnection/backoff,
+    so re-running the full fan-out on every call (the backend-down case) would only
+    stampede WebSocket connects (PERF-H1). If autostart fails *before* spawning any
+    loop (a config/programming error, never a transient outage — the pre-spawn path
+    is pure in-memory), the flag is left unset so a later call can retry rather than
+    bricking the live resources until a restart. Either way the failure is recorded
+    in ``_last_startup_error`` and surfaced via diagnose / the live resources rather
+    than swallowed (C1).
+    """
+    global _subscriptions_started, _last_startup_error
 
     # Fast-path: skip lock if already started
     if _subscriptions_started:
@@ -42,10 +63,27 @@ async def ensure_subscriptions_started() -> None:
         logger.info("[STARTUP] First async operation detected, starting subscriptions...")
         try:
             await autostart_subscriptions()
+        except asyncio.CancelledError:
+            # Shutdown in progress — do NOT latch; let cancellation propagate so a
+            # later (post-restart) call can retry.
+            raise
+        except Exception as e:
+            _last_startup_error = repr(e)
+            # Latch only if loops were spawned (they self-heal via reconnect). If none
+            # were spawned, leave the flag unset so a later call retries instead of
+            # permanently surfacing the error for the process lifetime.
+            spawned = len(subscription_manager.active_subscriptions) > 0
+            _subscriptions_started = spawned
+            logger.error(
+                "[STARTUP] Failed to start subscriptions (loops spawned=%s): %s",
+                spawned,
+                e,
+                exc_info=True,
+            )
+        else:
+            _last_startup_error = None
             _subscriptions_started = True
             logger.info("[STARTUP] Subscriptions started successfully")
-        except Exception as e:
-            logger.error(f"[STARTUP] Failed to start subscriptions: {e}", exc_info=True)
 
 
 async def autostart_subscriptions() -> None:
@@ -86,6 +124,23 @@ async def autostart_subscriptions() -> None:
         logger.info("[AUTOSTART] No log file path configured for auto-start")
 
 
+def _apply_startup_error(base: dict[str, Any], subject: str) -> dict[str, Any]:
+    """Overlay the autostart failure onto a fallback/placeholder payload, if any.
+
+    Returns ``base`` unchanged when autostart succeeded. ``subject`` is the leading
+    clause of the surfaced message (e.g. "Subscription autostart failed" or
+    "Subscription 'cpu' unavailable: autostart failed").
+    """
+    if _last_startup_error is None:
+        return base
+    return {
+        **base,
+        "status": "error",
+        "startup_error": _last_startup_error,
+        "message": f"{subject} ({_last_startup_error}). Check server logs.",
+    }
+
+
 def register_subscription_resources(mcp: FastMCP) -> None:
     """Register all subscription resources with the FastMCP instance.
 
@@ -101,12 +156,11 @@ def register_subscription_resources(mcp: FastMCP) -> None:
         if result is not None:
             data, fetched_at = result
             return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
-        return json.dumps(
-            {
-                "status": "No subscription data yet",
-                "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
-            }
-        )
+        fallback: dict[str, Any] = {
+            "status": "No subscription data yet",
+            "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
+        }
+        return json.dumps(_apply_startup_error(fallback, "Subscription autostart failed"), indent=2)
 
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
@@ -137,11 +191,17 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                         return json.dumps(fallback_data, indent=2)
                 except Exception as e:
                     logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
+            # Autostart failure is surfaced here instead of a perpetual "connecting"
+            # placeholder that would hide the dead feature (C1).
+            placeholder: dict[str, Any] = {
+                "status": "connecting",
+                "message": f"Subscription '{action}' is starting. Retry in a moment.",
+            }
             return json.dumps(
-                {
-                    "status": "connecting",
-                    "message": f"Subscription '{action}' is starting. Retry in a moment.",
-                }
+                _apply_startup_error(
+                    placeholder, f"Subscription '{action}' unavailable: autostart failed"
+                ),
+                indent=2,
             )
 
         _live_resource.__name__ = f"{action}_resource"

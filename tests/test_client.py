@@ -620,6 +620,55 @@ class TestGraphQLErrorHandling:
         assert result["idempotent_success"] is True
         assert result["operation"] == "stop"
 
+    async def test_idempotent_start_via_304_signal_not_prose(self) -> None:
+        """The numeric 'HTTP code 304' signal is treated as idempotent success.
+
+        Pins the locale-stable numeric path: an 'already started'-style no-op that
+        carries ONLY the 304 signal (no English idempotent prose like 'already
+        started') is synthesized into idempotent-success without relying on prose.
+        """
+        # Deliberately carries no _START_IDEMPOTENT_PHRASES substring — only 304.
+        error_msg = "Error response from daemon: HTTP code 304"
+        assert not any(p in error_msg.lower() for p in _START_IDEMPOTENT_PHRASES)
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"errors": [{"message": error_msg}]}
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("unraid_mcp.core.client.get_http_client", return_value=mock_client):
+            result = await make_graphql_request(
+                'mutation { docker { start(id: "x") } }',
+                operation_context={"operation": "start"},
+            )
+        assert result["idempotent_success"] is True
+        assert result["operation"] == "start"
+        assert result["message"] == error_msg
+
+    async def test_idempotent_stop_via_304_signal_not_prose(self) -> None:
+        """The 304 signal is idempotent for 'stop' too, without prose matching."""
+        # Deliberately carries no _STOP_IDEMPOTENT_PHRASES substring — only 304.
+        error_msg = "Error response from daemon: HTTP code 304"
+        assert not any(p in error_msg.lower() for p in _STOP_IDEMPOTENT_PHRASES)
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"errors": [{"message": error_msg}]}
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("unraid_mcp.core.client.get_http_client", return_value=mock_client):
+            result = await make_graphql_request(
+                'mutation { docker { stop(id: "x") } }',
+                operation_context={"operation": "stop"},
+            )
+        assert result["idempotent_success"] is True
+        assert result["operation"] == "stop"
+        assert result["message"] == error_msg
+
     async def test_non_idempotent_error_with_context_raises(self) -> None:
         """An error that doesn't match idempotent patterns still raises even with context."""
         mock_response = MagicMock()
@@ -809,3 +858,45 @@ class TestRateLimitRetry:
             pytest.raises(ToolError, match="10 seconds"),
         ):
             await make_graphql_request("{ info }")
+
+
+# ---------------------------------------------------------------------------
+# make_graphql_request — rate limiter wiring
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimiterWiring:
+    """Pin that make_graphql_request actually goes through the singleton limiter."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_config(self):
+        with (
+            patch("unraid_mcp.config.settings.UNRAID_API_URL", "https://unraid.local/graphql"),
+            patch("unraid_mcp.config.settings.UNRAID_API_KEY", "test-key"),
+        ):
+            yield
+
+    async def test_acquire_awaited_once_on_success(self) -> None:
+        """A normal successful request must acquire exactly one rate-limiter token.
+
+        Guards against the acquire() call being dropped: without this assertion,
+        removing `await _rate_limiter.acquire()` from make_graphql_request would
+        pass the whole suite silently.
+        """
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"data": {"info": {"os": "Unraid"}}}
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+
+        with (
+            patch(
+                "unraid_mcp.core.client._rate_limiter.acquire", new_callable=AsyncMock
+            ) as acquire,
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+        ):
+            result = await make_graphql_request("{ info { os } }")
+
+        assert result == {"info": {"os": "Unraid"}}
+        acquire.assert_awaited_once()

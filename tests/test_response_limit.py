@@ -139,6 +139,38 @@ def test_measure_multi_content_falls_back_to_full_serialization():
     assert mw._measure(result) == len(pydantic_core.to_json(result, fallback=str))
 
 
+def test_measure_multi_text_over_cap_short_circuits():
+    """Multi text-block running sum over the cap returns the byte lower bound (> cap)
+    without a full pydantic serialization (the early-bail path)."""
+    mw = StructuredResponseLimitingMiddleware(max_size=10)
+    result = ToolResult(
+        content=[
+            TextContent(type="text", text="x" * 8),
+            TextContent(type="text", text="y" * 8),  # running 16 > 10 → early return
+        ]
+    )
+
+    measured = mw._measure(result)
+    assert measured == 16  # text-byte lower bound, NOT full serialization
+    assert measured > mw.max_size
+
+
+def test_measure_non_text_block_forces_full_serialization():
+    """A non-TextContent block breaks the cheap estimate and forces full measurement."""
+    import pydantic_core
+    from mcp.types import ImageContent
+
+    mw = StructuredResponseLimitingMiddleware(max_size=131072)
+    result = ToolResult(
+        content=[
+            TextContent(type="text", text="a"),
+            ImageContent(type="image", data="QUJD", mimeType="image/png"),
+        ]
+    )
+
+    assert mw._measure(result) == len(pydantic_core.to_json(result, fallback=str))
+
+
 async def test_single_text_content_cap_decision_matches_text_bytes():
     """The cap decision for a single TextContent keys off the text byte length."""
     cap = 100

@@ -184,20 +184,30 @@ class TestTestSubscriptionQueryHandler:
         with pytest.raises(ToolError, match="not a mutation or query"):
             await test_subscription_query("mutation { startArray { id } }")
 
-    async def test_allowlisted_field_accepted_end_to_end(self) -> None:
-        """An allowlisted field passes validation and runs the WebSocket probe."""
-        from unraid_mcp.subscriptions.diagnostics import test_subscription_query
-
+    @staticmethod
+    def _mock_ws() -> MagicMock:
         ack = json.dumps({"type": "connection_ack"})
         data_resp = json.dumps(
             {"id": "test", "type": "next", "payload": {"data": {"cpu": {"used": 12}}}}
         )
-
         ws = MagicMock()
         ws.subprotocol = "graphql-transport-ws"
         ws.send = AsyncMock()
         # First recv() -> ack, second recv() -> data response.
         ws.recv = AsyncMock(side_effect=[ack, data_resp])
+        return ws
+
+    async def test_allowlisted_field_accepted_end_to_end(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An allowlisted field passes validation and runs the WebSocket probe.
+
+        With the raw-probe flag enabled, the upstream frame is echoed back.
+        """
+        from unraid_mcp.subscriptions.diagnostics import test_subscription_query
+
+        monkeypatch.setenv("UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE", "true")
+        ws = self._mock_ws()
 
         with (
             patch(
@@ -216,5 +226,37 @@ class TestTestSubscriptionQueryHandler:
             result = await test_subscription_query("subscription { cpu { used idle system } }")
 
         assert result["success"] is True
+        assert result["validated_field"] == "cpu"
         assert result["query_tested"] == "subscription { cpu { used idle system } }"
+        # Flag enabled -> raw upstream frame is included.
         assert result["response"]["payload"]["data"]["cpu"]["used"] == 12
+
+    async def test_raw_frame_withheld_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """SEC-M1: by default the probe must NOT echo the raw upstream frame."""
+        from unraid_mcp.subscriptions.diagnostics import test_subscription_query
+
+        monkeypatch.delenv("UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE", raising=False)
+        ws = self._mock_ws()
+
+        with (
+            patch(
+                "unraid_mcp.subscriptions.diagnostics.build_ws_url",
+                return_value="ws://localhost:2999/graphql",
+            ),
+            patch(
+                "unraid_mcp.subscriptions.diagnostics.build_ws_ssl_context",
+                return_value=None,
+            ),
+            patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect,
+        ):
+            mock_connect.return_value.__aenter__ = AsyncMock(return_value=ws)
+            mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            result = await test_subscription_query("subscription { cpu { used idle system } }")
+
+        assert result["success"] is True
+        assert result["first_frame_received"] is True
+        assert result["validated_field"] == "cpu"
+        # No raw frame leaked — response is a withheld-placeholder string, not the dict.
+        assert isinstance(result["response"], str)
+        assert "withheld" in result["response"].lower()

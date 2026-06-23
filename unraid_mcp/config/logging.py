@@ -41,65 +41,106 @@ class OverwriteFileHandler(logging.FileHandler):
         self.max_bytes = max_bytes
         self._emit_count = 0
         self._check_interval = 100
+        # In-process byte counter — accumulates the size of each formatted record so
+        # the periodic size check no longer needs a stat()/exists() syscall on the
+        # event-loop thread. Seeded below from the existing file size (append mode).
+        self._bytes_written = 0
         super().__init__(filename, mode, encoding, delay)
+        try:
+            base_path = Path(self.baseFilename)
+            if base_path.exists():
+                self._bytes_written = base_path.stat().st_size
+        except OSError:
+            self._bytes_written = 0
 
-    def emit(self, record: logging.LogRecord) -> None:
-        """Emit a record, checking file size periodically and overwriting if needed."""
-        self._emit_count += 1
-        if (
-            (self._emit_count == 1 or self._emit_count % self._check_interval == 0)
-            and self.stream
-            and hasattr(self.stream, "name")
-        ):
+    def _rotate_if_needed(self) -> bool:
+        """Overwrite the log file if the accumulated byte count crossed the cap.
+
+        Opens a fresh stream (deleting the old file first), atomically swaps it in,
+        resets the in-process byte counter, and writes a reset marker. On repeated
+        open failure, logging silently continues on the existing stream.
+
+        Returns ``True`` if the file was actually overwritten (the byte counter was
+        reset), so the caller can re-account the in-flight record against the fresh
+        file — the record is written to the *new* file but was counted against the
+        old one before the reset.
+        """
+        if self._bytes_written < self.max_bytes:
+            return False
+        if not (self.stream and hasattr(self.stream, "name")):
+            return False
+
+        base_path = Path(self.baseFilename)
+        # Open new file FIRST, then swap — self.stream is never None.
+        try:
+            base_path.unlink(missing_ok=True)
+            new_stream = self._open()
+        except OSError:
             try:
-                base_path = Path(self.baseFilename)
-                file_size = base_path.stat().st_size if base_path.exists() else 0
-                if file_size >= self.max_bytes:
-                    # Open new file FIRST, then swap — self.stream is never None.
-                    try:
-                        base_path.unlink(missing_ok=True)
-                        new_stream = self._open()
-                    except OSError:
-                        try:
-                            new_stream = self._open()
-                        except OSError:
-                            import sys
-
-                            print(
-                                "WARNING: Failed to reopen log file after rotation. "
-                                "File logging continues on old stream.",
-                                file=sys.stderr,
-                            )
-                            new_stream = None
-
-                    if new_stream is not None:
-                        old_stream = self.stream
-                        self.stream = new_stream  # atomic swap
-                        if old_stream is not None:
-                            old_stream.close()
-
-                    if self.stream is not None:
-                        reset_record = logging.LogRecord(
-                            name="UnraidMCPServer.Logging",
-                            level=logging.INFO,
-                            pathname="",
-                            lineno=0,
-                            msg="=== LOG FILE RESET (10MB limit reached) ===",
-                            args=(),
-                            exc_info=None,
-                        )
-                        super().emit(reset_record)
-
-            except OSError as e:
+                new_stream = self._open()
+            except OSError:
                 import sys
 
                 print(
-                    f"WARNING: Log file size check failed: {e}. Continuing without rotation.",
+                    "WARNING: Failed to reopen log file after rotation. "
+                    "File logging continues on old stream.",
                     file=sys.stderr,
                 )
+                new_stream = None
+
+        rotated = new_stream is not None
+        if rotated:
+            old_stream = self.stream
+            self.stream = new_stream  # atomic swap
+            if old_stream is not None:
+                old_stream.close()
+            # Reset the byte counter now that we are writing to a fresh file.
+            self._bytes_written = 0
+
+            # Write the reset marker ONLY on a successful overwrite — otherwise we'd
+            # stamp "LOG FILE RESET" onto the old, un-reset file (reopen failed).
+            if self.stream is not None:
+                reset_record = logging.LogRecord(
+                    name="UnraidMCPServer.Logging",
+                    level=logging.INFO,
+                    pathname="",
+                    lineno=0,
+                    msg="=== LOG FILE RESET (10MB limit reached) ===",
+                    args=(),
+                    exc_info=None,
+                )
+                super().emit(reset_record)
+                self._account_for(reset_record)
+
+        return rotated
+
+    def _account_for(self, record: logging.LogRecord) -> None:
+        """Add the byte size of a formatted record to the in-process counter."""
+        try:
+            enc = self.encoding or "utf-8"
+            self._bytes_written += len(self.format(record).encode(enc))
+            self._bytes_written += len(self.terminator.encode(enc))
+        except (LookupError, UnicodeError, TypeError, ValueError):
+            # Accounting must never break logging; a single missed measurement just
+            # delays the next size check slightly.
+            return
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit a record, checking accumulated size periodically and overwriting if needed."""
+        self._emit_count += 1
+        self._account_for(record)
+        rotated = False
+        if self._emit_count == 1 or self._emit_count % self._check_interval == 0:
+            rotated = self._rotate_if_needed()
 
         # Emit the original record
         super().emit(record)
+
+        if rotated:
+            # This record was counted against the pre-rotation file but is physically
+            # written to the fresh file above. Re-account it so the new file's counter
+            # reflects what it actually holds (fixes a one-record undercount per cycle).
+            self._account_for(record)
 
 
 def _create_shared_file_handler() -> OverwriteFileHandler:
