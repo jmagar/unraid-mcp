@@ -61,6 +61,20 @@ _CUSTOMIZATION_MUTATIONS: dict[str, str] = {
 _CUSTOMIZATION_SUBACTIONS: set[str] = set(_CUSTOMIZATION_QUERIES) | set(_CUSTOMIZATION_MUTATIONS)
 
 
+def _required_customization_root(data: dict[str, Any]) -> dict[str, Any]:
+    root = data.get("customization")
+    if root is None:
+        raise ToolError(
+            "Unraid API returned no 'customization' root for customization/details. "
+            "Check API version, permissions, and server logs."
+        )
+    if not isinstance(root, dict):
+        raise ToolError(
+            "Unraid API returned unexpected 'customization' payload for customization/details"
+        )
+    return root
+
+
 async def _handle_customization(
     subaction: str, theme_name: str | None, locale: str | None = None
 ) -> dict[str, Any]:
@@ -71,7 +85,7 @@ async def _handle_customization(
 
         if subaction == "details":
             data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES["details"])
-            return {"customization": data.get("customization") or {}}
+            return {"customization": _required_customization_root(data)}
 
         if subaction in _CUSTOMIZATION_QUERIES:
             data = await _client.make_graphql_request(_CUSTOMIZATION_QUERIES[subaction])

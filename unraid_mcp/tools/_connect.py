@@ -29,7 +29,7 @@ _CONNECT_QUERIES: dict[str, str] = {
           connect {
             id
             dynamicRemoteAccess { enabledType runningType error }
-            settings { id dataSchema uiSchema }
+            settings { id }
           }
         }
     """,
@@ -78,6 +78,26 @@ _CONNECT_RESULT_FIELD: dict[str, str] = {
     "enable_dynamic_remote_access": "enableDynamicRemoteAccess",
 }
 
+_CONNECT_QUERY_OUTPUTS: dict[str, str] = {
+    "remote_access": "remoteAccess",
+    "cloud": "cloud",
+    "status": "connect",
+}
+
+
+def _required_query_root(data: dict[str, Any], response_key: str, subaction: str) -> dict[str, Any]:
+    root = data.get(response_key)
+    if root is None:
+        raise ToolError(
+            f"Unraid API returned no {response_key!r} root for connect/{subaction}. "
+            "Check API version, permissions, and server logs."
+        )
+    if not isinstance(root, dict):
+        raise ToolError(
+            f"Unraid API returned unexpected {response_key!r} payload for connect/{subaction}"
+        )
+    return root
+
 
 async def _handle_connect(
     subaction: str,
@@ -109,24 +129,13 @@ async def _handle_connect(
     with tool_error_handler("connect", subaction, logger):
         logger.info(f"Executing unraid action=connect subaction={subaction}")
 
-        if subaction == "remote_access":
-            data = await _client.make_graphql_request(_CONNECT_QUERIES["remote_access"])
+        if subaction in _CONNECT_QUERY_OUTPUTS:
+            response_key = _CONNECT_QUERY_OUTPUTS[subaction]
+            data = await _client.make_graphql_request(_CONNECT_QUERIES[subaction])
             return {
                 "success": True,
                 "subaction": subaction,
-                "remoteAccess": data.get("remoteAccess"),
-            }
-
-        if subaction == "cloud":
-            data = await _client.make_graphql_request(_CONNECT_QUERIES["cloud"])
-            return {"success": True, "subaction": subaction, "cloud": data.get("cloud")}
-
-        if subaction == "status":
-            data = await _client.make_graphql_request(_CONNECT_QUERIES["status"])
-            return {
-                "success": True,
-                "subaction": subaction,
-                "connect": data.get("connect") or {},
+                response_key: _required_query_root(data, response_key, subaction),
             }
 
         if subaction == "sign_out":

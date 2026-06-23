@@ -170,6 +170,27 @@ _SYSTEM_LIST_ACTIONS: dict[str, tuple[str, str]] = {
     "timezones": ("timeZoneOptions", "timezones"),
 }
 
+_SYSTEM_DIRECT_ROOTS: dict[str, str] = {
+    "display_details": "display",
+    "network_access_urls": "network",
+    "server_details": "server",
+}
+
+
+def _required_direct_root(data: dict[str, Any], subaction: str) -> dict[str, Any]:
+    root_name = _SYSTEM_DIRECT_ROOTS[subaction]
+    root = data.get(root_name)
+    if root is None:
+        raise ToolError(
+            f"Unraid API returned no {root_name!r} root for system/{subaction}. "
+            "Check API version, permissions, and server logs."
+        )
+    if not isinstance(root, dict):
+        raise ToolError(
+            f"Unraid API returned unexpected {root_name!r} payload for system/{subaction}"
+        )
+    return root
+
 
 def _analyze_disk_health(disks: list[dict[str, Any]]) -> dict[str, int]:
     counts = {
@@ -296,8 +317,9 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
 
         if subaction == "display":
             return dict(safe_get(data, "info", "display", default={}))
-        if subaction == "display_details":
-            return {"display": data.get("display") or {}}
+        if subaction in _SYSTEM_DIRECT_ROOTS:
+            root_name = _SYSTEM_DIRECT_ROOTS[subaction]
+            return {root_name: _required_direct_root(data, subaction)}
         if subaction == "online":
             return {"online": data.get("online")}
         if subaction == "settings":
@@ -340,11 +362,6 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 "localTld": vars_data.get("localTld"),
                 "useSsl": vars_data.get("useSsl"),
             }
-        if subaction == "network_access_urls":
-            return {"network": data.get("network") or {}}
-        if subaction == "server_details":
-            return {"server": data.get("server") or {}}
-
         if subaction == "ups_device":
             result = data.get("upsDeviceById")
             if result is None:

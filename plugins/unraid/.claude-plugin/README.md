@@ -2,7 +2,7 @@
 
 Query, monitor, and manage Unraid servers via GraphQL API using a single consolidated `unraid` tool with action+subaction routing.
 
-**Version:** 1.1.3 | **Category:** Infrastructure | **Tags:** unraid, homelab, graphql, docker, virtualization
+**Category:** Infrastructure | **Tags:** unraid, homelab, graphql, docker, virtualization
 
 ---
 
@@ -10,16 +10,19 @@ Query, monitor, and manage Unraid servers via GraphQL API using a single consoli
 
 ```bash
 /plugin marketplace add jmagar/unraid-mcp
-/plugin install unraid @unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
 ```
 
-After install, configure credentials:
+After install, Claude Code prompts for the plugin `userConfig` values:
+**Unraid GraphQL API URL** and **Unraid API Key**. The SessionStart hook writes
+them to `~/.unraid-mcp/.env`, which is the server's canonical credentials file.
+Get an API key from **Unraid WebUI → Settings → Management Access → API Keys**.
+
+You can check credential status with:
 
 ```python
 unraid(action="health", subaction="setup")
 ```
-
-Credentials are stored at `~/.unraid-mcp/.env`. Get an API key from **Unraid WebUI → Settings → Management Access → API Keys**.
 
 ---
 
@@ -63,7 +66,7 @@ For the complete current action/subaction reference, call `unraid(action="help")
 | `check` | Comprehensive health check — connectivity, array, disks, containers, VMs, resources |
 | `test_connection` | Test API connectivity and authentication |
 | `diagnose` | Detailed diagnostic report with troubleshooting recommendations |
-| `setup` | Configure credentials interactively (stores to `~/.unraid-mcp/.env`) |
+| `setup` | Report credential status and setup instructions |
 
 #### `array` — Array & Parity
 | Subaction | Description |
@@ -173,7 +176,7 @@ Container identification: name, ID, or partial name (fuzzy match).
 |-----------|-------------|
 | `remote_access` | Current remote-access settings (access/forward type, port) |
 | `cloud` | Unraid Connect / cloud status (relay, minigraph, API key validity) |
-| `status` | Direct `connect` root status: dynamic remote access and settings schema; settings values omitted |
+| `status` | Direct `connect` root status: dynamic remote access and settings metadata; settings values and schemas omitted |
 | `update_api_settings` | ⚠️ Update Connect API settings (requires `connect_input`: `{accessType?, forwardType?, port?}`, `confirm=True`) |
 | `sign_in` | ⚠️ Sign the server in to Unraid Connect (requires `connect_input`, `confirm=True`) |
 | `sign_out` | ⚠️ Sign the server out of Unraid Connect (requires `confirm=True`) |
@@ -225,32 +228,32 @@ Persistent WebSocket connections. Returns `{"status": "connecting"}` on first ca
 
 ---
 
-### `diagnose_subscriptions` — Subscription Diagnostics
+#### `subscriptions` — Subscription Diagnostics
 
-Inspect WebSocket subscription connection states, errors, and URLs. No parameters required.
+Inspect WebSocket subscription connection states, errors, and URLs:
 
----
+```python
+unraid(action="subscriptions", subaction="diagnose")
+```
 
-### `test_subscription_query` — Subscription Query Tester
+Test a specific GraphQL subscription query against the live Unraid API. Uses an
+allowlisted set of safe fields only:
 
-Test a specific GraphQL subscription query against the live Unraid API. Uses an allowlisted set of safe fields only.
+```python
+unraid(
+    action="subscriptions",
+    subaction="test_query",
+    subscription_query="subscription { arraySubscription { state } }",
+)
+```
 
 ---
 
 ## Destructive Actions
 
-All require `confirm=True`. Without it, the action is blocked.
-
-| Domain | Subaction |
-|--------|-----------|
-| `array` | `stop_array`, `remove_disk`, `clear_disk_stats` |
-| `vm` | `force_stop`, `reset` |
-| `notification` | `delete`, `delete_archived` |
-| `rclone` | `delete_remote` |
-| `key` | `delete` |
-| `disk` | `flash_backup` |
-| `setting` | `configure_ups` |
-| `plugin` | `remove` |
+All destructive subactions require `confirm=True`. Without it, the action is
+blocked before any GraphQL request is sent. For the complete current destructive
+action list, call `unraid(action="help")` or see `docs/mcp/TOOLS.md`.
 
 ---
 
