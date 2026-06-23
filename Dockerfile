@@ -19,8 +19,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
-FROM python@sha256:4d7dd74c5b2d3151fe58eb8ecc9c56be13471a240ce5423ba765b04f8f95ebe8 AS runtime
-# tag: python:3.12-slim-bookworm  (digest pinned for reproducibility; Dependabot bumps it)
+FROM python:3.12-slim-bookworm AS runtime
+# Runtime Python must match the builder's Python 3.12 virtualenv layout.
 
 RUN groupadd --gid 1000 mcp && \
     useradd --uid 1000 --gid mcp --create-home mcp
