@@ -4,6 +4,31 @@ Live integration smoke-tests for the unraid-mcp server.
 
 ---
 
+## Generated GraphQL Operation Inventory
+
+Use the generated inventory before adding or updating live smoke tests. It is
+derived from the same action/subaction query and mutation dictionaries that the
+schema dispatch contract tests exercise, so it includes **all** GraphQL reads and
+mutations plus internal helper queries and live subscription documents:
+
+```bash
+scripts/list_graphql_operations.py
+scripts/list_graphql_operations.py --json
+```
+
+Use the root-field parity report when checking whether that inventory tracks the
+vendored Unraid schema surface:
+
+```bash
+scripts/report_api_parity.py
+scripts/report_api_parity.py --json
+```
+
+Live smoke scripts should consume this inventory or be checked against it rather
+than carrying a hand-maintained action list.
+
+---
+
 ## Canonical runner — `tests/test_live.sh`
 
 Non-destructive integration smoke-tests now live in a single canonical runner,

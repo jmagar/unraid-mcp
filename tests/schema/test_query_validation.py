@@ -10,6 +10,8 @@ from pathlib import Path
 import pytest
 from graphql import DocumentNode, GraphQLSchema, build_schema, parse, validate
 
+from unraid_mcp.devtools.graphql_inventory import schema_operation_dicts
+
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
 
@@ -26,83 +28,6 @@ def _validate_operation(schema: GraphQLSchema, query_str: str) -> list[str]:
     doc: DocumentNode = parse(query_str)
     errors = validate(schema, doc)
     return [str(e) for e in errors]
-
-
-def _all_domain_dicts() -> list[tuple[str, dict[str, str]]]:
-    """Return all query/mutation dicts imported directly from domain modules.
-
-    Single source of truth used by both test_all_tool_queries_validate and
-    test_total_operations_count so the two lists stay in sync automatically.
-    """
-    from unraid_mcp.tools._array import _ARRAY_MUTATIONS, _ARRAY_QUERIES
-    from unraid_mcp.tools._connect import _CONNECT_MUTATIONS, _CONNECT_QUERIES
-    from unraid_mcp.tools._customization import (
-        _CUSTOMIZATION_MUTATIONS,
-        _CUSTOMIZATION_QUERIES,
-    )
-    from unraid_mcp.tools._disk import _DISK_MUTATIONS, _DISK_QUERIES
-
-    # Docker organizer specs hold their GraphQL under a "mutation" key — flatten
-    # to a {subaction: query} dict so the bulk validator can check them too.
-    from unraid_mcp.tools._docker import (
-        _DOCKER_BULK_MUTATIONS,
-        _DOCKER_MUTATIONS,
-        _DOCKER_ORGANIZER,
-        _DOCKER_QUERIES,
-        _DOCKER_ROOT_MUTATIONS,
-    )
-    from unraid_mcp.tools._key import _KEY_MUTATIONS, _KEY_QUERIES
-    from unraid_mcp.tools._notification import (
-        _NOTIFICATION_MUTATIONS,
-        _NOTIFICATION_QUERIES,
-    )
-    from unraid_mcp.tools._oidc import _OIDC_QUERIES
-    from unraid_mcp.tools._onboarding import (
-        _ONBOARDING_INPUT_MUTATIONS,
-        _ONBOARDING_QUERIES,
-        _ONBOARDING_SIMPLE_MUTATIONS,
-    )
-    from unraid_mcp.tools._plugin import _PLUGIN_MUTATIONS, _PLUGIN_QUERIES
-    from unraid_mcp.tools._rclone import _RCLONE_MUTATIONS, _RCLONE_QUERIES
-    from unraid_mcp.tools._setting import _SETTING_MUTATIONS
-    from unraid_mcp.tools._system import _SYSTEM_QUERIES
-    from unraid_mcp.tools._user import _USER_QUERIES
-    from unraid_mcp.tools._vm import _VM_MUTATIONS, _VM_QUERIES
-
-    docker_organizer = {k: v["mutation"] for k, v in _DOCKER_ORGANIZER.items()}
-
-    return [
-        ("system/QUERIES", _SYSTEM_QUERIES),
-        ("array/QUERIES", _ARRAY_QUERIES),
-        ("array/MUTATIONS", _ARRAY_MUTATIONS),
-        ("disk/QUERIES", _DISK_QUERIES),
-        ("disk/MUTATIONS", _DISK_MUTATIONS),
-        ("docker/QUERIES", _DOCKER_QUERIES),
-        ("docker/MUTATIONS", _DOCKER_MUTATIONS),
-        ("docker/BULK_MUTATIONS", _DOCKER_BULK_MUTATIONS),
-        ("docker/ROOT_MUTATIONS", _DOCKER_ROOT_MUTATIONS),
-        ("docker/ORGANIZER", docker_organizer),
-        ("vm/QUERIES", _VM_QUERIES),
-        ("vm/MUTATIONS", _VM_MUTATIONS),
-        ("notification/QUERIES", _NOTIFICATION_QUERIES),
-        ("notification/MUTATIONS", _NOTIFICATION_MUTATIONS),
-        ("rclone/QUERIES", _RCLONE_QUERIES),
-        ("rclone/MUTATIONS", _RCLONE_MUTATIONS),
-        ("user/QUERIES", _USER_QUERIES),
-        ("key/QUERIES", _KEY_QUERIES),
-        ("key/MUTATIONS", _KEY_MUTATIONS),
-        ("setting/MUTATIONS", _SETTING_MUTATIONS),
-        ("connect/QUERIES", _CONNECT_QUERIES),
-        ("connect/MUTATIONS", _CONNECT_MUTATIONS),
-        ("customization/QUERIES", _CUSTOMIZATION_QUERIES),
-        ("customization/MUTATIONS", _CUSTOMIZATION_MUTATIONS),
-        ("plugin/QUERIES", _PLUGIN_QUERIES),
-        ("plugin/MUTATIONS", _PLUGIN_MUTATIONS),
-        ("oidc/QUERIES", _OIDC_QUERIES),
-        ("onboarding/QUERIES", _ONBOARDING_QUERIES),
-        ("onboarding/SIMPLE_MUTATIONS", _ONBOARDING_SIMPLE_MUTATIONS),
-        ("onboarding/INPUT_MUTATIONS", _ONBOARDING_INPUT_MUTATIONS),
-    ]
 
 
 # ============================================================================
@@ -1067,8 +992,7 @@ class TestSchemaCompleteness:
         from the assertion so the test suite stays green while the underlying
         tool queries are fixed incrementally.
         """
-        # All query/mutation dicts from domain modules, keyed by domain/type label
-        all_operation_dicts = _all_domain_dicts()
+        all_operation_dicts = schema_operation_dicts()
 
         # Known schema mismatches — bugs in tool implementation, not in tests.
         # Remove entries as they are fixed.
@@ -1111,7 +1035,7 @@ class TestSchemaCompleteness:
 
     def test_total_operations_count(self, schema: GraphQLSchema) -> None:
         """Verify the expected number of tool operations exist."""
-        all_dicts = [d for _, d in _all_domain_dicts()]
+        all_dicts = [d for _, d in schema_operation_dicts()]
 
         total = sum(len(d) for d in all_dicts)
         assert total >= 90, f"Expected at least 90 operations, found {total}"
