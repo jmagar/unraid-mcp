@@ -99,8 +99,14 @@ jobs:
       # Pre-merge (pull_request) gate: the build above ran with load:true, so the image
       # is in the local docker daemon. Scan it with a non-zero exit-code so CRITICAL/HIGH
       # CVEs *block the merge* before they can ever reach the registry. ignore-unfixed
-      # avoids failing on CVEs with no available patch (those are tracked via the
-      # advisory SARIF upload below).
+      # avoids failing on CVEs with no available patch.
+      #
+      # Scope = library only (the application's Python dependencies — what a PR actually
+      # controls). Base-OS/kernel CVEs in the digest-pinned base are intentionally NOT a
+      # merge blocker here: a container ships no kernel, the base is bumped via Dependabot
+      # digest updates, and the full os+library picture is surfaced by the advisory SARIF
+      # scan below. Blocking on uncontrollable base CVEs would fail every PR until the next
+      # base bump.
       - name: Scan image for vulnerabilities (blocking, pre-merge)
         if: github.event_name == 'pull_request'
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
@@ -109,6 +115,7 @@ jobs:
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
+          vuln-type: 'library'
           ignore-unfixed: true
 
       # Post-push (tag/branch) scan is intentionally ADVISORY (non-blocking): the image
