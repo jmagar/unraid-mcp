@@ -307,29 +307,21 @@ async def _post_with_429_retry(
         instead of returning (see Raises).
 
     Raises:
-        ToolError: If no response is received, or 429 persists after 3 retries
+        ToolError: If 429 persists after 3 retries
     """
-    response: httpx.Response | None = None
     for attempt in range(3):
         response = await client.post(url, **post_kwargs)
-        if response.status_code == 429:
-            backoff = 2**attempt
-            logger.warning(
-                f"Rate limited (429) by Unraid API, retrying in {backoff}s (attempt {attempt + 1}/3)"
-            )
-            await asyncio.sleep(backoff)
-            continue
-        break
+        if response.status_code != 429:
+            return response
+        backoff = 2**attempt
+        logger.warning(
+            f"Rate limited (429) by Unraid API, retrying in {backoff}s (attempt {attempt + 1}/3)"
+        )
+        await asyncio.sleep(backoff)
 
-    if response is None:  # pragma: no cover — guaranteed by loop
-        raise ToolError("No response received after retry attempts")
-
-    # Provide a clear message when all retries are exhausted on 429
-    if response.status_code == 429:
-        logger.error("Rate limit (429) persisted after 3 retries — request aborted")
-        raise ToolError("Unraid API is rate limiting requests. Wait ~10 seconds before retrying.")
-
-    return response
+    # All 3 attempts returned 429.
+    logger.error("Rate limit (429) persisted after 3 retries — request aborted")
+    raise ToolError("Unraid API is rate limiting requests. Wait ~10 seconds before retrying.")
 
 
 def _synthesize_idempotent_success(

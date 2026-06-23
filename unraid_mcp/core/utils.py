@@ -228,7 +228,8 @@ def _coerce_int(value: Any) -> int | None:
         return None
     try:
         return int(value)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
+        # OverflowError: int(inf) / int(very-large-float) — map to None like the rest.
         return None
 
 

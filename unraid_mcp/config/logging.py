@@ -97,18 +97,20 @@ class OverwriteFileHandler(logging.FileHandler):
             # Reset the byte counter now that we are writing to a fresh file.
             self._bytes_written = 0
 
-        if self.stream is not None:
-            reset_record = logging.LogRecord(
-                name="UnraidMCPServer.Logging",
-                level=logging.INFO,
-                pathname="",
-                lineno=0,
-                msg="=== LOG FILE RESET (10MB limit reached) ===",
-                args=(),
-                exc_info=None,
-            )
-            super().emit(reset_record)
-            self._account_for(reset_record)
+            # Write the reset marker ONLY on a successful overwrite — otherwise we'd
+            # stamp "LOG FILE RESET" onto the old, un-reset file (reopen failed).
+            if self.stream is not None:
+                reset_record = logging.LogRecord(
+                    name="UnraidMCPServer.Logging",
+                    level=logging.INFO,
+                    pathname="",
+                    lineno=0,
+                    msg="=== LOG FILE RESET (10MB limit reached) ===",
+                    args=(),
+                    exc_info=None,
+                )
+                super().emit(reset_record)
+                self._account_for(reset_record)
 
         return rotated
 
