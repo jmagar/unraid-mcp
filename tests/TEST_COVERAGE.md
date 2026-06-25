@@ -15,7 +15,7 @@ A QA engineer should be able to verify correctness of the script without executi
 | MCP server exercised | `unraid-mcp` — Python MCP server that proxies Unraid's GraphQL API |
 | Transport protocols covered | Streamable-HTTP (primary), Docker container (build + run), stdio (subprocess) |
 | Test approach | Direct JSON-RPC 2.0 over HTTP — no mcporter or secondary proxy dependency |
-| Total tool subactions exercised | 47 (45 read-only + 2 destructive-guard bypass) |
+| Total tool subactions attempted | 51 (49 read-only + 2 destructive-guard bypass) |
 | Destructive operations | None — all state-changing tools are invoked only with `confirm=true` to verify the guard bypasses correctly, not to execute the operation |
 
 ### What the script is not
@@ -26,6 +26,12 @@ A QA engineer should be able to verify correctness of the script without executi
   business data.
 - It does not test write operations (container start/stop, VM actions beyond force_stop guard
   check, array operations, etc.) to avoid causing data loss or service disruption.
+- It intentionally covers new read-only schema-drift surfaces in the live phase, including
+  `system/network_interfaces`, `onboarding/internal_boot_context`, `live/network_metrics`,
+  and `subscriptions/test_query` for `systemMetricsNetwork`.
+- Some live API/config-dependent probes report `SKIP` instead of `FAIL` when the upstream
+  Unraid appliance rejects a newly-added schema field or optional subsystem data is absent.
+  The skipped subaction remains visible in the summary.
 
 ---
 
@@ -56,7 +62,7 @@ For stdio mode: `uv` must be in `PATH` (soft requirement — skipped with `SKIP`
 # Docker only — builds image, starts container, tests, tears down
 ./tests/test_live.sh --mode docker
 
-# Stdio only — spawns server subprocess via uvx
+# Stdio only — spawns server subprocess via uv run
 ./tests/test_live.sh --mode stdio
 
 # All three modes explicitly

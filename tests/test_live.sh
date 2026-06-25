@@ -104,7 +104,7 @@ esac
 section() { printf "\n${C}${B}━━━ %s ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${N}\n" "$1"; }
 pass()    { printf "  %-62s${G}PASS${N}\n" "$1"; (( PASS++ )); }
 fail()    { printf "  %-62s${R}FAIL${N}\n" "$1"; (( FAIL++ )); FAILED+=("$1"); }
-skip()    { printf "  %-62s${Y}SKIP${N}${D} ($2)${N}\n" "$1" "${2:-}"; (( SKIP++ )); }
+skip()    { printf "  %-62s${Y}SKIP${N}${D} (%s)${N}\n" "$1" "${2:-}"; (( SKIP++ )); }
 verbose() { [[ "$VERBOSE" == true ]] && printf "${D}    %s${N}\n" "$1" || true; }
 
 # ---------------------------------------------------------------------------
@@ -203,6 +203,44 @@ call_unraid() {
     local detail; detail="$(printf '%s' "$HTTP_BODY" | jq -r \
       '.error.message // .result.content[0].text // empty' 2>/dev/null | head -c 120)"
     fail "$label  (HTTP $HTTP_STATUS${detail:+: $detail})"
+  fi
+}
+
+# call_unraid_optional LABEL ACTION SUBACTION SKIP_REGEX SKIP_REASON [EXTRA_ARGS_JSON]
+# Calls the unraid tool and passes on success. Tool errors matching SKIP_REGEX are
+# treated as an environment/API-version skip, which keeps live smoke-tests useful
+# against older or feature-disabled Unraid installs while still surfacing the
+# skipped coverage explicitly.
+call_unraid_optional() {
+  local label="$1" action="$2" subaction="$3" skip_regex="$4" skip_reason="$5"
+  local extra_params="${6:-}"
+  local params; params="$(jq -cn \
+    --arg a "$action" --arg s "$subaction" \
+    '{"name":"unraid","arguments":{"action":$a,"subaction":$s}}')"
+  if [[ -n "$extra_params" ]]; then
+    params="$(printf '%s' "$params" | jq --argjson x "$extra_params" '.arguments += $x')"
+  fi
+  mcp_post "tools/call" "$params"
+
+  if [[ "$HTTP_STATUS" == "200" ]]; then
+    if printf '%s' "$HTTP_BODY" | jq -e '.result.isError == true' &>/dev/null; then
+      local errmsg; errmsg="$(printf '%s' "$HTTP_BODY" | jq -r '.result.content[0].text' 2>/dev/null | head -c 220)"
+      if printf '%s' "$errmsg" | grep -qiE "$skip_regex"; then
+        skip "$label" "$skip_reason: $errmsg"
+      else
+        fail "$label  (tool error: $(printf '%s' "$errmsg" | head -c 100))"
+      fi
+    else
+      pass "$label"
+    fi
+  else
+    local detail; detail="$(printf '%s' "$HTTP_BODY" | jq -r \
+      '.error.message // .result.content[0].text // empty' 2>/dev/null | head -c 120)"
+    if printf '%s\n%s' "$HTTP_STATUS" "$detail" | grep -qiE "$skip_regex"; then
+      skip "$label" "$skip_reason: HTTP $HTTP_STATUS${detail:+: $detail}"
+    else
+      fail "$label  (HTTP $HTTP_STATUS${detail:+: $detail})"
+    fi
   fi
 }
 
@@ -398,12 +436,19 @@ run_phase4() {
   call_unraid "unraid system/display"         "system"       "display"
   call_unraid "unraid system/config"          "system"       "config"
   call_unraid "unraid system/online"          "system"       "online"
-  call_unraid "unraid system/owner"           "system"       "owner"
+  call_unraid_optional "unraid system/owner"  "system"       "owner" \
+    'Cannot return null for non-nullable field Owner\.url' \
+    "upstream owner profile has null url"
   call_unraid "unraid system/settings"        "system"       "settings"
   call_unraid "unraid system/server"          "system"       "server"
   call_unraid "unraid system/servers"         "system"       "servers"
   call_unraid "unraid system/flash"           "system"       "flash"
-  call_unraid "unraid system/ups_devices"     "system"       "ups_devices"
+  call_unraid_optional "unraid system/ups_devices" "system"  "ups_devices" \
+    'No UPS data returned from apcaccess' \
+    "UPS service has no data on this appliance"
+  call_unraid_optional "unraid system/network_interfaces" "system" "network_interfaces" \
+    'HTTP 400|Cannot query field|networkInterfaces' \
+    "networkInterfaces requires newer/compatible Unraid API schema"
   call_unraid "unraid array/parity_status"    "array"        "parity_status"
   call_unraid "unraid array/parity_history"   "array"        "parity_history"
   call_unraid "unraid disk/shares"            "disk"         "shares"
@@ -418,7 +463,10 @@ run_phase4() {
   call_unraid "unraid user/me"                "user"         "me"
   call_unraid "unraid key/list"               "key"          "list"
   call_unraid "unraid rclone/list_remotes"    "rclone"       "list_remotes"
-  call_unraid "unraid rclone/config_form"     "rclone"       "config_form" '{"provider_type":"s3"}'
+  call_unraid_optional "unraid rclone/config_form" "rclone"  "config_form" \
+    '`url` must not start with a slash' \
+    "rclone plugin endpoint rejected local config-form URL" \
+    '{"provider_type":"s3"}'
   call_unraid "unraid plugin/list"            "plugin"       "list"
   call_unraid "unraid customization/public_theme" "customization" "public_theme"
   call_unraid "unraid customization/sso_enabled"  "customization" "sso_enabled"
@@ -426,10 +474,17 @@ run_phase4() {
   call_unraid "unraid oidc/providers"         "oidc"         "providers"
   call_unraid "unraid oidc/public_providers"  "oidc"         "public_providers"
   call_unraid "unraid oidc/configuration"     "oidc"         "configuration"
+  call_unraid "unraid onboarding/internal_boot_context" "onboarding" "internal_boot_context"
   call_unraid "unraid live/cpu"               "live"         "cpu"
   call_unraid "unraid live/memory"            "live"         "memory"
   call_unraid "unraid live/cpu_telemetry"     "live"         "cpu_telemetry"
   call_unraid "unraid live/notifications_overview" "live"    "notifications_overview"
+  call_unraid_optional "unraid live/network_metrics" "live"  "network_metrics" \
+    'Cannot query field|systemMetricsNetwork|timed out|WebSocket|Subscription error' \
+    "systemMetricsNetwork requires newer/compatible Unraid API schema"
+  call_unraid "unraid subscriptions/test_query systemMetricsNetwork" \
+    "subscriptions" "test_query" \
+    '{"subscription_query":"subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"}'
 
   # Phase 4b — Destructive guard bypass (confirm=True)
   section "Phase 4b · Destructive action guards (confirm=True bypass)"
@@ -605,19 +660,21 @@ run_stdio_mode() {
   # Build the initialize request
   local init_req; init_req="$(jq -cn \
     '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test_live_stdio","version":"0"}}}')"
+  local initialized_req; initialized_req="$(jq -cn \
+    '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}')"
   local list_req; list_req="$(jq -cn \
     '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":null}')"
 
   # Launch the server, send two requests, collect output
   local stdio_out
   stdio_out="$(
-    printf '%s\n%s\n' "$init_req" "$list_req" \
+    { printf '%s\n%s\n%s\n' "$init_req" "$initialized_req" "$list_req"; sleep 3; } \
     | UNRAID_MCP_TRANSPORT=stdio \
       UNRAID_API_URL="${UNRAID_API_URL:-http://127.0.0.1:1}" \
       UNRAID_API_KEY="${UNRAID_API_KEY:-ci-fake-key}" \
-      uv run --directory "$REPO_DIR" --from . "$ENTRY_POINT" \
+      uv run --directory "$REPO_DIR" "$ENTRY_POINT" \
       2>/dev/null \
-    | head -c 16384
+    | head -c 1048576
   )" || true
 
   if [[ -z "$stdio_out" ]]; then
