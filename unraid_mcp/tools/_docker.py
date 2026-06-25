@@ -47,6 +47,7 @@ _DOCKER_RESOLVE_QUERY = "query ResolveContainerID { docker { containers { id nam
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",
     "stop": "mutation StopContainer($id: PrefixedID!) { docker { stop(id: $id) { id names state status } } }",
+    "restart": "mutation RestartContainer($id: PrefixedID!) { docker { restart(id: $id) { id names state status } } }",
     "unpause": "mutation UnpauseContainer($id: PrefixedID!) { docker { unpause(id: $id) { id names state status } } }",
     "update_container": "mutation UpdateContainer($id: PrefixedID!) { docker { updateContainer(id: $id) { id names image state status } } }",
 }
@@ -77,6 +78,7 @@ _DOCKER_ROOT_RESULT_FIELD: dict[str, str] = {
 _DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
     "start": "start",
     "stop": "stop",
+    "restart": "restart",
     "unpause": "unpause",
     "update_container": "updateContainer",
 }
@@ -342,14 +344,24 @@ async def _handle_docker(
             )
 
         if subaction == "restart":
-            # Resolution is by name (or short id), which `docker.container(id:)`
-            # cannot do — that field takes a full PrefixedID! and offers no
-            # name lookup. Unlike docker/details (which used the single-container
-            # field only to skip the *heavy* detail payload), restart's stop/start
-            # mutations take a PrefixedID! and have no payload to trim, so the
-            # minimal `{ id names }` resolve scan is the smallest correct fetch.
-            # A full prefixed id short-circuits below with no request at all.
             actual_id = await _resolve_container_id(container_id or "", strict=True)
+            # Try the native restart mutation first (Unraid API with DockerMutations.restart).
+            # Fall back to stop+start for older API versions that don't have the field.
+            try:
+                data = await _client.make_graphql_request(
+                    _DOCKER_MUTATIONS["restart"],
+                    {"id": actual_id},
+                    operation_context={"operation": "restart"},
+                )
+                result = (
+                    {}
+                    if data.get("idempotent_success")
+                    else safe_get(data, "docker", "restart", default={})
+                )
+                return {"success": True, "subaction": "restart", "container": result}
+            except ToolError:
+                pass
+            # Fallback: stop then start (compatible with older Unraid API versions).
             stop_data = await _client.make_graphql_request(
                 _DOCKER_MUTATIONS["stop"],
                 {"id": actual_id},

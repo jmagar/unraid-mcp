@@ -2,8 +2,8 @@
 
 Covers: cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status,
 notifications_overview, notifications_warnings, notification_feed, log_tail, owner,
-server_status, docker_container_stats, temperature, display,
-plugin_install_updates (16 subactions).
+server_status, docker_container_stats, temperature, display, network,
+plugin_install_updates (17 subactions).
 """
 
 from typing import Any

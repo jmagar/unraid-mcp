@@ -4,7 +4,7 @@ Provides the `unraid` tool with 19 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
-  system       - Server info, metrics, network, UPS (23 subactions)
+  system       - Server info, metrics, network, UPS (24 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
   array        - Parity checks, array state, disk operations (14 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
@@ -20,7 +20,7 @@ Actions:
   oidc         - OIDC/SSO provider management (5 subactions)
   onboarding   - First-boot/onboarding state (11 subactions)
   user         - Current authenticated user (1 subaction)
-  live         - Real-time WebSocket subscription snapshots (16 subactions)
+  live         - Real-time WebSocket subscription snapshots (17 subactions)
   subscriptions - WebSocket subscription diagnostics (2 subactions)
   help         - Return the full Markdown action/subaction reference (no subaction)
 """
@@ -231,7 +231,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 
 | Action | Subactions | Notes |
 |--------|-----------|-------|
-| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | |
+| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones`, `network_interfaces` | |
 | `health` | `check`, `test_connection`, `diagnose`, `setup` | |
 | `array` | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
 | `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
@@ -247,7 +247,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 | `oidc` | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | |
 | `onboarding` | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`* | inputs via `onboarding_input` |
 | `user` | `me` | |
-| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `log_tail` (requires `path=`), `notification_feed`, `plugin_install_updates` | |
+| `live` | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `network`, `log_tail` (requires `path=`), `notification_feed`, `plugin_install_updates` | |
 | `subscriptions` | `diagnose`, `test_query` (requires `subscription_query=`) | WebSocket subscription diagnostics |
 | `help` | _(no subaction)_ | Returns this reference |
 

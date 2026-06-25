@@ -172,6 +172,7 @@ class TestInfoQueries:
             "ups_config",
             "server_time",
             "timezones",
+            "network_interfaces",
         }
         assert set(QUERIES.keys()) == expected_actions
 
@@ -434,6 +435,7 @@ class TestDockerMutations:
         assert set(_DOCKER_MUTATIONS.keys()) == {
             "start",
             "stop",
+            "restart",
             "unpause",
             "update_container",
         }
