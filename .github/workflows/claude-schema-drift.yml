@@ -81,7 +81,7 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
-            --max-turns 12
+            --max-turns 35
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
             Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
