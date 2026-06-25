@@ -157,13 +157,12 @@ jobs:
             - Run the focused schema and dispatch contract tests. Run broader
               tests when the touched code warrants it.
             - Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`.
-            - After pushing, wait for the PR's GitHub checks to complete. Your task
-              is not finished until all tests and CI checks are passing. If a check
-              fails, inspect the failing logs, fix the issue, push again, and repeat.
-              Only leave the PR failing when the failure is unrelated external
-              infrastructure, and explain that evidence in the PR body.
+            - Do not wait for GitHub PR checks inside Claude after pushing. This
+              workflow owns CI waiting and will re-invoke Claude with failing check
+              logs when repair is needed. The overall automation is not considered
+              finished until all tests and CI checks are passing.
             - In the PR body, link issue #${{ inputs.issue_number }} and summarize
-              the local test commands plus final CI status.
+              the local test commands you ran.
 
       - name: Verify Claude updated the draft PR
         id: verify_initial
@@ -319,8 +318,10 @@ jobs:
               schema/contract tests affected by the fix.
             - Commit and push the repair to `${{ steps.prepare.outputs.branch_name }}`.
             - Update the PR body with the repair summary, local test commands, and
-              final CI status.
-            - Your task is not finished until all tests and CI checks are passing.
+              note that the workflow will verify final CI status.
+            - Do not wait for GitHub PR checks inside Claude after pushing. This
+              workflow owns the final CI gate and will fail unless all tests and CI
+              checks are passing.
 
       - name: Verify repaired Claude PR checks
         if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
