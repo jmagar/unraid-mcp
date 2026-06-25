@@ -190,15 +190,20 @@ jobs:
         run: |
           title="Unraid GraphQL schema drift detected"
           label="schema-drift"
+          gh label create "$label" \
+            --color "d73a4a" \
+            --description "Automated upstream Unraid GraphQL schema drift reports" \
+            >/dev/null 2>&1 || true
+
           existing="$(
             gh issue list \
               --state open \
-              --label "$label" \
               --json number,title,body \
               --jq ".[] | select(.title == \"$title\") | select((.body // \"\") | contains(\"<!-- upstream-schema-sha256:\")) | .number" |
               head -n 1
           )"
           if [ -n "$existing" ]; then
+            gh issue edit "$existing" --add-label "$label"
             gh issue comment "$existing" \
               --body "The vendored Unraid SDL now matches \`unraid/api@main\`; closing this drift report."
             gh issue close "$existing" \
