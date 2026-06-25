@@ -58,6 +58,7 @@ _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
         "network",
         "docker",
         "systemMetricsTemperature",
+        "systemMetricsNetwork",
         "vm",
         "displaySubscription",
         "notificationsWarningsAndAlerts",

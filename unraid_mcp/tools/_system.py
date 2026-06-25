@@ -144,6 +144,18 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "ups_config": "query GetUpsConfig { upsConfiguration { service upsCable upsType device batteryLevel minutes timeout killUps upsName } }",
     "server_time": "query GetSystemTime { systemTime { currentTime timeZone useNtp ntpServers } }",
     "timezones": "query GetTimeZones { timeZoneOptions { value label } }",
+    "network_interfaces": """
+        query GetNetworkInterfaces {
+          networkInterfaces {
+            id name description macAddress status protocol
+            ipAddress netmask gateway useDhcp
+            ipv6Address ipv6Netmask ipv6Gateway useDhcp6
+            mtu speed duplex internal virtual operstate type vlanId
+            ipv4Addresses { address netmask }
+            ipv6Addresses { address prefixLength }
+          }
+        }
+    """,
 }
 
 _SYSTEM_SUBACTIONS: set[str] = set(_SYSTEM_QUERIES)
@@ -168,6 +180,7 @@ _SYSTEM_LIST_ACTIONS: dict[str, tuple[str, str]] = {
     "servers": ("servers", "servers"),
     "ups_devices": ("upsDevices", "ups_devices"),
     "timezones": ("timeZoneOptions", "timezones"),
+    "network_interfaces": ("networkInterfaces", "network_interfaces"),
 }
 
 _SYSTEM_DIRECT_ROOTS: dict[str, str] = {

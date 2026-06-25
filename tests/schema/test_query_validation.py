@@ -144,6 +144,12 @@ class TestInfoQueries:
         errors = _validate_operation(schema, QUERIES["ups_config"])
         assert not errors, f"ups_config query validation failed: {errors}"
 
+    def test_network_interfaces_query(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._system import _SYSTEM_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["network_interfaces"])
+        assert not errors, f"network_interfaces query validation failed: {errors}"
+
     def test_all_info_actions_covered(self, schema: GraphQLSchema) -> None:
         """Ensure every key in QUERIES has a corresponding test."""
         from unraid_mcp.tools._system import _SYSTEM_QUERIES as QUERIES
@@ -172,6 +178,7 @@ class TestInfoQueries:
             "ups_config",
             "server_time",
             "timezones",
+            "network_interfaces",
         }
         assert set(QUERIES.keys()) == expected_actions
 
@@ -423,6 +430,12 @@ class TestDockerMutations:
         errors = _validate_operation(schema, MUTATIONS["stop"])
         assert not errors, f"stop mutation validation failed: {errors}"
 
+    def test_restart_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._docker import _DOCKER_MUTATIONS as MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["restart"])
+        assert not errors, f"restart mutation validation failed: {errors}"
+
     def test_all_docker_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._docker import (
             _DOCKER_BULK_MUTATIONS,
@@ -434,6 +447,7 @@ class TestDockerMutations:
         assert set(_DOCKER_MUTATIONS.keys()) == {
             "start",
             "stop",
+            "restart",
             "unpause",
             "update_container",
         }

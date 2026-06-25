@@ -121,6 +121,21 @@ class TestDockerActions:
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            {"docker": {"restart": {"id": cid, "state": "running"}}},
+        ]
+        tool_fn = _make_tool()
+        result = await tool_fn(action="docker", subaction="restart", container_id="plex")
+        assert result["success"] is True
+        assert result["subaction"] == "restart"
+
+    async def test_restart_fallback_to_stop_start(self, _mock_graphql: AsyncMock) -> None:
+        """Older Unraid APIs lack DockerMutations.restart; fall back to stop+start."""
+        from unraid_mcp.core.exceptions import ToolError as _TE
+
+        cid = "a" * 64 + ":local"
+        _mock_graphql.side_effect = [
+            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            _TE("Cannot query field 'restart' on type 'DockerMutations'"),
             {"docker": {"stop": {"id": cid, "state": "exited"}}},
             {"docker": {"start": {"id": cid, "state": "running"}}},
         ]
@@ -130,9 +145,13 @@ class TestDockerActions:
         assert result["subaction"] == "restart"
 
     async def test_restart_idempotent_stop(self, _mock_graphql: AsyncMock) -> None:
+        """Fallback path: container was already stopped before restart."""
+        from unraid_mcp.core.exceptions import ToolError as _TE
+
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
+            _TE("Cannot query field 'restart' on type 'DockerMutations'"),
             {"idempotent_success": True},
             {"docker": {"start": {"id": cid, "state": "running"}}},
         ]

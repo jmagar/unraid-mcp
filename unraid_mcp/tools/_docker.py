@@ -47,6 +47,7 @@ _DOCKER_RESOLVE_QUERY = "query ResolveContainerID { docker { containers { id nam
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",
     "stop": "mutation StopContainer($id: PrefixedID!) { docker { stop(id: $id) { id names state status } } }",
+    "restart": "mutation RestartContainer($id: PrefixedID!) { docker { restart(id: $id) { id names state status } } }",
     "unpause": "mutation UnpauseContainer($id: PrefixedID!) { docker { unpause(id: $id) { id names state status } } }",
     "update_container": "mutation UpdateContainer($id: PrefixedID!) { docker { updateContainer(id: $id) { id names image state status } } }",
 }
@@ -77,6 +78,7 @@ _DOCKER_ROOT_RESULT_FIELD: dict[str, str] = {
 _DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
     "start": "start",
     "stop": "stop",
+    "restart": "restart",
     "unpause": "unpause",
     "update_container": "updateContainer",
 }
@@ -156,7 +158,7 @@ _DOCKER_SUBACTIONS: set[str] = (
     | set(_DOCKER_BULK_MUTATIONS)
     | set(_DOCKER_ROOT_MUTATIONS)
     | set(_DOCKER_ORGANIZER)
-    | {"restart", "logs"}
+    | {"logs"}
 )
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart", "unpause", "update_container"}
 # remove_container deletes the container (and optionally its image); reset_template_mappings
@@ -345,11 +347,30 @@ async def _handle_docker(
             # Resolution is by name (or short id), which `docker.container(id:)`
             # cannot do — that field takes a full PrefixedID! and offers no
             # name lookup. Unlike docker/details (which used the single-container
-            # field only to skip the *heavy* detail payload), restart's stop/start
-            # mutations take a PrefixedID! and have no payload to trim, so the
-            # minimal `{ id names }` resolve scan is the smallest correct fetch.
+            # field only to skip the *heavy* detail payload), restart's mutation
+            # takes a PrefixedID! and has no payload to trim, so the minimal
+            # `{ id names }` resolve scan is the smallest correct fetch.
             # A full prefixed id short-circuits below with no request at all.
             actual_id = await _resolve_container_id(container_id or "", strict=True)
+            try:
+                # Use native DockerMutations.restart introduced in upstream schema drift #107.
+                # Falls back to stop+start for older Unraid API versions that don't have it.
+                restart_data = await _client.make_graphql_request(
+                    _DOCKER_MUTATIONS["restart"],
+                    {"id": actual_id},
+                    operation_context={"operation": "restart"},
+                )
+                result = safe_get(restart_data, "docker", "restart", default={})
+                return {
+                    "success": True,
+                    "subaction": "restart",
+                    "container": result,
+                }
+            except Exception as exc:
+                if "restart" not in str(exc).lower() and "field" not in str(exc).lower():
+                    raise
+                # Older API: fall back to stop → start sequence.
+                logger.debug("Native DockerMutations.restart unavailable, using stop+start fallback: %s", exc)
             stop_data = await _client.make_graphql_request(
                 _DOCKER_MUTATIONS["stop"],
                 {"id": actual_id},
@@ -489,6 +510,7 @@ async def _handle_docker(
             }
 
         # Single-id namespaced lifecycle mutations: start, stop, unpause, update_container.
+        # (restart is handled by its own block above with native-mutation + fallback logic.)
         if subaction not in _DOCKER_MUTATIONS:
             raise ToolError(f"Unhandled docker subaction '{subaction}' — this is a bug")
         actual_id = await _resolve_container_id(container_id or "", strict=True)
