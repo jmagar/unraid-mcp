@@ -78,6 +78,7 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert 'select((.body // "") | contains($hash))' in workflow
     assert "should_run=false" in workflow
     assert "steps.prepare.outputs.should_run == 'true'" in workflow
+    assert "timeout-minutes: 35" in workflow
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
     assert "display_report: true" in workflow
     assert "--max-turns" not in workflow
@@ -90,7 +91,8 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`" in workflow
     assert "Do not wait for GitHub PR checks inside Claude after pushing" in workflow
     assert "workflow owns CI waiting" in workflow
-    assert "overall automation is not considered" in workflow
+    assert "overall automation is not considered" not in workflow
+    assert "After pushing, return control to the workflow" in workflow
     assert "local test commands you ran" in workflow
     assert "Verify Claude updated the draft PR" in workflow
     assert "id: verify_initial" in workflow
@@ -109,6 +111,7 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "steps.verify_initial.outcome == 'failure'" in workflow
     assert '"/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs"' in workflow
     assert "Run Claude Code to repair failing CI" in workflow
+    assert "timeout-minutes: 25" in workflow
     assert "Read `ci-failure-report.md` in this checkout" in workflow
     assert "workflow will verify final CI status" in workflow
     assert "workflow owns the final CI gate" in workflow

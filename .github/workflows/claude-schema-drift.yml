@@ -118,6 +118,7 @@ jobs:
       - name: Run Claude Code
         id: claude
         if: steps.prepare.outputs.should_run == 'true'
+        timeout-minutes: 35
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
@@ -159,8 +160,8 @@ jobs:
             - Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`.
             - Do not wait for GitHub PR checks inside Claude after pushing. This
               workflow owns CI waiting and will re-invoke Claude with failing check
-              logs when repair is needed. The overall automation is not considered
-              finished until all tests and CI checks are passing.
+              logs when repair is needed.
+            - After pushing, return control to the workflow.
             - In the PR body, link issue #${{ inputs.issue_number }} and summarize
               the local test commands you ran.
 
@@ -291,6 +292,7 @@ jobs:
       - name: Run Claude Code to repair failing CI
         id: claude_repair
         if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
+        timeout-minutes: 25
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
@@ -322,6 +324,7 @@ jobs:
             - Do not wait for GitHub PR checks inside Claude after pushing. This
               workflow owns the final CI gate and will fail unless all tests and CI
               checks are passing.
+            - After pushing, return control to the workflow.
 
       - name: Verify repaired Claude PR checks
         if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
