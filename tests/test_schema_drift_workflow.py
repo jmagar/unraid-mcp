@@ -92,12 +92,28 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "inspect the failing logs, fix the issue, push again, and repeat" in workflow
     assert "final CI status" in workflow
     assert "Verify Claude updated the draft PR" in workflow
+    assert "id: verify_initial" in workflow
+    assert "continue-on-error: true" in workflow
     assert "GH_TOKEN: ${{ github.token }}" in workflow
     assert "GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}" not in workflow
     assert "steps.prepare.outputs.branch_name" in workflow
     assert "branch_sha=" in workflow
     assert "gh pr list \\" in workflow
     assert 'gh pr checks "$PR_URL" --watch --fail-fast' in workflow
+    assert "Collect failing PR check logs" in workflow
+    assert "id: ci_failure_report" in workflow
+    assert "ci-failure-report.md" in workflow
+    assert "failed_sha=" in workflow
+    assert "Failed head SHA:" in workflow
+    assert "steps.verify_initial.outcome == 'failure'" in workflow
+    assert '"/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs"' in workflow
+    assert "Run Claude Code to repair failing CI" in workflow
+    assert "Read `ci-failure-report.md` in this checkout" in workflow
+    assert "Verify repaired Claude PR checks" in workflow
+    assert "PRE_REPAIR_SHA: ${{ steps.ci_failure_report.outputs.failed_sha }}" in workflow
+    assert 'gh pr checks "$PR_URL" --watch --fail-fast' in workflow
+    assert "Claude repair completed without pushing changes" in workflow
+    assert "Claude repaired schema drift PR" in workflow
     assert "all PR checks are passing" in workflow
     assert "Claude completed without pushing changes" in workflow
     assert "Claude pushed schema drift changes" in workflow
