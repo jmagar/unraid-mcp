@@ -34,6 +34,8 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "additional_permissions: |\n            actions: read\n            contents: write" not in workflow
     assert "Prepare Claude branch and draft PR" in workflow
     assert 'branch_name="claude/schema-drift-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"' in workflow
+    assert "git commit --allow-empty" in workflow
+    assert 'prepared_sha="$(git rev-parse HEAD)"' in workflow
     assert "gh pr create \\" in workflow
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
     assert "--max-turns 12" in workflow
