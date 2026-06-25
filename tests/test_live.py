@@ -339,6 +339,22 @@ async def test_notifications_warnings_returns_snapshot(_mock_subscribe_once, _co
 
 
 @pytest.mark.asyncio
+async def test_network_metrics_returns_snapshot(_mock_subscribe_once, _cold_cache):
+    _mock_subscribe_once.return_value = {
+        "systemMetricsNetwork": {
+            "interface": "eth0",
+            "rxBytesPerSec": 1024.0,
+            "txBytesPerSec": 2048.0,
+        }
+    }
+    result = await _make_tool()(action="live", subaction="network_metrics")
+    assert result["success"] is True
+    assert result["data"]["systemMetricsNetwork"]["interface"] == "eth0"
+    query = _mock_subscribe_once.call_args.args[0]
+    assert "systemMetricsNetwork" in query
+
+
+@pytest.mark.asyncio
 async def test_plugin_install_updates_requires_operation_id(_mock_subscribe_collect):
     from unraid_mcp.core.exceptions import ToolError
 

@@ -41,7 +41,7 @@ _ONBOARDING_SIMPLE_MUTATIONS: dict[str, str] = {
     "bypass": f"mutation BypassOnboarding {{ onboarding {{ bypassOnboarding {{ {_ONBOARDING_FIELDS} }} }} }}",
     "resume": f"mutation ResumeOnboarding {{ onboarding {{ resumeOnboarding {{ {_ONBOARDING_FIELDS} }} }} }}",
     "clear_override": f"mutation ClearOnboardingOverride {{ onboarding {{ clearOnboardingOverride {{ {_ONBOARDING_FIELDS} }} }} }}",
-    "refresh_internal_boot_context": "mutation RefreshInternalBootContext { onboarding { refreshInternalBootContext { arrayStopped bootEligible poolNames } } }",
+    "refresh_internal_boot_context": "mutation RefreshInternalBootContext { onboarding { refreshInternalBootContext { arrayStopped bootEligible poolNames driveWarnings { diskId device warnings } } } }",
 }
 
 _ONBOARDING_INPUT_MUTATIONS: dict[str, str] = {

@@ -8,8 +8,10 @@ argument smuggling bypasses a first-field-only regex allowlist permits (SEC-H1).
 """
 
 import pytest
+from graphql import FieldNode, OperationDefinitionNode, OperationType, parse
 
 from unraid_mcp.core.exceptions import ToolError
+from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
 from unraid_mcp.subscriptions.diagnostics import (
     _ALLOWED_SUBSCRIPTION_FIELDS,
     _validate_subscription_query,
@@ -34,6 +36,27 @@ class TestValidateSubscriptionQueryAllowed:
             )
             == "systemMetricsNetwork"
         )
+
+    def test_snapshot_subscription_fields_are_diagnostic_allowlisted(self) -> None:
+        intentionally_blocked = {"log_tail", "notification_feed", "plugin_install_updates"}
+        missing: dict[str, str] = {}
+        for action, query in SNAPSHOT_ACTIONS.items():
+            document = parse(query)
+            operations = [d for d in document.definitions if isinstance(d, OperationDefinitionNode)]
+            assert len(operations) == 1
+            operation = operations[0]
+            assert operation.operation is OperationType.SUBSCRIPTION
+            assert len(operation.selection_set.selections) == 1
+            selection = operation.selection_set.selections[0]
+            assert isinstance(selection, FieldNode)
+            field_name = selection.name.value
+            if (
+                field_name not in _ALLOWED_SUBSCRIPTION_FIELDS
+                and action not in intentionally_blocked
+            ):
+                missing[action] = field_name
+
+        assert not missing
 
     def test_leading_whitespace_accepted(self) -> None:
         assert _validate_subscription_query("  subscription { memory { free } }") == "memory"
