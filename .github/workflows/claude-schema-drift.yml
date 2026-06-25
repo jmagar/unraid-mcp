@@ -127,7 +127,6 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           display_report: true
           show_full_output: true
-          track_progress: true
           additional_permissions: |
             actions: read
           claude_args: |
@@ -324,7 +323,6 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           display_report: true
           show_full_output: true
-          track_progress: true
           additional_permissions: |
             actions: read
           claude_args: |

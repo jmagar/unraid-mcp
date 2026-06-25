@@ -82,7 +82,7 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
     assert "display_report: true" in workflow
     assert "show_full_output: true" in workflow
-    assert "track_progress: true" in workflow
+    assert "track_progress: true" not in workflow
     assert "--max-turns 10" in workflow
     assert "--debug" in workflow
     assert "--allowedTools" in workflow
