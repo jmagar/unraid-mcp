@@ -37,6 +37,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
+          claude_args: |
+            --allowedTools Read,Edit,MultiEdit,Write,Glob,Grep,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)
           prompt: |
             Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
 
@@ -55,3 +57,33 @@ jobs:
             - open a pull request with the required code, docs, and tests.
             - In the PR body, link issue #${{ inputs.issue_number }} and summarize
               the test commands and results.
+
+      - name: Verify Claude opened a pull request
+        env:
+          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
+          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        run: |
+          echo "Claude session: ${{ steps.claude.outputs.session_id }}"
+          echo "Claude branch: ${BRANCH_NAME:-<none>}"
+
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "::error::Claude completed without creating a branch or pull request."
+            exit 1
+          fi
+
+          pr_url="$(
+            gh pr list \
+              --head "$BRANCH_NAME" \
+              --state open \
+              --json url \
+              --jq '.[0].url // ""'
+          )"
+          if [ -z "$pr_url" ]; then
+            echo "::error::Claude branch '$BRANCH_NAME' exists, but no open pull request was found."
+            exit 1
+          fi
+
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Claude opened a schema drift implementation PR: ${pr_url}"
+          echo "Claude PR: $pr_url"

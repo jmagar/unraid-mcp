@@ -32,5 +32,14 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" in workflow
     assert "additional_permissions: |\n            actions: read" in workflow
     assert "additional_permissions: |\n            actions: read\n            contents: write" not in workflow
+    assert "--allowedTools" in workflow
+    assert "Bash(git:*)" in workflow
+    assert "Bash(gh:*)" in workflow
+    assert "Read,Edit,MultiEdit,Write" in workflow
     assert "Read issue #${{ inputs.issue_number }}" in workflow
     assert "open a pull request" in workflow
+    assert "Verify Claude opened a pull request" in workflow
+    assert "steps.claude.outputs.branch_name" in workflow
+    assert "gh pr list \\" in workflow
+    assert "Claude completed without creating a branch or pull request." in workflow
+    assert "Claude opened a schema drift implementation PR" in workflow
