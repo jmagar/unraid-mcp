@@ -11,11 +11,11 @@ import pytest
 from graphql import FieldNode, OperationDefinitionNode, OperationType, parse
 
 from unraid_mcp.core.exceptions import ToolError
-from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
 from unraid_mcp.subscriptions.diagnostics import (
     _ALLOWED_SUBSCRIPTION_FIELDS,
     _validate_subscription_query,
 )
+from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
 
 
 class TestValidateSubscriptionQueryAllowed:

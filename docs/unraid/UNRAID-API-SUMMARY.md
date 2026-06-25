@@ -1,6 +1,6 @@
 # Unraid API Introspection Summary
 
-> Auto-generated from API introspection on 2026-06-19T04:36:38+00:00
+> Auto-generated from API introspection on 2026-06-25T12:11:09+00:00
 > Source: docs/unraid/UNRAID-API-INTROSPECTION.json
 
 ## Table of Contents
@@ -15,7 +15,7 @@
 - Query root: `Query`
 - Mutation root: `Mutation`
 - Subscription root: `Subscription`
-- Total types: **239**
+- Total types: **243**
 - Total directives: **6**
 
 ## Query Fields
@@ -50,6 +50,7 @@
 | `me` | `UserAccount!` |  —  |
 | `metrics` | `Metrics!` |  —  |
 | `network` | `Network!` |  —  |
+| `networkInterfaces` | `[InfoNetworkInterface!]!` |  —  |
 | `notifications` | `Notifications!` |  —  |
 | `oidcConfiguration` | `OidcConfiguration!` |  —  |
 | `oidcProvider` | `OidcProvider` | id: PrefixedID! |
@@ -148,6 +149,7 @@
 | `systemMetricsCpu` | `CpuUtilization!` |  —  |
 | `systemMetricsCpuTelemetry` | `CpuPackages!` |  —  |
 | `systemMetricsMemory` | `MemoryUtilization!` |  —  |
+| `systemMetricsNetwork` | `NetworkMetrics!` |  —  |
 | `systemMetricsTemperature` | `TemperatureMetrics` |  —  |
 | `upsUpdates` | `UPSDevice!` |  —  |
 
@@ -156,7 +158,7 @@
 - `ENUM`: 40
 - `INPUT_OBJECT`: 43
 - `INTERFACE`: 2
-- `OBJECT`: 143
+- `OBJECT`: 147
 - `SCALAR`: 11
 
 ## Notes

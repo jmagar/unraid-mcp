@@ -1,6 +1,6 @@
 # Unraid API Complete Reference
 
-> Generated on 2026-06-19T04:36:38+00:00
+> Generated on 2026-06-25T12:11:09+00:00
 > Source: docs/unraid/UNRAID-API-INTROSPECTION.json
 > Rendered by graphql-markdown / GraphQL Inspector — do not edit by hand.
 
@@ -69,6 +69,8 @@
     * [InfoMemory](#infomemory)
     * [InfoNetwork](#infonetwork)
     * [InfoNetworkInterface](#infonetworkinterface)
+    * [InfoNetworkIpv4Address](#infonetworkipv4address)
+    * [InfoNetworkIpv6Address](#infonetworkipv6address)
     * [InfoOs](#infoos)
     * [InfoPci](#infopci)
     * [InfoSystem](#infosystem)
@@ -85,6 +87,7 @@
     * [Metrics](#metrics)
     * [MinigraphqlResponse](#minigraphqlresponse)
     * [Network](#network)
+    * [NetworkMetrics](#networkmetrics)
     * [Notification](#notification)
     * [NotificationCounts](#notificationcounts)
     * [NotificationOverview](#notificationoverview)
@@ -95,6 +98,7 @@
     * [OidcSessionValidation](#oidcsessionvalidation)
     * [Onboarding](#onboarding)
     * [OnboardingInternalBootContext](#onboardinginternalbootcontext)
+    * [OnboardingInternalBootDriveWarning](#onboardinginternalbootdrivewarning)
     * [OnboardingInternalBootResult](#onboardinginternalbootresult)
     * [OnboardingMutations](#onboardingmutations)
     * [OnboardingState](#onboardingstate)
@@ -1080,6 +1084,23 @@ List all installed plugins with their metadata
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top"><strong id="query.networkinterfaces">networkInterfaces</strong></td>
+<td valign="top">[<a href="#infonetworkinterface">InfoNetworkInterface</a>!]!</td>
+<td>
+
+
+#### Required Permissions:
+
+- Action: **READ_ANY**
+- Resource: **INFO**
+
+#### Description:
+
+Get all network interfaces
+
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -1962,6 +1983,19 @@ Remove one or more plugins from the API. Returns false if restart was triggered 
 <tr>
 <td colspan="2" valign="top"><strong id="subscription.systemmetricstemperature">systemMetricsTemperature</strong></td>
 <td valign="top"><a href="#temperaturemetrics">TemperatureMetrics</a></td>
+<td>
+
+
+#### Required Permissions:
+
+- Action: **READ_ANY**
+- Resource: **INFO**
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="subscription.systemmetricsnetwork">systemMetricsNetwork</strong></td>
+<td valign="top"><a href="#networkmetrics">NetworkMetrics</a>!</td>
 <td>
 
 
@@ -3901,6 +3935,11 @@ The size of the partition in bytes
 </td>
 </tr>
 <tr>
+<td colspan="2" align="right" valign="top">skipCache</td>
+<td valign="top"><a href="#boolean">Boolean</a>!</td>
+<td></td>
+</tr>
+<tr>
 <td colspan="2" valign="top"><strong id="docker.networks">networks</strong></td>
 <td valign="top">[<a href="#dockernetwork">DockerNetwork</a>!]!</td>
 <td>
@@ -3914,6 +3953,11 @@ The size of the partition in bytes
 </td>
 </tr>
 <tr>
+<td colspan="2" align="right" valign="top">skipCache</td>
+<td valign="top"><a href="#boolean">Boolean</a>!</td>
+<td></td>
+</tr>
+<tr>
 <td colspan="2" valign="top"><strong id="docker.portconflicts">portConflicts</strong></td>
 <td valign="top"><a href="#dockerportconflicts">DockerPortConflicts</a>!</td>
 <td>
@@ -3925,6 +3969,11 @@ The size of the partition in bytes
 - Resource: **DOCKER**
 
 </td>
+</tr>
+<tr>
+<td colspan="2" align="right" valign="top">skipCache</td>
+<td valign="top"><a href="#boolean">Boolean</a>!</td>
+<td></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><strong id="docker.logs">logs</strong></td>
@@ -3988,6 +4037,11 @@ Access container logs. Requires specifying a target container id through resolve
 - Resource: **DOCKER**
 
 </td>
+</tr>
+<tr>
+<td colspan="2" align="right" valign="top">skipCache</td>
+<td valign="top"><a href="#boolean">Boolean</a>!</td>
+<td></td>
 </tr>
 <tr>
 <td colspan="2" valign="top"><strong id="docker.containerupdatestatuses">containerUpdateStatuses</strong></td>
@@ -4579,6 +4633,28 @@ Start a container
 #### Description:
 
 Stop a container
+
+</td>
+</tr>
+<tr>
+<td colspan="2" align="right" valign="top">id</td>
+<td valign="top"><a href="#prefixedid">PrefixedID</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="dockermutations.restart">restart</strong></td>
+<td valign="top"><a href="#dockercontainer">DockerContainer</a>!</td>
+<td>
+
+
+#### Required Permissions:
+
+- Action: **UPDATE_ANY**
+- Resource: **DOCKER**
+
+#### Description:
+
+Restart a container
 
 </td>
 </tr>
@@ -6109,6 +6185,150 @@ Using DHCP for IPv6
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.speed">speed</strong></td>
+<td valign="top"><a href="#int">Int</a></td>
+<td>
+
+Link speed in Mbps
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.duplex">duplex</strong></td>
+<td valign="top"><a href="#string">String</a></td>
+<td>
+
+Duplex mode (full/half)
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.mtu">mtu</strong></td>
+<td valign="top"><a href="#int">Int</a></td>
+<td>
+
+Maximum transmission unit
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.operstate">operstate</strong></td>
+<td valign="top"><a href="#string">String</a></td>
+<td>
+
+Operational state
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.type">type</strong></td>
+<td valign="top"><a href="#string">String</a></td>
+<td>
+
+Interface type
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.virtual">virtual</strong></td>
+<td valign="top"><a href="#boolean">Boolean</a></td>
+<td>
+
+Whether this is a virtual interface
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.vlanid">vlanId</strong></td>
+<td valign="top"><a href="#int">Int</a></td>
+<td>
+
+VLAN identifier
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.internal">internal</strong></td>
+<td valign="top"><a href="#boolean">Boolean</a></td>
+<td>
+
+Whether this is an internal interface
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.ipv4addresses">ipv4Addresses</strong></td>
+<td valign="top">[<a href="#infonetworkipv4address">InfoNetworkIpv4Address</a>!]</td>
+<td>
+
+IPv4 address details
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkinterface.ipv6addresses">ipv6Addresses</strong></td>
+<td valign="top">[<a href="#infonetworkipv6address">InfoNetworkIpv6Address</a>!]</td>
+<td>
+
+IPv6 address details
+
+</td>
+</tr>
+</tbody>
+</table>
+
+### InfoNetworkIpv4Address
+
+IPv4 address information for a network interface
+
+<table>
+<thead>
+<tr>
+<th align="left">Field</th>
+<th align="right">Argument</th>
+<th align="left">Type</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkipv4address.address">address</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkipv4address.cidr">cidr</strong></td>
+<td valign="top"><a href="#int">Int</a></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+### InfoNetworkIpv6Address
+
+IPv6 address information for a network interface
+
+<table>
+<thead>
+<tr>
+<th align="left">Field</th>
+<th align="right">Argument</th>
+<th align="left">Type</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkipv6address.address">address</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="infonetworkipv6address.cidr">cidr</strong></td>
+<td valign="top"><a href="#int">Int</a></td>
+<td></td>
+</tr>
 </tbody>
 </table>
 
@@ -7021,6 +7241,15 @@ Temperature metrics
 
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top"><strong id="metrics.network">network</strong></td>
+<td valign="top"><a href="#networkmetrics">NetworkMetrics</a></td>
+<td>
+
+Network interface metrics
+
+</td>
+</tr>
 </tbody>
 </table>
 
@@ -7075,6 +7304,50 @@ Temperature metrics
 <td colspan="2" valign="top"><strong id="network.accessurls">accessUrls</strong></td>
 <td valign="top">[<a href="#accessurl">AccessUrl</a>!]</td>
 <td></td>
+</tr>
+</tbody>
+</table>
+
+### NetworkMetrics
+
+Network interface metrics
+
+<table>
+<thead>
+<tr>
+<th align="left">Field</th>
+<th align="right">Argument</th>
+<th align="left">Type</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.interface">interface</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td>
+
+Network interface name
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.rxbytespersec">rxBytesPerSec</strong></td>
+<td valign="top"><a href="#float">Float</a></td>
+<td>
+
+Bytes received per second
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.txbytespersec">txBytesPerSec</strong></td>
+<td valign="top"><a href="#float">Float</a></td>
+<td>
+
+Bytes transmitted per second
+
+</td>
 </tr>
 </tbody>
 </table>
@@ -7637,6 +7910,43 @@ Current onboarding context for configuring internal boot
 <tr>
 <td colspan="2" valign="top"><strong id="onboardinginternalbootcontext.assignabledisks">assignableDisks</strong></td>
 <td valign="top">[<a href="#disk">Disk</a>!]!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="onboardinginternalbootcontext.drivewarnings">driveWarnings</strong></td>
+<td valign="top">[<a href="#onboardinginternalbootdrivewarning">OnboardingInternalBootDriveWarning</a>!]!</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+
+### OnboardingInternalBootDriveWarning
+
+Warning metadata for an assignable internal boot drive
+
+<table>
+<thead>
+<tr>
+<th align="left">Field</th>
+<th align="right">Argument</th>
+<th align="left">Type</th>
+<th align="left">Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td colspan="2" valign="top"><strong id="onboardinginternalbootdrivewarning.diskid">diskId</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="onboardinginternalbootdrivewarning.device">device</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="onboardinginternalbootdrivewarning.warnings">warnings</strong></td>
+<td valign="top">[<a href="#string">String</a>!]!</td>
 <td></td>
 </tr>
 </tbody>
