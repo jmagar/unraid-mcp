@@ -38,7 +38,8 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert 'prepared_sha="$(git rev-parse HEAD)"' in workflow
     assert "gh pr create \\" in workflow
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
-    assert "--max-turns 35" in workflow
+    assert "display_report: true" in workflow
+    assert "--max-turns" not in workflow
     assert "--allowedTools" in workflow
     assert "Bash(git:*)" in workflow
     assert "Bash(gh:*)" in workflow
