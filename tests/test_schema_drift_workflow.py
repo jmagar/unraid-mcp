@@ -44,7 +44,10 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "actions/checkout@v4" not in workflow
     assert "claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" in workflow
     assert "additional_permissions: |\n            actions: read" in workflow
-    assert "additional_permissions: |\n            actions: read\n            contents: write" not in workflow
+    assert (
+        "additional_permissions: |\n            actions: read\n            contents: write"
+        not in workflow
+    )
     assert "Prepare Claude branch and draft PR" in workflow
     assert 'branch_name="claude/schema-drift-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"' in workflow
     assert "git commit --allow-empty" in workflow
@@ -82,8 +85,7 @@ def test_sensitive_workflows_pin_privileged_actions() -> None:
         "schema-drift.yml",
     ]
     combined = "\n".join(
-        (WORKFLOWS / workflow).read_text(encoding="utf-8")
-        for workflow in sensitive_workflows
+        (WORKFLOWS / workflow).read_text(encoding="utf-8") for workflow in sensitive_workflows
     )
 
     assert "actions/checkout@v4" not in combined
