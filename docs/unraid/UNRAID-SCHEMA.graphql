@@ -1148,6 +1148,13 @@ type OnboardingInternalBootResult {
   output: String!
 }
 
+"""Warning metadata for an assignable internal boot drive"""
+type OnboardingInternalBootDriveWarning {
+  diskId: String!
+  device: String!
+  warnings: [String!]!
+}
+
 """Current onboarding context for configuring internal boot"""
 type OnboardingInternalBootContext {
   arrayStopped: Boolean!
@@ -1158,6 +1165,7 @@ type OnboardingInternalBootContext {
   shareNames: [String!]!
   poolNames: [String!]!
   assignableDisks: [Disk!]!
+  driveWarnings: [OnboardingInternalBootDriveWarning!]
 }
 
 type RCloneDrive {
@@ -1322,6 +1330,9 @@ type DockerMutations {
 
   "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nUpdate all containers that have available updates"
   updateAllContainers: [DockerContainer!]!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nRestart a container"
+  restart(id: PrefixedID!): DockerContainer!
 }
 
 input DockerAutostartEntryInput {
@@ -1950,6 +1961,54 @@ type InfoNetworkInterface implements Node {
 
   """Using DHCP for IPv6"""
   useDhcp6: Boolean
+
+  """Interface type (e.g. wired, wireless)"""
+  type: String
+
+  """Interface operational state"""
+  operstate: String
+
+  """Interface duplex mode (full/half)"""
+  duplex: String
+
+  """Interface speed in Mbps"""
+  speed: Int
+
+  """Maximum transmission unit in bytes"""
+  mtu: Int
+
+  """Whether the interface is a virtual interface"""
+  virtual: Boolean
+
+  """Whether the interface is an internal-only interface"""
+  internal: Boolean
+
+  """VLAN identifier if applicable"""
+  vlanId: Int
+
+  """List of IPv4 addresses assigned to this interface"""
+  ipv4Addresses: [InfoNetworkIpv4Address!]
+
+  """List of IPv6 addresses assigned to this interface"""
+  ipv6Addresses: [InfoNetworkIpv6Address!]
+}
+
+"""IPv4 address details for a network interface"""
+type InfoNetworkIpv4Address {
+  """IPv4 address"""
+  address: String!
+
+  """Subnet prefix length"""
+  prefixLength: Int
+}
+
+"""IPv6 address details for a network interface"""
+type InfoNetworkIpv6Address {
+  """IPv6 address"""
+  address: String!
+
+  """Subnet prefix length"""
+  prefixLength: Int
 }
 
 type InfoOs implements Node {
@@ -2392,13 +2451,13 @@ type Docker implements Node {
   id: PrefixedID!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  containers: [DockerContainer!]!
+  containers(skipCache: Boolean): [DockerContainer!]!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  networks: [DockerNetwork!]!
+  networks(skipCache: Boolean): [DockerNetwork!]!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  portConflicts: DockerPortConflicts!
+  portConflicts(skipCache: Boolean): DockerPortConflicts!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nAccess container logs. Requires specifying a target container id through resolver arguments."
   logs(id: PrefixedID!, since: DateTime, tail: Int): DockerContainerLogs!
@@ -2407,7 +2466,7 @@ type Docker implements Node {
   container(id: PrefixedID!): DockerContainer
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  organizer: ResolvedOrganizerV1!
+  organizer(skipCache: Boolean): ResolvedOrganizerV1!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   containerUpdateStatuses: [ExplicitStatusItem!]!
@@ -2601,6 +2660,27 @@ type Metrics implements Node {
 
   """Temperature metrics"""
   temperature: TemperatureMetrics
+
+  """Per-interface network metrics"""
+  network: [NetworkMetrics!]
+}
+
+"""Network utilization metrics for a single interface"""
+type NetworkMetrics {
+  """Interface name"""
+  iface: String!
+
+  """Received bytes per second"""
+  rxBytesPerSec: Float
+
+  """Transmitted bytes per second"""
+  txBytesPerSec: Float
+
+  """Received errors per second"""
+  rxErrorsPerSec: Float
+
+  """Transmitted errors per second"""
+  txErrorsPerSec: Float
 }
 
 type SensorConfig {
@@ -3267,6 +3347,9 @@ type Query {
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   info: Info!
 
+  """Network interfaces"""
+  networkInterfaces: [InfoNetworkInterface!]!
+
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   docker: Docker!
 
@@ -3733,6 +3816,9 @@ type Subscription {
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsMemory: MemoryUtilization!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
+  systemMetricsNetwork: [NetworkMetrics!]!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsTemperature: TemperatureMetrics
