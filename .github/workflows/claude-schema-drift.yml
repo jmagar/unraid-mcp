@@ -165,7 +165,10 @@ jobs:
               installed API may lag upstream `unraid/api@main`.
             - `uv` is already installed in PATH by this workflow. Do not search for
               Python, pytest, uv, or runner tool locations.
-            - Run exactly this focused verification before pushing:
+            - Run all of these local gates before pushing:
+              `uv run ruff check .`
+              `uv run ruff format --check .`
+              `uv run ty check unraid_mcp/`
               `uv run pytest tests/schema/test_api_parity.py tests/test_schema_diff_summary.py -q`
               Add one extra targeted test file only when the touched code clearly
               warrants it.
@@ -352,6 +355,10 @@ jobs:
             - Fix the failing tests or checks on branch `${{ steps.prepare.outputs.branch_name }}`.
             - `uv` is already installed in PATH by this workflow. Do not search for
               Python, pytest, uv, or runner tool locations.
+            - Run all of these local gates before pushing:
+              `uv run ruff check .`
+              `uv run ruff format --check .`
+              `uv run ty check unraid_mcp/`
             - Run the relevant local test command from `ci-failure-report.md`, plus
               `uv run pytest tests/schema/test_api_parity.py tests/test_schema_diff_summary.py -q`
               when schema or contract files changed.

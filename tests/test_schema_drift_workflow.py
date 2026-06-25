@@ -109,6 +109,9 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
         "uv run pytest tests/schema/test_api_parity.py tests/test_schema_diff_summary.py -q"
         in workflow
     )
+    assert "uv run ruff check ." in workflow
+    assert "uv run ruff format --check ." in workflow
+    assert "uv run ty check unraid_mcp/" in workflow
     assert "local test commands you ran" in workflow
     assert "Fail if initial Claude step failed" in workflow
     assert "steps.claude.outcome == 'failure'" in workflow
