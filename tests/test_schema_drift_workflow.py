@@ -32,14 +32,20 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" in workflow
     assert "additional_permissions: |\n            actions: read" in workflow
     assert "additional_permissions: |\n            actions: read\n            contents: write" not in workflow
+    assert "Prepare Claude branch and draft PR" in workflow
+    assert 'branch_name="claude/schema-drift-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"' in workflow
+    assert "gh pr create \\" in workflow
+    assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
+    assert "--max-turns 12" in workflow
     assert "--allowedTools" in workflow
     assert "Bash(git:*)" in workflow
     assert "Bash(gh:*)" in workflow
-    assert "Read,Edit,MultiEdit,Write" in workflow
+    assert "Edit,MultiEdit,Write,Read" in workflow
     assert "Read issue #${{ inputs.issue_number }}" in workflow
-    assert "open a pull request" in workflow
-    assert "Verify Claude opened a pull request" in workflow
-    assert "steps.claude.outputs.branch_name" in workflow
+    assert "Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`" in workflow
+    assert "Verify Claude updated the draft PR" in workflow
+    assert "steps.prepare.outputs.branch_name" in workflow
+    assert "branch_sha=" in workflow
     assert "gh pr list \\" in workflow
-    assert "Claude completed without creating a branch or pull request." in workflow
-    assert "Claude opened a schema drift implementation PR" in workflow
+    assert "Claude completed without pushing changes" in workflow
+    assert "Claude pushed schema drift changes" in workflow

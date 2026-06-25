@@ -30,21 +30,73 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Prepare Claude branch and draft PR
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          SCHEMA_HASH: ${{ inputs.schema_hash }}
+        run: |
+          branch_name="claude/schema-drift-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch_name"
+          git push -u origin "$branch_name"
+
+          {
+            echo "Draft automation PR for #${ISSUE_NUMBER}."
+            echo
+            echo "Upstream schema hash: \`${SCHEMA_HASH}\`"
+            echo
+            echo "Claude Code will update this branch with the required schema, docs, code, and tests."
+          } > pr-body.md
+
+          pr_url="$(
+            gh pr create \
+              --draft \
+              --base main \
+              --head "$branch_name" \
+              --title "fix: support Unraid schema drift from issue #${ISSUE_NUMBER}" \
+              --body-file pr-body.md
+          )"
+
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Claude schema drift automation started: ${pr_url}"
+
+          {
+            echo "branch_name=${branch_name}"
+            echo "pr_url=${pr_url}"
+            echo "base_sha=${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@v1
+        env:
+          CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
           claude_args: |
-            --allowedTools Read,Edit,MultiEdit,Write,Glob,Grep,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)
+            --max-turns 12
+            --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
             Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
 
             The issue describes Unraid GraphQL schema drift for upstream SDL
             hash `${{ inputs.schema_hash }}`. Update this repository to support
             the new Unraid GraphQL API surface described there.
+
+            Work directly on the already checked out branch
+            `${{ steps.prepare.outputs.branch_name }}` and update the existing
+            draft PR: ${{ steps.prepare.outputs.pr_url }}. Do not create a second
+            branch or PR.
+
+            First, post a short heartbeat comment on issue #${{ inputs.issue_number }}
+            saying that you have started implementation on
+            `${{ steps.prepare.outputs.branch_name }}`. Then inspect the drift
+            report and make the required repository changes.
 
             Requirements:
             - Re-vendor the schema and generated API reference docs if needed.
@@ -54,21 +106,26 @@ jobs:
               installed API may lag upstream `unraid/api@main`.
             - Run the focused schema and dispatch contract tests. Run broader
               tests when the touched code warrants it.
-            - open a pull request with the required code, docs, and tests.
+            - Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`.
             - In the PR body, link issue #${{ inputs.issue_number }} and summarize
               the test commands and results.
 
-      - name: Verify Claude opened a pull request
+      - name: Verify Claude updated the draft PR
         env:
           GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
-          BRANCH_NAME: ${{ steps.claude.outputs.branch_name }}
+          BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}
+          BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
+          PR_URL: ${{ steps.prepare.outputs.pr_url }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           echo "Claude session: ${{ steps.claude.outputs.session_id }}"
-          echo "Claude branch: ${BRANCH_NAME:-<none>}"
+          echo "Claude branch: $BRANCH_NAME"
+          echo "Claude PR: $PR_URL"
 
-          if [ -z "$BRANCH_NAME" ]; then
-            echo "::error::Claude completed without creating a branch or pull request."
+          git fetch origin "$BRANCH_NAME" main
+          branch_sha="$(git rev-parse "origin/${BRANCH_NAME}")"
+          if [ "$branch_sha" = "$BASE_SHA" ]; then
+            echo "::error::Claude completed without pushing changes to '$BRANCH_NAME'."
             exit 1
           fi
 
@@ -79,11 +136,11 @@ jobs:
               --json url \
               --jq '.[0].url // ""'
           )"
-          if [ -z "$pr_url" ]; then
-            echo "::error::Claude branch '$BRANCH_NAME' exists, but no open pull request was found."
+          if [ "$pr_url" != "$PR_URL" ]; then
+            echo "::error::Expected PR '$PR_URL' for branch '$BRANCH_NAME', found '${pr_url:-<none>}'."
             exit 1
           fi
 
           gh issue comment "$ISSUE_NUMBER" \
-            --body "Claude opened a schema drift implementation PR: ${pr_url}"
+            --body "Claude pushed schema drift changes to ${pr_url}."
           echo "Claude PR: $pr_url"
