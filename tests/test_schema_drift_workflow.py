@@ -80,12 +80,12 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert 'select((.body // "") | contains($hash))' in workflow
     assert "should_run=false" in workflow
     assert "steps.prepare.outputs.should_run == 'true'" in workflow
-    assert "timeout-minutes: 40" in workflow
+    assert "timeout-minutes: 70" in workflow
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
     assert "display_report: true" in workflow
     assert "show_full_output: true" in workflow
     assert "track_progress: true" not in workflow
-    assert "--max-turns 40" in workflow
+    assert "--max-turns 100" in workflow
     assert "--debug" in workflow
     assert "--allowedTools" in workflow
     assert "Bash(git:*)" in workflow
@@ -132,8 +132,8 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "steps.verify_initial.outcome == 'failure'" in workflow
     assert '"/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs"' in workflow
     assert "Run Claude Code to repair failing CI" in workflow
-    assert "timeout-minutes: 25" in workflow
-    assert "--max-turns 20" in workflow
+    assert "timeout-minutes: 35" in workflow
+    assert "--max-turns 50" in workflow
     assert "Read `ci-failure-report.md` in this checkout" in workflow
     assert "workflow will verify final CI status" in workflow
     assert "workflow owns the final CI gate" in workflow

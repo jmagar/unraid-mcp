@@ -123,7 +123,7 @@ jobs:
         id: claude
         if: steps.prepare.outputs.should_run == 'true'
         continue-on-error: true
-        timeout-minutes: 40
+        timeout-minutes: 70
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
@@ -134,7 +134,7 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
-            --max-turns 40
+            --max-turns 100
             --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(python3:*),Bash(which:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
@@ -323,7 +323,7 @@ jobs:
         id: claude_repair
         if: steps.prepare.outputs.should_run == 'true' && steps.claude.outcome == 'success' && steps.verify_initial.outcome == 'failure'
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 35
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
@@ -334,7 +334,7 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
-            --max-turns 20
+            --max-turns 50
             --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(python3:*),Bash(which:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(tail:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
