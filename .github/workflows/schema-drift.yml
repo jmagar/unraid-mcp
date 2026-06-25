@@ -6,6 +6,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
+  actions: write
   contents: read
   issues: write
 
@@ -50,10 +51,14 @@ jobs:
             > schema-summary.md
 
       - name: Open or update drift issue
+        id: issue
         if: steps.diff.outputs.drift == 'true'
         run: |
           title="Unraid GraphQL schema drift detected"
+          schema_hash="$(sha256sum upstream-schema.graphql | awk '{print $1}')"
           {
+            echo "<!-- upstream-schema-sha256: ${schema_hash} -->"
+            echo
             echo "The vendored \`docs/unraid/UNRAID-SCHEMA.graphql\` no longer matches"
             echo "Unraid's published SDL at \`unraid/api@main\`."
             echo
@@ -85,11 +90,37 @@ jobs:
               --json number \
               --jq ".[0].number // \"\""
           )"
+          previous_hash=""
           if [ -n "$existing" ]; then
+            previous_hash="$(
+              gh issue view "$existing" \
+                --json body \
+                --jq ".body" |
+                sed -n 's/.*<!-- upstream-schema-sha256: \([0-9a-f]\{64\}\) -->.*/\1/p' |
+                head -n 1
+            )"
             gh issue edit "$existing" --body-file issue-body.md
+            issue_number="$existing"
           else
-            gh issue create --title "$title" --body-file issue-body.md
+            issue_url="$(gh issue create --title "$title" --body-file issue-body.md)"
+            issue_number="${issue_url##*/}"
           fi
+          echo "issue_number=${issue_number}" >> "$GITHUB_OUTPUT"
+          echo "schema_hash=${schema_hash}" >> "$GITHUB_OUTPUT"
+          if [ "$previous_hash" = "$schema_hash" ]; then
+            echo "dispatch_claude=false" >> "$GITHUB_OUTPUT"
+            echo "Schema hash ${schema_hash} already has a drift issue; skipping Claude dispatch."
+          else
+            echo "dispatch_claude=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch Claude schema drift implementer
+        if: steps.issue.outputs.dispatch_claude == 'true'
+        run: |
+          gh workflow run claude-schema-drift.yml \
+            --ref main \
+            -f issue_number="${{ steps.issue.outputs.issue_number }}" \
+            -f schema_hash="${{ steps.issue.outputs.schema_hash }}"
 
       - name: Close resolved drift issue
         if: steps.diff.outputs.drift == 'false'

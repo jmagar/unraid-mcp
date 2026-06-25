@@ -1,0 +1,60 @@
+name: Claude Schema Drift Implementer
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: GitHub issue number containing the schema drift report.
+        required: true
+        type: string
+      schema_hash:
+        description: SHA-256 hash of the upstream SDL that triggered this run.
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  claude-schema-drift:
+    name: Ask Claude to implement schema drift support
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+            contents: write
+            issues: write
+            pull-requests: write
+          prompt: |
+            Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
+
+            The issue describes Unraid GraphQL schema drift for upstream SDL
+            hash `${{ inputs.schema_hash }}`. Update this repository to support
+            the new Unraid GraphQL API surface described there.
+
+            Requirements:
+            - Re-vendor the schema and generated API reference docs if needed.
+            - Update MCP tool queries, dispatch handling, response shaping, docs,
+              and tests for the new API surface.
+            - Preserve compatibility with older Unraid API versions when the live
+              installed API may lag upstream `unraid/api@main`.
+            - Run the focused schema and dispatch contract tests. Run broader
+              tests when the touched code warrants it.
+            - open a pull request with the required code, docs, and tests.
+            - In the PR body, link issue #${{ inputs.issue_number }} and summarize
+              the test commands and results.
