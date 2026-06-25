@@ -3,7 +3,7 @@
 Covers: overview, array, network, registration, variables, metrics, services,
 display, display_details, config, online, owner, settings, server,
 server_details, servers, network_access_urls, flash, ups_devices, ups_device,
-ups_config, server_time, timezones (23 subactions).
+ups_config, server_time, timezones, network_interfaces (24 subactions).
 """
 
 from typing import Any
@@ -144,7 +144,36 @@ _SYSTEM_QUERIES: dict[str, str] = {
     "ups_config": "query GetUpsConfig { upsConfiguration { service upsCable upsType device batteryLevel minutes timeout killUps upsName } }",
     "server_time": "query GetSystemTime { systemTime { currentTime timeZone useNtp ntpServers } }",
     "timezones": "query GetTimeZones { timeZoneOptions { value label } }",
-    "network_interfaces": "query GetNetworkInterfaces { networkInterfaces { id name description macAddress status protocol ipAddress netmask gateway useDhcp ipv6Address ipv6Netmask ipv6Gateway useDhcp6 speed duplex mtu operstate type virtual vlanId internal } }",
+    "network_interfaces": """
+        query GetNetworkInterfaces {
+          networkInterfaces {
+            id
+            name
+            description
+            macAddress
+            status
+            protocol
+            ipAddress
+            netmask
+            gateway
+            useDhcp
+            ipv6Address
+            ipv6Netmask
+            ipv6Gateway
+            useDhcp6
+            speed
+            duplex
+            mtu
+            operstate
+            type
+            virtual
+            vlanId
+            internal
+            ipv4Addresses { address cidr }
+            ipv6Addresses { address cidr }
+          }
+        }
+    """,
 }
 
 _SYSTEM_SUBACTIONS: set[str] = set(_SYSTEM_QUERIES)

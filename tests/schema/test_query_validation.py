@@ -430,6 +430,12 @@ class TestDockerMutations:
         errors = _validate_operation(schema, MUTATIONS["stop"])
         assert not errors, f"stop mutation validation failed: {errors}"
 
+    def test_restart_mutation(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._docker import _DOCKER_MUTATIONS as MUTATIONS
+
+        errors = _validate_operation(schema, MUTATIONS["restart"])
+        assert not errors, f"restart mutation validation failed: {errors}"
+
     def test_all_docker_mutations_covered(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._docker import (
             _DOCKER_BULK_MUTATIONS,

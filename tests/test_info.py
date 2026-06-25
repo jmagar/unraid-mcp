@@ -173,6 +173,40 @@ class TestUnraidInfoTool:
         assert result["httpsPort"] == 31337
         assert any(u["type"] == "LAN" and u["ipv4"] == "10.1.0.2" for u in result["accessUrls"])
 
+    async def test_network_interfaces_includes_address_details(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {
+            "networkInterfaces": [
+                {
+                    "id": "net:eth0",
+                    "name": "eth0",
+                    "speed": 2500,
+                    "duplex": "full",
+                    "mtu": 1500,
+                    "operstate": "up",
+                    "type": "ether",
+                    "virtual": False,
+                    "vlanId": None,
+                    "internal": False,
+                    "ipv4Addresses": [{"address": "10.1.0.2", "cidr": 24}],
+                    "ipv6Addresses": [{"address": "fd7a:115c:a1e0::1", "cidr": 64}],
+                }
+            ]
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="network_interfaces")
+
+        query = _mock_graphql.call_args.args[0]
+        assert "ipv4Addresses" in query
+        assert "ipv6Addresses" in query
+        assert result["network_interfaces"][0]["ipv4Addresses"] == [
+            {"address": "10.1.0.2", "cidr": 24}
+        ]
+        assert result["network_interfaces"][0]["ipv6Addresses"] == [
+            {"address": "fd7a:115c:a1e0::1", "cidr": 64}
+        ]
+
     async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid subaction 'connect'"):

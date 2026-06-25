@@ -27,6 +27,14 @@ class TestValidateSubscriptionQueryAllowed:
     def test_returns_extracted_subscription_name(self) -> None:
         assert _validate_subscription_query("subscription { cpu { usage } }") == "cpu"
 
+    def test_system_metrics_network_accepted(self) -> None:
+        assert (
+            _validate_subscription_query(
+                "subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"
+            )
+            == "systemMetricsNetwork"
+        )
+
     def test_leading_whitespace_accepted(self) -> None:
         assert _validate_subscription_query("  subscription { memory { free } }") == "memory"
 

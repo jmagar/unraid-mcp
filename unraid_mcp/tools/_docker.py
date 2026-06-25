@@ -158,7 +158,7 @@ _DOCKER_SUBACTIONS: set[str] = (
     | set(_DOCKER_BULK_MUTATIONS)
     | set(_DOCKER_ROOT_MUTATIONS)
     | set(_DOCKER_ORGANIZER)
-    | {"restart", "logs"}
+    | {"logs"}
 )
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart", "unpause", "update_container"}
 # remove_container deletes the container (and optionally its image); reset_template_mappings
@@ -460,11 +460,31 @@ async def _handle_docker(
         if subaction not in _DOCKER_MUTATIONS:
             raise ToolError(f"Unhandled docker subaction '{subaction}' — this is a bug")
         actual_id = await _resolve_container_id(container_id or "", strict=True)
-        data = await _client.make_graphql_request(
-            _DOCKER_MUTATIONS[subaction],
-            {"id": actual_id},
-            operation_context={"operation": subaction},
-        )
+        try:
+            data = await _client.make_graphql_request(
+                _DOCKER_MUTATIONS[subaction],
+                {"id": actual_id},
+                operation_context={"operation": subaction},
+            )
+        except ToolError as exc:
+            if subaction != "restart" or not _client.is_idempotent_error(str(exc), "stop"):
+                raise
+            data = await _client.make_graphql_request(
+                _DOCKER_MUTATIONS["start"],
+                {"id": actual_id},
+                operation_context={"operation": "start"},
+            )
+            container = (
+                {}
+                if data.get("idempotent_success")
+                else safe_get(data, "docker", "start", default={})
+            )
+            return {
+                "success": True,
+                "subaction": "restart",
+                "container": container,
+                "note": "Container was stopped before restart; started it instead.",
+            }
         if data.get("idempotent_success"):
             return {
                 "success": True,
