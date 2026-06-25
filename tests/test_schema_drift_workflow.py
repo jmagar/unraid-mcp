@@ -30,5 +30,7 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "actions: read" in workflow
     assert "uses: anthropics/claude-code-action@v1" in workflow
     assert "claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" in workflow
+    assert "additional_permissions: |\n            actions: read" in workflow
+    assert "additional_permissions: |\n            actions: read\n            contents: write" not in workflow
     assert "Read issue #${{ inputs.issue_number }}" in workflow
     assert "open a pull request" in workflow

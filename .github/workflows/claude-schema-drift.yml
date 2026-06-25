@@ -37,9 +37,6 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: |
             actions: read
-            contents: write
-            issues: write
-            pull-requests: write
           prompt: |
             Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
 
