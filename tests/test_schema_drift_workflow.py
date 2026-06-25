@@ -64,6 +64,8 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "Read issue #${{ inputs.issue_number }}" in workflow
     assert "Commit and push changes to `${{ steps.prepare.outputs.branch_name }}`" in workflow
     assert "Verify Claude updated the draft PR" in workflow
+    assert "GH_TOKEN: ${{ github.token }}" in workflow
+    assert "GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}" not in workflow
     assert "steps.prepare.outputs.branch_name" in workflow
     assert "branch_sha=" in workflow
     assert "gh pr list \\" in workflow

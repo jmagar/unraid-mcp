@@ -136,7 +136,7 @@ jobs:
       - name: Verify Claude updated the draft PR
         if: steps.prepare.outputs.should_run == 'true'
         env:
-          GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
+          GH_TOKEN: ${{ github.token }}
           BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}
           BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
           PR_URL: ${{ steps.prepare.outputs.pr_url }}
