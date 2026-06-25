@@ -119,7 +119,7 @@ jobs:
         id: claude
         if: steps.prepare.outputs.should_run == 'true'
         continue-on-error: true
-        timeout-minutes: 20
+        timeout-minutes: 40
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
@@ -130,7 +130,7 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
-            --max-turns 10
+            --max-turns 40
             --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
@@ -326,7 +326,7 @@ jobs:
           additional_permissions: |
             actions: read
           claude_args: |
-            --max-turns 8
+            --max-turns 20
             --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
