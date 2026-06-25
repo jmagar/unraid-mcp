@@ -94,3 +94,9 @@ def test_sensitive_workflows_pin_privileged_actions() -> None:
     assert f"actions/checkout@{CHECKOUT_SHA}" in combined
     assert f"anthropics/claude-code-action@{CLAUDE_ACTION_SHA}" in combined
     assert "googleapis/release-please-action@0dfd8538845b8e92600d271a895a5372865d4062" in combined
+
+
+def test_claude_review_allows_claude_bot_prs() -> None:
+    workflow = (WORKFLOWS / "claude-code-review.yml").read_text(encoding="utf-8")
+
+    assert "allowed_bots: claude" in workflow
