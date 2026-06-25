@@ -37,6 +37,18 @@ jobs:
             cat schema.diff
           fi
 
+      - name: Set up uv
+        if: steps.diff.outputs.drift == 'true'
+        uses: astral-sh/setup-uv@v6
+
+      - name: Summarize structured schema changes
+        if: steps.diff.outputs.drift == 'true'
+        run: |
+          uv run python -m unraid_mcp.devtools.schema_diff_summary \
+            docs/unraid/UNRAID-SCHEMA.graphql \
+            upstream-schema.graphql \
+            > schema-summary.md
+
       - name: Open or update drift issue
         if: steps.diff.outputs.drift == 'true'
         run: |
@@ -47,6 +59,14 @@ jobs:
             echo
             echo "Re-vendor the schema, then run the schema and dispatch contract tests"
             echo "to surface which queries, mutations, and mock responses need updates."
+            echo
+            cat schema-summary.md
+            echo
+            echo "## Suggested agent follow-up"
+            echo
+            echo "Ask an implementation agent to read this issue, update support for the"
+            echo "new Unraid GraphQL API surface, run schema + dispatch contract tests,"
+            echo "and open a PR with the required code/docs/test changes."
             echo
             echo "<details><summary>diff</summary>"
             echo
