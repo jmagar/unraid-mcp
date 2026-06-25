@@ -435,7 +435,6 @@ class TestDockerMutations:
         assert set(_DOCKER_MUTATIONS.keys()) == {
             "start",
             "stop",
-            "restart",
             "unpause",
             "update_container",
         }

@@ -47,8 +47,7 @@ _DOCKER_RESOLVE_QUERY = "query ResolveContainerID { docker { containers { id nam
 _DOCKER_MUTATIONS: dict[str, str] = {
     "start": "mutation StartContainer($id: PrefixedID!) { docker { start(id: $id) { id names state status } } }",
     "stop": "mutation StopContainer($id: PrefixedID!) { docker { stop(id: $id) { id names state status } } }",
-    "restart": "mutation RestartContainer($id: PrefixedID!) { docker { restart(id: $id) { id names state status } } }",
-    "unpause": "mutation UnpauseContainer($id: PrefixedID!) { docker { unpause(id: $id) { id names state status } } }",
+"unpause": "mutation UnpauseContainer($id: PrefixedID!) { docker { unpause(id: $id) { id names state status } } }",
     "update_container": "mutation UpdateContainer($id: PrefixedID!) { docker { updateContainer(id: $id) { id names image state status } } }",
 }
 
@@ -78,7 +77,6 @@ _DOCKER_ROOT_RESULT_FIELD: dict[str, str] = {
 _DOCKER_LIFECYCLE_RESULT_FIELD: dict[str, str] = {
     "start": "start",
     "stop": "stop",
-    "restart": "restart",
     "unpause": "unpause",
     "update_container": "updateContainer",
 }
@@ -158,7 +156,7 @@ _DOCKER_SUBACTIONS: set[str] = (
     | set(_DOCKER_BULK_MUTATIONS)
     | set(_DOCKER_ROOT_MUTATIONS)
     | set(_DOCKER_ORGANIZER)
-    | {"logs"}
+    | {"restart", "logs"}
 )
 _DOCKER_NEEDS_CONTAINER_ID = {"start", "stop", "details", "restart", "unpause", "update_container"}
 # remove_container deletes the container (and optionally its image); reset_template_mappings
@@ -345,16 +343,30 @@ async def _handle_docker(
 
         if subaction == "restart":
             actual_id = await _resolve_container_id(container_id or "", strict=True)
-            data = await _client.make_graphql_request(
-                _DOCKER_MUTATIONS["restart"],
+            stop_data = await _client.make_graphql_request(
+                _DOCKER_MUTATIONS["stop"],
                 {"id": actual_id},
+                operation_context={"operation": "stop"},
             )
-            result = safe_get(data, "docker", "restart", default={})
-            return {
+            stop_was_idempotent = stop_data.get("idempotent_success", False)
+            start_data = await _client.make_graphql_request(
+                _DOCKER_MUTATIONS["start"],
+                {"id": actual_id},
+                operation_context={"operation": "start"},
+            )
+            result = (
+                {}
+                if start_data.get("idempotent_success")
+                else safe_get(start_data, "docker", "start", default={})
+            )
+            response: dict[str, Any] = {
                 "success": True,
                 "subaction": "restart",
                 "container": result,
             }
+            if stop_was_idempotent:
+                response["note"] = "Container was already stopped before restart"
+            return response
 
         # Root-level no-arg mutations (refresh digests / template sync + reset).
         if subaction in _DOCKER_ROOT_MUTATIONS:
