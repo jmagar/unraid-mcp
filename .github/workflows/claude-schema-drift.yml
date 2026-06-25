@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 1
 
@@ -37,6 +37,25 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           SCHEMA_HASH: ${{ inputs.schema_hash }}
         run: |
+          existing_pr_url="$(
+            gh pr list \
+              --state open \
+              --json url,headRefName \
+              --jq ".[] | select(.headRefName | startswith(\"claude/schema-drift-${ISSUE_NUMBER}-\")) | .url" |
+              head -n 1
+          )"
+          if [ -n "$existing_pr_url" ]; then
+            gh issue comment "$ISSUE_NUMBER" \
+              --body "Claude schema drift automation already has an open PR for this issue: ${existing_pr_url}"
+            {
+              echo "should_run=false"
+              echo "pr_url=${existing_pr_url}"
+              echo "branch_name="
+              echo "base_sha="
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           branch_name="claude/schema-drift-${ISSUE_NUMBER}-${GITHUB_RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -66,6 +85,7 @@ jobs:
             --body "Claude schema drift automation started: ${pr_url}"
 
           {
+            echo "should_run=true"
             echo "branch_name=${branch_name}"
             echo "pr_url=${pr_url}"
             echo "base_sha=${prepared_sha}"
@@ -73,7 +93,8 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        if: steps.prepare.outputs.should_run == 'true'
+        uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
         with:
@@ -113,6 +134,7 @@ jobs:
               the test commands and results.
 
       - name: Verify Claude updated the draft PR
+        if: steps.prepare.outputs.should_run == 'true'
         env:
           GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}
           BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}

@@ -40,7 +40,7 @@ jobs:
 
       - name: Set up uv
         if: steps.diff.outputs.drift == 'true'
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
 
       - name: Summarize structured schema changes
         if: steps.diff.outputs.drift == 'true'
@@ -50,12 +50,29 @@ jobs:
             upstream-schema.graphql \
             > schema-summary.md
 
+      - name: Upload full schema drift artifacts
+        if: steps.diff.outputs.drift == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unraid-schema-drift-${{ github.run_id }}
+          path: |
+            schema.diff
+            schema-summary.md
+            upstream-schema.graphql
+          retention-days: 14
+
       - name: Open or update drift issue
         id: issue
         if: steps.diff.outputs.drift == 'true'
         run: |
           title="Unraid GraphQL schema drift detected"
+          label="schema-drift"
           schema_hash="$(sha256sum upstream-schema.graphql | awk '{print $1}')"
+          gh label create "$label" \
+            --color "d73a4a" \
+            --description "Automated upstream Unraid GraphQL schema drift reports" \
+            >/dev/null 2>&1 || true
+
           {
             echo "<!-- upstream-schema-sha256: ${schema_hash} -->"
             echo
@@ -65,7 +82,47 @@ jobs:
             echo "Re-vendor the schema, then run the schema and dispatch contract tests"
             echo "to surface which queries, mutations, and mock responses need updates."
             echo
-            cat schema-summary.md
+            echo "The complete \`schema.diff\`, \`schema-summary.md\`, and"
+            echo "\`upstream-schema.graphql\` are attached to this workflow run as"
+            echo "the \`unraid-schema-drift-${GITHUB_RUN_ID}\` artifact."
+            echo
+            echo "## Structured schema changes"
+            echo
+          } > issue-body.md
+
+          max_body_bytes=60000
+          append_with_budget() {
+            file="$1"
+            label="$2"
+            reserve="$3"
+            current_bytes="$(wc -c < issue-body.md)"
+            remaining_bytes="$((max_body_bytes - current_bytes - reserve))"
+            if [ "$remaining_bytes" -le 0 ]; then
+              {
+                echo
+                echo "_${label} omitted to keep this issue body under ${max_body_bytes} bytes._"
+                echo "_See the workflow artifact for the complete content._"
+              } >> issue-body.md
+              return
+            fi
+
+            file_bytes="$(wc -c < "$file")"
+            if [ "$file_bytes" -gt "$remaining_bytes" ]; then
+              head -c "$remaining_bytes" "$file" >> issue-body.md
+              {
+                echo
+                echo
+                echo "_${label} truncated to keep this issue body under ${max_body_bytes} bytes._"
+                echo "_See the workflow artifact for the complete content._"
+              } >> issue-body.md
+            else
+              cat "$file" >> issue-body.md
+            fi
+          }
+
+          append_with_budget schema-summary.md "Structured schema summary" 14000
+
+          {
             echo
             echo "## Suggested agent follow-up"
             echo
@@ -76,19 +133,24 @@ jobs:
             echo "<details><summary>diff</summary>"
             echo
             echo "\`\`\`diff"
-            head -c 60000 schema.diff
+          } >> issue-body.md
+
+          append_with_budget schema.diff "Schema diff" 300
+
+          {
             echo
             echo "\`\`\`"
             echo
             echo "</details>"
-          } > issue-body.md
+          } >> issue-body.md
 
           existing="$(
             gh issue list \
               --state open \
               --search "$title in:title" \
-              --json number \
-              --jq ".[0].number // \"\""
+              --json number,title,body \
+              --jq ".[] | select(.title == \"$title\") | select((.body // \"\") | contains(\"<!-- upstream-schema-sha256:\")) | .number" |
+              head -n 1
           )"
           previous_hash=""
           if [ -n "$existing" ]; then
@@ -100,9 +162,10 @@ jobs:
                 head -n 1
             )"
             gh issue edit "$existing" --body-file issue-body.md
+            gh issue edit "$existing" --add-label "$label"
             issue_number="$existing"
           else
-            issue_url="$(gh issue create --title "$title" --body-file issue-body.md)"
+            issue_url="$(gh issue create --title "$title" --label "$label" --body-file issue-body.md)"
             issue_number="${issue_url##*/}"
           fi
           echo "issue_number=${issue_number}" >> "$GITHUB_OUTPUT"
@@ -126,12 +189,14 @@ jobs:
         if: steps.diff.outputs.drift == 'false'
         run: |
           title="Unraid GraphQL schema drift detected"
+          label="schema-drift"
           existing="$(
             gh issue list \
               --state open \
-              --search "$title in:title" \
-              --json number \
-              --jq ".[0].number // \"\""
+              --label "$label" \
+              --json number,title,body \
+              --jq ".[] | select(.title == \"$title\") | select((.body // \"\") | contains(\"<!-- upstream-schema-sha256:\")) | .number" |
+              head -n 1
           )"
           if [ -n "$existing" ]; then
             gh issue comment "$existing" \
