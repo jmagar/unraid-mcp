@@ -446,49 +446,30 @@ class TestDockerToolRequests:
         assert "GetDockerNetworks" in body["query"]
 
     @respx.mock
-    async def test_restart_sends_stop_then_start(self) -> None:
-        """Restart is a compound action: stop + start. Verify both are sent."""
+    async def test_restart_sends_native_mutation(self) -> None:
+        """Restart uses the native DockerMutations.restart mutation (single call)."""
         container_id = "e" * 64
-        call_count = 0
-
-        def side_effect(request: httpx.Request) -> httpx.Response:
-            nonlocal call_count
-            body = json.loads(request.content.decode())
-            call_count += 1
-            if "StopContainer" in body["query"]:
-                return _graphql_response(
-                    {
-                        "docker": {
-                            "stop": {
-                                "id": container_id,
-                                "names": ["app"],
-                                "state": "exited",
-                                "status": "Exited",
-                            }
+        route = respx.post(API_URL).mock(
+            return_value=_graphql_response(
+                {
+                    "docker": {
+                        "restart": {
+                            "id": container_id,
+                            "names": ["app"],
+                            "state": "running",
+                            "status": "Up",
                         }
                     }
-                )
-            if "StartContainer" in body["query"]:
-                return _graphql_response(
-                    {
-                        "docker": {
-                            "start": {
-                                "id": container_id,
-                                "names": ["app"],
-                                "state": "running",
-                                "status": "Up",
-                            }
-                        }
-                    }
-                )
-            return _graphql_response({"docker": {"containers": []}})
-
-        respx.post(API_URL).mock(side_effect=side_effect)
+                }
+            )
+        )
         tool = self._get_tool()
         result = await tool(action="docker", subaction="restart", container_id=container_id)
         assert result["success"] is True
         assert result["subaction"] == "restart"
-        assert call_count == 2
+        body = _extract_request_body(route.calls.last.request)
+        assert "RestartContainer" in body["query"]
+        assert body["variables"] == {"id": container_id}
 
     @respx.mock
     async def test_container_name_resolution(self) -> None:

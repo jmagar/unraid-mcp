@@ -54,6 +54,9 @@ SNAPSHOT_ACTIONS = {
     "display": """
         subscription { displaySubscription { id theme unit scale locale total usage warning critical hot max } }
     """,
+    "network_metrics": """
+        subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }
+    """,
 }
 
 COLLECT_ACTIONS = {

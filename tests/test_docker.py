@@ -121,25 +121,12 @@ class TestDockerActions:
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
-            {"docker": {"stop": {"id": cid, "state": "exited"}}},
-            {"docker": {"start": {"id": cid, "state": "running"}}},
+            {"docker": {"restart": {"id": cid, "state": "running"}}},
         ]
         tool_fn = _make_tool()
         result = await tool_fn(action="docker", subaction="restart", container_id="plex")
         assert result["success"] is True
         assert result["subaction"] == "restart"
-
-    async def test_restart_idempotent_stop(self, _mock_graphql: AsyncMock) -> None:
-        cid = "a" * 64 + ":local"
-        _mock_graphql.side_effect = [
-            {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
-            {"idempotent_success": True},
-            {"docker": {"start": {"id": cid, "state": "running"}}},
-        ]
-        tool_fn = _make_tool()
-        result = await tool_fn(action="docker", subaction="restart", container_id="plex")
-        assert result["success"] is True
-        assert "note" in result
 
     async def test_details_found(self, _mock_graphql: AsyncMock) -> None:
         # details now fetches a single container by id: the first call resolves

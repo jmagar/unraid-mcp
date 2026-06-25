@@ -172,8 +172,15 @@ class TestInfoQueries:
             "ups_config",
             "server_time",
             "timezones",
+            "network_interfaces",
         }
         assert set(QUERIES.keys()) == expected_actions
+
+    def test_network_interfaces_query(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._system import _SYSTEM_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["network_interfaces"])
+        assert not errors, f"network_interfaces query validation failed: {errors}"
 
 
 # ============================================================================
@@ -434,6 +441,7 @@ class TestDockerMutations:
         assert set(_DOCKER_MUTATIONS.keys()) == {
             "start",
             "stop",
+            "restart",
             "unpause",
             "update_container",
         }

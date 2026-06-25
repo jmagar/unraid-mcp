@@ -29,7 +29,7 @@ from ..core.validation import validate_input_mapping
 _ONBOARDING_FIELDS = "status isPartnerBuild completed completedAtVersion activationCode shouldOpen"
 
 _ONBOARDING_QUERIES: dict[str, str] = {
-    "internal_boot_context": "query InternalBootContext { internalBootContext { arrayStopped bootEligible bootedFromFlashWithInternalBootSetup enableBootTransfer reservedNames shareNames poolNames } }",
+    "internal_boot_context": "query InternalBootContext { internalBootContext { arrayStopped bootEligible bootedFromFlashWithInternalBootSetup enableBootTransfer reservedNames shareNames poolNames driveWarnings { diskId device warnings } } }",
 }
 
 # Simple no-argument onboarding mutations that all return an Onboarding object.
