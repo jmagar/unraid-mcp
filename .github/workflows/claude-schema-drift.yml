@@ -118,16 +118,21 @@ jobs:
       - name: Run Claude Code
         id: claude
         if: steps.prepare.outputs.should_run == 'true'
-        timeout-minutes: 35
+        continue-on-error: true
+        timeout-minutes: 20
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
           CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           display_report: true
+          show_full_output: true
+          track_progress: true
           additional_permissions: |
             actions: read
           claude_args: |
+            --max-turns 10
+            --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
             Read issue #${{ inputs.issue_number }} in ${{ github.repository }}.
@@ -165,9 +170,22 @@ jobs:
             - In the PR body, link issue #${{ inputs.issue_number }} and summarize
               the local test commands you ran.
 
+      - name: Fail if initial Claude step failed
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PR_URL: ${{ steps.prepare.outputs.pr_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Claude schema drift automation failed before pushing changes on ${PR_URL}. Run: ${RUN_URL}"
+          echo "::error::Claude action failed before pushing changes. See ${RUN_URL}."
+          exit 1
+
       - name: Verify Claude updated the draft PR
         id: verify_initial
-        if: steps.prepare.outputs.should_run == 'true'
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude.outcome == 'success'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -226,10 +244,11 @@ jobs:
 
       - name: Collect failing PR check logs
         id: ci_failure_report
-        if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude.outcome == 'success' && steps.verify_initial.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}
+          BASE_SHA: ${{ steps.prepare.outputs.base_sha }}
           PR_URL: ${{ steps.prepare.outputs.pr_url }}
         run: |
           git fetch origin "$BRANCH_NAME" main
@@ -241,6 +260,10 @@ jobs:
             echo
             echo "PR: ${PR_URL}"
             echo "Failed head SHA: ${failed_sha}"
+            if [ "$failed_sha" = "$BASE_SHA" ]; then
+              echo
+              echo "Claude completed without pushing changes beyond the prepared seed commit."
+            fi
             echo
             echo "## Check summary"
             echo
@@ -291,7 +314,8 @@ jobs:
 
       - name: Run Claude Code to repair failing CI
         id: claude_repair
-        if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude.outcome == 'success' && steps.verify_initial.outcome == 'failure'
+        continue-on-error: true
         timeout-minutes: 25
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         env:
@@ -299,9 +323,13 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           display_report: true
+          show_full_output: true
+          track_progress: true
           additional_permissions: |
             actions: read
           claude_args: |
+            --max-turns 8
+            --debug
             --allowedTools "Edit,MultiEdit,Write,Read,Glob,Grep,LS,WebFetch,mcp__github__*,Bash(git:*),Bash(gh:*),Bash(uv:*),Bash(python:*),Bash(curl:*),Bash(diff:*),Bash(head:*),Bash(sed:*),Bash(awk:*),Bash(grep:*),Bash(rg:*),Bash(cat:*),Bash(ls:*),Bash(find:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(pwd),Bash(test:*),Bash(chmod:*),Bash(sha256sum:*)"
           prompt: |
             Continue work on PR ${{ steps.prepare.outputs.pr_url }} for issue #${{ inputs.issue_number }}.
@@ -326,8 +354,21 @@ jobs:
               checks are passing.
             - After pushing, return control to the workflow.
 
+      - name: Fail if Claude repair step failed
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude_repair.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          PR_URL: ${{ steps.prepare.outputs.pr_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Claude schema drift repair failed before pushing a fix on ${PR_URL}. Run: ${RUN_URL}"
+          echo "::error::Claude repair action failed before pushing a fix. See ${RUN_URL}."
+          exit 1
+
       - name: Verify repaired Claude PR checks
-        if: steps.prepare.outputs.should_run == 'true' && steps.verify_initial.outcome == 'failure'
+        if: steps.prepare.outputs.should_run == 'true' && steps.claude_repair.outcome == 'success' && steps.verify_initial.outcome == 'failure'
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH_NAME: ${{ steps.prepare.outputs.branch_name }}

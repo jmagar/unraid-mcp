@@ -78,10 +78,13 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert 'select((.body // "") | contains($hash))' in workflow
     assert "should_run=false" in workflow
     assert "steps.prepare.outputs.should_run == 'true'" in workflow
-    assert "timeout-minutes: 35" in workflow
+    assert "timeout-minutes: 20" in workflow
     assert "CLAUDE_BRANCH: ${{ steps.prepare.outputs.branch_name }}" in workflow
     assert "display_report: true" in workflow
-    assert "--max-turns" not in workflow
+    assert "show_full_output: true" in workflow
+    assert "track_progress: true" in workflow
+    assert "--max-turns 10" in workflow
+    assert "--debug" in workflow
     assert "--allowedTools" in workflow
     assert "Bash(git:*)" in workflow
     assert "Bash(gh:*)" in workflow
@@ -94,9 +97,13 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "overall automation is not considered" not in workflow
     assert "After pushing, return control to the workflow" in workflow
     assert "local test commands you ran" in workflow
+    assert "Fail if initial Claude step failed" in workflow
+    assert "steps.claude.outcome == 'failure'" in workflow
+    assert "failed before pushing changes" in workflow
     assert "Verify Claude updated the draft PR" in workflow
     assert "id: verify_initial" in workflow
     assert "continue-on-error: true" in workflow
+    assert "steps.claude.outcome == 'success'" in workflow
     assert "GH_TOKEN: ${{ github.token }}" in workflow
     assert "GH_TOKEN: ${{ steps.claude.outputs.github_token || github.token }}" not in workflow
     assert "steps.prepare.outputs.branch_name" in workflow
@@ -108,13 +115,18 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
     assert "ci-failure-report.md" in workflow
     assert "failed_sha=" in workflow
     assert "Failed head SHA:" in workflow
+    assert "Claude completed without pushing changes beyond the prepared seed commit" in workflow
     assert "steps.verify_initial.outcome == 'failure'" in workflow
     assert '"/repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}/logs"' in workflow
     assert "Run Claude Code to repair failing CI" in workflow
     assert "timeout-minutes: 25" in workflow
+    assert "--max-turns 8" in workflow
     assert "Read `ci-failure-report.md` in this checkout" in workflow
     assert "workflow will verify final CI status" in workflow
     assert "workflow owns the final CI gate" in workflow
+    assert "Fail if Claude repair step failed" in workflow
+    assert "steps.claude_repair.outcome == 'failure'" in workflow
+    assert "steps.claude_repair.outcome == 'success'" in workflow
     assert "Verify repaired Claude PR checks" in workflow
     assert "PRE_REPAIR_SHA: ${{ steps.ci_failure_report.outputs.failed_sha }}" in workflow
     assert 'gh pr checks "$PR_URL" --watch --fail-fast' in workflow
