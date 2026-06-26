@@ -205,6 +205,7 @@ reads and mutations under one name, making per-subaction cache exclusion impossi
 `health/diagnose` "caching disabled" note is simply accurate.
 
 ### HTTP Authentication (bearer token OR Google OAuth)
+
 HTTP transport supports two **mutually exclusive** auth modes, selected by env vars:
 1. **Pre-shared bearer token** (default) — enforced by the ASGI `BearerAuthMiddleware`
    in `core/auth.py`, auto-generated on first HTTP startup. `WellKnownMiddleware` advertises
