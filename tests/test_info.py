@@ -206,6 +206,47 @@ class TestUnraidInfoTool:
         assert result["network_interfaces"][0]["ipv6Addresses"] == [
             {"address": "fd7a:115c:a1e0::1", "cidr": 64}
         ]
+        assert result["page"]["truncated"] is False
+
+    async def test_network_interfaces_are_capped(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "networkInterfaces": [{"id": f"net:{idx}", "name": f"eth{idx}"} for idx in range(3)]
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="network_interfaces", limit=2)
+
+        assert [interface["name"] for interface in result["network_interfaces"]] == [
+            "eth0",
+            "eth1",
+        ]
+        assert result["page"]["returned"] == 2
+        assert result["page"]["total"] == 3
+        assert result["page"]["truncated"] is True
+
+    async def test_network_metrics_returns_current_network_metrics(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {
+            "metrics": {
+                "network": {
+                    "interface": "eth0",
+                    "rxBytesPerSec": 1024.0,
+                    "txBytesPerSec": 2048.0,
+                },
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="network_metrics")
+
+        query = _mock_graphql.call_args.args[0]
+        assert "network" in query
+        assert "rxBytesPerSec" in query
+        assert "txBytesPerSec" in query
+        assert result == {
+            "interface": "eth0",
+            "rxBytesPerSec": 1024.0,
+            "txBytesPerSec": 2048.0,
+        }
 
     async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()

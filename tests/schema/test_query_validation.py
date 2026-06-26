@@ -155,6 +155,7 @@ class TestInfoQueries:
             "registration",
             "variables",
             "metrics",
+            "network_metrics",
             "services",
             "display",
             "display_details",
@@ -181,6 +182,12 @@ class TestInfoQueries:
 
         errors = _validate_operation(schema, QUERIES["network_interfaces"])
         assert not errors, f"network_interfaces query validation failed: {errors}"
+
+    def test_network_metrics_query(self, schema: GraphQLSchema) -> None:
+        from unraid_mcp.tools._system import _SYSTEM_QUERIES as QUERIES
+
+        errors = _validate_operation(schema, QUERIES["network_metrics"])
+        assert not errors, f"network_metrics query validation failed: {errors}"
 
 
 # ============================================================================

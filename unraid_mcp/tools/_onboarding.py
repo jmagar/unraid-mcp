@@ -32,6 +32,10 @@ _ONBOARDING_QUERIES: dict[str, str] = {
     "internal_boot_context": "query InternalBootContext { internalBootContext { arrayStopped bootEligible bootedFromFlashWithInternalBootSetup enableBootTransfer reservedNames shareNames poolNames driveWarnings { diskId device warnings } } }",
 }
 
+_ONBOARDING_LEGACY_QUERIES: dict[str, str] = {
+    "internal_boot_context": "query InternalBootContext { internalBootContext { arrayStopped bootEligible bootedFromFlashWithInternalBootSetup enableBootTransfer reservedNames shareNames poolNames } }",
+}
+
 # Simple no-argument onboarding mutations that all return an Onboarding object.
 _ONBOARDING_SIMPLE_MUTATIONS: dict[str, str] = {
     "complete": f"mutation CompleteOnboarding {{ onboarding {{ completeOnboarding {{ {_ONBOARDING_FIELDS} }} }} }}",
@@ -42,6 +46,10 @@ _ONBOARDING_SIMPLE_MUTATIONS: dict[str, str] = {
     "resume": f"mutation ResumeOnboarding {{ onboarding {{ resumeOnboarding {{ {_ONBOARDING_FIELDS} }} }} }}",
     "clear_override": f"mutation ClearOnboardingOverride {{ onboarding {{ clearOnboardingOverride {{ {_ONBOARDING_FIELDS} }} }} }}",
     "refresh_internal_boot_context": "mutation RefreshInternalBootContext { onboarding { refreshInternalBootContext { arrayStopped bootEligible poolNames driveWarnings { diskId device warnings } } } }",
+}
+
+_ONBOARDING_LEGACY_SIMPLE_MUTATIONS: dict[str, str] = {
+    "refresh_internal_boot_context": "mutation RefreshInternalBootContext { onboarding { refreshInternalBootContext { arrayStopped bootEligible poolNames } } }",
 }
 
 _ONBOARDING_INPUT_MUTATIONS: dict[str, str] = {
@@ -70,6 +78,11 @@ _ONBOARDING_SUBACTIONS: set[str] = (
 _ONBOARDING_DESTRUCTIVE: set[str] = {"reset", "create_internal_boot_pool"}
 
 
+def _is_unknown_drive_warnings_field_error(exc: ToolError) -> bool:
+    msg = str(exc).lower()
+    return "cannot query field" in msg and "drivewarnings" in msg
+
+
 async def _handle_onboarding(
     subaction: str,
     ctx: Context | None,
@@ -95,7 +108,16 @@ async def _handle_onboarding(
         logger.info(f"Executing unraid action=onboarding subaction={subaction}")
 
         if subaction == "internal_boot_context":
-            data = await _client.make_graphql_request(_ONBOARDING_QUERIES["internal_boot_context"])
+            try:
+                data = await _client.make_graphql_request(
+                    _ONBOARDING_QUERIES["internal_boot_context"]
+                )
+            except ToolError as exc:
+                if not _is_unknown_drive_warnings_field_error(exc):
+                    raise
+                data = await _client.make_graphql_request(
+                    _ONBOARDING_LEGACY_QUERIES["internal_boot_context"]
+                )
             return {
                 "success": True,
                 "subaction": subaction,
@@ -103,7 +125,13 @@ async def _handle_onboarding(
             }
 
         if subaction in _ONBOARDING_SIMPLE_MUTATIONS:
-            data = await _client.make_graphql_request(_ONBOARDING_SIMPLE_MUTATIONS[subaction])
+            try:
+                data = await _client.make_graphql_request(_ONBOARDING_SIMPLE_MUTATIONS[subaction])
+            except ToolError as exc:
+                legacy_mutation = _ONBOARDING_LEGACY_SIMPLE_MUTATIONS.get(subaction)
+                if legacy_mutation is None or not _is_unknown_drive_warnings_field_error(exc):
+                    raise
+                data = await _client.make_graphql_request(legacy_mutation)
             field = _ONBOARDING_RESULT_FIELD[subaction]
             result = (data.get("onboarding") or {}).get(field)
             return {

@@ -432,6 +432,9 @@ run_phase4() {
   call_unraid "unraid system/registration"    "system"       "registration"
   call_unraid "unraid system/variables"       "system"       "variables"
   call_unraid "unraid system/metrics"         "system"       "metrics"
+  call_unraid_optional "unraid system/network_metrics" "system" "network_metrics" \
+    'HTTP 400|Cannot query field|network' \
+    "metrics.network requires newer/compatible Unraid API schema"
   call_unraid "unraid system/services"        "system"       "services"
   call_unraid "unraid system/display"         "system"       "display"
   call_unraid "unraid system/config"          "system"       "config"
@@ -480,10 +483,12 @@ run_phase4() {
   call_unraid "unraid live/cpu_telemetry"     "live"         "cpu_telemetry"
   call_unraid "unraid live/notifications_overview" "live"    "notifications_overview"
   call_unraid_optional "unraid live/network_metrics" "live"  "network_metrics" \
-    'Cannot query field|systemMetricsNetwork|timed out|WebSocket|Subscription error' \
+    'Cannot query field|systemMetricsNetwork' \
     "systemMetricsNetwork requires newer/compatible Unraid API schema"
-  call_unraid "unraid subscriptions/test_query systemMetricsNetwork" \
+  call_unraid_optional "unraid subscriptions/test_query systemMetricsNetwork" \
     "subscriptions" "test_query" \
+    'Cannot query field|systemMetricsNetwork' \
+    "systemMetricsNetwork requires newer/compatible Unraid API schema" \
     '{"subscription_query":"subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"}'
 
   # Phase 4b — Destructive guard bypass (confirm=True)

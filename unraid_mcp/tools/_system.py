@@ -1,9 +1,9 @@
 """System domain handler for the Unraid MCP tool.
 
-Covers: overview, array, network, registration, variables, metrics, services,
+Covers: overview, array, network, registration, variables, metrics, network_metrics, services,
 display, display_details, config, online, owner, settings, server,
 server_details, servers, network_access_urls, flash, ups_devices, ups_device,
-ups_config, server_time, timezones, network_interfaces (24 subactions).
+ups_config, server_time, timezones, network_interfaces (25 subactions).
 """
 
 from typing import Any
@@ -76,6 +76,7 @@ _SYSTEM_QUERIES: dict[str, str] = {
         }
     """,
     "metrics": "query GetMetrics { metrics { cpu { percentTotal } memory { total used free available buffcache percentTotal } } }",
+    "network_metrics": "query GetNetworkMetrics { metrics { network { interface rxBytesPerSec txBytesPerSec } } }",
     "services": "query GetServices { services { name online version } }",
     "display": "query GetDisplay { info { display { theme } } }",
     "display_details": """
@@ -359,6 +360,9 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
                 raise ToolError("No settings data returned or unexpected structure")
             values = settings["unified"].get("values") or {}
             return dict(values) if isinstance(values, dict) else {"raw": values}
+        if subaction == "network_metrics":
+            network = safe_get(data, "metrics", "network", default=None)
+            return dict(network) if isinstance(network, dict) else {}
         if subaction == "server":
             info = data.get("info") or {}
             summary: dict[str, Any] = {}
@@ -414,9 +418,10 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
             response_key, output_key = _SYSTEM_LIST_ACTIONS[subaction]
             raw_items = data.get(response_key) or []
             items = list(raw_items) if isinstance(raw_items, list) else []
-            # timezones returns 400+ unbounded IANA entries — cap it and surface
-            # truncation meta so the agent can widen the window when needed.
-            if subaction == "timezones":
+            # timezones returns 400+ unbounded IANA entries, and network_interfaces
+            # can grow on VLAN-heavy hosts. Cap both and surface truncation meta so
+            # callers can widen the window when needed.
+            if subaction in {"timezones", "network_interfaces"}:
                 capped, meta = cap_list(items, limit)
                 return {output_key: capped, "page": meta}
             return {output_key: items}

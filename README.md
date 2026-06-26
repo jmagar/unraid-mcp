@@ -189,7 +189,7 @@ reference are themselves actions of that tool (`subscriptions` and `help`).
 
 All operations go through one tool. Pick an `action`, then a `subaction` within it.
 
-#### `system` — 23 subactions
+#### `system` — 25 subactions
 
 Server information, metrics, network, and UPS.
 
@@ -200,7 +200,8 @@ Server information, metrics, network, and UPS.
 | `network` | Access URLs, HTTP/HTTPS ports, LAN/WAN IPs | — |
 | `registration` | License type, key file, expiration | — |
 | `variables` | Full Unraid variable set (timezone, shares, etc.) | — |
-| `metrics` | Live CPU % and memory usage | — |
+| `metrics` | Current CPU % and memory usage | — |
+| `network_metrics` | Current network throughput metrics from `metrics.network` | — |
 | `services` | Running services with name, online status, version | — |
 | `display` | Current UI theme name | — |
 | `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale | — |
@@ -218,6 +219,7 @@ Server information, metrics, network, and UPS.
 | `ups_config` | UPS daemon configuration | — |
 | `server_time` | Current server time, time zone, and NTP config | — |
 | `timezones` | Available IANA time-zone options (capped) | — |
+| `network_interfaces` | Extended network interface list with IPv4/IPv6 address details | — |
 
 #### `health` — 4 subactions
 
@@ -462,7 +464,7 @@ First-boot / onboarding state and the internal boot context. These operate on se
 | --- | --- | --- |
 | `me` | Authenticated user: ID, name, description, roles | — |
 
-#### `live` — 16 subactions (WebSocket subscriptions)
+#### `live` — 17 subactions (WebSocket subscriptions)
 
 The `live` action group reads from active WebSocket subscriptions to the Unraid GraphQL API. Instead of issuing HTTP queries, it opens a `graphql-transport-ws` connection and either waits for one snapshot or collects events over a window.
 
@@ -486,6 +488,7 @@ Two delivery modes:
 | `display` | Snapshot (event-driven) | Theme/display changes | — |
 | `docker_container_stats` | Snapshot | Per-container CPU/memory/IO stats | — |
 | `temperature` | Snapshot | Temperature sensor readings | — |
+| `network_metrics` | Snapshot | Network throughput metrics | — |
 | `log_tail` | Collect | Stream log file lines | `path` (must start with `/var/log/` or `/boot/logs/`) |
 | `notification_feed` | Collect | Stream incoming notifications | — |
 | `plugin_install_updates` | Collect | Stream plugin-install progress events | `operation_id` (required) |

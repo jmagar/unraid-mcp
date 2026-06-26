@@ -6,7 +6,7 @@ unraid-mcp exposes a single MCP tool, `unraid`, with `action` (domain) + `subact
 
 | Tool | Purpose | Parameters |
 |------|---------|------------|
-| `unraid` | The only tool -- action+subaction dispatch across 19 actions / 175 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
+| `unraid` | The only tool -- action+subaction dispatch across 19 actions / 178 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
 
 The consolidated action pattern keeps the MCP surface to one tool while supporting 175 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
 
@@ -44,7 +44,7 @@ unraid(
 
 ### Actions and Subactions
 
-#### `system` (23 subactions)
+#### `system` (25 subactions)
 
 Server information, metrics, network, and UPS management.
 
@@ -57,7 +57,8 @@ Server information, metrics, network, and UPS management.
 | `network` | Network interfaces and config | -- |
 | `registration` | License and registration status | -- |
 | `variables` | Environment variables | -- |
-| `metrics` | Real-time CPU, memory, I/O usage | -- |
+| `metrics` | Current CPU and memory usage | -- |
+| `network_metrics` | Current network throughput metrics | -- |
 | `services` | Running services status | -- |
 | `display` | Display settings | -- |
 | `display_details` | Direct `display` root metadata: case, theme, temperature display settings, thresholds, locale | -- |
@@ -73,6 +74,7 @@ Server information, metrics, network, and UPS management.
 | `ups_config` | UPS configuration | -- |
 | `server_time` | Current server time, time zone, and NTP config | -- |
 | `timezones` | Available IANA time-zone options (capped) | -- |
+| `network_interfaces` | Extended network interface list with IPv4/IPv6 address details | -- |
 
 #### `health` (4 subactions)
 
@@ -322,7 +324,7 @@ require `confirm=True`.
 |-----------|-------------|
 | `me` | Current authenticated user info |
 
-#### `live` (16 subactions)
+#### `live` (17 subactions)
 
 Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder on first call -- retry momentarily for live data.
 
@@ -341,6 +343,7 @@ Real-time WebSocket subscription snapshots. Returns a "connecting" placeholder o
 | `display` | Live theme/display changes | `collect_for` |
 | `docker_container_stats` | Live per-container CPU/memory/IO stats | `collect_for` |
 | `temperature` | Live temperature sensor readings | `collect_for` |
+| `network_metrics` | Live network throughput metrics | `collect_for` |
 | `log_tail` | Live log tail stream | `path` (required), `collect_for` |
 | `notification_feed` | Live notification feed | `collect_for` |
 | `plugin_install_updates` | Live plugin-install progress stream | `operation_id` (required), `collect_for` |

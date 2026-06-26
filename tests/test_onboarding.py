@@ -49,6 +49,21 @@ class TestOnboardingQueries:
             }
         ]
 
+    async def test_internal_boot_context_falls_back_without_drive_warnings(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.side_effect = [
+            ToolError('GraphQL API error: Cannot query field "driveWarnings"'),
+            {"internalBootContext": {"arrayStopped": False, "bootEligible": True}},
+        ]
+
+        result = await _make_tool()(action="onboarding", subaction="internal_boot_context")
+
+        assert result["success"] is True
+        assert result["context"]["bootEligible"] is True
+        assert "driveWarnings" in _mock_graphql.call_args_list[0].args[0]
+        assert "driveWarnings" not in _mock_graphql.call_args_list[1].args[0]
+
 
 class TestOnboardingSimpleMutations:
     @pytest.mark.parametrize("subaction", ["complete", "open", "close", "resume", "bypass"])
@@ -148,6 +163,29 @@ class TestOnboardingSuccessDerivation:
         assert "device" in query
         assert "warnings" in query
         assert result["onboarding"]["driveWarnings"] == [warning]
+
+    async def test_refresh_internal_boot_context_falls_back_without_drive_warnings(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.side_effect = [
+            ToolError('GraphQL API error: Cannot query field "driveWarnings"'),
+            {
+                "onboarding": {
+                    "refreshInternalBootContext": {
+                        "arrayStopped": True,
+                        "bootEligible": False,
+                        "poolNames": ["cache"],
+                    }
+                }
+            },
+        ]
+
+        result = await _make_tool()(action="onboarding", subaction="refresh_internal_boot_context")
+
+        assert result["success"] is True
+        assert result["onboarding"]["poolNames"] == ["cache"]
+        assert "driveWarnings" in _mock_graphql.call_args_list[0].args[0]
+        assert "driveWarnings" not in _mock_graphql.call_args_list[1].args[0]
 
     async def test_simple_mutation_null_is_not_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"onboarding": {"completeOnboarding": None}}

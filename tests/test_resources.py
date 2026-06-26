@@ -1,6 +1,7 @@
 """Tests for MCP subscription resources."""
 
 import json
+from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -86,7 +87,9 @@ class TestLiveResourcesUseManagerCache:
 
 
 class TestSnapshotSubscriptionsRegistered:
-    """All SNAPSHOT_ACTIONS must be registered in the SubscriptionManager with auto_start=True."""
+    """All SNAPSHOT_ACTIONS must be registered in the SubscriptionManager."""
+
+    OPTIONAL_AUTO_START_DISABLED: ClassVar[frozenset[str]] = frozenset({"network_metrics"})
 
     def test_all_snapshot_actions_in_configs(self) -> None:
         from unraid_mcp.subscriptions.manager import subscription_manager
@@ -96,13 +99,14 @@ class TestSnapshotSubscriptionsRegistered:
                 f"'{action}' not registered in subscription_configs"
             )
 
-    def test_all_snapshot_actions_autostart(self) -> None:
+    def test_snapshot_actions_autostart_except_optional_new_schema_actions(self) -> None:
         from unraid_mcp.subscriptions.manager import subscription_manager
 
         for action in SNAPSHOT_ACTIONS:
             config = subscription_manager.subscription_configs[action]
-            assert config.get("auto_start") is True, (
-                f"'{action}' missing auto_start=True in subscription_configs"
+            expected = action not in self.OPTIONAL_AUTO_START_DISABLED
+            assert config.get("auto_start") is expected, (
+                f"'{action}' auto_start should be {expected} in subscription_configs"
             )
 
 

@@ -4,7 +4,7 @@ Provides the `unraid` tool with 19 actions, each routing to domain-specific
 subactions via the action + subaction pattern.
 
 Actions:
-  system       - Server info, metrics, network, UPS (24 subactions)
+  system       - Server info, metrics, network, UPS (25 subactions)
   health       - Health checks, connection test, diagnostics, setup (4 subactions)
   array        - Parity checks, array state, disk operations (14 subactions)
   disk         - Shares, physical disks, log files (6 subactions)
@@ -231,7 +231,7 @@ Single entry point for all operations. Use `action` + `subaction` to select an o
 
 | Action | Subactions | Notes |
 |--------|-----------|-------|
-| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones`, `network_interfaces` | |
+| `system` | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `network_metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones`, `network_interfaces` | |
 | `health` | `check`, `test_connection`, `diagnose`, `setup` | |
 | `array` | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`*, `add_disk`, `remove_disk`*, `mount_disk`, `unmount_disk`, `clear_disk_stats`* | |
 | `disk` | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`* | |
@@ -859,7 +859,8 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         │ action          │ subactions                                                           │
         ├─────────────────┼──────────────────────────────────────────────────────────────────────┤
         │ system          │ overview, array, network, registration, variables, metrics,          │
-        │                 │ services, display, display_details, config, online, owner, settings, │
+        │                 │ network_metrics, services, display, display_details, config, online, │
+        │                 │ owner, settings,                                                     │
         │                 │ server, server_details, servers, network_access_urls, flash,         │
         │                 │ ups_devices, ups_device, ups_config, server_time, timezones,         │
         │                 │ network_interfaces                                                   │
