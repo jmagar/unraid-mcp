@@ -204,6 +204,25 @@ Note: there is **no query cache**. The only caching middleware ever present —
 reads and mutations under one name, making per-subaction cache exclusion impossible. The
 `health/diagnose` "caching disabled" note is simply accurate.
 
+### HTTP Authentication (bearer token OR Google OAuth)
+HTTP transport supports two **mutually exclusive** auth modes, selected by env vars:
+1. **Pre-shared bearer token** (default) — enforced by the ASGI `BearerAuthMiddleware`
+   in `core/auth.py`, auto-generated on first HTTP startup. `WellKnownMiddleware` advertises
+   *no* OAuth authorization server (clients must send a static token).
+2. **Google OAuth** (`core/google_auth.py`) — activated when **both**
+   `UNRAID_MCP_GOOGLE_CLIENT_ID` and `UNRAID_MCP_GOOGLE_CLIENT_SECRET` are set. FastMCP's
+   `GoogleProvider` is attached via `FastMCP(auth=...)`; `build_google_provider()` returns
+   `None` (mode 1) otherwise. When active, `run_server()` installs **only** `HealthMiddleware`
+   — the bearer + well-known ASGI middleware are omitted because the provider serves its own
+   OAuth/`.well-known` routes and would be shadowed (and the OAuth callback 401'd) otherwise.
+   `UNRAID_MCP_GOOGLE_BASE_URL` is **required** when enabled. Token persistence is optional
+   and Redis-free: set both `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` and
+   `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` (a Fernet key) to persist tokens encrypted-at-rest in a
+   `FileTreeStore` under `UNRAID_MCP_GOOGLE_STORAGE_DIR` (default `~/.unraid-mcp/oauth-tokens`);
+   setting only one is a fatal config error. Misconfig raises `GoogleOAuthConfigError`, which
+   `server.py` converts to a fatal `sys.exit(1)` at import. See `.env.example` for the full
+   variable reference.
+
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
 - Selective queries to avoid GraphQL type overflow issues

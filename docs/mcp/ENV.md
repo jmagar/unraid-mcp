@@ -23,6 +23,21 @@
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | no | Disable bearer auth. Only valid behind a trusted fronting gateway; binding a public interface with auth disabled additionally requires `UNRAID_MCP_TRUST_PROXY=true`. |
 | `UNRAID_MCP_TRUST_PROXY` | conditional | `false` | no | Required second opt-in to bind a non-loopback interface while `UNRAID_MCP_DISABLE_HTTP_AUTH=true`. Asserts an upstream gateway terminates auth; without it a public bind with auth off is refused. |
 
+## Google OAuth (optional — replaces bearer token when enabled)
+
+Setting both client id and secret delegates HTTP auth to Google OAuth (FastMCP `GoogleProvider`); the bearer-token middleware is then not installed. Leave unset to keep bearer auth. See [AUTHENTICATION.md](../AUTHENTICATION.md#google-oauth-optional).
+
+| Variable | Required | Default | Sensitive | Description |
+|----------|----------|---------|-----------|-------------|
+| `UNRAID_MCP_GOOGLE_CLIENT_ID` | no | -- | yes | Google OAuth Client ID. Setting id **and** secret enables OAuth. |
+| `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | no | -- | yes | Google OAuth Client Secret (`GOCSPX-…`). |
+| `UNRAID_MCP_GOOGLE_BASE_URL` | conditional | -- | no | Required when OAuth is enabled. Public base URL of this server; must match the Google redirect URI host. |
+| `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | no | `openid` + `userinfo.email` | no | Comma/space-separated OAuth scopes. |
+| `UNRAID_MCP_GOOGLE_REDIRECT_PATH` | no | `/auth/callback` | no | OAuth callback path; must match the Google client config. |
+| `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` | conditional | -- | yes | With the encryption key, enables persistent (restart-surviving) token storage. Both or neither. |
+| `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` | conditional | -- | yes | Fernet key encrypting persisted tokens at rest. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `UNRAID_MCP_GOOGLE_STORAGE_DIR` | no | `~/.unraid-mcp/oauth-tokens` | no | Directory for persisted encrypted tokens (FileTreeStore; no Redis needed). |
+
 ## SSL/TLS
 
 | Variable | Required | Default | Sensitive | Description |

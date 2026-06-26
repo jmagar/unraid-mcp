@@ -86,6 +86,12 @@ dependencies = [
     # string accepted by `subscriptions/test_query` — the allowlist is enforced on
     # the parsed operation (every top-level field), not a regex. (Was dev-only.)
     "graphql-core>=3.2.0",
+    # Optional Google OAuth (core/google_auth.py) imports these directly. Both ship
+    # transitively with fastmcp today, but the OAuth code uses them at the top level
+    # (Fernet token encryption + FileTreeStore disk persistence), so pin them as
+    # explicit deps rather than relying on a transitive resolution.
+    "cryptography>=44.0.0",
+    "py-key-value-aio>=0.4.0",
 ]
 
 # ============================================================================
