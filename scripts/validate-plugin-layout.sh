@@ -30,8 +30,8 @@ for file in "${claude_manifest}" "${codex_manifest}"; do
 done
 
 jq -er '.mcpServers | type == "object" and length > 0' "${mcp_json}" >/dev/null
-jq -er '.hooks.SessionStart[]?.hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"' "${hooks_json}" >/dev/null
-jq -er '.hooks.ConfigChange[]? | select(.matcher == "user_settings") | .hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"' "${hooks_json}" >/dev/null
+jq -er '.hooks.SessionStart[]?.hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh"' "${hooks_json}" >/dev/null
+jq -er '.hooks.ConfigChange[]? | select(.matcher == "user_settings") | .hooks[]?.command == "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh"' "${hooks_json}" >/dev/null
 
 [[ -d "${skills_dir}" ]] || { echo "MISSING: ${skills_dir}"; exit 1; }
 skill_count=0

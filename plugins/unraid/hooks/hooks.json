@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh",
             "timeout": 600
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh",
             "timeout": 600
           }
         ]
