@@ -52,7 +52,7 @@ surface to the caller instead of wrapping it in a user-friendly ToolError.
 
 def _run(coro) -> Any:
     """Run a coroutine synchronously so Hypothesis @given works with async tools."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _assert_only_tool_error(exc: BaseException) -> None:
