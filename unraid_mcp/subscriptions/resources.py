@@ -181,16 +181,28 @@ def register_subscription_resources(mcp: FastMCP) -> None:
                         "message": f"Subscription '{action}' failed: {last_error}",
                     }
                 )
-            # When auto-start is disabled, fall back to a one-shot fetch so the
-            # resource returns real data instead of a perpetual "connecting" placeholder.
-            if not subscription_manager.auto_start_enabled:
+            # When auto-start is disabled, or an action is deliberately excluded
+            # from auto-start, fall back to a one-shot fetch so the resource returns
+            # real data or a real upstream error instead of a perpetual
+            # "connecting" placeholder.
+            query_info = SNAPSHOT_ACTIONS[action]
+            config = subscription_manager.subscription_configs.get(action, {})
+            use_on_demand = (
+                not subscription_manager.auto_start_enabled or config.get("auto_start") is False
+            )
+            if use_on_demand:
                 try:
-                    query_info = SNAPSHOT_ACTIONS.get(action)
-                    if query_info is not None:
-                        fallback_data = await subscribe_once(query_info)
-                        return json.dumps(fallback_data, indent=2)
+                    fallback_data = await subscribe_once(query_info)
+                    return json.dumps(fallback_data, indent=2)
                 except Exception as e:
                     logger.warning("[RESOURCE] On-demand fallback for '%s' failed: %s", action, e)
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "message": f"Subscription '{action}' on-demand fetch failed: {e}",
+                        },
+                        indent=2,
+                    )
             # Autostart failure is surfaced here instead of a perpetual "connecting"
             # placeholder that would hide the dead feature (C1).
             placeholder: dict[str, Any] = {

@@ -53,13 +53,23 @@ _ALLOWED_SUBSCRIPTION_FIELDS = frozenset(
         "containerStats",
         "cpu",
         "dockerContainerStats",
+        "systemMetricsCpu",
+        "systemMetricsCpuTelemetry",
         "memory",
+        "systemMetricsMemory",
         "array",
+        "arraySubscription",
+        "parityHistorySubscription",
         "network",
         "docker",
         "systemMetricsTemperature",
+        "systemMetricsNetwork",
         "vm",
         "displaySubscription",
+        "notificationsOverview",
+        "ownerSubscription",
+        "serversSubscription",
+        "upsUpdates",
         "notificationsWarningsAndAlerts",
         "pluginInstallUpdates",
     }
@@ -158,8 +168,7 @@ async def test_subscription_query(subscription_query: str) -> dict[str, Any]:
     """Test a GraphQL subscription query directly to debug schema issues.
 
     Use this to find working subscription field names and structure.
-    Only whitelisted schema fields are permitted (containerStats,
-    cpu, memory, array, network, docker, vm).
+    Only schema fields in _ALLOWED_SUBSCRIPTION_FIELDS are permitted.
 
     Args:
         subscription_query: The GraphQL subscription query to test

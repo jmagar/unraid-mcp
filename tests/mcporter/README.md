@@ -87,6 +87,10 @@ The `just` wrappers map to these: `just test-http` → `--mode http`,
 | **4 · Tool smoke-tests** | Non-destructive subactions across all domains (skipped with `--skip-tools`) |
 | **4b · Guard bypass** | `confirm=True` bypasses destructive guard on `notification/delete` and `vm/force_stop` |
 
+Current schema-drift smoke coverage includes `system/network_interfaces`,
+`onboarding/internal_boot_context`, `live/network_metrics`, and
+`subscriptions/test_query` for the `systemMetricsNetwork` subscription field.
+
 `stdio` mode performs the protocol handshake (`initialize`, `tools/list`) and confirms the
 `unraid` tool is present, without needing a running server.
 

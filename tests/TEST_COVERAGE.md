@@ -15,7 +15,7 @@ A QA engineer should be able to verify correctness of the script without executi
 | MCP server exercised | `unraid-mcp` — Python MCP server that proxies Unraid's GraphQL API |
 | Transport protocols covered | Streamable-HTTP (primary), Docker container (build + run), stdio (subprocess) |
 | Test approach | Direct JSON-RPC 2.0 over HTTP — no mcporter or secondary proxy dependency |
-| Total tool subactions exercised | 47 (45 read-only + 2 destructive-guard bypass) |
+| Total tool subactions attempted | 52 (50 read-only + 2 destructive-guard bypass) |
 | Destructive operations | None — all state-changing tools are invoked only with `confirm=true` to verify the guard bypasses correctly, not to execute the operation |
 
 ### What the script is not
@@ -26,6 +26,12 @@ A QA engineer should be able to verify correctness of the script without executi
   business data.
 - It does not test write operations (container start/stop, VM actions beyond force_stop guard
   check, array operations, etc.) to avoid causing data loss or service disruption.
+- It intentionally covers new read-only schema-drift surfaces in the live phase, including
+  `system/network_interfaces`, `system/network_metrics`, `onboarding/internal_boot_context`,
+  `live/network_metrics`, and `subscriptions/test_query` for `systemMetricsNetwork`.
+- Some live API/config-dependent probes report `SKIP` instead of `FAIL` when the upstream
+  Unraid appliance rejects a newly-added schema field or optional subsystem data is absent.
+  The skipped subaction remains visible in the summary.
 
 ---
 
@@ -56,7 +62,7 @@ For stdio mode: `uv` must be in `PATH` (soft requirement — skipped with `SKIP`
 # Docker only — builds image, starts container, tests, tears down
 ./tests/test_live.sh --mode docker
 
-# Stdio only — spawns server subprocess via uvx
+# Stdio only — spawns server subprocess via uv run
 ./tests/test_live.sh --mode stdio
 
 # All three modes explicitly
@@ -424,6 +430,7 @@ Extra arguments (e.g., `provider_type`) are merged into the `arguments` object v
 | `unraid system/registration` | `system` | `registration` | — | License/registration info |
 | `unraid system/variables` | `system` | `variables` | — | Unraid system variables |
 | `unraid system/metrics` | `system` | `metrics` | — | Performance metrics |
+| `unraid system/network_metrics` | `system` | `network_metrics` | — | Current network throughput metrics; skips on older schemas |
 | `unraid system/services` | `system` | `services` | — | Running services |
 | `unraid system/display` | `system` | `display` | — | Display/UI settings |
 | `unraid system/config` | `system` | `config` | — | System configuration |
@@ -434,6 +441,7 @@ Extra arguments (e.g., `provider_type`) are merged into the `arguments` object v
 | `unraid system/servers` | `system` | `servers` | — | All known servers |
 | `unraid system/flash` | `system` | `flash` | — | USB flash device info |
 | `unraid system/ups_devices` | `system` | `ups_devices` | — | UPS device list |
+| `unraid system/network_interfaces` | `system` | `network_interfaces` | — | Extended network interface list; skips on older schemas |
 
 #### `array` action
 
@@ -524,10 +532,12 @@ set to `"s3"` to exercise argument merging.
 | `unraid live/memory` | `live` | `memory` | — | Real-time memory usage |
 | `unraid live/cpu_telemetry` | `live` | `cpu_telemetry` | — | Detailed CPU telemetry |
 | `unraid live/notifications_overview` | `live` | `notifications_overview` | — | Live notification overview |
+| `unraid live/network_metrics` | `live` | `network_metrics` | — | Live network throughput metrics; skips on older schemas |
+| `unraid subscriptions/test_query systemMetricsNetwork` | `subscriptions` | `test_query` | `subscription_query` | Diagnostic probe for `systemMetricsNetwork`; skips on older schemas |
 
 ### 8.2 What "PASS" means for each smoke test
 
-For all 45 subactions listed above, PASS means:
+For all 50 read-only subactions listed above, PASS means:
 
 1. The MCP server returned HTTP `200`.
 2. The response body does NOT have `.result.isError == true`.
@@ -901,7 +911,7 @@ does NOT contain `"re-run with confirm"`. PASS means the guard accepted `confirm
 | Category | Subactions tested | Destructive? |
 |---|---|---|
 | health | 3 (check, test_connection, diagnose) | No |
-| system | 16 (overview, network, array, registration, variables, metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices) | No |
+| system | 18 (overview, network, array, registration, variables, metrics, network_metrics, services, display, config, online, owner, settings, server, servers, flash, ups_devices, network_interfaces) | No |
 | array | 2 (parity_status, parity_history) | No |
 | disk | 3 (shares, disks, log_files) | No |
 | docker | 2 (list, networks) | No |
@@ -913,9 +923,9 @@ does NOT contain `"re-run with confirm"`. PASS means the guard accepted `confirm
 | plugin | 1 (list) | No |
 | customization | 4 (theme, public_theme, sso_enabled, is_initial_setup) | No |
 | oidc | 3 (providers, public_providers, configuration) | No |
-| live | 4 (cpu, memory, cpu_telemetry, notifications_overview) | No |
+| live/subscriptions | 6 (cpu, memory, cpu_telemetry, notifications_overview, network_metrics, subscriptions/test_query) | No |
 | **Guard bypass** | 2 (notification/delete, vm/force_stop) | Guarded (confirm=true) |
-| **Total** | **48** | — |
+| **Total** | **52** | — |
 
 **Not tested (by design):**
 

@@ -1,87 +1,77 @@
-# Live Smoke Testing (mcporter)
+# Live Smoke Testing
 
-End-to-end verification against a running unraid-mcp server. Complements unit/integration tests in [TESTS.md](TESTS.md).
+End-to-end verification for `unraid-mcp` is split between the canonical live
+runner and the destructive-action mcporter harness.
 
-## Purpose
+## Canonical Runner
 
-Mcporter tests verify that the MCP server responds correctly over both HTTP and stdio transports with real GraphQL queries against a live Unraid API.
-
-## Test scripts
-
-### HTTP smoke test (`test-actions.sh`)
-
-Tests all non-destructive actions over HTTP transport:
+Use [`tests/test_live.sh`](../../tests/test_live.sh) for non-destructive live
+coverage. It drives the MCP server directly with JSON-RPC over HTTP, Docker, or
+stdio; it does not require mcporter.
 
 ```bash
-./tests/mcporter/test-actions.sh [MCP_URL]
-# Default: http://localhost:6970/mcp
+./tests/test_live.sh
+./tests/test_live.sh --mode http
+./tests/test_live.sh --mode docker
+./tests/test_live.sh --mode stdio
+./tests/test_live.sh --mode http --skip-auth
+./tests/test_live.sh --mode http --url https://unraid.tootie.tv/mcp --skip-auth
 ```
 
-Sends tool calls for every non-destructive action/subaction combination and validates response format.
+The live tool phase covers read-only subactions across all domains. Schema-drift
+coverage includes:
 
-### stdio smoke test (`test-tools.sh`)
+- `system/network_interfaces`
+- `onboarding/internal_boot_context`
+- `live/network_metrics`
+- `subscriptions/test_query` for `systemMetricsNetwork`
 
-Tests tool availability without a running HTTP server:
+Live API/config-dependent probes may report `SKIP` when the upstream appliance
+does not expose the newer field yet or an optional subsystem has no data. Skips
+are explicit in the summary so coverage gaps are visible without failing an
+otherwise healthy transport smoke-test.
+
+See [`tests/TEST_COVERAGE.md`](../../tests/TEST_COVERAGE.md) for the full phase
+breakdown and assertion model.
+
+## mcporter Harness
+
+mcporter is still used for destructive-action testing in
+[`tests/mcporter/test-destructive.sh`](../../tests/mcporter/test-destructive.sh).
+The script is dry-run by default and requires `--confirm` before it executes any
+destructive test case.
 
 ```bash
-./tests/mcporter/test-tools.sh [--parallel] [--timeout-ms N] [--verbose]
+./tests/mcporter/test-destructive.sh
+./tests/mcporter/test-destructive.sh --confirm
 ```
 
-Spawns the server in stdio mode and sends tool list/call requests over stdin/stdout. Good for CI environments where no network is needed.
+The destructive harness uses create-to-delete patterns where safe, skips global
+blast-radius actions, and runs over stdio by spawning `uv run unraid-mcp-server`
+per call.
 
-### Destructive action smoke test (`test-destructive.sh`)
+## Operation Inventory
 
-Confirms that destructive action guards block execution without `confirm=True`:
+Before adding or changing live smoke coverage, compare the script against the
+generated operation inventory and parity report:
 
 ```bash
-./tests/mcporter/test-destructive.sh [MCP_URL]
+scripts/list_graphql_operations.py
+scripts/list_graphql_operations.py --json
+scripts/report_api_parity.py
+scripts/report_api_parity.py --json
 ```
 
-Sends destructive subactions without `confirm=True` and verifies the server returns an error (not execution).
+The inventory is derived from the same action/subaction query and mutation
+dictionaries used by the schema dispatch tests.
 
-### HTTP e2e test (`test-http.sh`)
+## CI Integration
 
-Full HTTP transport test with automatic bearer token loading:
-
-```bash
-# Standard (reads token from ~/.unraid-mcp/.env)
-just test-http
-
-# Skip auth (for gateway-protected deployments)
-just test-http-no-auth
-
-# Remote URL
-just test-http-remote https://unraid.tootie.tv/mcp
-```
-
-## Justfile recipes
-
-| Recipe | Description |
-|--------|-------------|
-| `just test-http` | HTTP e2e test with auto-read token |
-| `just test-http-no-auth` | HTTP e2e test without auth |
-| `just test-http-remote <url>` | HTTP e2e test against a remote URL |
-| `just test-live` | Run pytest integration tests (`-m live`) |
-
-## Transport differences
-
-| Aspect | HTTP (`test-actions.sh`) | stdio (`test-tools.sh`) |
-|--------|--------------------------|------------------------|
-| Server required | Yes (running on port) | No (spawned inline) |
-| Auth | Bearer token | None |
-| Network | HTTP to `/mcp` | stdin/stdout pipes |
-| CI friendly | Needs Docker or port | Yes (process only) |
-| Parallelism | Native (concurrent HTTP) | Optional (`--parallel`) |
-
-## CI integration
-
-The `ci.yml` workflow runs `test_live.sh` in the `mcp-integration` job:
-- Only runs on pushes and same-repo PRs (needs secrets)
-- Uses `UNRAID_API_URL` and `UNRAID_API_KEY` from GitHub secrets
-- Validates real GraphQL connectivity
+The CI MCP integration workflow runs `tests/test_live.sh` for same-repo pushes
+and PRs where the required Unraid secrets are available.
 
 ## See Also
 
 - [TESTS.md](TESTS.md) -- Unit and specialized test suites
 - [CICD.md](CICD.md) -- CI workflow configuration
-- [../GUARDRAILS.md](../GUARDRAILS.md) -- Destructive action guard details
+- [../../tests/mcporter/README.md](../../tests/mcporter/README.md) -- mcporter-specific destructive test details

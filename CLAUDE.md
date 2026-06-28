@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 ### Tool Categories (1 Tool)
 
 The server registers a **single MCP tool**, `unraid`, with `action` (domain) +
-`subaction` (operation) routing (19 actions / 175 subactions). Call it as
+`subaction` (operation) routing (19 actions / 178 subactions). Call it as
 `unraid(action="docker", subaction="list")`. Subscription diagnostics and the
 Markdown reference that used to be standalone tools are now actions of `unraid`:
 - **`subscriptions`** — `diagnose` (connection states, errors, WebSocket URLs) and
@@ -115,7 +115,7 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 
 | action | subactions |
 |--------|-----------|
-| **system** (23) | overview, array, network, registration, variables, metrics, services, display, display_details, config, online, owner, settings, server, server_details, servers, network_access_urls, flash, ups_devices, ups_device, ups_config, server_time, timezones |
+| **system** (25) | overview, array, network, registration, variables, metrics, network_metrics, services, display, display_details, config, online, owner, settings, server, server_details, servers, network_access_urls, flash, ups_devices, ups_device, ups_config, server_time, timezones, network_interfaces |
 | **health** (4) | check, test_connection, diagnose, setup |
 | **array** (14) | parity_status, parity_history, assignable_disks, parity_start, parity_pause, parity_resume, parity_cancel, start_array, stop_array*, add_disk, remove_disk*, mount_disk, unmount_disk, clear_disk_stats* |
 | **disk** (6) | shares, disks, disk_details, log_files, logs, flash_backup* |
@@ -131,7 +131,7 @@ The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
 | **oidc** (5) | providers, provider, configuration, public_providers, validate_session |
 | **onboarding** (11) | internal_boot_context, complete, open, close, resume, bypass, reset*, set_override, clear_override, refresh_internal_boot_context, create_internal_boot_pool* |
 | **user** (1) | me |
-| **live** (16) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notifications_warnings, notification_feed, log_tail, owner, server_status, display, docker_container_stats, temperature, plugin_install_updates |
+| **live** (17) | cpu, memory, cpu_telemetry, array_state, parity_progress, ups_status, notifications_overview, notifications_warnings, notification_feed, log_tail, owner, server_status, display, docker_container_stats, temperature, network_metrics, plugin_install_updates |
 | **subscriptions** (2) | diagnose, test_query (needs `subscription_query=`) |
 | **help** (0) | _(no subaction)_ — returns the Markdown reference |
 

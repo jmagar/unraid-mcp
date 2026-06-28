@@ -1010,6 +1010,11 @@ class TestAutoStart:
             await mgr.auto_start_all_subscriptions()
             mock_start.assert_called_once_with("auto_sub", "subscription { auto }")
 
+    async def test_network_metrics_not_auto_started_by_default(self) -> None:
+        mgr = SubscriptionManager()
+
+        assert mgr.subscription_configs["network_metrics"]["auto_start"] is False
+
 
 # ---------------------------------------------------------------------------
 # SSL Context (via utils)

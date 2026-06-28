@@ -1148,6 +1148,13 @@ type OnboardingInternalBootResult {
   output: String!
 }
 
+"""Warning metadata for an assignable internal boot drive"""
+type OnboardingInternalBootDriveWarning {
+  diskId: String!
+  device: String!
+  warnings: [String!]!
+}
+
 """Current onboarding context for configuring internal boot"""
 type OnboardingInternalBootContext {
   arrayStopped: Boolean!
@@ -1158,6 +1165,7 @@ type OnboardingInternalBootContext {
   shareNames: [String!]!
   poolNames: [String!]!
   assignableDisks: [Disk!]!
+  driveWarnings: [OnboardingInternalBootDriveWarning!]!
 }
 
 type RCloneDrive {
@@ -1301,6 +1309,9 @@ type DockerMutations {
 
   "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nStop a container"
   stop(id: PrefixedID!): DockerContainer!
+
+  "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nRestart a container"
+  restart(id: PrefixedID!): DockerContainer!
 
   "\n#### Required Permissions:\n\n- Action: **UPDATE_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nPause (Suspend) a container"
   pause(id: PrefixedID!): DockerContainer!
@@ -1950,6 +1961,48 @@ type InfoNetworkInterface implements Node {
 
   """Using DHCP for IPv6"""
   useDhcp6: Boolean
+
+  """Link speed in Mbps"""
+  speed: Int
+
+  """Duplex mode (full/half)"""
+  duplex: String
+
+  """Maximum transmission unit"""
+  mtu: Int
+
+  """Operational state"""
+  operstate: String
+
+  """Interface type"""
+  type: String
+
+  """Whether this is a virtual interface"""
+  virtual: Boolean
+
+  """VLAN identifier"""
+  vlanId: Int
+
+  """Whether this is an internal interface"""
+  internal: Boolean
+
+  """IPv4 address details"""
+  ipv4Addresses: [InfoNetworkIpv4Address!]
+
+  """IPv6 address details"""
+  ipv6Addresses: [InfoNetworkIpv6Address!]
+}
+
+"""IPv4 address information for a network interface"""
+type InfoNetworkIpv4Address {
+  address: String!
+  cidr: Int
+}
+
+"""IPv6 address information for a network interface"""
+type InfoNetworkIpv6Address {
+  address: String!
+  cidr: Int
 }
 
 type InfoOs implements Node {
@@ -2392,13 +2445,13 @@ type Docker implements Node {
   id: PrefixedID!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  containers: [DockerContainer!]!
+  containers(skipCache: Boolean! = false): [DockerContainer!]!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  networks: [DockerNetwork!]!
+  networks(skipCache: Boolean! = false): [DockerNetwork!]!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  portConflicts: DockerPortConflicts!
+  portConflicts(skipCache: Boolean! = false): DockerPortConflicts!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**\n\n#### Description:\n\nAccess container logs. Requires specifying a target container id through resolver arguments."
   logs(id: PrefixedID!, since: DateTime, tail: Int): DockerContainerLogs!
@@ -2407,7 +2460,7 @@ type Docker implements Node {
   container(id: PrefixedID!): DockerContainer
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
-  organizer: ResolvedOrganizerV1!
+  organizer(skipCache: Boolean! = false): ResolvedOrganizerV1!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **DOCKER**"
   containerUpdateStatuses: [ExplicitStatusItem!]!
@@ -2601,6 +2654,21 @@ type Metrics implements Node {
 
   """Temperature metrics"""
   temperature: TemperatureMetrics
+
+  """Network interface metrics"""
+  network: NetworkMetrics
+}
+
+"""Network interface metrics"""
+type NetworkMetrics {
+  """Network interface name"""
+  interface: String!
+
+  """Bytes received per second"""
+  rxBytesPerSec: Float
+
+  """Bytes transmitted per second"""
+  txBytesPerSec: Float
 }
 
 type SensorConfig {
@@ -3340,6 +3408,9 @@ type Query {
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CLOUD**"
   cloud: Cloud!
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**\n\n#### Description:\n\nGet all network interfaces"
+  networkInterfaces: [InfoNetworkInterface!]!
 }
 
 type Mutation {
@@ -3736,6 +3807,9 @@ type Subscription {
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
   systemMetricsTemperature: TemperatureMetrics
+
+  "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **INFO**"
+  systemMetricsNetwork: NetworkMetrics!
   upsUpdates: UPSDevice!
 
   "\n#### Required Permissions:\n\n- Action: **READ_ANY**\n- Resource: **CONFIG**"

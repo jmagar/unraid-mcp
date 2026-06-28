@@ -203,7 +203,7 @@ class SubscriptionManager:
                 "query": query,
                 "resource": f"unraid://live/{action}",
                 "description": f"Real-time {action.replace('_', ' ')} data",
-                "auto_start": True,
+                "auto_start": action != "network_metrics",
             }
             for action, query in SNAPSHOT_ACTIONS.items()
         }

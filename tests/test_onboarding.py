@@ -22,10 +22,47 @@ def _make_tool():
 class TestOnboardingQueries:
     async def test_internal_boot_context(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {
-            "internalBootContext": {"arrayStopped": False, "bootEligible": True}
+            "internalBootContext": {
+                "arrayStopped": False,
+                "bootEligible": True,
+                "driveWarnings": [
+                    {
+                        "diskId": "disk1",
+                        "device": "/dev/sdb",
+                        "warnings": ["device will be formatted"],
+                    }
+                ],
+            }
         }
         result = await _make_tool()(action="onboarding", subaction="internal_boot_context")
+        query = _mock_graphql.call_args.args[0]
+        assert "driveWarnings" in query
+        assert "diskId" in query
+        assert "device" in query
+        assert "warnings" in query
         assert result["context"]["bootEligible"] is True
+        assert result["context"]["driveWarnings"] == [
+            {
+                "diskId": "disk1",
+                "device": "/dev/sdb",
+                "warnings": ["device will be formatted"],
+            }
+        ]
+
+    async def test_internal_boot_context_falls_back_without_drive_warnings(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.side_effect = [
+            ToolError('GraphQL API error: Cannot query field "driveWarnings"'),
+            {"internalBootContext": {"arrayStopped": False, "bootEligible": True}},
+        ]
+
+        result = await _make_tool()(action="onboarding", subaction="internal_boot_context")
+
+        assert result["success"] is True
+        assert result["context"]["bootEligible"] is True
+        assert "driveWarnings" in _mock_graphql.call_args_list[0].args[0]
+        assert "driveWarnings" not in _mock_graphql.call_args_list[1].args[0]
 
 
 class TestOnboardingSimpleMutations:
@@ -100,6 +137,55 @@ class TestOnboardingSuccessDerivation:
         _mock_graphql.return_value = {"onboarding": {field: {"status": "INCOMPLETE"}}}
         result = await _make_tool()(action="onboarding", subaction=subaction)
         assert result["success"] is True
+
+    async def test_refresh_internal_boot_context_preserves_drive_warnings(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        warning = {
+            "diskId": "disk1",
+            "device": "/dev/sdb",
+            "warnings": ["device will be formatted"],
+        }
+        _mock_graphql.return_value = {
+            "onboarding": {
+                "refreshInternalBootContext": {
+                    "arrayStopped": True,
+                    "bootEligible": False,
+                    "poolNames": ["cache"],
+                    "driveWarnings": [warning],
+                }
+            }
+        }
+        result = await _make_tool()(action="onboarding", subaction="refresh_internal_boot_context")
+        query = _mock_graphql.call_args.args[0]
+        assert "driveWarnings" in query
+        assert "diskId" in query
+        assert "device" in query
+        assert "warnings" in query
+        assert result["onboarding"]["driveWarnings"] == [warning]
+
+    async def test_refresh_internal_boot_context_falls_back_without_drive_warnings(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.side_effect = [
+            ToolError('GraphQL API error: Cannot query field "driveWarnings"'),
+            {
+                "onboarding": {
+                    "refreshInternalBootContext": {
+                        "arrayStopped": True,
+                        "bootEligible": False,
+                        "poolNames": ["cache"],
+                    }
+                }
+            },
+        ]
+
+        result = await _make_tool()(action="onboarding", subaction="refresh_internal_boot_context")
+
+        assert result["success"] is True
+        assert result["onboarding"]["poolNames"] == ["cache"]
+        assert "driveWarnings" in _mock_graphql.call_args_list[0].args[0]
+        assert "driveWarnings" not in _mock_graphql.call_args_list[1].args[0]
 
     async def test_simple_mutation_null_is_not_success(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.return_value = {"onboarding": {"completeOnboarding": None}}

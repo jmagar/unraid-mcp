@@ -1,6 +1,7 @@
 """Tests for MCP subscription resources."""
 
 import json
+from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -84,9 +85,51 @@ class TestLiveResourcesUseManagerCache:
         assert parsed["status"] == "error"
         assert "auth failed" in parsed["message"]
 
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_non_autostart_resource_uses_on_demand_fetch(self) -> None:
+        fallback_data = {"systemMetricsNetwork": {"interface": "eth0"}}
+        with (
+            patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
+            patch(
+                "unraid_mcp.subscriptions.resources.subscribe_once",
+                new=AsyncMock(return_value=fallback_data),
+            ) as mock_once,
+        ):
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
+            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.auto_start_enabled = True
+            mock_mgr.subscription_configs = {"network_metrics": {"auto_start": False}}
+            mcp = _make_resources()
+            resource = _get_resource(mcp, "unraid://live/network_metrics")
+            result = await resource.fn()
+        assert json.loads(result) == fallback_data
+        mock_once.assert_awaited_once_with(SNAPSHOT_ACTIONS["network_metrics"])
+
+    @pytest.mark.usefixtures("_mock_ensure_started")
+    async def test_non_autostart_resource_surfaces_on_demand_failure(self) -> None:
+        with (
+            patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
+            patch(
+                "unraid_mcp.subscriptions.resources.subscribe_once",
+                new=AsyncMock(side_effect=Exception("Cannot query field systemMetricsNetwork")),
+            ),
+        ):
+            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
+            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.auto_start_enabled = True
+            mock_mgr.subscription_configs = {"network_metrics": {"auto_start": False}}
+            mcp = _make_resources()
+            resource = _get_resource(mcp, "unraid://live/network_metrics")
+            result = await resource.fn()
+        parsed = json.loads(result)
+        assert parsed["status"] == "error"
+        assert "Cannot query field systemMetricsNetwork" in parsed["message"]
+
 
 class TestSnapshotSubscriptionsRegistered:
-    """All SNAPSHOT_ACTIONS must be registered in the SubscriptionManager with auto_start=True."""
+    """All SNAPSHOT_ACTIONS must be registered in the SubscriptionManager."""
+
+    OPTIONAL_AUTO_START_DISABLED: ClassVar[frozenset[str]] = frozenset({"network_metrics"})
 
     def test_all_snapshot_actions_in_configs(self) -> None:
         from unraid_mcp.subscriptions.manager import subscription_manager
@@ -96,13 +139,14 @@ class TestSnapshotSubscriptionsRegistered:
                 f"'{action}' not registered in subscription_configs"
             )
 
-    def test_all_snapshot_actions_autostart(self) -> None:
+    def test_snapshot_actions_autostart_except_optional_new_schema_actions(self) -> None:
         from unraid_mcp.subscriptions.manager import subscription_manager
 
         for action in SNAPSHOT_ACTIONS:
             config = subscription_manager.subscription_configs[action]
-            assert config.get("auto_start") is True, (
-                f"'{action}' missing auto_start=True in subscription_configs"
+            expected = action not in self.OPTIONAL_AUTO_START_DISABLED
+            assert config.get("auto_start") is expected, (
+                f"'{action}' auto_start should be {expected} in subscription_configs"
             )
 
 
@@ -154,8 +198,8 @@ class TestAutoStartDisabledFallback:
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
     @pytest.mark.usefixtures("_mock_ensure_started")
-    async def test_fallback_failure_returns_connecting(self, action: str) -> None:
-        """When on-demand fallback itself fails, still return 'connecting' status."""
+    async def test_fallback_failure_returns_error(self, action: str) -> None:
+        """When on-demand fallback itself fails, surface the actual error."""
         with (
             patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
             patch(
@@ -169,7 +213,9 @@ class TestAutoStartDisabledFallback:
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
-        assert json.loads(result)["status"] == "connecting"
+        parsed = json.loads(result)
+        assert parsed["status"] == "error"
+        assert "WebSocket failed" in parsed["message"]
 
 
 class TestEnsureSubscriptionsStarted:
