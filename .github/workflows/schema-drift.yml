@@ -40,7 +40,7 @@ jobs:
 
       - name: Set up uv
         if: steps.diff.outputs.drift == 'true'
-        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
 
       - name: Summarize structured schema changes
         if: steps.diff.outputs.drift == 'true'

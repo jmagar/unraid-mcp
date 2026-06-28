@@ -117,7 +117,7 @@ jobs:
 
       - name: Set up uv for Claude
         if: steps.prepare.outputs.should_run == 'true'
-        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
 
       - name: Run Claude Code
         id: claude
