@@ -104,22 +104,20 @@ class TestPassThrough:
     def test_websocket_scope_passes_through(self):
         app, called = _app_called_flag()
         mw = BearerAuthMiddleware(app, token="secret", disabled=False)
-        asyncio.get_event_loop().run_until_complete(mw(_make_ws_scope(), _noop_receive, _noop_send))
+        asyncio.run(mw(_make_ws_scope(), _noop_receive, _noop_send))
         assert called["value"]
 
     def test_lifespan_scope_passes_through(self):
         app, called = _app_called_flag()
         mw = BearerAuthMiddleware(app, token="secret", disabled=False)
-        asyncio.get_event_loop().run_until_complete(
-            mw(_make_lifespan_scope(), _noop_receive, _noop_send)
-        )
+        asyncio.run(mw(_make_lifespan_scope(), _noop_receive, _noop_send))
         assert called["value"]
 
     def test_disabled_passes_all_http_requests(self):
         app, called = _app_called_flag()
         mw = BearerAuthMiddleware(app, token="secret", disabled=True)
         scope = _make_http_scope()  # no auth header
-        asyncio.get_event_loop().run_until_complete(mw(scope, _noop_receive, _noop_send))
+        asyncio.run(mw(scope, _noop_receive, _noop_send))
         assert called["value"]
 
 
@@ -135,7 +133,7 @@ class TestUnauthorized:
 
     def _run(self, headers=None, ip="10.0.0.1"):
         scope = _make_http_scope(headers=headers, client_ip=ip)
-        return asyncio.get_event_loop().run_until_complete(_collect_response(self.mw, scope))
+        return asyncio.run(_collect_response(self.mw, scope))
 
     def test_missing_header_returns_401(self):
         status, _, _ = self._run()
@@ -178,7 +176,7 @@ class TestUnauthorized:
             app, called = _app_called_flag()
             mw = BearerAuthMiddleware(app, token="correct-token")
             scope = _make_http_scope(headers=[(b"authorization", scheme)])
-            asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+            asyncio.run(_collect_response(mw, scope))
             assert called["value"], f"scheme {scheme!r} was rejected but should pass"
 
 
@@ -192,7 +190,7 @@ class TestValidToken:
         app, called = _app_called_flag()
         mw = BearerAuthMiddleware(app, token="my-secret-token")
         scope = _make_http_scope(headers=[(b"authorization", b"Bearer my-secret-token")])
-        status, _, _ = asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        status, _, _ = asyncio.run(_collect_response(mw, scope))
         assert status == 200
         assert called["value"]
 
@@ -201,7 +199,7 @@ class TestValidToken:
         app, called = _app_called_flag()
         mw = BearerAuthMiddleware(app, token="tok")
         scope = _make_http_scope(headers=[(b"authorization", b"Bearer  tok ")])
-        asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        asyncio.run(_collect_response(mw, scope))
         assert called["value"]
 
 
@@ -215,7 +213,7 @@ class TestRateLimiting:
         statuses = []
         for _ in range(count):
             scope = _make_http_scope(headers=[(b"authorization", b"Bearer wrong")], client_ip=ip)
-            status, _, _ = asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+            status, _, _ = asyncio.run(_collect_response(mw, scope))
             statuses.append(status)
         return statuses
 
@@ -234,9 +232,7 @@ class TestRateLimiting:
         scope = _make_http_scope(
             headers=[(b"authorization", b"Bearer wrong")], client_ip="192.168.2.2"
         )
-        status, headers, _ = asyncio.get_event_loop().run_until_complete(
-            _collect_response(mw, scope)
-        )
+        status, headers, _ = asyncio.run(_collect_response(mw, scope))
         assert status == 429
         assert headers.get("retry-after") == "60"
 
@@ -249,7 +245,7 @@ class TestRateLimiting:
         scope = _make_http_scope(
             headers=[(b"authorization", b"Bearer wrong")], client_ip="10.0.0.2"
         )
-        status, _, _ = asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        status, _, _ = asyncio.run(_collect_response(mw, scope))
         assert status == 401
 
     def test_window_expiry_resets_counter(self):
@@ -263,7 +259,7 @@ class TestRateLimiting:
         )
         # These are all stale — next request should be 401, not 429
         scope = _make_http_scope(headers=[(b"authorization", b"Bearer wrong")], client_ip=ip)
-        status, _, _ = asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        status, _, _ = asyncio.run(_collect_response(mw, scope))
         assert status == 401
         assert len(mw._ip_failures[ip]) == 1
 
@@ -273,7 +269,7 @@ class TestRateLimiting:
         ip = "172.16.0.2"
         mw._ip_last_warn[ip] = time.monotonic() - (_RATE_WINDOW_SECS + 1)
         scope = _make_http_scope(headers=[(b"authorization", b"Bearer wrong")], client_ip=ip)
-        asyncio.get_event_loop().run_until_complete(_collect_response(mw, scope))
+        asyncio.run(_collect_response(mw, scope))
         assert ip in mw._ip_last_warn
 
 
@@ -564,7 +560,7 @@ async def _run_health(method: str, path: str = "/health"):
 
 class TestHealthMiddleware:
     def _run(self, method, path="/health"):
-        return asyncio.get_event_loop().run_until_complete(_run_health(method, path))
+        return asyncio.run(_run_health(method, path))
 
     def test_get_health_returns_200_without_auth(self):
         status, _, body, called = self._run("GET")
@@ -653,9 +649,7 @@ async def _run_well_known(
 
 class TestWellKnownMiddleware:
     def _run(self, path, method="GET", host="localhost:6970", public_host=None):
-        return asyncio.get_event_loop().run_until_complete(
-            _run_well_known(path, method=method, host=host, public_host=public_host)
-        )
+        return asyncio.run(_run_well_known(path, method=method, host=host, public_host=public_host))
 
     # ------------------------------------------------------------------
     # Handled paths → 200
@@ -740,7 +734,7 @@ class TestWellKnownMiddleware:
         async def send(msg: dict):
             received.append(msg)
 
-        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        asyncio.run(mw(scope, receive, send))
         assert called["value"]
 
     def test_unrelated_path_falls_through(self):
@@ -762,7 +756,7 @@ class TestWellKnownMiddleware:
             received.append(msg)
 
         received: list[dict] = []
-        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        asyncio.run(mw(scope, receive, send))
         assert called["value"]
 
     def test_websocket_scope_falls_through(self):
@@ -776,7 +770,7 @@ class TestWellKnownMiddleware:
         async def send(msg: dict):
             pass
 
-        asyncio.get_event_loop().run_until_complete(mw(scope, receive, send))
+        asyncio.run(mw(scope, receive, send))
         assert called["value"]
 
 
@@ -828,9 +822,7 @@ class TestMiddlewareOrdering:
     """Regression tests for the WellKnown→BearerAuth ordering invariant."""
 
     def _run(self, path, method="GET", auth_header=None):
-        return asyncio.get_event_loop().run_until_complete(
-            _run_stack(path, method=method, auth_header=auth_header)
-        )
+        return asyncio.run(_run_stack(path, method=method, auth_header=auth_header))
 
     def test_well_known_accessible_without_token(self):
         """Core regression: discovery must be reachable even with auth enabled."""
@@ -872,6 +864,6 @@ class TestMiddlewareOrdering:
         async def send(msg: dict):
             received.append(msg)
 
-        asyncio.get_event_loop().run_until_complete(wrong_stack(scope, receive, send))
+        asyncio.run(wrong_stack(scope, receive, send))
         start = next(m for m in received if m["type"] == "http.response.start")
         assert start["status"] == 401, "Wrong order should produce 401 (the issue #17 regression)"
