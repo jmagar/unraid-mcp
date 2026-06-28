@@ -46,7 +46,7 @@ jobs:
 
       # When a release PR was opened/updated, sync uv.lock to the bumped version on
       # that branch. Runs only for release PRs (not when a release is tagged).
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           ref: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
