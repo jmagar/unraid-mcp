@@ -279,6 +279,40 @@ class TestPortGuard:
         assert isinstance(settings.unraid_mcp_port, int)
 
 
+class TestGoogleOAuthSettings:
+    def test_google_oauth_empty_plugin_values_become_none(self) -> None:
+        settings = Settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="",
+            UNRAID_MCP_GOOGLE_BASE_URL="",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="",
+            UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS="",
+            UNRAID_MCP_GOOGLE_STORAGE_DIR="",
+        )
+        assert settings.unraid_mcp_google_client_id is None
+        assert settings.unraid_mcp_google_client_secret is None
+        assert settings.unraid_mcp_google_base_url is None
+        assert settings.unraid_mcp_google_allowed_emails is None
+        assert settings.unraid_mcp_google_allowed_domains is None
+        assert settings.unraid_mcp_google_storage_dir is None
+
+    def test_google_oauth_aliases_populate_model(self) -> None:
+        settings = Settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="client",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS="example.com",
+            UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=True,
+        )
+        assert settings.unraid_mcp_google_client_id == "client"
+        assert settings.unraid_mcp_google_client_secret == "secret"
+        assert settings.unraid_mcp_google_base_url == "https://mcp.example.com"
+        assert settings.unraid_mcp_google_allowed_emails == "owner@example.com"
+        assert settings.unraid_mcp_google_allowed_domains == "example.com"
+        assert settings.unraid_mcp_google_allow_any_user is True
+
+
 @pytest.fixture
 def _reload_settings(
     monkeypatch: pytest.MonkeyPatch,

@@ -175,6 +175,18 @@ class Settings(BaseSettings):
     unraid_mcp_google_required_scopes: str | None = Field(
         default=None, alias="UNRAID_MCP_GOOGLE_REQUIRED_SCOPES"
     )
+    # Authorization allowlist. OAuth proves Google identity; these settings decide
+    # which identities may control this MCP server. At least one allowlist entry is
+    # required unless UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true is explicitly set.
+    unraid_mcp_google_allowed_emails: str | None = Field(
+        default=None, alias="UNRAID_MCP_GOOGLE_ALLOWED_EMAILS"
+    )
+    unraid_mcp_google_allowed_domains: str | None = Field(
+        default=None, alias="UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS"
+    )
+    unraid_mcp_google_allow_any_user: bool = Field(
+        default=False, alias="UNRAID_MCP_GOOGLE_ALLOW_ANY_USER"
+    )
     # OAuth callback path. Defaults to GoogleProvider's "/auth/callback" when unset.
     unraid_mcp_google_redirect_path: str | None = Field(
         default=None, alias="UNRAID_MCP_GOOGLE_REDIRECT_PATH"
@@ -213,6 +225,8 @@ class Settings(BaseSettings):
         "unraid_mcp_google_client_secret",
         "unraid_mcp_google_base_url",
         "unraid_mcp_google_required_scopes",
+        "unraid_mcp_google_allowed_emails",
+        "unraid_mcp_google_allowed_domains",
         "unraid_mcp_google_redirect_path",
         "unraid_mcp_google_jwt_signing_key",
         "unraid_mcp_google_encryption_key",
@@ -293,6 +307,7 @@ class Settings(BaseSettings):
     @field_validator(
         "unraid_mcp_disable_http_auth",
         "unraid_mcp_trust_proxy",
+        "unraid_mcp_google_allow_any_user",
         "unraid_allow_insecure_tls",
         mode="before",
     )
@@ -351,6 +366,9 @@ UNRAID_MCP_GOOGLE_CLIENT_ID: str | None = _settings.unraid_mcp_google_client_id
 UNRAID_MCP_GOOGLE_CLIENT_SECRET: str | None = _settings.unraid_mcp_google_client_secret
 UNRAID_MCP_GOOGLE_BASE_URL: str | None = _settings.unraid_mcp_google_base_url
 UNRAID_MCP_GOOGLE_REQUIRED_SCOPES: str | None = _settings.unraid_mcp_google_required_scopes
+UNRAID_MCP_GOOGLE_ALLOWED_EMAILS: str | None = _settings.unraid_mcp_google_allowed_emails
+UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS: str | None = _settings.unraid_mcp_google_allowed_domains
+UNRAID_MCP_GOOGLE_ALLOW_ANY_USER: bool = _settings.unraid_mcp_google_allow_any_user
 UNRAID_MCP_GOOGLE_REDIRECT_PATH: str | None = _settings.unraid_mcp_google_redirect_path
 UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY: str | None = _settings.unraid_mcp_google_jwt_signing_key
 UNRAID_MCP_GOOGLE_ENCRYPTION_KEY: str | None = _settings.unraid_mcp_google_encryption_key
@@ -461,6 +479,18 @@ def get_config_summary() -> dict[str, Any]:
     from ..core.utils import safe_display_url
 
     is_http = UNRAID_MCP_TRANSPORT in ("streamable-http", "sse")
+    google_oauth_enabled = is_http and bool(
+        UNRAID_MCP_GOOGLE_CLIENT_ID and UNRAID_MCP_GOOGLE_CLIENT_SECRET
+    )
+    http_auth_mode = (
+        "google_oauth"
+        if google_oauth_enabled
+        else "disabled"
+        if is_http and UNRAID_MCP_DISABLE_HTTP_AUTH
+        else "bearer"
+        if is_http
+        else "not_applicable"
+    )
     return {
         "api_url_configured": bool(UNRAID_API_URL),
         "api_url_preview": safe_display_url(UNRAID_API_URL) if UNRAID_API_URL else None,
@@ -474,12 +504,14 @@ def get_config_summary() -> dict[str, Any]:
         "config_valid": is_valid,
         "missing_config": missing if not is_valid else None,
         # Auth fields only meaningful in HTTP mode
-        "http_auth_enabled": is_http and not UNRAID_MCP_DISABLE_HTTP_AUTH,
-        "http_auth_token_set": bool(UNRAID_MCP_BEARER_TOKEN) if is_http else False,
+        "http_auth_enabled": is_http and http_auth_mode != "disabled",
+        "http_auth_mode": http_auth_mode,
+        "http_auth_token_set": bool(UNRAID_MCP_BEARER_TOKEN)
+        if http_auth_mode == "bearer"
+        else None,
         # Google OAuth delegation (when both client id + secret are set, OAuth
         # replaces the bearer token as the HTTP auth mechanism).
-        "google_oauth_enabled": is_http
-        and bool(UNRAID_MCP_GOOGLE_CLIENT_ID and UNRAID_MCP_GOOGLE_CLIENT_SECRET),
+        "google_oauth_enabled": google_oauth_enabled,
     }
 
 

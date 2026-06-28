@@ -29,8 +29,13 @@ two keys is a configuration error — encrypted persistence needs both.
 
 from __future__ import annotations
 
+import contextlib
+import ipaddress
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
+
+import httpx
 
 from ..config import settings as _settings
 from ..config.logging import logger
@@ -40,6 +45,7 @@ from ..config.settings import CREDENTIALS_DIR
 if TYPE_CHECKING:
     from fastmcp.server.auth.providers.google import GoogleProvider
     from key_value.aio.protocols.key_value import AsyncKeyValue
+    from mcp.server.auth.provider import AccessToken, TokenVerifier
 
 
 # Default scopes match the FastMCP Google integration guide: an OpenID Connect
@@ -58,6 +64,23 @@ class GoogleOAuthConfigError(RuntimeError):
     """
 
 
+def _split_list(raw: str | None) -> list[str]:
+    """Split comma/space-separated env values, dropping blanks."""
+    if not raw or not raw.strip():
+        return []
+    return [item.strip() for chunk in raw.split(",") for item in chunk.split() if item.strip()]
+
+
+def _normalize_email_list(raw: str | None) -> set[str]:
+    """Return a lower-cased email allowlist from an env string."""
+    return {item.lower() for item in _split_list(raw)}
+
+
+def _normalize_domain_list(raw: str | None) -> set[str]:
+    """Return lower-cased allowed domains without leading '@'."""
+    return {item.lower().lstrip("@") for item in _split_list(raw)}
+
+
 def google_oauth_enabled() -> bool:
     """Return True when Google OAuth should replace the bearer-token auth.
 
@@ -71,12 +94,137 @@ def google_oauth_enabled() -> bool:
     )
 
 
+def _google_oauth_partially_configured() -> bool:
+    """Return True when one OAuth enablement var is present without the other."""
+    client_id = (_settings.UNRAID_MCP_GOOGLE_CLIENT_ID or "").strip()
+    client_secret = (_settings.UNRAID_MCP_GOOGLE_CLIENT_SECRET or "").strip()
+    return bool(client_id or client_secret) and not bool(client_id and client_secret)
+
+
 def _parse_scopes(raw: str | None) -> list[str]:
     """Split a comma/space-separated scope string, falling back to the defaults."""
     if not raw or not raw.strip():
         return list(_DEFAULT_SCOPES)
     parts = [scope.strip() for chunk in raw.split(",") for scope in chunk.split() if scope.strip()]
     return parts or list(_DEFAULT_SCOPES)
+
+
+def _is_loopback_hostname(hostname: str | None) -> bool:
+    if hostname is None:
+        return False
+    host = hostname.strip("[]").lower()
+    if host == "localhost":
+        return True
+    with contextlib.suppress(ValueError):
+        return ipaddress.ip_address(host).is_loopback
+    return False
+
+
+def _validate_base_url(base_url: str) -> None:
+    """Require HTTPS for OAuth except loopback HTTP development URLs."""
+    parsed = urlparse(base_url)
+    if parsed.scheme == "https" and parsed.netloc:
+        return
+    if parsed.scheme == "http" and parsed.netloc and _is_loopback_hostname(parsed.hostname):
+        return
+    raise GoogleOAuthConfigError(
+        "UNRAID_MCP_GOOGLE_BASE_URL must be an https:// URL. "
+        "http:// is allowed only for localhost/loopback development."
+    )
+
+
+def _validate_redirect_path(path: str | None) -> None:
+    """Validate Google redirect path when configured."""
+    if path is None:
+        return
+    parsed = urlparse(path)
+    if (
+        parsed.scheme
+        or parsed.netloc
+        or parsed.query
+        or parsed.fragment
+        or not path.startswith("/")
+    ):
+        raise GoogleOAuthConfigError(
+            "UNRAID_MCP_GOOGLE_REDIRECT_PATH must be an absolute path such as "
+            "/auth/callback (no scheme, host, query, or fragment)."
+        )
+
+
+def _google_bool(value: object) -> bool:
+    """Google tokeninfo may return bools or string booleans."""
+    if isinstance(value, bool):
+        return value
+    return str(value).lower() in {"true", "1", "yes"}
+
+
+def _email_authorized(email: str, allowed_emails: set[str], allowed_domains: set[str]) -> bool:
+    """Return True when a verified Google email is locally authorized."""
+    email_l = email.lower()
+    domain = email_l.rsplit("@", 1)[-1] if "@" in email_l else ""
+    return email_l in allowed_emails or domain in allowed_domains
+
+
+class _AuthorizedGoogleTokenVerifier:
+    """Wrap Google token verification with local email/domain authorization."""
+
+    def __init__(
+        self,
+        wrapped: TokenVerifier,
+        *,
+        allowed_emails: set[str],
+        allowed_domains: set[str],
+        allow_any_user: bool,
+        timeout_seconds: int = 10,
+    ) -> None:
+        self._wrapped = wrapped
+        self._allowed_emails = allowed_emails
+        self._allowed_domains = allowed_domains
+        self._allow_any_user = allow_any_user
+        self._timeout_seconds = timeout_seconds
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        access_token = await self._wrapped.verify_token(token)
+        if access_token is None:
+            return None
+        if self._allow_any_user:
+            return access_token
+
+        user = await self._fetch_google_identity(token)
+        email = str(user.get("email") or "").strip().lower()
+        if not email or not _google_bool(user.get("email_verified")):
+            logger.warning("Google OAuth rejected token without a verified email")
+            return None
+        if not _email_authorized(email, self._allowed_emails, self._allowed_domains):
+            logger.warning("Google OAuth rejected unauthorized email %s", email)
+            return None
+        return access_token
+
+    async def _fetch_google_identity(self, token: str) -> dict[str, object]:
+        """Fetch token identity data used for local authorization."""
+        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+            response = await client.get(
+                "https://oauth2.googleapis.com/tokeninfo",
+                params={"access_token": token},
+                headers={"User-Agent": "UnraidMCP-Google-OAuth"},
+            )
+            if response.status_code == 200:
+                return dict(response.json())
+
+            logger.debug("Google tokeninfo authorization lookup failed: %s", response.status_code)
+            userinfo = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "UnraidMCP-Google-OAuth",
+                },
+            )
+            if userinfo.status_code == 200:
+                data = dict(userinfo.json())
+                if "verified_email" in data and "email_verified" not in data:
+                    data["email_verified"] = data["verified_email"]
+                return data
+        return {}
 
 
 def _storage_dir() -> Path:
@@ -126,7 +274,11 @@ def _build_encrypted_storage(encryption_key: str) -> AsyncKeyValue:
         key_sanitization_strategy=FileTreeV1KeySanitizationStrategy(storage_dir),
         collection_sanitization_strategy=FileTreeV1CollectionSanitizationStrategy(storage_dir),
     )
-    return FernetEncryptionWrapper(key_value=store, fernet=fernet)
+    return FernetEncryptionWrapper(
+        key_value=store,
+        fernet=fernet,
+        raise_on_decryption_error=False,
+    )
 
 
 def build_google_provider() -> GoogleProvider | None:
@@ -138,7 +290,24 @@ def build_google_provider() -> GoogleProvider | None:
     invalid Fernet key) so startup fails closed with an actionable message.
     """
     if not google_oauth_enabled():
+        if _google_oauth_partially_configured():
+            missing = []
+            if not (_settings.UNRAID_MCP_GOOGLE_CLIENT_ID or "").strip():
+                missing.append("UNRAID_MCP_GOOGLE_CLIENT_ID")
+            if not (_settings.UNRAID_MCP_GOOGLE_CLIENT_SECRET or "").strip():
+                missing.append("UNRAID_MCP_GOOGLE_CLIENT_SECRET")
+            raise GoogleOAuthConfigError(
+                "Google OAuth is partially configured. Set both "
+                "UNRAID_MCP_GOOGLE_CLIENT_ID and UNRAID_MCP_GOOGLE_CLIENT_SECRET, "
+                f"or unset all Google OAuth variables. Missing: {', '.join(missing)}."
+            )
         return None
+    if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+        raise GoogleOAuthConfigError(
+            "UNRAID_MCP_DISABLE_HTTP_AUTH=true conflicts with Google OAuth. "
+            "Unset the Google OAuth variables for gateway-owned auth, or leave "
+            "UNRAID_MCP_DISABLE_HTTP_AUTH=false and let OAuth protect the endpoint."
+        )
 
     from fastmcp.server.auth.providers.google import GoogleProvider
 
@@ -153,13 +322,29 @@ def build_google_provider() -> GoogleProvider | None:
             "(e.g. https://unraid-mcp.example.com) — it must match the Authorized redirect "
             "URI configured for the OAuth client in Google Cloud."
         )
+    _validate_base_url(base_url)
 
     scopes = _parse_scopes(_settings.UNRAID_MCP_GOOGLE_REQUIRED_SCOPES)
     redirect_path = (_settings.UNRAID_MCP_GOOGLE_REDIRECT_PATH or "").strip() or None
+    _validate_redirect_path(redirect_path)
+
+    allowed_emails = _normalize_email_list(_settings.UNRAID_MCP_GOOGLE_ALLOWED_EMAILS)
+    allowed_domains = _normalize_domain_list(_settings.UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS)
+    allow_any_user = bool(_settings.UNRAID_MCP_GOOGLE_ALLOW_ANY_USER)
+    if not allow_any_user and not (allowed_emails or allowed_domains):
+        raise GoogleOAuthConfigError(
+            "Google OAuth is enabled but no local identity allowlist is configured. "
+            "Set UNRAID_MCP_GOOGLE_ALLOWED_EMAILS and/or "
+            "UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS, or explicitly set "
+            "UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true for a trusted/private deployment."
+        )
 
     jwt_signing_key = _settings.UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY
     encryption_key = _settings.UNRAID_MCP_GOOGLE_ENCRYPTION_KEY
-    client_storage: AsyncKeyValue | None = None
+    from key_value.aio.stores.memory import MemoryStore
+
+    client_storage: AsyncKeyValue = MemoryStore()
+    persistence_label = "in-memory"
     if jwt_signing_key or encryption_key:
         if not (jwt_signing_key and encryption_key):
             raise GoogleOAuthConfigError(
@@ -169,6 +354,7 @@ def build_google_provider() -> GoogleProvider | None:
                 "memory (cleared on restart)."
             )
         client_storage = _build_encrypted_storage(encryption_key)
+        persistence_label = "encrypted-filetree"
 
     # Pass every optional argument explicitly. ``redirect_path=None`` selects the
     # provider's default ("/auth/callback"); ``client_storage``/``jwt_signing_key``
@@ -183,12 +369,23 @@ def build_google_provider() -> GoogleProvider | None:
         client_storage=client_storage,
         jwt_signing_key=jwt_signing_key,
     )
+    setattr(  # noqa: B010 - private FastMCP hook; typed assignment is rejected by ty.
+        provider,
+        "_token_validator",
+        _AuthorizedGoogleTokenVerifier(
+            provider._token_validator,
+            allowed_emails=allowed_emails,
+            allowed_domains=allowed_domains,
+            allow_any_user=allow_any_user,
+        ),
+    )
 
     logger.info(
-        "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s)",
+        "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s, authz=%s)",
         base_url,
         ",".join(scopes),
         redirect_path or "/auth/callback",
-        "encrypted-filetree" if client_storage is not None else "in-memory",
+        persistence_label,
+        "allow-any-user" if allow_any_user else "email/domain allowlist",
     )
     return provider

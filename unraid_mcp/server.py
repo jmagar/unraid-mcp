@@ -164,11 +164,14 @@ async def lifespan(_server: "FastMCP") -> AsyncIterator[None]:
 # pre-shared bearer-token auth at the HTTP layer. Built once here so it is attached
 # to the FastMCP instance for `fastmcp run server.py` discovery too. A misconfig
 # (e.g. missing base_url) fails closed with a fatal, actionable message.
-try:
-    _google_auth_provider = build_google_provider()
-except GoogleOAuthConfigError as exc:
-    print(f"FATAL: {exc}", file=sys.stderr)
-    sys.exit(1)
+if _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
+    try:
+        _google_auth_provider = build_google_provider()
+    except GoogleOAuthConfigError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        sys.exit(1)
+else:
+    _google_auth_provider = None
 
 # Initialize FastMCP instance — ASGI-level bearer auth added at run time via
 # mcp.run(middleware=[...]) so it fires before any MCP protocol processing. When

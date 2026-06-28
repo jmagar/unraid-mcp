@@ -111,7 +111,7 @@ just setup
 | `UNRAID_API_URL` | Yes | — | GraphQL endpoint URL, e.g. `https://tower.local/graphql` |
 | `UNRAID_API_KEY` | Yes | — | Unraid API key (see below) |
 | `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or `sse` (deprecated) |
-| `UNRAID_MCP_HOST` | No | `0.0.0.0` | Bind address for HTTP transports |
+| `UNRAID_MCP_HOST` | No | `127.0.0.1` bare metal; Docker sets `0.0.0.0` | Bind address for HTTP transports |
 | `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
 | `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |

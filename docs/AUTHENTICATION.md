@@ -88,7 +88,9 @@ to distribute. Leave these unset to keep bearer-token auth (the default).
    create an **OAuth 2.0 Client ID** of type **Web application**.
 2. Add `<UNRAID_MCP_GOOGLE_BASE_URL>/auth/callback` as an **Authorized redirect URI**
    (it must match exactly; HTTPS is required in production).
-3. Set the env vars below and restart the server.
+3. Configure an allowed email/domain list for the Google users who may control this
+   MCP server.
+4. Set the env vars below and restart the server.
 
 ### Environment variables
 
@@ -98,6 +100,9 @@ to distribute. Leave these unset to keep bearer-token auth (the default).
 | `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | *(none)* | Google OAuth Client Secret (`GOCSPX-…`). |
 | `UNRAID_MCP_GOOGLE_BASE_URL` | *(none)* | **Required when enabled.** This server's public base URL; must match the Google redirect URI host. |
 | `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | `openid` + `userinfo.email` | Comma/space-separated OAuth scopes. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` | *(none)* | Comma/space-separated verified Google emails allowed to use this server. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS` | *(none)* | Comma/space-separated verified email domains allowed to use this server. |
+| `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER` | `false` | Explicit escape hatch for private deployments that intentionally allow any Google account. |
 | `UNRAID_MCP_GOOGLE_REDIRECT_PATH` | `/auth/callback` | OAuth callback path; must match the Google config. |
 | `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` | *(none)* | With the encryption key, enables persistent token storage. |
 | `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` | *(none)* | Fernet key for encrypting persisted tokens at rest. |
@@ -110,6 +115,10 @@ re-authenticate). To persist them across restarts, set **both**
 `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` and `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY`. Tokens are
 then written, encrypted-at-rest, to a `FileTreeStore` on disk — no Redis or other
 service is needed. Setting only one of the two keys is a fatal configuration error.
+
+OAuth identity is not authorization by itself. Unless
+`UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true` is explicitly set, startup fails until at
+least one allowed email or domain is configured.
 
 Generate the encryption key:
 

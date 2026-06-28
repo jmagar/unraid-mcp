@@ -11,7 +11,7 @@
 
 | Variable | Required | Default | Sensitive | Description |
 |----------|----------|---------|-----------|-------------|
-| `UNRAID_MCP_HOST` | no | `0.0.0.0` | no | Bind address for HTTP transport |
+| `UNRAID_MCP_HOST` | no | `127.0.0.1` bare metal; Docker image sets `0.0.0.0` | no | Bind address for HTTP transport |
 | `UNRAID_MCP_PORT` | no | `6970` | no | HTTP server port (1-65535) |
 | `UNRAID_MCP_TRANSPORT` | no | `streamable-http` | no | Transport: `streamable-http`, `stdio`, or `sse` |
 
@@ -33,6 +33,9 @@ Setting both client id and secret delegates HTTP auth to Google OAuth (FastMCP `
 | `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | no | -- | yes | Google OAuth Client Secret (`GOCSPX-…`). |
 | `UNRAID_MCP_GOOGLE_BASE_URL` | conditional | -- | no | Required when OAuth is enabled. Public base URL of this server; must match the Google redirect URI host. |
 | `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | no | `openid` + `userinfo.email` | no | Comma/space-separated OAuth scopes. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` | conditional | -- | no | Verified Google emails allowed to use this MCP server. Required unless domains or allow-any-user is set. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS` | conditional | -- | no | Verified email domains allowed to use this MCP server. Required unless emails or allow-any-user is set. |
+| `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER` | no | `false` | no | Explicitly allow any verified Google account. Use only for private/trusted deployments. |
 | `UNRAID_MCP_GOOGLE_REDIRECT_PATH` | no | `/auth/callback` | no | OAuth callback path; must match the Google client config. |
 | `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` | conditional | -- | yes | With the encryption key, enables persistent (restart-surviving) token storage. Both or neither. |
 | `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` | conditional | -- | yes | Fernet key encrypting persisted tokens at rest. Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
