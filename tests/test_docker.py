@@ -128,25 +128,21 @@ class TestDockerActions:
         assert result["success"] is True
         assert result["subaction"] == "restart"
 
-    async def test_restart_stopped_container_falls_back_to_start(
+    async def test_restart_stopped_container_error_is_not_masked(
         self, _mock_graphql: AsyncMock
     ) -> None:
         cid = "a" * 64 + ":local"
         _mock_graphql.side_effect = [
             {"docker": {"containers": [{"id": cid, "names": ["plex"]}]}},
             ToolError("GraphQL API error: Container not running"),
-            {"docker": {"start": {"id": cid, "state": "running"}}},
         ]
         tool_fn = _make_tool()
-        result = await tool_fn(action="docker", subaction="restart", container_id="plex")
-        assert result["success"] is True
-        assert result["subaction"] == "restart"
-        assert result["container"] == {"id": cid, "state": "running"}
-        assert "started it instead" in result["note"]
+        with pytest.raises(ToolError, match="Container not running"):
+            await tool_fn(action="docker", subaction="restart", container_id="plex")
         assert _mock_graphql.call_args_list[1].kwargs["operation_context"] == {
             "operation": "restart"
         }
-        assert _mock_graphql.call_args_list[2].kwargs["operation_context"] == {"operation": "start"}
+        assert _mock_graphql.call_count == 2
 
     async def test_details_found(self, _mock_graphql: AsyncMock) -> None:
         # details now fetches a single container by id: the first call resolves

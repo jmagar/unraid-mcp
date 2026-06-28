@@ -320,6 +320,57 @@ class TestInfoToolRequests:
         assert "GetMetrics" in body["query"]
 
     @respx.mock
+    async def test_network_metrics_sends_correct_query(self) -> None:
+        route = respx.post(API_URL).mock(
+            return_value=_graphql_response(
+                {
+                    "metrics": {
+                        "network": {
+                            "interface": "eth0",
+                            "rxBytesPerSec": 1.0,
+                            "txBytesPerSec": 2.0,
+                        }
+                    }
+                }
+            )
+        )
+        tool = self._get_tool()
+        await tool(action="system", subaction="network_metrics")
+        body = _extract_request_body(route.calls.last.request)
+        assert body.get("variables") is None
+        assert "GetNetworkMetrics" in body["query"]
+        assert "metrics" in body["query"]
+        assert "network" in body["query"]
+        assert "rxBytesPerSec" in body["query"]
+        assert "txBytesPerSec" in body["query"]
+
+    @respx.mock
+    async def test_network_interfaces_sends_correct_query(self) -> None:
+        route = respx.post(API_URL).mock(
+            return_value=_graphql_response(
+                {
+                    "networkInterfaces": [
+                        {
+                            "id": "net:eth0",
+                            "name": "eth0",
+                            "ipv4Addresses": [{"address": "10.1.0.2", "cidr": 24}],
+                            "ipv6Addresses": [],
+                        }
+                    ]
+                }
+            )
+        )
+        tool = self._get_tool()
+        await tool(action="system", subaction="network_interfaces")
+        body = _extract_request_body(route.calls.last.request)
+        assert body.get("variables") is None
+        assert "GetNetworkInterfaces" in body["query"]
+        assert "networkInterfaces" in body["query"]
+        assert "ipv4Addresses" in body["query"]
+        assert "ipv6Addresses" in body["query"]
+        assert "rxBytesPerSec" not in body["query"]
+
+    @respx.mock
     async def test_ups_device_sends_variables(self) -> None:
         route = respx.post(API_URL).mock(
             return_value=_graphql_response({"upsDeviceById": {"id": "ups1", "model": "APC"}})

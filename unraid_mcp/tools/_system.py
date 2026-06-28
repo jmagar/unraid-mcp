@@ -362,7 +362,12 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
             return dict(values) if isinstance(values, dict) else {"raw": values}
         if subaction == "network_metrics":
             network = safe_get(data, "metrics", "network", default=None)
-            return dict(network) if isinstance(network, dict) else {}
+            if not isinstance(network, dict):
+                raise ToolError(
+                    "Unraid API returned no metrics.network payload for "
+                    "system/network_metrics. Check API version, permissions, and server logs."
+                )
+            return dict(network)
         if subaction == "server":
             info = data.get("info") or {}
             summary: dict[str, Any] = {}

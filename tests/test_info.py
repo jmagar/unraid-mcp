@@ -248,6 +248,15 @@ class TestUnraidInfoTool:
             "txBytesPerSec": 2048.0,
         }
 
+    @pytest.mark.parametrize("payload", [{}, {"metrics": None}, {"metrics": {"network": []}}])
+    async def test_network_metrics_requires_network_payload(
+        self, _mock_graphql: AsyncMock, payload: dict
+    ) -> None:
+        _mock_graphql.return_value = payload
+        tool_fn = _make_tool()
+        with pytest.raises(ToolError, match="metrics\\.network payload"):
+            await tool_fn(action="system", subaction="network_metrics")
+
     async def test_connect_action_raises_tool_error(self, _mock_graphql: AsyncMock) -> None:
         tool_fn = _make_tool()
         with pytest.raises(ToolError, match="Invalid subaction 'connect'"):

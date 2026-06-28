@@ -423,6 +423,10 @@ run_phase4() {
     return
   fi
 
+  local metrics_network_schema_re='Cannot query field "network" on type "Metrics"|Cannot query field '\''network'\'' on type '\''Metrics'\'''
+  local network_interfaces_schema_re='Cannot query field "networkInterfaces" on type "Query"|Cannot query field '\''networkInterfaces'\'' on type '\''Query'\'''
+  local system_metrics_network_schema_re='Cannot query field "systemMetricsNetwork" on type "Subscription"|Cannot query field '\''systemMetricsNetwork'\'' on type '\''Subscription'\'''
+
   call_unraid "unraid health/check"           "health"       "check"
   call_unraid "unraid health/test_connection" "health"       "test_connection"
   call_unraid "unraid health/diagnose"        "health"       "diagnose"
@@ -433,7 +437,7 @@ run_phase4() {
   call_unraid "unraid system/variables"       "system"       "variables"
   call_unraid "unraid system/metrics"         "system"       "metrics"
   call_unraid_optional "unraid system/network_metrics" "system" "network_metrics" \
-    'HTTP 400|Cannot query field|network' \
+    "$metrics_network_schema_re" \
     "metrics.network requires newer/compatible Unraid API schema"
   call_unraid "unraid system/services"        "system"       "services"
   call_unraid "unraid system/display"         "system"       "display"
@@ -450,7 +454,7 @@ run_phase4() {
     'No UPS data returned from apcaccess' \
     "UPS service has no data on this appliance"
   call_unraid_optional "unraid system/network_interfaces" "system" "network_interfaces" \
-    'HTTP 400|Cannot query field|networkInterfaces' \
+    "$network_interfaces_schema_re" \
     "networkInterfaces requires newer/compatible Unraid API schema"
   call_unraid "unraid array/parity_status"    "array"        "parity_status"
   call_unraid "unraid array/parity_history"   "array"        "parity_history"
@@ -483,11 +487,11 @@ run_phase4() {
   call_unraid "unraid live/cpu_telemetry"     "live"         "cpu_telemetry"
   call_unraid "unraid live/notifications_overview" "live"    "notifications_overview"
   call_unraid_optional "unraid live/network_metrics" "live"  "network_metrics" \
-    'Cannot query field|systemMetricsNetwork' \
+    "$system_metrics_network_schema_re" \
     "systemMetricsNetwork requires newer/compatible Unraid API schema"
   call_unraid_optional "unraid subscriptions/test_query systemMetricsNetwork" \
     "subscriptions" "test_query" \
-    'Cannot query field|systemMetricsNetwork' \
+    "$system_metrics_network_schema_re" \
     "systemMetricsNetwork requires newer/compatible Unraid API schema" \
     '{"subscription_query":"subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"}'
 
