@@ -113,11 +113,36 @@ just setup
 | `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or `sse` (deprecated) |
 | `UNRAID_MCP_HOST` | No | `127.0.0.1` bare metal; Docker sets `0.0.0.0` | Bind address for HTTP transports |
 | `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
+| `UNRAID_MCP_MAX_RESPONSE_BYTES` | No | `40000` | Max serialized tool-response size; over-cap responses return a parseable truncation marker |
 | `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |
+| `UNRAID_MCP_TRUST_PROXY` | Conditional | `false` | Required when disabling HTTP auth while binding a non-loopback interface |
+| `UNRAID_MCP_GOOGLE_CLIENT_ID` | No | — | Google OAuth client ID; setting both client ID and secret replaces Bearer auth for HTTP transports |
+| `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | No | — | Google OAuth client secret |
+| `UNRAID_MCP_GOOGLE_BASE_URL` | Conditional | — | Public server base URL, required when Google OAuth is enabled |
+| `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | No | `openid` + `userinfo.email` | Comma/space-separated OAuth scopes |
+| `UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` | Conditional | — | Verified Google emails allowed to use the MCP server |
+| `UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS` | Conditional | — | Verified Google email domains allowed to use the MCP server |
+| `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER` | No | `false` | Explicitly allow any verified Google account; only for private/trusted deployments |
+| `UNRAID_MCP_GOOGLE_REDIRECT_PATH` | No | `/auth/callback` | OAuth callback path configured in Google Cloud |
+| `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` | Conditional | — | With the encryption key, enables restart-surviving encrypted token storage |
+| `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` | Conditional | — | Fernet key for encrypted OAuth token storage |
+| `UNRAID_MCP_GOOGLE_STORAGE_DIR` | No | `~/.unraid-mcp/oauth-tokens` | Directory for persisted encrypted OAuth tokens |
+| `UNRAID_VERIFY_SSL` | No | `true` | Upstream Unraid API TLS verification; may also be a CA-bundle path |
+| `UNRAID_ALLOW_INSECURE_TLS` | Conditional | `false` | Required second opt-in when `UNRAID_VERIFY_SSL=false` |
+| `UNRAID_MCP_LOG_LEVEL` | No | `INFO` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
+| `UNRAID_MCP_LOG_FILE` | No | `unraid-mcp.log` | Log filename under `logs/` or `/app/logs/` in Docker |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | No | `true` | Auto-start live WebSocket subscriptions on boot |
+| `UNRAID_MAX_RECONNECT_ATTEMPTS` | No | `10` | Max WebSocket reconnect attempts |
+| `UNRAID_AUTOSTART_LOG_PATH` | No | auto-detect | Log file path for the log-tail subscription |
+| `UNRAID_CREDENTIALS_DIR` | No | `~/.unraid-mcp` | Override credentials directory |
 | `DOCKER_NETWORK` | No | — | External Docker network to join; leave blank for default bridge |
 | `PGID` | No | `1000` | Container process GID |
 | `PUID` | No | `1000` | Container process UID |
+
+For the full reference, including OAuth persistence and `.env` loading order, see
+[docs/mcp/ENV.md](docs/mcp/ENV.md), [docs/CONFIG.md](docs/CONFIG.md), and
+[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
 
 ### How to find UNRAID_API_KEY
 
@@ -136,6 +161,20 @@ These are two separate credentials with different purposes:
 ### UNRAID_MCP_DISABLE_HTTP_AUTH
 
 Set this to `true` when a reverse proxy (nginx, Caddy, Traefik, SWAG) already handles authentication before requests reach the MCP server. Disabling the built-in check removes the Bearer token requirement at the MCP layer. Do not expose the server directly to untrusted networks with this flag enabled.
+
+If auth is disabled and `UNRAID_MCP_HOST` binds a non-loopback interface, the server
+also requires `UNRAID_MCP_TRUST_PROXY=true` as an explicit assertion that a trusted
+fronting gateway enforces authentication.
+
+### Google OAuth for HTTP transports
+
+Set both `UNRAID_MCP_GOOGLE_CLIENT_ID` and
+`UNRAID_MCP_GOOGLE_CLIENT_SECRET` to replace static Bearer auth with Google OAuth.
+OAuth requires `UNRAID_MCP_GOOGLE_BASE_URL` and at least one authorization allowlist
+entry (`UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` or
+`UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS`) unless
+`UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true` is explicitly set. Google OAuth and
+`UNRAID_MCP_DISABLE_HTTP_AUTH=true` are mutually exclusive.
 
 ### Transport modes
 

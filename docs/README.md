@@ -4,7 +4,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/unraid-mcp)](https://pypi.org/project/unraid-mcp/) [![ghcr.io](https://img.shields.io/badge/ghcr.io-jmagar%2Funraid--mcp-blue?logo=docker)](https://github.com/jmagar/unraid-mcp/pkgs/container/unraid-mcp)
 
-MCP server for Unraid NAS management. Exposes a single unified `unraid` tool with 19 action domains and 175 subactions, backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
+MCP server for Unraid NAS management. Exposes a single unified `unraid` tool with 19 action domains and 178 subactions, backed by Unraid's GraphQL API and real-time WebSocket subscriptions.
 
 ## Overview
 
@@ -12,7 +12,7 @@ A single MCP tool is exposed:
 
 | Tool | Purpose |
 | --- | --- |
-| `unraid` | Unified action/subaction router for all operations (19 actions, 175 subactions). The Markdown reference and WebSocket diagnostics, which used to be standalone tools, are now the `help` and `subscriptions` actions of this tool. |
+| `unraid` | Unified action/subaction router for all operations (19 actions, 178 subactions). The Markdown reference and WebSocket diagnostics, which used to be standalone tools, are now the `help` and `subscriptions` actions of this tool. |
 
 Discover the full surface with `unraid(action="help")`. WebSocket subscription diagnostics are available via `unraid(action="subscriptions", subaction="diagnose")` and `unraid(action="subscriptions", subaction="test_query", subscription_query=...)`.
 
@@ -39,7 +39,7 @@ Single entry point for all Unraid operations. Select the operation with `action`
 
 | Action | Subactions | Description |
 | --- | --- | --- |
-| `system` (23) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones` | Server info, metrics, network, UPS |
+| `system` (25) | `overview`, `array`, `network`, `registration`, `variables`, `metrics`, `network_metrics`, `services`, `display`, `display_details`, `config`, `online`, `owner`, `settings`, `server`, `server_details`, `servers`, `network_access_urls`, `flash`, `ups_devices`, `ups_device`, `ups_config`, `server_time`, `timezones`, `network_interfaces` | Server info, metrics, network, UPS |
 | `health` (4) | `check`, `test_connection`, `diagnose`, `setup` | Health checks, connection test, credential setup |
 | `array` (14) | `parity_status`, `parity_history`, `assignable_disks`, `parity_start`, `parity_pause`, `parity_resume`, `parity_cancel`, `start_array`, `stop_array`\*, `add_disk`, `remove_disk`\*, `mount_disk`, `unmount_disk`, `clear_disk_stats`\* | Parity checks, array lifecycle, disk operations |
 | `disk` (6) | `shares`, `disks`, `disk_details`, `log_files`, `logs`, `flash_backup`\* | Shares, physical disks, log files |
@@ -55,7 +55,7 @@ Single entry point for all Unraid operations. Select the operation with `action`
 | `oidc` (5) | `providers`, `provider`, `configuration`, `public_providers`, `validate_session` | OIDC/SSO provider management |
 | `onboarding` (11) | `internal_boot_context`, `complete`, `open`, `close`, `resume`, `bypass`, `reset`\*, `set_override`, `clear_override`, `refresh_internal_boot_context`, `create_internal_boot_pool`\* | First-boot / onboarding state |
 | `user` (1) | `me` | Current authenticated user |
-| `live` (16) | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `notification_feed`, `log_tail`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `plugin_install_updates` | Real-time WebSocket subscription snapshots |
+| `live` (17) | `cpu`, `memory`, `cpu_telemetry`, `array_state`, `parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `notification_feed`, `log_tail`, `owner`, `server_status`, `display`, `docker_container_stats`, `temperature`, `network_metrics`, `plugin_install_updates` | Real-time WebSocket subscription snapshots |
 | `subscriptions` (2) | `diagnose`, `test_query` (needs `subscription_query=`) | WebSocket subscription diagnostics |
 | `help` (0) | _(no subaction)_ | Returns the full Markdown action/subaction reference |
 
@@ -76,8 +76,8 @@ unraid(action="help")
 ### Marketplace
 
 ```bash
-/plugin marketplace add jmagar/claude-homelab
-/plugin install unraid-mcp @jmagar-claude-homelab
+/plugin marketplace add jmagar/unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
 ```
 
 ### Local development

@@ -4,14 +4,14 @@
 
 | Marketplace | Identifier | Install method |
 |-------------|-----------|----------------|
-| Claude Plugin Marketplace | `jmagar/unraid-mcp` (via `jmagar/claude-homelab`) | `/plugin install unraid-mcp @jmagar-claude-homelab` |
+| Claude Plugin Marketplace | `jmagar/unraid-mcp` | `/plugin install unraid-mcp@unraid-mcp` |
 | MCP Registry | `tv.tootie/unraid-mcp` | Auto-discovery by MCP clients |
 | PyPI | `unraid-mcp` | `pip install unraid-mcp` or `uvx unraid-mcp` |
 | GitHub Container Registry | `ghcr.io/jmagar/unraid-mcp` | `docker pull ghcr.io/jmagar/unraid-mcp` |
 
 ## Claude Plugin Marketplace
 
-unraid-mcp is an external plugin in the `jmagar/claude-homelab` marketplace:
+unraid-mcp ships its own Claude Code marketplace manifest at `.claude-plugin/marketplace.json`:
 
 ```json
 {
@@ -30,10 +30,10 @@ unraid-mcp is an external plugin in the `jmagar/claude-homelab` marketplace:
 
 ```bash
 # Add the marketplace (one-time)
-/plugin marketplace add jmagar/claude-homelab
+/plugin marketplace add jmagar/unraid-mcp
 
 # Install the plugin
-/plugin install unraid-mcp @jmagar-claude-homelab
+/plugin install unraid-mcp@unraid-mcp
 ```
 
 ## MCP Registry

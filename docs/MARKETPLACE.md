@@ -14,15 +14,16 @@ The marketplace catalog that lists all available plugins in this repository.
 - Plugin catalog with the "unraid" plugin
 - Categories and tags for discoverability
 
-### 2. Plugin Manifest (`.claude-plugin/plugin.json`)
+### 2. Plugin Manifest (`plugins/unraid/.claude-plugin/plugin.json`)
 The individual plugin configuration for the Unraid MCP server.
 
-**Location:** `.claude-plugin/plugin.json`
+**Location:** `plugins/unraid/.claude-plugin/plugin.json`
 
 **Contents:**
-- Plugin name (`unraid`), version (`1.1.2`), author
+- Plugin name (`unraid-mcp`), release-please-managed version, author
 - Repository and homepage links
-- `mcpServers` block that configures the server to run via `uv run unraid-mcp-server` in stdio mode
+- `mcpServers` reference to `plugins/unraid/.mcp.json`, which runs the published `uvx unraid-mcp` server in stdio mode
+- `userConfig` fields for `UNRAID_API_URL` and `UNRAID_API_KEY`
 
 ## MCP Tools Exposed
 
@@ -30,7 +31,7 @@ The plugin registers **a single MCP tool**:
 
 | Tool | Purpose |
 |------|---------|
-| `unraid` | The only tool — `action` (domain) + `subaction` (operation) routing, 175 subactions across 19 actions. WebSocket diagnostics and the Markdown reference are the `subscriptions` and `help` actions of this tool. |
+| `unraid` | The only tool — `action` (domain) + `subaction` (operation) routing, 178 subactions across 19 actions. WebSocket diagnostics and the Markdown reference are the `subscriptions` and `help` actions of this tool. |
 
 ### Calling Convention
 
@@ -77,7 +78,7 @@ Once pushed to GitHub, users install via:
 /plugin marketplace add jmagar/unraid-mcp
 
 # Install the Unraid plugin
-/plugin install unraid @unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
 ```
 
 ### Method 2: Local Installation (Development)
@@ -89,7 +90,7 @@ For testing locally before publishing:
 /plugin marketplace add /home/jmagar/workspace/unraid-mcp
 
 # Install the plugin
-/plugin install unraid @unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
 ```
 
 ### Method 3: Direct URL
@@ -124,9 +125,19 @@ Exits 0 on success, 1 if any check fails.
 
 ```text
 unraid-mcp/
-├── .claude-plugin/          # Plugin manifest + marketplace manifest
-│   ├── plugin.json          # Plugin configuration (name, version, mcpServers)
-│   └── marketplace.json     # Marketplace catalog
+├── .claude-plugin/
+│   └── marketplace.json     # Claude Code marketplace catalog
+├── .agents/plugins/
+│   └── marketplace.json     # Codex marketplace catalog
+├── plugins/unraid/
+│   ├── .claude-plugin/
+│   │   ├── plugin.json      # Claude Code plugin manifest
+│   │   └── README.md
+│   ├── .codex-plugin/
+│   │   └── plugin.json      # Codex plugin manifest
+│   ├── .mcp.json            # Shared MCP server definition
+│   ├── hooks/               # SessionStart / ConfigChange hooks
+│   └── skills/unraid/       # Client-facing skill docs and references
 ├── unraid_mcp/              # Python package (the actual MCP server)
 │   ├── main.py              # Entry point
 │   ├── server.py            # FastMCP server registration
@@ -158,29 +169,26 @@ unraid-mcp/
 
 Before publishing to GitHub:
 
-1. **Update Version Numbers** (must be in sync)
-   - `pyproject.toml` → `version = "X.Y.Z"` under `[project]`
-   - `.claude-plugin/plugin.json` → `"version": "X.Y.Z"`
-   - `.claude-plugin/marketplace.json` → `"version"` in both `metadata` and `plugins[]`
+1. **Let release-please update version-bearing files**
+   - Do not bump versions by hand.
+   - release-please keeps `pyproject.toml`, plugin manifests, extension manifests, and `CHANGELOG.md` in sync.
 
 3. **Test Locally**
    ```bash
    /plugin marketplace add .
-   /plugin install unraid @unraid-mcp
+   /plugin install unraid-mcp@unraid-mcp
    ```
 
 4. **Commit and Push**
    ```bash
-   git add .claude-plugin/
-   git commit -m "chore: bump marketplace to vX.Y.Z"
+   git add .claude-plugin/ .agents/plugins/ plugins/unraid/ gemini-extension.json
+   git commit -m "docs: update marketplace documentation"
    git push origin main
    ```
 
-5. **Create Release Tag**
-   ```bash
-   git tag -a vX.Y.Z -m "Release vX.Y.Z"
-   git push origin vX.Y.Z
-   ```
+5. **Cut releases via release-please**
+   - Merge the release-please PR.
+   - The tag triggers PyPI, GHCR, and MCP Registry publication workflows.
 
 ## User Experience
 
@@ -216,12 +224,13 @@ After installation, users can:
 To release a new version:
 
 1. Make changes to the plugin code
-2. Update version in `pyproject.toml`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json`
-3. Commit and push
+2. Commit and push with Conventional Commit messages
+3. Merge the release-please PR when ready
 
 Users with the plugin installed will see the update available and can upgrade:
 ```bash
 /plugin update unraid
+/plugin update unraid-mcp
 ```
 
 ## Support

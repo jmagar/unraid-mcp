@@ -44,11 +44,13 @@ The `docker-compose.yaml` provides:
 
 ### Environment
 
-The container reads from `~/.claude-homelab/.env` via `env_file`. Required variables:
+The container reads from `~/.unraid-mcp/.env` via `env_file`. Required variables:
 
 ```bash
 UNRAID_API_URL=https://your-unraid-server
 UNRAID_API_KEY=your_api_key
+# Required for HTTP Bearer auth. Leave unset only when using Google OAuth or
+# UNRAID_MCP_DISABLE_HTTP_AUTH=true behind a trusted proxy.
 UNRAID_MCP_BEARER_TOKEN=your_bearer_token
 ```
 
@@ -106,7 +108,7 @@ The `entrypoint.sh` validates required environment variables before starting the
 
 - `UNRAID_API_URL` -- always required
 - `UNRAID_API_KEY` -- always required
-- `UNRAID_MCP_BEARER_TOKEN` -- required for HTTP transport with auth enabled
+- `UNRAID_MCP_BEARER_TOKEN` -- required for HTTP transport with auth enabled unless Google OAuth is configured
 
 If any are missing, the container exits with a descriptive error listing the missing variables.
 
