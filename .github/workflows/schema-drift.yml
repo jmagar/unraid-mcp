@@ -93,14 +93,14 @@ jobs:
           max_body_bytes=60000
           append_with_budget() {
             file="$1"
-            label="$2"
+            section_label="$2"
             reserve="$3"
             current_bytes="$(wc -c < issue-body.md)"
             remaining_bytes="$((max_body_bytes - current_bytes - reserve))"
             if [ "$remaining_bytes" -le 0 ]; then
               {
                 echo
-                echo "_${label} omitted to keep this issue body under ${max_body_bytes} bytes._"
+                echo "_${section_label} omitted to keep this issue body under ${max_body_bytes} bytes._"
                 echo "_See the workflow artifact for the complete content._"
               } >> issue-body.md
               return
@@ -112,7 +112,7 @@ jobs:
               {
                 echo
                 echo
-                echo "_${label} truncated to keep this issue body under ${max_body_bytes} bytes._"
+                echo "_${section_label} truncated to keep this issue body under ${max_body_bytes} bytes._"
                 echo "_See the workflow artifact for the complete content._"
               } >> issue-body.md
             else
