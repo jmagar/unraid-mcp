@@ -1,0 +1,509 @@
+"""Tests for the optional Google OAuth authentication path.
+
+Covers:
+  - google_oauth_enabled() gating on client id + secret
+  - build_google_provider() returns None when disabled (default deployment)
+  - scope parsing (default + custom comma/space separated)
+  - fail-closed config errors: missing base_url, partial persistence config,
+    invalid Fernet key
+  - in-memory vs encrypted-on-disk (FileTreeStore) provider construction
+  - run_server() omits the bearer/well-known ASGI middleware when OAuth is active
+"""
+
+from __future__ import annotations
+
+import contextlib
+import importlib
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from mcp.server.auth.provider import AccessToken
+
+import unraid_mcp.config.settings as s
+from unraid_mcp.core.google_auth import (
+    GoogleOAuthConfigError,
+    _AuthorizedGoogleTokenVerifier,
+    _parse_scopes,
+    build_google_provider,
+    google_oauth_enabled,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_GOOGLE_ATTRS = (
+    "UNRAID_MCP_GOOGLE_CLIENT_ID",
+    "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
+    "UNRAID_MCP_GOOGLE_BASE_URL",
+    "UNRAID_MCP_GOOGLE_REQUIRED_SCOPES",
+    "UNRAID_MCP_GOOGLE_ALLOWED_EMAILS",
+    "UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS",
+    "UNRAID_MCP_GOOGLE_ALLOW_ANY_USER",
+    "UNRAID_MCP_GOOGLE_REDIRECT_PATH",
+    "UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY",
+    "UNRAID_MCP_GOOGLE_ENCRYPTION_KEY",
+    "UNRAID_MCP_GOOGLE_STORAGE_DIR",
+)
+
+
+@contextlib.contextmanager
+def _google_settings(**overrides):
+    """Temporarily set UNRAID_MCP_GOOGLE_* settings globals, restoring after."""
+    originals = {name: getattr(s, name) for name in _GOOGLE_ATTRS}
+    try:
+        # Clear all first so each test starts from a known (disabled) baseline.
+        for name in _GOOGLE_ATTRS:
+            setattr(s, name, None)
+        for name, value in overrides.items():
+            setattr(s, name, value)
+        yield
+    finally:
+        for name, value in originals.items():
+            setattr(s, name, value)
+
+
+def _fernet_key() -> str:
+    from cryptography.fernet import Fernet
+
+    return Fernet.generate_key().decode()
+
+
+# ---------------------------------------------------------------------------
+# Enable gate
+# ---------------------------------------------------------------------------
+
+
+class TestEnableGate:
+    def test_disabled_by_default(self):
+        with _google_settings():
+            assert google_oauth_enabled() is False
+            assert build_google_provider() is None
+
+    def test_disabled_with_only_client_id(self):
+        with (
+            _google_settings(UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com"),
+            pytest.raises(GoogleOAuthConfigError, match="partially configured"),
+        ):
+            assert google_oauth_enabled() is False
+            build_google_provider()
+
+    def test_disabled_with_only_secret(self):
+        with (
+            _google_settings(UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret"),
+            pytest.raises(GoogleOAuthConfigError, match="partially configured"),
+        ):
+            assert google_oauth_enabled() is False
+            build_google_provider()
+
+    def test_empty_strings_do_not_enable(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="   ",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="",
+        ):
+            assert google_oauth_enabled() is False
+
+    def test_enabled_with_both(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+        ):
+            assert google_oauth_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# Scope parsing
+# ---------------------------------------------------------------------------
+
+
+class TestScopeParsing:
+    def test_default_scopes_when_unset(self):
+        assert _parse_scopes(None) == [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ]
+
+    def test_default_scopes_when_blank(self):
+        assert _parse_scopes("   ") == [
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ]
+
+    def test_comma_separated(self):
+        assert _parse_scopes("openid, email, profile") == ["openid", "email", "profile"]
+
+    def test_space_separated(self):
+        assert _parse_scopes("openid email profile") == ["openid", "email", "profile"]
+
+    def test_mixed_separators_and_extra_whitespace(self):
+        assert _parse_scopes(" openid ,email  profile ") == ["openid", "email", "profile"]
+
+
+# ---------------------------------------------------------------------------
+# Config errors (fail closed)
+# ---------------------------------------------------------------------------
+
+
+class TestConfigErrors:
+    def test_missing_base_url_raises(self):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="UNRAID_MCP_GOOGLE_BASE_URL"),
+        ):
+            build_google_provider()
+
+    def test_oauth_requires_identity_allowlist(self):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="identity allowlist"),
+        ):
+            build_google_provider()
+
+    def test_allow_any_user_must_be_explicit(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=True,
+        ):
+            assert build_google_provider() is not None
+
+    def test_disable_http_auth_conflicts_with_oauth(self):
+        original = s.UNRAID_MCP_DISABLE_HTTP_AUTH
+        try:
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = True
+            with (
+                _google_settings(
+                    UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                    UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                    UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+                    UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+                ),
+                pytest.raises(GoogleOAuthConfigError, match="DISABLE_HTTP_AUTH"),
+            ):
+                build_google_provider()
+        finally:
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = original
+
+    @pytest.mark.parametrize("base_url", ["http://mcp.example.com", "not-a-url"])
+    def test_non_https_base_url_rejected(self, base_url: str):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL=base_url,
+                UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="https://"),
+        ):
+            build_google_provider()
+
+    def test_loopback_http_base_url_allowed_for_dev(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="http://127.0.0.1:6970",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+        ):
+            assert build_google_provider() is not None
+
+    @pytest.mark.parametrize(
+        "redirect_path", ["https://evil.example/cb", "auth/callback", "/cb?x=1"]
+    )
+    def test_invalid_redirect_path_rejected(self, redirect_path: str):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+                UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+                UNRAID_MCP_GOOGLE_REDIRECT_PATH=redirect_path,
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="REDIRECT_PATH"),
+        ):
+            build_google_provider()
+
+    def test_only_jwt_key_raises(self):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+                UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+                UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY="jwt-key",
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="requires BOTH"),
+        ):
+            build_google_provider()
+
+    def test_only_encryption_key_raises(self):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+                UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+                UNRAID_MCP_GOOGLE_ENCRYPTION_KEY=_fernet_key(),
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="requires BOTH"),
+        ):
+            build_google_provider()
+
+    def test_invalid_fernet_key_raises(self, tmp_path):
+        with (
+            _google_settings(
+                UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+                UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+                UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+                UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+                UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY="jwt-key",
+                UNRAID_MCP_GOOGLE_ENCRYPTION_KEY="not-a-valid-fernet-key",
+                UNRAID_MCP_GOOGLE_STORAGE_DIR=str(tmp_path / "tokens"),
+            ),
+            pytest.raises(GoogleOAuthConfigError, match="not a valid Fernet key"),
+        ):
+            build_google_provider()
+
+
+# ---------------------------------------------------------------------------
+# Provider construction
+# ---------------------------------------------------------------------------
+
+
+class TestProviderConstruction:
+    def test_in_memory_provider(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+        ):
+            provider = build_google_provider()
+        assert provider is not None
+        assert type(provider).__name__ == "GoogleProvider"
+        from key_value.aio.stores.memory import MemoryStore
+
+        assert isinstance(provider._client_storage, MemoryStore)
+
+    def test_custom_scopes_and_redirect_path(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS="example.com",
+            UNRAID_MCP_GOOGLE_REQUIRED_SCOPES="openid profile",
+            UNRAID_MCP_GOOGLE_REDIRECT_PATH="/auth/google/callback",
+        ):
+            provider = build_google_provider()
+        assert provider is not None
+
+    def test_encrypted_persistence_creates_storage_dir(self, tmp_path):
+        storage = tmp_path / "oauth-tokens"
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+            UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY="jwt-signing-key",
+            UNRAID_MCP_GOOGLE_ENCRYPTION_KEY=_fernet_key(),
+            UNRAID_MCP_GOOGLE_STORAGE_DIR=str(storage),
+        ):
+            provider = build_google_provider()
+        assert provider is not None
+        assert storage.is_dir()
+        from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+
+        assert isinstance(provider._client_storage, FernetEncryptionWrapper)
+
+
+class TestAuthorizedGoogleTokenVerifier:
+    async def _verify_with_user(self, user: dict, *, emails=None, domains=None, allow_any=False):
+        wrapped = AsyncMock()
+        wrapped.verify_token.return_value = AccessToken(token="tok", client_id="sub", scopes=[])
+        verifier = _AuthorizedGoogleTokenVerifier(
+            wrapped,
+            allowed_emails=set(emails or []),
+            allowed_domains=set(domains or []),
+            allow_any_user=allow_any,
+        )
+        verifier._fetch_google_identity = AsyncMock(return_value=user)
+        return await verifier.verify_token("tok")
+
+    async def test_allows_verified_email(self):
+        result = await self._verify_with_user(
+            {"email": "Owner@Example.com", "email_verified": "true"},
+            emails={"owner@example.com"},
+        )
+        assert result is not None
+
+    async def test_allows_verified_domain(self):
+        result = await self._verify_with_user(
+            {"email": "admin@example.com", "email_verified": True},
+            domains={"example.com"},
+        )
+        assert result is not None
+
+    async def test_rejects_unverified_email(self):
+        result = await self._verify_with_user(
+            {"email": "owner@example.com", "email_verified": "false"},
+            emails={"owner@example.com"},
+        )
+        assert result is None
+
+    async def test_rejects_unauthorized_email(self):
+        result = await self._verify_with_user(
+            {"email": "stranger@example.net", "email_verified": True},
+            emails={"owner@example.com"},
+        )
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# run_server() middleware selection
+# ---------------------------------------------------------------------------
+
+
+class TestRunServerMiddlewareSelection:
+    def _capture_middleware(self, google_provider):
+        """Run run_server() in HTTP mode and return the middleware list passed to mcp.run."""
+        import unraid_mcp.server as server
+
+        captured: dict = {}
+
+        def fake_run(*args, **kwargs):
+            captured["middleware"] = kwargs.get("middleware")
+
+        orig_transport = s.UNRAID_MCP_TRANSPORT
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            with (
+                patch.object(server, "_google_auth_provider", google_provider),
+                patch.object(server.mcp, "run", side_effect=fake_run),
+                patch.object(server, "ensure_token_exists") as ensure_token,
+                patch.object(server, "log_configuration_status"),
+                patch.object(s, "UNRAID_MCP_BEARER_TOKEN", "tok"),
+            ):
+                server.run_server()
+                captured["ensure_token_called"] = ensure_token.called
+        finally:
+            s.UNRAID_MCP_TRANSPORT = orig_transport
+        return captured.get("middleware")
+
+    def test_bearer_path_installs_three_middleware(self):
+        middleware = self._capture_middleware(google_provider=None)
+        assert middleware is not None
+        # Health + WellKnown + Bearer
+        assert len(middleware) == 3
+        import unraid_mcp.server as server
+
+        assert middleware[0].cls is server.HealthMiddleware
+        assert middleware[1].cls is server.WellKnownMiddleware
+        assert middleware[2].cls is server.BearerAuthMiddleware
+        assert middleware[2].kwargs["token"] == "tok"
+        assert middleware[2].kwargs["disabled"] is False
+
+    def test_oauth_path_installs_only_health(self):
+        sentinel = object()  # stand-in for a built GoogleProvider
+        middleware = self._capture_middleware(google_provider=sentinel)
+        assert middleware is not None
+        # Only HealthMiddleware — bearer + well-known are omitted under OAuth.
+        assert len(middleware) == 1
+        import unraid_mcp.server as server
+
+        assert middleware[0].cls is server.HealthMiddleware
+
+    def test_oauth_skips_bearer_bootstrap_and_public_bind_guard(self):
+        import unraid_mcp.server as server
+
+        captured: dict = {}
+
+        def fake_run(*args, **kwargs):
+            captured["middleware"] = kwargs.get("middleware")
+
+        originals = {
+            "transport": s.UNRAID_MCP_TRANSPORT,
+            "token": s.UNRAID_MCP_BEARER_TOKEN,
+            "disable": s.UNRAID_MCP_DISABLE_HTTP_AUTH,
+            "host": s.UNRAID_MCP_HOST,
+            "trust": s.UNRAID_MCP_TRUST_PROXY,
+        }
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            s.UNRAID_MCP_BEARER_TOKEN = None
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = True
+            s.UNRAID_MCP_HOST = "0.0.0.0"  # noqa: S104 - deliberate public-bind guard test
+            s.UNRAID_MCP_TRUST_PROXY = False
+            with (
+                patch.object(server, "_google_auth_provider", object()),
+                patch.object(server.mcp, "run", side_effect=fake_run),
+                patch.object(server, "ensure_token_exists") as ensure_token,
+                patch.object(server, "log_configuration_status"),
+            ):
+                server.run_server()
+            ensure_token.assert_not_called()
+            assert len(captured["middleware"]) == 1
+            assert captured["middleware"][0].cls is server.HealthMiddleware
+        finally:
+            s.UNRAID_MCP_TRANSPORT = originals["transport"]
+            s.UNRAID_MCP_BEARER_TOKEN = originals["token"]
+            s.UNRAID_MCP_DISABLE_HTTP_AUTH = originals["disable"]
+            s.UNRAID_MCP_HOST = originals["host"]
+            s.UNRAID_MCP_TRUST_PROXY = originals["trust"]
+
+
+class TestServerImportWiring:
+    def _reload_server(self):
+        import unraid_mcp.server as server
+
+        return importlib.reload(server)
+
+    def _restore_server(self, transport: str):
+        s.UNRAID_MCP_TRANSPORT = transport
+        return self._reload_server()
+
+    def test_fastmcp_auth_wired_at_import_for_http(self):
+        original_transport = s.UNRAID_MCP_TRANSPORT
+        sentinel = object()
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            with patch("unraid_mcp.core.google_auth.build_google_provider", return_value=sentinel):
+                server = self._reload_server()
+            assert server.mcp.auth is sentinel
+        finally:
+            self._restore_server(original_transport)
+
+    def test_oauth_misconfig_exits_at_http_import(self, capsys):
+        original_transport = s.UNRAID_MCP_TRANSPORT
+        try:
+            s.UNRAID_MCP_TRANSPORT = "streamable-http"
+            with (
+                patch(
+                    "unraid_mcp.core.google_auth.build_google_provider",
+                    side_effect=GoogleOAuthConfigError("bad oauth"),
+                ),
+                pytest.raises(SystemExit) as excinfo,
+            ):
+                self._reload_server()
+            assert excinfo.value.code == 1
+            assert "bad oauth" in capsys.readouterr().err
+        finally:
+            self._restore_server(original_transport)
+
+    def test_stdio_import_does_not_build_google_provider(self):
+        original_transport = s.UNRAID_MCP_TRANSPORT
+        try:
+            s.UNRAID_MCP_TRANSPORT = "stdio"
+            with patch("unraid_mcp.core.google_auth.build_google_provider") as build:
+                server = self._reload_server()
+            build.assert_not_called()
+            assert server.mcp.auth is None
+        finally:
+            self._restore_server(original_transport)

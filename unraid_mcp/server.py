@@ -37,6 +37,7 @@ from .config.settings import (
 from .core import middleware_refs as _middleware_refs
 from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
 from .core.client import close_http_client
+from .core.google_auth import GoogleOAuthConfigError, build_google_provider
 from .core.response_limit import StructuredResponseLimitingMiddleware
 from .subscriptions.manager import subscription_manager
 from .subscriptions.resources import register_subscription_resources
@@ -158,13 +159,30 @@ async def lifespan(_server: "FastMCP") -> AsyncIterator[None]:
             logger.error("Error closing HTTP client during shutdown", exc_info=True)
 
 
+# Optional Google OAuth provider. Returns None (the default) unless
+# UNRAID_MCP_GOOGLE_CLIENT_ID and _SECRET are set, in which case OAuth REPLACES the
+# pre-shared bearer-token auth at the HTTP layer. Built once here so it is attached
+# to the FastMCP instance for `fastmcp run server.py` discovery too. A misconfig
+# (e.g. missing base_url) fails closed with a fatal, actionable message.
+if _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
+    try:
+        _google_auth_provider = build_google_provider()
+    except GoogleOAuthConfigError as exc:
+        print(f"FATAL: {exc}", file=sys.stderr)
+        sys.exit(1)
+else:
+    _google_auth_provider = None
+
 # Initialize FastMCP instance — ASGI-level bearer auth added at run time via
-# mcp.run(middleware=[...]) so it fires before any MCP protocol processing.
+# mcp.run(middleware=[...]) so it fires before any MCP protocol processing. When
+# Google OAuth is active, `auth=` carries the provider and the bearer/well-known
+# ASGI middleware is omitted in run_server() (the provider handles both).
 mcp = FastMCP(
     name="Unraid MCP Server",
     instructions="Provides tools to interact with an Unraid server's GraphQL API.",
     version=VERSION,
     lifespan=lifespan,
+    auth=_google_auth_provider,
     middleware=[
         _logging_middleware,
         _error_middleware,
@@ -250,13 +268,20 @@ def ensure_token_exists() -> None:
 def run_server() -> None:
     """Run the MCP server with the configured transport."""
     is_http = _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse")
+    # Source of truth for the HTTP auth mode is the provider actually attached to
+    # `mcp` at import — when present, OAuth fully replaces the bearer-token path.
+    google_enabled = _google_auth_provider is not None
 
     try:
-        if is_http:
+        # Bearer-token bootstrap and guards apply only when OAuth is NOT delegating
+        # authentication. The GoogleProvider gates requests and serves its own
+        # discovery metadata, so the bearer token / S-H3 checks are irrelevant then.
+        if is_http and not google_enabled:
             ensure_token_exists()
 
         if (
             is_http
+            and not google_enabled
             and not _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
             and not _settings.UNRAID_MCP_BEARER_TOKEN
         ):
@@ -271,9 +296,11 @@ def run_server() -> None:
         # loopback. Refuse to expose an unauthenticated MCP endpoint on a
         # public/LAN interface — that would let anyone on the network drive the
         # Unraid API. Operators fronting the server with SWAG/Authelia opt in
-        # via UNRAID_MCP_TRUST_PROXY=true.
+        # via UNRAID_MCP_TRUST_PROXY=true. (Skipped when OAuth is active — the
+        # endpoint is then authenticated by Google, not left open.)
         if (
             is_http
+            and not google_enabled
             and _settings.UNRAID_MCP_DISABLE_HTTP_AUTH
             and not _settings.UNRAID_MCP_TRUST_PROXY
             and not _is_loopback_host(_settings.UNRAID_MCP_HOST)
@@ -311,7 +338,17 @@ def run_server() -> None:
             )
 
         if is_http:
-            if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+            if google_enabled:
+                logger.info(
+                    "HTTP authentication delegated to Google OAuth (GoogleProvider); "
+                    "bearer-token middleware is not installed."
+                )
+                if _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
+                    logger.warning(
+                        "UNRAID_MCP_DISABLE_HTTP_AUTH=true is ignored while Google OAuth "
+                        "is active — the endpoint is authenticated via OAuth."
+                    )
+            elif _settings.UNRAID_MCP_DISABLE_HTTP_AUTH:
                 logger.warning(
                     "HTTP auth disabled (UNRAID_MCP_DISABLE_HTTP_AUTH=true). "
                     "Ensure an upstream gateway enforces authentication."
@@ -340,18 +377,22 @@ def run_server() -> None:
                 "Literal['stdio', 'http', 'sse', 'streamable-http']",
                 _settings.UNRAID_MCP_TRANSPORT,
             )
-            mcp.run(
-                transport=transport_literal,
-                host=UNRAID_MCP_HOST,
-                port=UNRAID_MCP_PORT,
-                path="/mcp",
-                middleware=[
-                    # Middleware order (outermost → innermost):
-                    # 1. HealthMiddleware   — GET /health → 200, no auth.
-                    # 2. WellKnownMiddleware — GET /.well-known/oauth-protected-resource → 200,
-                    #    no auth.  MCP clients probe this after a 401 to discover how to
-                    #    authenticate; responding correctly stops the 401 cascade.
-                    # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
+            if google_enabled:
+                # Google OAuth path: the GoogleProvider (attached via FastMCP's
+                # auth=) gates requests and serves its own OAuth/well-known
+                # discovery routes, so the bearer + well-known ASGI middleware are
+                # omitted (they would shadow the provider's endpoints and 401 the
+                # OAuth callback). HealthMiddleware stays outermost so Docker's
+                # unauthenticated /health probe keeps working.
+                http_middleware = [ASGIMiddleware(HealthMiddleware)]
+            else:
+                # Middleware order (outermost → innermost):
+                # 1. HealthMiddleware   — GET /health → 200, no auth.
+                # 2. WellKnownMiddleware — GET /.well-known/oauth-protected-resource → 200,
+                #    no auth.  MCP clients probe this after a 401 to discover how to
+                #    authenticate; responding correctly stops the 401 cascade.
+                # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
+                http_middleware = [
                     ASGIMiddleware(HealthMiddleware),
                     ASGIMiddleware(WellKnownMiddleware),
                     ASGIMiddleware(
@@ -359,7 +400,13 @@ def run_server() -> None:
                         token=_settings.UNRAID_MCP_BEARER_TOKEN or "",
                         disabled=_settings.UNRAID_MCP_DISABLE_HTTP_AUTH,
                     ),
-                ],
+                ]
+            mcp.run(
+                transport=transport_literal,
+                host=UNRAID_MCP_HOST,
+                port=UNRAID_MCP_PORT,
+                path="/mcp",
+                middleware=http_middleware,
             )
         elif _settings.UNRAID_MCP_TRANSPORT == "stdio":
             mcp.run()
