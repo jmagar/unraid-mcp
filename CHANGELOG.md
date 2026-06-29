@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/jmagar/unraid-mcp/compare/v2.2.0...v2.3.0) (2026-06-29)
+
+
+### Features
+
+* add optional Google OAuth authentication for HTTP transport ([a855192](https://github.com/jmagar/unraid-mcp/commit/a855192260aab976d4b67b8ecb8fd3c518cec4aa))
+* add optional Google OAuth authentication for HTTP transport ([75eda35](https://github.com/jmagar/unraid-mcp/commit/75eda353c536d813389c3c6c7adab68b108b23a0))
+* dispatch Claude for schema drift ([c0d9f01](https://github.com/jmagar/unraid-mcp/commit/c0d9f017b2e875b7a2f0c025f52adf568a86343a))
+* summarize schema drift issues ([2a9f492](https://github.com/jmagar/unraid-mcp/commit/2a9f492ee9ff8289de908dfbd6fff4551110f33b))
+* support Unraid GraphQL schema drift (SDL hash ae82121) ([a6761d4](https://github.com/jmagar/unraid-mcp/commit/a6761d45fff13109709bfc6817f47c931fdf349d))
+* support Unraid GraphQL schema drift (SDL hash ae82121) ([a353e39](https://github.com/jmagar/unraid-mcp/commit/a353e3998847a34bae2b6bf1aa667e82d313b0bf)), closes [#107](https://github.com/jmagar/unraid-mcp/issues/107)
+
+
+### Bug Fixes
+
+* address schema drift review findings ([de7894c](https://github.com/jmagar/unraid-mcp/commit/de7894caae67dc778e09be011a9a87451932f969))
+* address schema drift review findings ([fdf4a1e](https://github.com/jmagar/unraid-mcp/commit/fdf4a1ebef3d4b3c80b2299fc1ab12dc2c90f5b4))
+* address schema drift review issues ([9a98efe](https://github.com/jmagar/unraid-mcp/commit/9a98efe511a94b71ad6be6941c0cbeb086e92cb1))
+* allow Claude review on bot PRs ([8aa9fd8](https://github.com/jmagar/unraid-mcp/commit/8aa9fd80395d9a28e8dceb528a0561ee690726cc))
+* allow dispatched Claude drift debug runs ([0300283](https://github.com/jmagar/unraid-mcp/commit/0300283321f02481f563190a045599a0ce368d00))
+* allow longer Claude drift runs ([43b9b8c](https://github.com/jmagar/unraid-mcp/commit/43b9b8cdf9edaccbf3f330d7543e91deb0ead6c8))
+* bound Claude drift workflow steps ([e0e6d03](https://github.com/jmagar/unraid-mcp/commit/e0e6d039363c26de709beff07d8cd7b526e25bbe))
+* expose Claude drift action failures ([1a82dbc](https://github.com/jmagar/unraid-mcp/commit/1a82dbc6dfe430d1f0f9c8b296b20151daf814f8))
+* harden google oauth review issues ([b656648](https://github.com/jmagar/unraid-mcp/commit/b6566485aa11d2c9eab2e8d4199cdf067fa1990b))
+* harden schema drift automation ([a20c3df](https://github.com/jmagar/unraid-mcp/commit/a20c3df4dd960845e53752ce669f2e7610610714))
+* keep Claude extra permissions valid ([8028e3e](https://github.com/jmagar/unraid-mcp/commit/8028e3e3eb6529b7c32c0f0de155e1ddecc12346))
+* keep drift CI waiting in workflow ([346d6b4](https://github.com/jmagar/unraid-mcp/commit/346d6b4360aac099ca07d4755847d36be1739122))
+* let Claude repair failing drift CI ([11f332a](https://github.com/jmagar/unraid-mcp/commit/11f332a29ee9a429aadca0bdf51fb3fcbac27902))
+* prepare Claude drift runner tooling ([c2fe9a2](https://github.com/jmagar/unraid-mcp/commit/c2fe9a272f7d5d5dbe929fb34a2f56c2e606d394))
+* prepare observable Claude drift PR ([ff55209](https://github.com/jmagar/unraid-mcp/commit/ff55209f70da829917e68508f7fa59928a44a4ee))
+* preserve schema drift issue label ([18cf12a](https://github.com/jmagar/unraid-mcp/commit/18cf12a6cc3712ff13602ba679df784e0ba53926))
+* preserve schema drift issue label ([16d6d3b](https://github.com/jmagar/unraid-mcp/commit/16d6d3be3ab793553b8c9c248005de1b5dd9fbcd))
+* raise Claude drift implementation budget ([fed4c12](https://github.com/jmagar/unraid-mcp/commit/fed4c126d82fc99c3f2c27ccab67999aca85f97e))
+* raise Claude drift turn budget ([13f417c](https://github.com/jmagar/unraid-mcp/commit/13f417c9a8a403efc91ee4f72226a867792b3a17))
+* remove Claude drift turn cap ([ffd2651](https://github.com/jmagar/unraid-mcp/commit/ffd265183884f6b859028a160092e9fb79b9eb0e))
+* require Claude drift local gates ([3a6b8dd](https://github.com/jmagar/unraid-mcp/commit/3a6b8dd5eb8037766c060fa617f123d862927158))
+* require Claude schema drift PR output ([1f47522](https://github.com/jmagar/unraid-mcp/commit/1f47522f226a38ed8c7ed3e678566750248450d1))
+* require green CI for Claude drift PRs ([2d3d136](https://github.com/jmagar/unraid-mcp/commit/2d3d13605609d6761bfbcbf91fa5614c1a24001b))
+* seed Claude drift PR branch ([87191d6](https://github.com/jmagar/unraid-mcp/commit/87191d65c894c132b97ea01794934f23454ea3d8))
+* verify Claude drift PR with workflow token ([a1786ab](https://github.com/jmagar/unraid-mcp/commit/a1786abadb51971ef4bdd757e6d1711f6a926aff))
+
+
+### Documentation
+
+* add blank line after new CLAUDE.md heading (MD022) ([a1d0833](https://github.com/jmagar/unraid-mcp/commit/a1d0833f7616f020661765f7813a58c54c4a4fd6))
+* refresh Unraid schema artifacts ([5031244](https://github.com/jmagar/unraid-mcp/commit/5031244da274c5a09fe0d89ebde5a1996a80b85d))
+* save Claude schema drift automation session ([11f9eec](https://github.com/jmagar/unraid-mcp/commit/11f9eec8d05a4d03728bd14ab827abc1e06168b4))
+* save session log ([b527e5d](https://github.com/jmagar/unraid-mcp/commit/b527e5d565617902f2e42b715d9c83b30168dd48))
+
 ## [2.2.0](https://github.com/jmagar/unraid-mcp/compare/v2.1.2...v2.2.0) (2026-06-23)
 
 
