@@ -15,8 +15,8 @@ Configuration is collected by the plugin's config form — no interactive wizard
 
 1. Install as a Claude Code plugin:
    ```bash
-   /plugin marketplace add jmagar/claude-homelab
-   /plugin install unraid-mcp @jmagar-claude-homelab
+   /plugin marketplace add jmagar/unraid-mcp
+   /plugin install unraid-mcp@unraid-mcp
    ```
 
 2. In the plugin's configuration form, set:
@@ -73,10 +73,13 @@ Configuration is collected by the plugin's config form — no interactive wizard
    cd unraid-mcp
    ```
 
-2. Set up credentials (the Docker container reads from `~/.claude-homelab/.env` via env_file):
+2. Set up credentials (the Docker container reads from `~/.unraid-mcp/.env` via `env_file`):
    ```bash
-   # Ensure your credentials are in ~/.claude-homelab/.env
-   # or modify docker-compose.yaml to point to ~/.unraid-mcp/.env
+   mkdir -p ~/.unraid-mcp
+   cp .env.example ~/.unraid-mcp/.env
+   chmod 700 ~/.unraid-mcp
+   chmod 600 ~/.unraid-mcp/.env
+   # Edit ~/.unraid-mcp/.env with UNRAID_API_URL and UNRAID_API_KEY.
    ```
 
 3. Start the container:

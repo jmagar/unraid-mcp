@@ -100,7 +100,7 @@ setup:
         echo ".env already exists"; \
     fi
 
-# Generate a secure bearer token for UNRAID_MCP_TOKEN
+# Generate a secure bearer token for UNRAID_MCP_BEARER_TOKEN
 gen-token:
     @python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 
@@ -161,4 +161,3 @@ publish:
     @echo "  3. Merge that PR -- it tags vX.Y.Z and triggers publish-pypi + docker-publish."
     @echo ""
     @echo "Version is read at runtime from package metadata; never edit version strings by hand."
-

@@ -8,7 +8,7 @@ unraid-mcp exposes a single MCP tool, `unraid`, with `action` (domain) + `subact
 |------|---------|------------|
 | `unraid` | The only tool -- action+subaction dispatch across 19 actions / 178 subactions. The Markdown reference and WebSocket diagnostics are the `help` and `subscriptions` actions. | `action`, `subaction`, plus domain-specific params |
 
-The consolidated action pattern keeps the MCP surface to one tool while supporting 175 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
+The consolidated action pattern keeps the MCP surface to one tool while supporting 178 subactions across 19 actions. Clients call `unraid(action="help")` first to discover available operations, then call `unraid` with the appropriate action and subaction. WebSocket subscription diagnostics live under `unraid(action="subscriptions", subaction="diagnose"|"test_query")`.
 
 ## Primary Tool: `unraid`
 

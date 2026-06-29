@@ -4,7 +4,7 @@
 
 unraid-mcp has two authentication boundaries:
 
-1. **Inbound (client to MCP server)**: Bearer token authentication on HTTP transports
+1. **Inbound (client to MCP server)**: Bearer token authentication by default on HTTP transports, or optional Google OAuth when configured
 2. **Outbound (MCP server to Unraid)**: API key authentication via `x-api-key` header
 
 ## Inbound: Bearer token (RFC 6750)
@@ -62,6 +62,31 @@ warning. This is only safe behind a fronting gateway that terminates auth itself
 a public interface with auth disabled additionally requires `UNRAID_MCP_TRUST_PROXY=true`
 (without it, the server refuses to bind publicly). Keep the container's published port
 unexposed or loopback-scoped; see [DEPLOY.md](DEPLOY.md).
+
+## Inbound: Google OAuth
+
+Setting both `UNRAID_MCP_GOOGLE_CLIENT_ID` and
+`UNRAID_MCP_GOOGLE_CLIENT_SECRET` replaces the Bearer-token middleware with
+FastMCP's Google OAuth provider for HTTP transports. OAuth mode is mutually exclusive
+with `UNRAID_MCP_DISABLE_HTTP_AUTH=true`.
+
+Required when OAuth is enabled:
+
+- `UNRAID_MCP_GOOGLE_BASE_URL`, the public base URL of this MCP server. It must be
+  HTTPS outside localhost/loopback development.
+- At least one authorization allowlist entry: `UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` or
+  `UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS`, unless
+  `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true` is intentionally set.
+
+Optional persistence:
+
+- Set both `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` and
+  `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` to persist OAuth tokens encrypted at rest under
+  `UNRAID_MCP_GOOGLE_STORAGE_DIR` (default `~/.unraid-mcp/oauth-tokens`).
+- Set neither to keep tokens in memory. Setting only one is a startup error.
+
+See [../AUTHENTICATION.md](../AUTHENTICATION.md#google-oauth-optional) for setup
+steps and the full env-var table.
 
 ### Error responses
 

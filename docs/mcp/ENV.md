@@ -14,6 +14,7 @@
 | `UNRAID_MCP_HOST` | no | `127.0.0.1` bare metal; Docker image sets `0.0.0.0` | no | Bind address for HTTP transport |
 | `UNRAID_MCP_PORT` | no | `6970` | no | HTTP server port (1-65535) |
 | `UNRAID_MCP_TRANSPORT` | no | `streamable-http` | no | Transport: `streamable-http`, `stdio`, or `sse` |
+| `UNRAID_MCP_MAX_RESPONSE_BYTES` | no | `40000` | no | Max serialized tool-response size. Over-cap responses return a parseable truncation marker. |
 
 ## Authentication
 

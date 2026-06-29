@@ -26,7 +26,7 @@ Override the credentials directory with `UNRAID_CREDENTIALS_DIR`.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `UNRAID_MCP_HOST` | `0.0.0.0` | Bind address for HTTP transport |
+| `UNRAID_MCP_HOST` | `127.0.0.1` bare metal; Docker image sets `0.0.0.0` | Bind address for HTTP transport |
 | `UNRAID_MCP_PORT` | `6970` | Port for the MCP HTTP server. Must be 1-65535. |
 | `UNRAID_MCP_TRANSPORT` | `streamable-http` | Transport method: `streamable-http`, `stdio`, or `sse` (deprecated) |
 | `UNRAID_MCP_MAX_RESPONSE_BYTES` | `40000` | Max serialized tool-response size (~10K tokens). Over-cap responses are replaced with a parseable JSON truncation marker (`{"error":"response_truncated","truncated":true,...}`). |
@@ -38,6 +38,32 @@ Override the credentials directory with `UNRAID_CREDENTIALS_DIR`.
 | `UNRAID_MCP_BEARER_TOKEN` | auto-generated | Bearer token for HTTP auth. Auto-generated on first HTTP startup if absent. Generate manually with `openssl rand -hex 32`. |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | `false` | Set `true` to disable bearer auth. Only valid behind a trusted fronting gateway — requires `UNRAID_MCP_TRUST_PROXY=true` to bind a public interface (see below). |
 | `UNRAID_MCP_TRUST_PROXY` | `false` | Required second opt-in when auth is disabled (`UNRAID_MCP_DISABLE_HTTP_AUTH=true`) and the server binds a non-loopback interface. Asserts a fronting gateway terminates auth; without it, a public bind with auth disabled is refused. |
+
+## Google OAuth variables
+
+Google OAuth is optional and mutually exclusive with the Bearer-token middleware. It is
+enabled only when both `UNRAID_MCP_GOOGLE_CLIENT_ID` and
+`UNRAID_MCP_GOOGLE_CLIENT_SECRET` are set. When enabled, HTTP clients authenticate
+through the OAuth browser flow and the static `UNRAID_MCP_BEARER_TOKEN` is not used.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `UNRAID_MCP_GOOGLE_CLIENT_ID` | -- | Google OAuth Client ID. Setting this and the client secret enables OAuth. |
+| `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | -- | Google OAuth Client Secret. Must be set with the client ID. |
+| `UNRAID_MCP_GOOGLE_BASE_URL` | -- | Required when OAuth is enabled. Public base URL of this MCP server; must be `https://` except for localhost/loopback development. The Google authorized redirect URI is this base URL plus the redirect path. |
+| `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | `openid https://www.googleapis.com/auth/userinfo.email` | Comma/space-separated OAuth scopes. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` | -- | Comma/space-separated verified Google email addresses allowed to use this MCP server. Required unless domains or allow-any-user is set. |
+| `UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS` | -- | Comma/space-separated verified Google email domains allowed to use this MCP server. Required unless emails or allow-any-user is set. |
+| `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER` | `false` | Explicitly allow any verified Google account. Use only for private/trusted deployments. |
+| `UNRAID_MCP_GOOGLE_REDIRECT_PATH` | `/auth/callback` | OAuth callback path. Must be an absolute path with no scheme, host, query, or fragment. |
+| `UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY` | -- | With `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY`, enables restart-surviving token storage. Set both keys or neither. |
+| `UNRAID_MCP_GOOGLE_ENCRYPTION_KEY` | -- | Fernet key for encrypted OAuth token storage. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. |
+| `UNRAID_MCP_GOOGLE_STORAGE_DIR` | `~/.unraid-mcp/oauth-tokens` | Directory for persisted encrypted OAuth tokens. Created with mode 700 where possible. |
+
+Startup fails closed when OAuth is partially configured, when OAuth is combined with
+`UNRAID_MCP_DISABLE_HTTP_AUTH=true`, when no email/domain allowlist is configured
+without `UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=true`, or when only one persistence key is
+set. See [AUTHENTICATION.md](AUTHENTICATION.md#google-oauth-optional).
 
 ## SSL variables
 
@@ -119,15 +145,45 @@ UNRAID_API_KEY=your_api_key
 UNRAID_API_URL=http://your-unraid-server
 
 # MCP Server Settings
-UNRAID_MCP_HOST=0.0.0.0
+UNRAID_MCP_HOST=127.0.0.1
 UNRAID_MCP_PORT=6970
 UNRAID_MCP_TRANSPORT=streamable-http
+UNRAID_MCP_MAX_RESPONSE_BYTES=40000
 
 # HTTP Bearer Token Authentication
 UNRAID_MCP_BEARER_TOKEN=your_bearer_token
 
 # Safety flags
 UNRAID_MCP_DISABLE_HTTP_AUTH=false
+UNRAID_MCP_TRUST_PROXY=false
+
+# Optional Google OAuth alternative to Bearer auth
+# UNRAID_MCP_GOOGLE_CLIENT_ID=123456789.apps.googleusercontent.com
+# UNRAID_MCP_GOOGLE_CLIENT_SECRET=GOCSPX-...
+# UNRAID_MCP_GOOGLE_BASE_URL=https://unraid-mcp.example.com
+# UNRAID_MCP_GOOGLE_ALLOWED_EMAILS=you@example.com
+# UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS=example.com
+# UNRAID_MCP_GOOGLE_ALLOW_ANY_USER=false
+# UNRAID_MCP_GOOGLE_REDIRECT_PATH=/auth/callback
+# UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY=your_jwt_signing_secret
+# UNRAID_MCP_GOOGLE_ENCRYPTION_KEY=your_fernet_key
+# UNRAID_MCP_GOOGLE_STORAGE_DIR=/path/to/oauth-tokens
+
+# TLS / SSL Verification
+UNRAID_VERIFY_SSL=true
+UNRAID_ALLOW_INSECURE_TLS=false
+
+# Logging
+UNRAID_MCP_LOG_LEVEL=INFO
+UNRAID_MCP_LOG_FILE=unraid-mcp.log
+
+# Subscriptions
+UNRAID_AUTO_START_SUBSCRIPTIONS=true
+UNRAID_MAX_RECONNECT_ATTEMPTS=10
+# UNRAID_AUTOSTART_LOG_PATH=/var/log/syslog
+
+# Credentials directory override
+# UNRAID_CREDENTIALS_DIR=
 
 # Docker user / network
 DOCKER_NETWORK=

@@ -11,11 +11,11 @@ services:
       # destructive actions and is commonly run with DISABLE_HTTP_AUTH=true behind
       # SWAG, so it must NOT be reachable directly from the network.
       # Publishing on a non-loopback interface REQUIRES auth enabled (a bearer
-      # token via UNRAID_MCP_TOKEN). Behind a reverse proxy, prefer joining the
-      # proxy's docker network over publishing the port at all.
+      # token via UNRAID_MCP_BEARER_TOKEN, or Google OAuth). Behind a reverse
+      # proxy, prefer joining the proxy's docker network over publishing the port at all.
       - "127.0.0.1:${UNRAID_MCP_PORT:-6970}:${UNRAID_MCP_PORT:-6970}"
     env_file:
-      - path: ~/.claude-homelab/.env
+      - path: ~/.unraid-mcp/.env
         required: false
     volumes:
       - ./logs:/app/logs

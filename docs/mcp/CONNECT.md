@@ -7,17 +7,19 @@ How to connect to the unraid-mcp server from every supported client and transpor
 ### Install from marketplace
 
 ```bash
-/plugin marketplace add jmagar/claude-homelab
-/plugin install unraid-mcp @jmagar-claude-homelab
+/plugin marketplace add jmagar/unraid-mcp
+/plugin install unraid-mcp@unraid-mcp
 ```
 
-Claude Code runs the server in stdio mode via `uv run --directory <plugin-root> unraid-mcp-server`.
+Claude Code runs the published server in stdio mode via `uvx unraid-mcp`.
 
 The plugin prompts for `userConfig` values:
-- **Unraid MCP Server URL**: URL of the MCP server (default: `https://unraid.tootie.tv/mcp`)
-- **MCP Server Bearer Token**: For HTTP transport auth
 - **Unraid GraphQL API URL**: Your Unraid server's GraphQL endpoint
 - **Unraid API Key**: API key from Unraid Settings
+
+The plugin's setup hook persists those values to `~/.unraid-mcp/.env`. It does not
+prompt for a Bearer token because the plugin uses local stdio transport. Bearer tokens
+or Google OAuth apply only when you run a separate HTTP server.
 
 ### Connect to remote HTTP server
 
@@ -70,16 +72,17 @@ Replace `<SERVER>` with your Unraid (or MCP server) host.
 over `https://`. If the server requires a Bearer token, append
 `--header "Authorization: Bearer <token>"`.
 
-## Codex CLI
+## Codex
 
-The `.codex-plugin/plugin.json` provides Codex integration:
+The repo ships a Codex marketplace manifest at `.agents/plugins/marketplace.json`:
 
 ```bash
-# Install plugin
-codex plugin install ./
+codex plugin marketplace add jmagar/unraid-mcp
+# then enable `unraid-mcp@unraid-mcp` from the Codex `/plugins` view
 ```
 
-Codex discovers the MCP server via `.mcp.json` referenced in the manifest.
+Codex forwards `UNRAID_API_URL` and `UNRAID_API_KEY` by env-var name. Export them in
+the shell that launches Codex or populate `~/.unraid-mcp/.env`.
 
 ## Gemini CLI
 
@@ -97,7 +100,7 @@ The `gemini-extension.json` provides Gemini integration:
 }
 ```
 
-Settings are collected via the `settings` array for `UNRAID_API_URL` and `UNRAID_API_KEY`.
+Gemini collects `UNRAID_API_URL` and `UNRAID_API_KEY` through the extension settings.
 
 ## Direct HTTP (any client)
 

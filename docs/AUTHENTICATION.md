@@ -71,6 +71,7 @@ environment:
 |---|---|---|
 | `UNRAID_MCP_BEARER_TOKEN` | *(none)* | Required for HTTP transport (bearer mode). Generate with `openssl rand -hex 32`. |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | `false` | Set `true` to disable auth entirely (testing/trusted-network only). Ignored when Google OAuth is active. |
+| `UNRAID_MCP_TRUST_PROXY` | `false` | Required when auth is disabled and `UNRAID_MCP_HOST` binds a non-loopback interface. Asserts a trusted proxy enforces auth. |
 
 ---
 
@@ -135,10 +136,11 @@ handles the rest.
 ## How it works
 
 1. The server starts an HTTP listener on port 6970.
-2. Every request must include `Authorization: Bearer <token>` or it gets a
-   `401 Unauthorized` response.
+2. In Bearer-token mode, every request must include `Authorization: Bearer <token>`
+   or it gets a `401 Unauthorized` response. In Google OAuth mode, FastMCP's
+   `GoogleProvider` serves OAuth discovery and gates requests instead.
 3. `/health` (Docker healthcheck) is always allowed without a token.
-4. `/.well-known/oauth-protected-resource` is served without a token so MCP
+4. In Bearer-token mode, `/.well-known/oauth-protected-resource` is served without a token so MCP
    clients can discover the auth scheme automatically (RFC 9728).  It returns
    `{"bearer_methods_supported":["header"]}` with no `authorization_servers`,
    telling clients to use a pre-configured Bearer token.
