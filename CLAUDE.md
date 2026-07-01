@@ -82,9 +82,10 @@ Copy `.env.example` to `.env` and configure:
   from the `limit` tool param. Capped responses carry a `page` meta dict
   (`returned`/`total`/`truncated`, plus a `hint` when truncated). `limit<=0` returns everything;
   omitting `limit` uses the tool default (20). Applies to `docker/list`, `disk/shares`,
-  `disk/disks`, `array/parity_history`, and the `live/log_tail` + `live/notification_feed`
-  event lists. `docker/details` fetches a single container via `docker.container(id:)` rather
-  than over-fetching the full container list.
+  `disk/disks`, `array/parity_history`, `system/network_interfaces`, `system/network_metrics`,
+  and the `live/log_tail` + `live/notification_feed` + `live/network_metrics` event/interface
+  lists. `docker/details` fetches a single container via `docker.container(id:)` rather than
+  over-fetching the full container list.
 - **Destructive Action Safety**: `DESTRUCTIVE_ACTIONS` sets require `confirm=True` for dangerous operations
 - **Modular Architecture**: Clean separation of concerns across focused modules
 - **Error Handling**: Uses ToolError for user-facing errors, detailed logging for debugging

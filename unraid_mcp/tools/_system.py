@@ -76,7 +76,7 @@ _SYSTEM_QUERIES: dict[str, str] = {
         }
     """,
     "metrics": "query GetMetrics { metrics { cpu { percentTotal } memory { total used free available buffcache percentTotal } } }",
-    "network_metrics": "query GetNetworkMetrics { metrics { network { interface rxBytesPerSec txBytesPerSec } } }",
+    "network_metrics": "query GetNetworkMetrics { metrics { network { id name operstate bytesReceived bytesSent packetsReceived packetsSent receiveErrors transmitErrors receiveDropped transmitDropped rxSec txSec utilizationPercent lastUpdated } } }",
     "services": "query GetServices { services { name online version } }",
     "display": "query GetDisplay { info { display { theme } } }",
     "display_details": """
@@ -170,8 +170,8 @@ _SYSTEM_QUERIES: dict[str, str] = {
             virtual
             vlanId
             internal
-            ipv4Addresses { address cidr }
-            ipv6Addresses { address cidr }
+            ipv4Addresses { address netmask }
+            ipv6Addresses { address prefixLength }
           }
         }
     """,
@@ -362,12 +362,13 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
             return dict(values) if isinstance(values, dict) else {"raw": values}
         if subaction == "network_metrics":
             network = safe_get(data, "metrics", "network", default=None)
-            if not isinstance(network, dict):
+            if not isinstance(network, list):
                 raise ToolError(
                     "Unraid API returned no metrics.network payload for "
                     "system/network_metrics. Check API version, permissions, and server logs."
                 )
-            return dict(network)
+            capped, meta = cap_list(network, limit)
+            return {"network": capped, "page": meta}
         if subaction == "server":
             info = data.get("info") or {}
             summary: dict[str, Any] = {}

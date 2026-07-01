@@ -493,7 +493,7 @@ run_phase4() {
     "subscriptions" "test_query" \
     "$system_metrics_network_schema_re" \
     "systemMetricsNetwork requires newer/compatible Unraid API schema" \
-    '{"subscription_query":"subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"}'
+    '{"subscription_query":"subscription { systemMetricsNetwork { id name bytesReceived bytesSent rxSec txSec } }"}'
 
   # Phase 4b — Destructive guard bypass (confirm=True)
   section "Phase 4b · Destructive action guards (confirm=True bypass)"
