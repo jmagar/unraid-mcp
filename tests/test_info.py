@@ -260,6 +260,32 @@ class TestUnraidInfoTool:
             }
         ]
 
+    async def test_network_metrics_are_capped(self, _mock_graphql: AsyncMock) -> None:
+        _mock_graphql.return_value = {
+            "metrics": {
+                "network": [{"id": f"metrics:eth{idx}", "name": f"eth{idx}"} for idx in range(3)]
+            }
+        }
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="network_metrics", limit=2)
+
+        assert [interface["name"] for interface in result["network"]] == ["eth0", "eth1"]
+        assert result["page"]["returned"] == 2
+        assert result["page"]["total"] == 3
+        assert result["page"]["truncated"] is True
+
+    async def test_network_metrics_accepts_empty_interface_list(
+        self, _mock_graphql: AsyncMock
+    ) -> None:
+        _mock_graphql.return_value = {"metrics": {"network": []}}
+        tool_fn = _make_tool()
+        result = await tool_fn(action="system", subaction="network_metrics")
+
+        assert result == {
+            "network": [],
+            "page": {"returned": 0, "total": 0, "truncated": False},
+        }
+
     @pytest.mark.parametrize("payload", [{}, {"metrics": None}, {"metrics": {"network": {}}}])
     async def test_network_metrics_requires_network_payload(
         self, _mock_graphql: AsyncMock, payload: dict

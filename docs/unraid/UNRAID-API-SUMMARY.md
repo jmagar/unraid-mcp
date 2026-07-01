@@ -149,7 +149,7 @@
 | `systemMetricsCpu` | `CpuUtilization!` |  —  |
 | `systemMetricsCpuTelemetry` | `CpuPackages!` |  —  |
 | `systemMetricsMemory` | `MemoryUtilization!` |  —  |
-| `systemMetricsNetwork` | `NetworkMetrics!` |  —  |
+| `systemMetricsNetwork` | `[NetworkMetrics!]!` |  —  |
 | `systemMetricsTemperature` | `TemperatureMetrics` |  —  |
 | `upsUpdates` | `UPSDevice!` |  —  |
 

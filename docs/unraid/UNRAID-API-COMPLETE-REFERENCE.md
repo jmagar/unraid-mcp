@@ -1995,7 +1995,7 @@ Remove one or more plugins from the API. Returns false if restart was triggered 
 </tr>
 <tr>
 <td colspan="2" valign="top"><strong id="subscription.systemmetricsnetwork">systemMetricsNetwork</strong></td>
-<td valign="top"><a href="#networkmetrics">NetworkMetrics</a>!</td>
+<td valign="top">[<a href="#networkmetrics">NetworkMetrics</a>!]!</td>
 <td>
 
 
@@ -6280,7 +6280,7 @@ IPv6 address details
 
 ### InfoNetworkIpv4Address
 
-IPv4 address information for a network interface
+IPv4 address assigned to a network interface
 
 <table>
 <thead>
@@ -6295,19 +6295,27 @@ IPv4 address information for a network interface
 <tr>
 <td colspan="2" valign="top"><strong id="infonetworkipv4address.address">address</strong></td>
 <td valign="top"><a href="#string">String</a>!</td>
-<td></td>
+<td>
+
+IPv4 address
+
+</td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><strong id="infonetworkipv4address.cidr">cidr</strong></td>
-<td valign="top"><a href="#int">Int</a></td>
-<td></td>
+<td colspan="2" valign="top"><strong id="infonetworkipv4address.netmask">netmask</strong></td>
+<td valign="top"><a href="#string">String</a>!</td>
+<td>
+
+IPv4 netmask
+
+</td>
 </tr>
 </tbody>
 </table>
 
 ### InfoNetworkIpv6Address
 
-IPv6 address information for a network interface
+IPv6 address assigned to a network interface
 
 <table>
 <thead>
@@ -6322,12 +6330,20 @@ IPv6 address information for a network interface
 <tr>
 <td colspan="2" valign="top"><strong id="infonetworkipv6address.address">address</strong></td>
 <td valign="top"><a href="#string">String</a>!</td>
-<td></td>
+<td>
+
+IPv6 address
+
+</td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><strong id="infonetworkipv6address.cidr">cidr</strong></td>
+<td colspan="2" valign="top"><strong id="infonetworkipv6address.prefixlength">prefixLength</strong></td>
 <td valign="top"><a href="#int">Int</a></td>
-<td></td>
+<td>
+
+IPv6 prefix length
+
+</td>
 </tr>
 </tbody>
 </table>
@@ -7243,10 +7259,10 @@ Temperature metrics
 </tr>
 <tr>
 <td colspan="2" valign="top"><strong id="metrics.network">network</strong></td>
-<td valign="top"><a href="#networkmetrics">NetworkMetrics</a></td>
+<td valign="top">[<a href="#networkmetrics">NetworkMetrics</a>!]!</td>
 <td>
 
-Network interface metrics
+Current network metrics for all interfaces
 
 </td>
 </tr>
@@ -7310,8 +7326,6 @@ Network interface metrics
 
 ### NetworkMetrics
 
-Network interface metrics
-
 <table>
 <thead>
 <tr>
@@ -7323,29 +7337,133 @@ Network interface metrics
 </thead>
 <tbody>
 <tr>
-<td colspan="2" valign="top"><strong id="networkmetrics.interface">interface</strong></td>
+<td colspan="2" valign="top"><strong id="networkmetrics.id">id</strong></td>
+<td valign="top"><a href="#prefixedid">PrefixedID</a>!</td>
+<td></td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.name">name</strong></td>
 <td valign="top"><a href="#string">String</a>!</td>
 <td>
 
-Network interface name
+Interface identifier
 
 </td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><strong id="networkmetrics.rxbytespersec">rxBytesPerSec</strong></td>
-<td valign="top"><a href="#float">Float</a></td>
+<td colspan="2" valign="top"><strong id="networkmetrics.operstate">operstate</strong></td>
+<td valign="top"><a href="#string">String</a></td>
 <td>
 
-Bytes received per second
+Operational state
 
 </td>
 </tr>
 <tr>
-<td colspan="2" valign="top"><strong id="networkmetrics.txbytespersec">txBytesPerSec</strong></td>
+<td colspan="2" valign="top"><strong id="networkmetrics.bytesreceived">bytesReceived</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Total received bytes
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.bytessent">bytesSent</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Total transmitted bytes
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.packetsreceived">packetsReceived</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Total received packets
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.packetssent">packetsSent</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Total transmitted packets
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.receiveerrors">receiveErrors</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Receive errors
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.transmiterrors">transmitErrors</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Transmit errors
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.receivedropped">receiveDropped</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Dropped receive packets
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.transmitdropped">transmitDropped</strong></td>
+<td valign="top"><a href="#bigint">BigInt</a>!</td>
+<td>
+
+Dropped transmit packets
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.rxsec">rxSec</strong></td>
+<td valign="top"><a href="#float">Float</a>!</td>
+<td>
+
+Receive throughput in bytes per second
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.txsec">txSec</strong></td>
+<td valign="top"><a href="#float">Float</a>!</td>
+<td>
+
+Transmit throughput in bytes per second
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.utilizationpercent">utilizationPercent</strong></td>
 <td valign="top"><a href="#float">Float</a></td>
 <td>
 
-Bytes transmitted per second
+Estimated link utilization percentage
+
+</td>
+</tr>
+<tr>
+<td colspan="2" valign="top"><strong id="networkmetrics.lastupdated">lastUpdated</strong></td>
+<td valign="top"><a href="#datetime">DateTime</a>!</td>
+<td>
+
+Metric collection timestamp
 
 </td>
 </tr>

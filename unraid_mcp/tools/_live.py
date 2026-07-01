@@ -29,6 +29,23 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 _LIVE_EVENT_BYTE_BUDGET: int = max(1, UNRAID_MCP_MAX_RESPONSE_BYTES // 2)
 
 
+def _cap_network_metrics(
+    data: dict[str, Any], limit: int | None
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Cap the per-interface list in a ``systemMetricsNetwork`` snapshot payload.
+
+    ``systemMetricsNetwork`` moved from a single object to one entry per network
+    interface upstream — cap it the same way every other list subaction is
+    capped (``cap_list``) so a heavily virtualized/VLAN-heavy host can't return
+    an unbounded interface list through the live snapshot path.
+    """
+    network = data.get("systemMetricsNetwork")
+    if not isinstance(network, list):
+        return data, {"returned": 0, "total": 0, "truncated": False}
+    capped, meta = cap_list(network, limit)
+    return {**data, "systemMetricsNetwork": capped}, meta
+
+
 def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[str, Any]:
     """Apply severity/context filtering to a single log_tail event's content.
 
@@ -103,6 +120,15 @@ async def _handle_live(
                         "live/%s served from warm subscription cache (skipped fresh WS)",
                         subaction,
                     )
+                    if subaction == "network_metrics":
+                        capped_data, page = _cap_network_metrics(cached, limit)
+                        return {
+                            "success": True,
+                            "subaction": subaction,
+                            "source": "cache",
+                            "data": capped_data,
+                            "page": page,
+                        }
                     return {
                         "success": True,
                         "subaction": subaction,
@@ -124,6 +150,15 @@ async def _handle_live(
                     raise
             else:
                 data = await subscribe_once(SNAPSHOT_ACTIONS[subaction], timeout=timeout)
+            if subaction == "network_metrics":
+                capped_data, page = _cap_network_metrics(data, limit)
+                return {
+                    "success": True,
+                    "subaction": subaction,
+                    "source": "live",
+                    "data": capped_data,
+                    "page": page,
+                }
             return {"success": True, "subaction": subaction, "source": "live", "data": data}
 
         if subaction == "log_tail":

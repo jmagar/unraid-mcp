@@ -353,8 +353,27 @@ async def test_network_metrics_returns_snapshot(_mock_subscribe_once, _cold_cach
     result = await _make_tool()(action="live", subaction="network_metrics")
     assert result["success"] is True
     assert result["data"]["systemMetricsNetwork"][0]["name"] == "eth0"
+    assert result["page"] == {"returned": 1, "total": 1, "truncated": False}
     query = _mock_subscribe_once.call_args.args[0]
     assert "systemMetricsNetwork" in query
+
+
+@pytest.mark.asyncio
+async def test_network_metrics_snapshot_is_capped(_mock_subscribe_once, _cold_cache):
+    _mock_subscribe_once.return_value = {
+        "systemMetricsNetwork": [
+            {"id": f"metrics:eth{idx}", "name": f"eth{idx}"} for idx in range(3)
+        ]
+    }
+    result = await _make_tool()(action="live", subaction="network_metrics", limit=2)
+    assert result["success"] is True
+    assert [iface["name"] for iface in result["data"]["systemMetricsNetwork"]] == [
+        "eth0",
+        "eth1",
+    ]
+    assert result["page"]["returned"] == 2
+    assert result["page"]["total"] == 3
+    assert result["page"]["truncated"] is True
 
 
 @pytest.mark.asyncio
@@ -436,6 +455,32 @@ async def test_event_driven_snapshot_served_from_warm_cache(_warm_cache, _mock_s
 
     assert result["source"] == "cache"
     assert result["data"]["displaySubscription"]["theme"] == "black"
+    _mock_subscribe_once.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_network_metrics_warm_cache_is_capped(_warm_cache, _mock_subscribe_once):
+    """The warm-cache network_metrics path caps the interface list too."""
+    _seed_warm(
+        _warm_cache,
+        "network_metrics",
+        {
+            "systemMetricsNetwork": [
+                {"id": f"metrics:eth{idx}", "name": f"eth{idx}"} for idx in range(3)
+            ]
+        },
+    )
+
+    result = await _make_tool()(action="live", subaction="network_metrics", limit=2)
+
+    assert result["source"] == "cache"
+    assert [iface["name"] for iface in result["data"]["systemMetricsNetwork"]] == [
+        "eth0",
+        "eth1",
+    ]
+    assert result["page"]["returned"] == 2
+    assert result["page"]["total"] == 3
+    assert result["page"]["truncated"] is True
     _mock_subscribe_once.assert_not_called()
 
 
