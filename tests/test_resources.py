@@ -87,7 +87,7 @@ class TestLiveResourcesUseManagerCache:
 
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_non_autostart_resource_uses_on_demand_fetch(self) -> None:
-        fallback_data = {"systemMetricsNetwork": {"interface": "eth0"}}
+        fallback_data = {"systemMetricsNetwork": [{"id": "metrics:eth0", "name": "eth0"}]}
         with (
             patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr,
             patch(

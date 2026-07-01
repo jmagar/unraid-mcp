@@ -55,7 +55,7 @@ SNAPSHOT_ACTIONS = {
         subscription { displaySubscription { id theme unit scale locale total usage warning critical hot max } }
     """,
     "network_metrics": """
-        subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }
+        subscription { systemMetricsNetwork { id name operstate bytesReceived bytesSent packetsReceived packetsSent receiveErrors transmitErrors receiveDropped transmitDropped rxSec txSec utilizationPercent lastUpdated } }
     """,
 }
 

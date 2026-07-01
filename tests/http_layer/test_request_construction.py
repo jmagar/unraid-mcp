@@ -325,11 +325,14 @@ class TestInfoToolRequests:
             return_value=_graphql_response(
                 {
                     "metrics": {
-                        "network": {
-                            "interface": "eth0",
-                            "rxBytesPerSec": 1.0,
-                            "txBytesPerSec": 2.0,
-                        }
+                        "network": [
+                            {
+                                "id": "metrics:eth0",
+                                "name": "eth0",
+                                "bytesReceived": 1,
+                                "bytesSent": 2,
+                            }
+                        ]
                     }
                 }
             )
@@ -341,8 +344,8 @@ class TestInfoToolRequests:
         assert "GetNetworkMetrics" in body["query"]
         assert "metrics" in body["query"]
         assert "network" in body["query"]
-        assert "rxBytesPerSec" in body["query"]
-        assert "txBytesPerSec" in body["query"]
+        assert "bytesReceived" in body["query"]
+        assert "rxSec" in body["query"]
 
     @respx.mock
     async def test_network_interfaces_sends_correct_query(self) -> None:
@@ -353,7 +356,7 @@ class TestInfoToolRequests:
                         {
                             "id": "net:eth0",
                             "name": "eth0",
-                            "ipv4Addresses": [{"address": "10.1.0.2", "cidr": 24}],
+                            "ipv4Addresses": [{"address": "10.1.0.2", "netmask": "255.255.255.0"}],
                             "ipv6Addresses": [],
                         }
                     ]

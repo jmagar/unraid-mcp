@@ -189,8 +189,8 @@ class TestUnraidInfoTool:
                     "virtual": False,
                     "vlanId": None,
                     "internal": False,
-                    "ipv4Addresses": [{"address": "10.1.0.2", "cidr": 24}],
-                    "ipv6Addresses": [{"address": "fd7a:115c:a1e0::1", "cidr": 64}],
+                    "ipv4Addresses": [{"address": "10.1.0.2", "netmask": "255.255.255.0"}],
+                    "ipv6Addresses": [{"address": "fd7a:115c:a1e0::1", "prefixLength": 64}],
                 }
             ]
         }
@@ -201,10 +201,10 @@ class TestUnraidInfoTool:
         assert "ipv4Addresses" in query
         assert "ipv6Addresses" in query
         assert result["network_interfaces"][0]["ipv4Addresses"] == [
-            {"address": "10.1.0.2", "cidr": 24}
+            {"address": "10.1.0.2", "netmask": "255.255.255.0"}
         ]
         assert result["network_interfaces"][0]["ipv6Addresses"] == [
-            {"address": "fd7a:115c:a1e0::1", "cidr": 64}
+            {"address": "fd7a:115c:a1e0::1", "prefixLength": 64}
         ]
         assert result["page"]["truncated"] is False
 
@@ -228,11 +228,17 @@ class TestUnraidInfoTool:
     ) -> None:
         _mock_graphql.return_value = {
             "metrics": {
-                "network": {
-                    "interface": "eth0",
-                    "rxBytesPerSec": 1024.0,
-                    "txBytesPerSec": 2048.0,
-                },
+                "network": [
+                    {
+                        "id": "metrics:eth0",
+                        "name": "eth0",
+                        "operstate": "up",
+                        "bytesReceived": 1024,
+                        "bytesSent": 2048,
+                        "rxSec": 100.0,
+                        "txSec": 200.0,
+                    },
+                ],
             }
         }
         tool_fn = _make_tool()
@@ -240,15 +246,21 @@ class TestUnraidInfoTool:
 
         query = _mock_graphql.call_args.args[0]
         assert "network" in query
-        assert "rxBytesPerSec" in query
-        assert "txBytesPerSec" in query
-        assert result == {
-            "interface": "eth0",
-            "rxBytesPerSec": 1024.0,
-            "txBytesPerSec": 2048.0,
-        }
+        assert "bytesReceived" in query
+        assert "rxSec" in query
+        assert result["network"] == [
+            {
+                "id": "metrics:eth0",
+                "name": "eth0",
+                "operstate": "up",
+                "bytesReceived": 1024,
+                "bytesSent": 2048,
+                "rxSec": 100.0,
+                "txSec": 200.0,
+            }
+        ]
 
-    @pytest.mark.parametrize("payload", [{}, {"metrics": None}, {"metrics": {"network": []}}])
+    @pytest.mark.parametrize("payload", [{}, {"metrics": None}, {"metrics": {"network": {}}}])
     async def test_network_metrics_requires_network_payload(
         self, _mock_graphql: AsyncMock, payload: dict
     ) -> None:

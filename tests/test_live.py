@@ -341,15 +341,18 @@ async def test_notifications_warnings_returns_snapshot(_mock_subscribe_once, _co
 @pytest.mark.asyncio
 async def test_network_metrics_returns_snapshot(_mock_subscribe_once, _cold_cache):
     _mock_subscribe_once.return_value = {
-        "systemMetricsNetwork": {
-            "interface": "eth0",
-            "rxBytesPerSec": 1024.0,
-            "txBytesPerSec": 2048.0,
-        }
+        "systemMetricsNetwork": [
+            {
+                "id": "metrics:eth0",
+                "name": "eth0",
+                "bytesReceived": 1024,
+                "bytesSent": 2048,
+            }
+        ]
     }
     result = await _make_tool()(action="live", subaction="network_metrics")
     assert result["success"] is True
-    assert result["data"]["systemMetricsNetwork"]["interface"] == "eth0"
+    assert result["data"]["systemMetricsNetwork"][0]["name"] == "eth0"
     query = _mock_subscribe_once.call_args.args[0]
     assert "systemMetricsNetwork" in query
 

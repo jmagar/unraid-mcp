@@ -32,7 +32,7 @@ class TestValidateSubscriptionQueryAllowed:
     def test_system_metrics_network_accepted(self) -> None:
         assert (
             _validate_subscription_query(
-                "subscription { systemMetricsNetwork { interface rxBytesPerSec txBytesPerSec } }"
+                "subscription { systemMetricsNetwork { id name bytesReceived bytesSent } }"
             )
             == "systemMetricsNetwork"
         )
