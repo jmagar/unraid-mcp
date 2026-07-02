@@ -82,6 +82,46 @@ def test_container_configs_use_runtime_port_variable() -> None:
     assert "${UNRAID_MCP_PORT:-6970}" in dockerfile
 
 
+def test_dockerfile_does_not_hardcode_env_configurable_defaults() -> None:
+    """Regression coverage for GitHub issue #137 (Dockerfile half of the fix).
+
+    The image used to bake ``ENV UNRAID_MCP_TRANSPORT=streamable-http`` and
+    ``UNRAID_MCP_LOG_LEVEL=INFO`` — both byte-identical to ``Settings()``'s own
+    defaults. Because ``_load_env_files()`` uses ``load_dotenv(override=False)``,
+    a value already present in the process env from an image ``ENV`` permanently
+    shadows the same var configured in the container-local
+    ``~/.unraid-mcp/.env`` (populated via the ``health/setup`` elicitation flow,
+    distinct from the host-side ``.env`` docker-compose's ``env_file:`` passes
+    through — that path already works correctly since compose-supplied runtime
+    env beats image ``ENV``). Neither var needs a container-specific value, so
+    neither belongs in the image. ``UNRAID_MCP_HOST=0.0.0.0`` is the one
+    legitimate exception: it differs from the package default (``127.0.0.1``)
+    and is required for the server to be reachable from outside the container's
+    network namespace. ``UNRAID_MCP_PORT`` was dropped too — every place that
+    reads it (the healthcheck here and in docker-compose.yaml) already has its
+    own ``${UNRAID_MCP_PORT:-6970}`` shell-level fallback, so baking it into the
+    image added nothing but the same shadowing risk.
+    """
+    dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
+    # Strip comment lines so this test isn't tripped up by its own docstring-style
+    # explanatory comments in the Dockerfile mentioning these var names in prose.
+    code_lines = "\n".join(
+        line for line in dockerfile.splitlines() if not line.strip().startswith("#")
+    )
+    for shadowing_prone_var in (
+        "UNRAID_MCP_TRANSPORT=",
+        "UNRAID_MCP_PORT=",
+        "UNRAID_MCP_LOG_LEVEL=",
+    ):
+        assert shadowing_prone_var not in code_lines, (
+            f"Dockerfile bakes {shadowing_prone_var!r}, which duplicates a Settings() "
+            "default and would silently shadow the same var configured in the "
+            "container-local ~/.unraid-mcp/.env (load_dotenv(override=False)) — see "
+            "issue #137"
+        )
+    assert "UNRAID_MCP_HOST=0.0.0.0" in dockerfile
+
+
 def test_docker_runtime_python_matches_builder_minor_version() -> None:
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
     assert "uv:python3.12-bookworm-slim" in dockerfile
