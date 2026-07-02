@@ -1,6 +1,7 @@
 """Tests for the setting subactions of the consolidated unraid tool."""
 
 import importlib
+import os
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -389,6 +390,16 @@ def _reload_settings_from_dotenv(
     final reload — otherwise that "restore a clean module" reload would still
     see ``UNRAID_CREDENTIALS_DIR`` pointing at this test's tmp ``.env`` file and
     re-load whatever TLS value it contains, leaking into the next test.
+
+    The TLS vars are popped from ``os.environ`` directly (not just via
+    ``monkeypatch.delenv``) because ``load_dotenv()`` writes them straight into
+    ``os.environ`` during the test, bypassing monkeypatch's own tracking. If
+    the *only* monkeypatch touch of a key beforehand was a no-op
+    ``delenv(raising=False)`` on an already-absent var, monkeypatch's undo
+    stack has no earlier "restore to unset" entry to fall back on — so its
+    automatic teardown would faithfully restore the leaked ``load_dotenv``
+    value into ``os.environ`` for every later test, undoing our own cleanup.
+    The raw pop empties them before monkeypatch's ledger is ever consulted.
     """
     monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
     monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
@@ -396,6 +407,8 @@ def _reload_settings_from_dotenv(
     try:
         yield tmp_path
     finally:
+        os.environ.pop("UNRAID_VERIFY_SSL", None)
+        os.environ.pop("UNRAID_ALLOW_INSECURE_TLS", None)
         monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
         monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
         monkeypatch.delenv("UNRAID_CREDENTIALS_DIR", raising=False)

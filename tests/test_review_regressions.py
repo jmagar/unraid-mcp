@@ -28,12 +28,15 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
     var configured in ``~/.unraid-mcp/.env`` — so a user pointing
     ``UNRAID_VERIFY_SSL`` at a CA-bundle path for a self-signed cert had that
     silently ignored. The same shadowing risk applies to any other var these
-    manifests hardcode to a value that merely duplicates the package default
-    (``UNRAID_MCP_LOG_LEVEL``, ``UNRAID_MCP_LOG_FILE``,
-    ``UNRAID_AUTO_START_SUBSCRIPTIONS``, ``UNRAID_MAX_RECONNECT_ATTEMPTS``) —
-    none of them serve a purpose beyond matching ``Settings()``'s own default,
-    so none of them belong in the manifest. ``UNRAID_MCP_TRANSPORT=stdio`` is
-    the one legitimate exception: it differs from the package default
+    manifests hardcode to a value that merely duplicates the package's own
+    default (``UNRAID_MCP_LOG_LEVEL``, ``UNRAID_MCP_LOG_FILE`` — both from
+    ``Settings()`` in ``unraid_mcp/config/settings.py``;
+    ``UNRAID_AUTO_START_SUBSCRIPTIONS``, ``UNRAID_MAX_RECONNECT_ATTEMPTS`` —
+    both from ``os.getenv(...)`` fallbacks in
+    ``unraid_mcp/subscriptions/manager.py``) — none of them serve a purpose
+    beyond matching a default that already applies when unset, so none of
+    them belong in the manifest. ``UNRAID_MCP_TRANSPORT=stdio`` is the one
+    legitimate exception: it differs from the package default
     (``streamable-http``) and is mandatory for a plugin-launched subprocess,
     which talks to its host over stdio.
     """
@@ -56,7 +59,7 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
     for env_block, label in ((mcp_env, ".mcp.json"), (codex_env, ".codex-plugin/plugin.json")):
         leaked = shadowing_prone_vars & env_block.keys()
         assert not leaked, (
-            f"{label} hardcodes {leaked}, which duplicates a Settings() default and would "
+            f"{label} hardcodes {leaked}, which duplicates a package default and would "
             "silently shadow the same var configured in ~/.unraid-mcp/.env "
             "(load_dotenv(override=False)) — see issue #137"
         )
@@ -103,8 +106,9 @@ def test_dockerfile_does_not_hardcode_env_configurable_defaults() -> None:
     image added nothing but the same shadowing risk.
     """
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
-    # Strip comment lines so this test isn't tripped up by its own docstring-style
-    # explanatory comments in the Dockerfile mentioning these var names in prose.
+    # Strip comment lines so a future rewording of the explanatory comment above
+    # ENV UNRAID_MCP_HOST=0.0.0.0 (which today only abbreviates these var names,
+    # not spelling out VAR=value) can't accidentally false-positive this check.
     code_lines = "\n".join(
         line for line in dockerfile.splitlines() if not line.strip().startswith("#")
     )
