@@ -42,11 +42,17 @@ RUN mkdir -p /app/logs /app/backups /home/mcp/.unraid-mcp && \
     chown -R mcp:mcp /app/logs /app/backups /home/mcp/.unraid-mcp && \
     chmod 700 /home/mcp/.unraid-mcp
 
-# Default env — overridden by .env / docker-compose
-ENV UNRAID_MCP_TRANSPORT=streamable-http \
-    UNRAID_MCP_HOST=0.0.0.0 \
-    UNRAID_MCP_PORT=6970 \
-    UNRAID_MCP_LOG_LEVEL=INFO
+# UNRAID_MCP_HOST is the only var that genuinely needs a container-specific value
+# (the package default 127.0.0.1 would make the server unreachable from outside the
+# container network namespace). UNRAID_MCP_TRANSPORT/_PORT/_LOG_LEVEL are deliberately
+# NOT baked in here even though they used to match this image's intended defaults:
+# _load_env_files() loads ~/.unraid-mcp/.env with load_dotenv(override=False), so a
+# value already present in the process env (as these would be, coming from an image
+# ENV) permanently shadows the same var configured in that .env file. Package
+# defaults (streamable-http / 6970 / INFO — see unraid_mcp/config/settings.py) apply
+# identically when unset, so baking them in here would only ever silently block a
+# user's own configuration, never add real value (see issue #137).
+ENV UNRAID_MCP_HOST=0.0.0.0
 
 EXPOSE 6970
 

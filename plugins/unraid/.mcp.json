@@ -8,12 +8,7 @@
       "env": {
         "UNRAID_MCP_TRANSPORT": "stdio",
         "UNRAID_API_URL": "${CLAUDE_PLUGIN_OPTION_UNRAID_API_URL}",
-        "UNRAID_API_KEY": "${CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY}",
-        "UNRAID_VERIFY_SSL": "true",
-        "UNRAID_MCP_LOG_LEVEL": "INFO",
-        "UNRAID_MCP_LOG_FILE": "unraid-mcp.log",
-        "UNRAID_AUTO_START_SUBSCRIPTIONS": "true",
-        "UNRAID_MAX_RECONNECT_ATTEMPTS": "10"
+        "UNRAID_API_KEY": "${CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY}"
       }
     }
   }
