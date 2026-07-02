@@ -51,6 +51,12 @@ pub struct CounterSnapshot {
     pub upstream_errors: u64,
 }
 
+/// Timeout for the upstream health probe. Kept in line with the container
+/// healthcheck's own curl timeout (5s) so a transient DNS+TLS/latency spike
+/// against the externally-resolved Unraid endpoint does not register as a
+/// failure and fire warn-level alert noise while the API is actually healthy.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Result of a lightweight upstream health probe.
 #[derive(Debug, serde::Serialize)]
 pub struct UpstreamHealth {
@@ -85,7 +91,7 @@ pub async fn probe_upstream(client: &reqwest::Client, url: &str, api_key: &str) 
         .header("x-api-key", api_key)
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({ "query": "query { info { time } }" }))
-        .timeout(Duration::from_secs(1))
+        .timeout(PROBE_TIMEOUT)
         .send()
         .await;
     match res {
@@ -94,7 +100,17 @@ pub async fn probe_upstream(client: &reqwest::Client, url: &str, api_key: &str) 
         Err(e) => {
             // `/health` is public — log the full error (which may embed the
             // upstream URL) server-side, but return only a category to the caller.
-            tracing::warn!(error = %e, "upstream health probe failed");
+            // Walk the source chain: reqwest's Display only shows the outer
+            // "error sending request" line, hiding whether it was a timeout,
+            // DNS, or connection failure — the detail needed to diagnose.
+            let mut cause = String::new();
+            let mut src = std::error::Error::source(&e);
+            while let Some(s) = src {
+                cause.push_str(": ");
+                cause.push_str(&s.to_string());
+                src = s.source();
+            }
+            tracing::warn!(error = %e, cause = %cause, "upstream health probe failed");
             let category = if e.is_timeout() {
                 "request timed out"
             } else if e.is_connect() {
