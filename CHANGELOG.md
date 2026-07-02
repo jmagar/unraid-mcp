@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2](https://github.com/jmagar/unraid-mcp/compare/v2.3.1...v2.3.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* adapt to Unraid NetworkMetrics schema drift ([75bff2f](https://github.com/jmagar/unraid-mcp/commit/75bff2f6626ef9d59eedc246b740757ce775c34b))
+* adapt to Unraid NetworkMetrics schema drift ([519ceb5](https://github.com/jmagar/unraid-mcp/commit/519ceb55722c6dd1ae9843f03726840d559ef8a1)), closes [#138](https://github.com/jmagar/unraid-mcp/issues/138)
+* cap live/network_metrics interface list and refresh stale docs ([059d0b0](https://github.com/jmagar/unraid-mcp/commit/059d0b0588fb109002d21333958e0e73a7ef7c0e))
+* close a test-isolation leak in the new SSL precedence fixture ([30c0468](https://github.com/jmagar/unraid-mcp/commit/30c046870aeee0b5c188245d391ac57d27630324))
+* stop Dockerfile from shadowing container-local .env config ([a1be398](https://github.com/jmagar/unraid-mcp/commit/a1be3982f6952ffd86cde43319e0d00d6dab5e18))
+* stop plugin manifests from shadowing .env config ([432ccf6](https://github.com/jmagar/unraid-mcp/commit/432ccf648fe29d0d154661a75dc8bcee17e0e5f0))
+* stop plugin manifests from shadowing .env config ([#137](https://github.com/jmagar/unraid-mcp/issues/137)) ([81ec6b4](https://github.com/jmagar/unraid-mcp/commit/81ec6b48f1d413ae297f73af37bf4c3e6dd849af))
+
 ## [2.3.1](https://github.com/jmagar/unraid-mcp/compare/v2.3.0...v2.3.1) (2026-06-29)
 
 
