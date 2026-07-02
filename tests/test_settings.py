@@ -2,6 +2,7 @@
 
 import importlib
 from collections.abc import Generator
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -370,4 +371,102 @@ class TestVerifySslGuard:
         monkeypatch.setenv("UNRAID_VERIFY_SSL", ca_path)
         importlib.reload(settings_module)
         assert ca_path == settings_module.UNRAID_VERIFY_SSL
-        assert isinstance(settings_module.UNRAID_VERIFY_SSL, str)
+
+
+@pytest.fixture
+def _reload_settings_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Generator[Path, None, None]:
+    """Point the canonical credentials dir at an isolated tmp_path .env file.
+
+    ``CREDENTIALS_DIR``/``CREDENTIALS_ENV_PATH`` are computed once at module
+    import time from ``UNRAID_CREDENTIALS_DIR``, so re-deriving them for a test
+    requires both setting that env var *and* reloading the module (a bare
+    ``monkeypatch.setattr(settings_module, "CREDENTIALS_ENV_PATH", ...)`` would
+    just get clobbered the moment anything reloads the module).
+
+    Teardown clears the TLS vars *and* ``UNRAID_CREDENTIALS_DIR`` before the
+    final reload — otherwise that "restore a clean module" reload would still
+    see ``UNRAID_CREDENTIALS_DIR`` pointing at this test's tmp ``.env`` file and
+    re-load whatever TLS value it contains, leaking into the next test.
+    """
+    monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
+    monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+    monkeypatch.setenv("UNRAID_CREDENTIALS_DIR", str(tmp_path))
+    try:
+        yield tmp_path
+    finally:
+        monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
+        monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+        monkeypatch.delenv("UNRAID_CREDENTIALS_DIR", raising=False)
+        importlib.reload(settings_module)
+
+
+class TestVerifySslDotenvPrecedence:
+    """Regression coverage for GitHub issue #137.
+
+    The bundled Claude Code (``.mcp.json``) and Codex (``.codex-plugin/plugin.json``)
+    manifests used to hardcode ``UNRAID_VERIFY_SSL=true`` in the launched
+    process's env. Because ``_load_env_files()`` uses
+    ``load_dotenv(override=False)``, that pre-set value permanently shadowed
+    whatever ``UNRAID_VERIFY_SSL`` a user configured in the canonical
+    ``~/.unraid-mcp/.env`` (most notably a CA-bundle path for a self-signed
+    cert). The manifests no longer hardcode this var; these tests pin the
+    underlying ``_load_env_files()`` + ``Settings()`` precedence rule — both
+    that a ``.env``-configured value is honored once nothing shadows it, and
+    (explicitly) that a manifest-style pre-set value still wins if one is ever
+    reintroduced — so a future manifest edit can't silently bring the bug back.
+    """
+
+    @staticmethod
+    def _write_env(env_dir: Path, **values: str) -> None:
+        (env_dir / ".env").write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n")
+
+    def test_ca_bundle_path_from_dotenv_is_picked_up_when_unset(
+        self, _reload_settings_from_dotenv: Path
+    ) -> None:
+        """Nothing pre-sets UNRAID_VERIFY_SSL (the fixed manifest state) ->
+        the .env-configured CA-bundle path is used."""
+        ca_path = "/etc/ssl/certs/unraid-ca.pem"
+        self._write_env(_reload_settings_from_dotenv, UNRAID_VERIFY_SSL=ca_path)
+        importlib.reload(settings_module)
+        assert ca_path == settings_module.UNRAID_VERIFY_SSL
+
+    def test_true_from_dotenv_is_picked_up_when_unset(
+        self, _reload_settings_from_dotenv: Path
+    ) -> None:
+        self._write_env(_reload_settings_from_dotenv, UNRAID_VERIFY_SSL="true")
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_VERIFY_SSL is True
+
+    def test_false_from_dotenv_requires_opt_in(self, _reload_settings_from_dotenv: Path) -> None:
+        self._write_env(_reload_settings_from_dotenv, UNRAID_VERIFY_SSL="false")
+        with pytest.raises(SystemExit) as excinfo:
+            importlib.reload(settings_module)
+        assert excinfo.value.code == 1
+
+    def test_false_from_dotenv_with_opt_in_disables_verification(
+        self, _reload_settings_from_dotenv: Path
+    ) -> None:
+        self._write_env(
+            _reload_settings_from_dotenv,
+            UNRAID_VERIFY_SSL="false",
+            UNRAID_ALLOW_INSECURE_TLS="true",
+        )
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_VERIFY_SSL is False
+
+    def test_manifest_style_preset_env_shadows_dotenv_ca_path(
+        self, _reload_settings_from_dotenv: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Documents the actual bug mechanism from issue #137: if something
+        pre-sets UNRAID_VERIFY_SSL in the process env before the server reads
+        .env (exactly what the old hardcoded manifest 'true' did), the .env
+        file's CA-bundle path is silently ignored. This is why plugin
+        manifests must never hardcode this var.
+        """
+        ca_path = "/etc/ssl/certs/unraid-ca.pem"
+        self._write_env(_reload_settings_from_dotenv, UNRAID_VERIFY_SSL=ca_path)
+        monkeypatch.setenv("UNRAID_VERIFY_SSL", "true")  # simulates the old manifest hardcode
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_VERIFY_SSL is True  # .env's CA path was shadowed
