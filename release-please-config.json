@@ -1,0 +1,65 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "rust",
+  "include-v-in-tag": true,
+  "include-component-in-tag": false,
+  "bootstrap-sha": "52b3eff2c81b0371c25eb74553757e1f8d9dca09",
+  "label": "autorelease: pending,release-please",
+  "release-label": "autorelease: tagged,release-please",
+  "pull-request-header": "This release PR is managed by release-please. Merge it to let release-please create the tag and GitHub Release.",
+  "pull-request-footer": "After release-please publishes the GitHub Release, release.yml builds and attaches the linux/amd64 binary and Docker image.",
+  "changelog-sections": [
+    {
+      "type": "feat",
+      "section": "Added"
+    },
+    {
+      "type": "fix",
+      "section": "Fixed"
+    },
+    {
+      "type": "perf",
+      "section": "Changed"
+    },
+    {
+      "type": "refactor",
+      "section": "Changed"
+    },
+    {
+      "type": "chore",
+      "section": "Chores",
+      "hidden": true
+    },
+    {
+      "type": "ci",
+      "section": "CI",
+      "hidden": true
+    },
+    {
+      "type": "docs",
+      "section": "Documentation",
+      "hidden": true
+    },
+    {
+      "type": "test",
+      "section": "Tests",
+      "hidden": true
+    },
+    {
+      "type": "build",
+      "section": "Build",
+      "hidden": true
+    },
+    {
+      "type": "style",
+      "section": "Style",
+      "hidden": true
+    }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "unraid-mcp",
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}
