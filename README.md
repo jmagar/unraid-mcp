@@ -32,6 +32,8 @@ Rust MCP server that bridges Claude (and any MCP client) to the Unraid server Gr
 
 - Rust 1.90+ (`rustup show`)
 - Unraid API URL and API key (Settings → API Management in Unraid)
+- **Platform: linux/amd64 only.** Release binaries, the Docker image, and CI builds
+  target `x86_64` exclusively — arm64/aarch64 is not built or supported.
 
 ### Run
 
