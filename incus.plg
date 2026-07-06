@@ -1,0 +1,94 @@
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "incus">
+  <!ENTITY author    "jmagar">
+  <!ENTITY version   "2026.07.01">
+  <!ENTITY launch    "Settings/IncusSettings">
+  <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
+  <!ENTITY pluginURL "&gitURL;/&name;.plg">
+  <!ENTITY txz       "&name;-unraid-7.0.0-5-x86_64-1.txz">
+  <!ENTITY md5       "356f8f2f31ddac7cde6afc35d94ecc1d">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
+
+<CHANGES>
+###2026.07.01
+- Initial release: Incus 7.0 LTS (repackaged from Debian trixie), LAN-banned
+  agent-jail environment, config-driven idempotent init on array start.
+</CHANGES>
+
+<!-- clean older txz payloads -->
+<FILE Run="/bin/bash">
+<INLINE>
+rm -f $(ls &plugin;/&name;*.txz 2>/dev/null | grep -v '&txz;')
+</INLINE>
+</FILE>
+
+<!-- the repackaged Incus runtime (private-prefixed, no system-lib pollution) -->
+<FILE Name="&plugin;/&txz;" Run="upgradepkg --install-new">
+<URL>&gitURL;/packages/&txz;</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!-- default config, only if not present (never clobber user edits) -->
+<FILE Run="/bin/bash">
+<INLINE>
+if [ ! -f "&plugin;/incus.cfg" ]; then
+  cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg"
+fi
+# make scripts executable
+chmod +x &emhttp;/scripts/*.sh &emhttp;/event/* 2>/dev/null
+# symlink rc script into /etc/rc.d so it's callable as a service
+ln -sf "&emhttp;/scripts/rc.incus" /etc/rc.d/rc.incus
+chmod +x /etc/rc.d/rc.incus
+# create incus-admin group if it doesn't exist (incusd --group references it)
+getent group incus-admin >/dev/null 2>&amp;1 || groupadd -r incus-admin
+</INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/README.md">
+<INLINE>
+**Incus for Unraid — LAN-banned agent jails**
+
+Runs the Incus system-container manager on Unraid, purpose-built for isolated
+coding-agent / stdio-MCP workspaces. Jails get a dedicated NAT bridge that is
+firewalled off from your LAN (egress deny-list) while keeping Internet access,
+so an agent (or a compromised dependency) can't reach your NAS, routers, or
+internal services. All network/storage policy is configured in
+`/boot/config/plugins/incus/incus.cfg`.
+
+Not affiliated with the LinuxContainers project.
+</INLINE>
+</FILE>
+
+<!-- start now if array is already up and service enabled -->
+<FILE Run="/bin/bash">
+<INLINE>
+. "&plugin;/incus.cfg" 2>/dev/null
+if [ "${SERVICE:-disabled}" = "enabled" ] &amp;&amp; mountpoint -q /mnt/user 2>/dev/null; then
+  /etc/rc.d/rc.incus start &amp;&amp; &emhttp;/scripts/incus-init.sh
+fi
+echo ""
+echo "----------------------------------------------------"
+echo " Incus for Unraid &version; installed."
+echo " Configure: /boot/config/plugins/incus/incus.cfg"
+echo " Enable SERVICE=enabled, then start the array (or run"
+echo " /etc/rc.d/rc.incus start &amp;&amp; the init script)."
+echo "----------------------------------------------------"
+</INLINE>
+</FILE>
+
+<!-- uninstall -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+/etc/rc.d/rc.incus stop 2>/dev/null
+removepkg &name; 2>/dev/null
+rm -rf &emhttp;
+echo "Incus plugin removed. State in INCUS_DIR and /boot/config/plugins/incus was left intact."
+</INLINE>
+</FILE>
+
+</PLUGIN>

@@ -1,0 +1,13 @@
+#!/bin/bash
+# Fires when the array comes up. Start incusd (state lives on the array, so we
+# must wait until now) then apply the jail environment from incus.cfg.
+CFG="/boot/config/plugins/incus/incus.cfg"
+[ -f "$CFG" ] || exit 0
+. "$CFG"
+[ "${SERVICE:-disabled}" = "enabled" ] || exit 0
+
+logger -t incus "array up: starting incusd"
+/etc/rc.d/rc.incus start || { logger -t incus "incusd failed to start"; exit 0; }
+
+# Apply storage/ACL/bridge/profile idempotently.
+/usr/local/emhttp/plugins/incus/scripts/incus-init.sh

@@ -1,0 +1,28 @@
+{
+  "name": "unraid-api-plugin-incus",
+  "version": "0.1.0",
+  "description": "Manage LAN-banned Incus agent jails from the Unraid API (GraphQL over the Incus REST socket).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "*",
+    "@nestjs/config": "*",
+    "@nestjs/graphql": "*",
+    "@unraid/shared": "*",
+    "class-transformer": "*",
+    "class-validator": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

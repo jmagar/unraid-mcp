@@ -1,0 +1,15 @@
+# Build artifacts
+unraid-api-plugin-incus/dist/
+unraid-api-plugin-incus/node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Logs
+*.log

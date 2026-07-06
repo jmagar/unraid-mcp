@@ -1,0 +1,21 @@
+#!/bin/bash
+# Fires when the array is being taken down. Stop all jails and incusd cleanly
+# BEFORE the array (which holds INCUS_DIR) unmounts, or state gets corrupted.
+CFG="/boot/config/plugins/incus/incus.cfg"
+[ -f "$CFG" ] || exit 0
+. "$CFG"
+[ "${SERVICE:-disabled}" = "enabled" ] || exit 0
+
+PREFIX="/usr/local/incus"
+EMHTTP="/usr/local/emhttp/plugins/incus"
+. "${EMHTTP}/scripts/incus-env.sh"
+
+logger -t incus "array down: stopping jails"
+# Stop every running instance in parallel, then wait for all to finish.
+# Uses process substitution (not a pipe) so backgrounded jobs are children
+# of this shell and `wait` actually catches them.
+while IFS=, read -r name state; do
+  [ "$state" = "RUNNING" ] && { logger -t incus "stopping $name"; "${PREFIX}/bin/incus" stop "$name" --timeout=30 & }
+done < <("${PREFIX}/bin/incus" list -f csv -c n,s 2>/dev/null)
+wait
+/etc/rc.d/rc.incus stop

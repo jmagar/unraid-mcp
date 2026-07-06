@@ -1,0 +1,70 @@
+#!/bin/bash
+# /etc/rc.d/rc.incus — Unraid-style service control for incusd.
+# Backgrounds the daemon with scoped libs, persistent state on the array,
+# and a lxcfs mount for container /proc virtualization.
+
+PREFIX="/usr/local/incus"
+EMHTTP="/usr/local/emhttp/plugins/incus"
+. "${EMHTTP}/scripts/incus-env.sh"
+# Source user config to pick up custom INCUS_DIR and SERVICE setting
+[ -f "/boot/config/plugins/incus/incus.cfg" ] && . "/boot/config/plugins/incus/incus.cfg"
+
+PIDFILE="/var/run/incusd.pid"
+LXCFS_PID="/var/run/incus-lxcfs.pid"
+LOG="/var/log/incusd.log"
+
+start() {
+  if ! "${EMHTTP}/scripts/incus-preflight.sh" >>"$LOG" 2>&1; then
+    echo "incus: preflight FAILED — see $LOG"; exit 1
+  fi
+  mkdir -p "$INCUS_DIR"
+
+  # lxcfs first (optional but recommended: containers see their own limits).
+  if [ -x "${PREFIX}/bin/lxcfs" ] && ! mountpoint -q "${INCUS_DIR}/lxcfs" 2>/dev/null; then
+    mkdir -p "${INCUS_DIR}/lxcfs"
+    setsid "${PREFIX}/bin/lxcfs" "${INCUS_DIR}/lxcfs" >>"$LOG" 2>&1 &
+    echo $! > "$LXCFS_PID"
+  fi
+
+  if [ -S "${INCUS_DIR}/unix.socket" ] && "${PREFIX}/bin/incus" info >/dev/null 2>&1; then
+    echo "incus: already running"; return 0
+  fi
+
+  echo "incus: starting incusd (state: ${INCUS_DIR})"
+  setsid "${PREFIX}/libexec/incus/incusd" --group incus-admin >>"$LOG" 2>&1 &
+  echo $! > "$PIDFILE"
+
+  # Wait for the API socket (up to ~15s).
+  for _ in $(seq 1 30); do
+    "${PREFIX}/bin/incus" info >/dev/null 2>&1 && { echo "incus: ready"; return 0; }
+    sleep 0.5
+  done
+  echo "incus: socket did not come up — check $LOG"; exit 1
+}
+
+stop() {
+  echo "incus: stopping"
+  # Graceful daemon shutdown (stops instances per their config first).
+  "${PREFIX}/bin/incus" admin shutdown >/dev/null 2>&1 || \
+    { [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; }
+  [ -f "$LXCFS_PID" ] && kill "$(cat "$LXCFS_PID")" 2>/dev/null
+  fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null
+  rm -f "$PIDFILE" "$LXCFS_PID"
+}
+
+status() {
+  if "${PREFIX}/bin/incus" info >/dev/null 2>&1; then
+    echo "incus: RUNNING"; "${PREFIX}/bin/incus" list 2>/dev/null
+  else
+    echo "incus: STOPPED"
+  fi
+}
+
+case "$1" in
+  start)   start ;;
+  stop)    stop ;;
+  restart) stop; sleep 1; start ;;
+  status)  status ;;
+  preflight) "${EMHTTP}/scripts/incus-preflight.sh" ;;
+  *) echo "usage: $0 {start|stop|restart|status|preflight}"; exit 1 ;;
+esac
