@@ -109,6 +109,7 @@ impl CliCommand {
             ["vm-reset", id] => Self::VmReset(id.to_string()),
             ["docker-start", id] => Self::DockerStart(id.to_string()),
             ["docker-stop", id] => Self::DockerStop(id.to_string()),
+            ["docker-restart", id] => Self::DockerRestart(id.to_string()),
             ["docker-pause", id] => Self::DockerPause(id.to_string()),
             ["docker-unpause", id] => Self::DockerUnpause(id.to_string()),
             ["docker-update-container", id] => Self::DockerUpdateContainer(id.to_string()),

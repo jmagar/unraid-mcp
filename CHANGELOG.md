@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where relevant), returning a `{items, total, limit, offset, has_more, next_offset}`
   envelope (MCP surface).
 - ~40 KB truncation cap on MCP tool responses.
+- `docker_restart` action (`unraid:admin`), added after re-vendoring
+  `schema/unraid-schema.graphql` from `unraid/api@2679fda1` picked up a new
+  `DockerMutations.restart` mutation.
+- `array_set_state` accepts optional `decryption_password`/`decryption_keyfile`
+  (MCP-only — not exposed via the CLI, to avoid putting secrets in shell
+  history/process listings), so an encrypted array can be started without the
+  web UI unlock step. Also picked up from the same schema re-vendor.
 
 ### Fixed
 

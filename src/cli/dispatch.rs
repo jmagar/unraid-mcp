@@ -141,6 +141,7 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
         CliCommand::VmReset(id) => ("vm_reset", service.vm_reset(&id).await?),
         CliCommand::DockerStart(id) => ("docker_start", service.docker_start(&id).await?),
         CliCommand::DockerStop(id) => ("docker_stop", service.docker_stop(&id).await?),
+        CliCommand::DockerRestart(id) => ("docker_restart", service.docker_restart(&id).await?),
         CliCommand::DockerPause(id) => ("docker_pause", service.docker_pause(&id).await?),
         CliCommand::DockerUnpause(id) => ("docker_unpause", service.docker_unpause(&id).await?),
         CliCommand::DockerUpdateContainer(id) => (
@@ -159,7 +160,10 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
             "docker_update_all_containers",
             service.docker_update_all_containers().await?,
         ),
-        CliCommand::ArraySetState(ds) => ("array_set_state", service.array_set_state(&ds).await?),
+        CliCommand::ArraySetState(ds) => (
+            "array_set_state",
+            service.array_set_state(&ds, None, None).await?,
+        ),
         CliCommand::ArrayAddDiskToArray(id) => (
             "array_add_disk_to_array",
             service.array_add_disk_to_array(&id, None).await?,

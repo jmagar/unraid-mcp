@@ -315,6 +315,10 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
         scope: Scope::Write,
     },
     ActionSpec {
+        name: "docker_restart",
+        scope: Scope::Write,
+    },
+    ActionSpec {
         name: "docker_pause",
         scope: Scope::Write,
     },
@@ -570,6 +574,8 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "importance": { "type": "string", "enum": ["ALERT", "INFO", "WARNING"], "description": "Notification importance (create_notification)." },
                 "link": { "type": "string", "description": "Optional notification link (create_notification)." },
                 "desired_state": { "type": "string", "enum": ["START", "STOP"], "description": "Array target state (array_set_state)." },
+                "decryption_password": { "type": "string", "description": "Optional password to unlock encrypted array disks when starting the array (array_set_state)." },
+                "decryption_keyfile": { "type": "string", "description": "Optional keyfile contents (data URL or raw base64) to unlock encrypted array disks when starting the array (array_set_state)." },
                 "slot": { "type": "integer", "description": "Array disk slot (array_add/remove_disk_from_array)." },
                 "correct": { "type": "boolean", "description": "Whether the parity check should write corrections (parity_check_start)." },
                 "with_image": { "type": "boolean", "description": "Also remove the image (docker_remove_container)." },

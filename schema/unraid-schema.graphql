@@ -2,7 +2,7 @@
 # Vendored Unraid GraphQL schema (SDL) — used ONLY by tests/dev tooling.
 #
 # Source : github.com/unraid/api  → api/generated-schema.graphql
-# Commit : 8194972b (2026-06-15)
+# Commit : 2679fda1 (2026-07-06)
 # Method : copied from a local clone of unraid/api (the repo's own generated SDL;
 #          regenerate upstream with their codegen, do not hand-edit here).
 #
@@ -1228,6 +1228,16 @@ type ArrayMutations {
 input ArrayStateInput {
   """Array state"""
   desiredState: ArrayStateInputState!
+
+  """
+  Optional password used to unlock encrypted array disks when starting the array
+  """
+  decryptionPassword: String
+
+  """
+  Optional keyfile contents used to unlock encrypted array disks when starting the array. Accepts a data URL or raw base64 payload.
+  """
+  decryptionKeyfile: String
 }
 
 enum ArrayStateInputState {
@@ -1249,6 +1259,9 @@ type DockerMutations {
 
   """Stop a container"""
   stop(id: PrefixedID!): DockerContainer!
+
+  """Restart a container"""
+  restart(id: PrefixedID!): DockerContainer!
 
   """Pause (Suspend) a container"""
   pause(id: PrefixedID!): DockerContainer!
@@ -2532,6 +2545,52 @@ type LogFileContent {
   startLine: Int
 }
 
+type NetworkMetrics implements Node {
+  id: PrefixedID!
+
+  """Interface identifier"""
+  name: String!
+
+  """Operational state"""
+  operstate: String
+
+  """Total received bytes"""
+  bytesReceived: BigInt!
+
+  """Total transmitted bytes"""
+  bytesSent: BigInt!
+
+  """Total received packets"""
+  packetsReceived: BigInt!
+
+  """Total transmitted packets"""
+  packetsSent: BigInt!
+
+  """Receive errors"""
+  receiveErrors: BigInt!
+
+  """Transmit errors"""
+  transmitErrors: BigInt!
+
+  """Dropped receive packets"""
+  receiveDropped: BigInt!
+
+  """Dropped transmit packets"""
+  transmitDropped: BigInt!
+
+  """Receive throughput in bytes per second"""
+  rxSec: Float!
+
+  """Transmit throughput in bytes per second"""
+  txSec: Float!
+
+  """Estimated link utilization percentage"""
+  utilizationPercent: Float
+
+  """Metric collection timestamp"""
+  lastUpdated: DateTime!
+}
+
 type TemperatureReading {
   """Temperature value"""
   value: Float!
@@ -2630,52 +2689,6 @@ type TemperatureMetrics implements Node {
 
   """Temperature summary"""
   summary: TemperatureSummary!
-}
-
-type NetworkMetrics implements Node {
-  id: PrefixedID!
-
-  """Interface identifier"""
-  name: String!
-
-  """Operational state"""
-  operstate: String
-
-  """Total received bytes"""
-  bytesReceived: BigInt!
-
-  """Total transmitted bytes"""
-  bytesSent: BigInt!
-
-  """Total received packets"""
-  packetsReceived: BigInt!
-
-  """Total transmitted packets"""
-  packetsSent: BigInt!
-
-  """Receive errors"""
-  receiveErrors: BigInt!
-
-  """Transmit errors"""
-  transmitErrors: BigInt!
-
-  """Dropped receive packets"""
-  receiveDropped: BigInt!
-
-  """Dropped transmit packets"""
-  transmitDropped: BigInt!
-
-  """Receive throughput in bytes per second"""
-  rxSec: Float!
-
-  """Transmit throughput in bytes per second"""
-  txSec: Float!
-
-  """Estimated link utilization percentage"""
-  utilizationPercent: Float
-
-  """Metric collection timestamp"""
-  lastUpdated: DateTime!
 }
 
 """System metrics including CPU and memory utilization"""
@@ -3333,6 +3346,9 @@ type Query {
   isFreshInstall: Boolean!
   publicTheme: Theme!
   info: Info!
+
+  """Network interfaces"""
+  networkInterfaces: [InfoNetworkInterface!]!
   docker: Docker!
   disks: [Disk!]!
   assignableDisks: [Disk!]!
@@ -3357,9 +3373,6 @@ type Query {
 
   """Validate an OIDC session token (internal use for CLI validation)"""
   validateOidcSession(token: String!): OidcSessionValidation!
-
-  """Network interfaces"""
-  networkInterfaces: [InfoNetworkInterface!]!
   metrics: Metrics!
 
   """Retrieve current system time configuration"""

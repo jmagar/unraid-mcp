@@ -313,6 +313,10 @@ impl UnraidService {
         self.client.docker_stop(id).await
     }
 
+    pub async fn docker_restart(&self, id: &str) -> Result<Value> {
+        self.client.docker_restart(id).await
+    }
+
     pub async fn docker_pause(&self, id: &str) -> Result<Value> {
         self.client.docker_pause(id).await
     }
@@ -340,8 +344,15 @@ impl UnraidService {
     pub async fn docker_update_all_containers(&self) -> Result<Value> {
         self.client.docker_update_all_containers().await
     }
-    pub async fn array_set_state(&self, desired_state: &str) -> Result<Value> {
-        self.client.array_set_state(desired_state).await
+    pub async fn array_set_state(
+        &self,
+        desired_state: &str,
+        decryption_password: Option<&str>,
+        decryption_keyfile: Option<&str>,
+    ) -> Result<Value> {
+        self.client
+            .array_set_state(desired_state, decryption_password, decryption_keyfile)
+            .await
     }
     pub async fn array_add_disk_to_array(&self, id: &str, slot: Option<i32>) -> Result<Value> {
         self.client.array_add_disk_to_array(id, slot).await

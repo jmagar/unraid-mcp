@@ -1260,6 +1260,27 @@ pub struct DockerStopNs {
     pub stop: DockerContainerRef,
 }
 
+// ---- restart ---------------------------------------------------------------
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", variables = "DockerIdVars")]
+#[serde(rename_all = "camelCase")]
+pub struct DockerRestartMutation {
+    pub docker: DockerRestartNs,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "DockerMutations",
+    variables = "DockerIdVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerRestartNs {
+    #[arguments(id: $id)]
+    pub restart: DockerContainerRef,
+}
+
 // ---- pause -----------------------------------------------------------------
 
 #[derive(cynic::QueryFragment, serde::Serialize)]
@@ -1417,6 +1438,11 @@ pub struct ArrayDiskRef {
 #[cynic(rename_all = "camelCase")]
 pub struct ArrayStateInput {
     pub desired_state: ArrayStateInputState,
+    /// Optional password used to unlock encrypted array disks when starting the array.
+    pub decryption_password: Option<String>,
+    /// Optional keyfile contents (data URL or raw base64) used to unlock encrypted
+    /// array disks when starting the array.
+    pub decryption_keyfile: Option<String>,
 }
 
 #[derive(cynic::InputObject, Debug, Clone)]

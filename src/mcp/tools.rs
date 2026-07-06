@@ -433,6 +433,10 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> Result
             let id = require_id(args, "docker_stop")?;
             svc!(state.service.docker_stop(&id))
         }
+        "docker_restart" => {
+            let id = require_id(args, "docker_restart")?;
+            svc!(state.service.docker_restart(&id))
+        }
         "docker_pause" => {
             let id = require_id(args, "docker_pause")?;
             svc!(state.service.docker_pause(&id))
@@ -465,7 +469,13 @@ async fn dispatch_action(state: &AppState, action: &str, args: &Value) -> Result
                         .to_string(),
                 )
             })?;
-            svc!(state.service.array_set_state(&ds))
+            let decryption_password = string_arg(args, "decryption_password");
+            let decryption_keyfile = string_arg(args, "decryption_keyfile");
+            svc!(state.service.array_set_state(
+                &ds,
+                decryption_password.as_deref(),
+                decryption_keyfile.as_deref()
+            ))
         }
         "array_add_disk_to_array" => {
             let id = require_id(args, "array_add_disk_to_array")?;

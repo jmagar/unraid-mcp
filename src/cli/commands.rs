@@ -86,6 +86,7 @@ pub enum CliCommand {
     VmReset(String),
     DockerStart(String),
     DockerStop(String),
+    DockerRestart(String),
     DockerPause(String),
     DockerUnpause(String),
     DockerUpdateContainer(String),

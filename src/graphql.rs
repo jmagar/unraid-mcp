@@ -581,6 +581,15 @@ impl UnraidClient {
         .await
     }
 
+    pub async fn docker_restart(&self, id: &str) -> Result<Value> {
+        use crate::gql_typed::{DockerIdVars, DockerRestartMutation, PrefixedID};
+        use cynic::MutationBuilder;
+        self.run_typed(DockerRestartMutation::build(DockerIdVars {
+            id: PrefixedID(id.to_string()),
+        }))
+        .await
+    }
+
     pub async fn docker_pause(&self, id: &str) -> Result<Value> {
         use crate::gql_typed::{DockerIdVars, DockerPauseMutation, PrefixedID};
         use cynic::MutationBuilder;
@@ -638,7 +647,12 @@ impl UnraidClient {
         .await
     }
 
-    pub async fn array_set_state(&self, desired_state: &str) -> Result<Value> {
+    pub async fn array_set_state(
+        &self,
+        desired_state: &str,
+        decryption_password: Option<&str>,
+        decryption_keyfile: Option<&str>,
+    ) -> Result<Value> {
         use crate::gql_typed::{
             ArraySetStateMutation, ArrayStateInput, ArrayStateInputState, ArrayStateInputVars,
         };
@@ -647,7 +661,11 @@ impl UnraidClient {
             .map_err(|e| {
                 UpstreamError::Other(format!("invalid desired_state (START/STOP): {e}"))
             })?;
-        let input = ArrayStateInput { desired_state };
+        let input = ArrayStateInput {
+            desired_state,
+            decryption_password: decryption_password.map(str::to_string),
+            decryption_keyfile: decryption_keyfile.map(str::to_string),
+        };
         self.run_typed(ArraySetStateMutation::build(ArrayStateInputVars { input }))
             .await
     }

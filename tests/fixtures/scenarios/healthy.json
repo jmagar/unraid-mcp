@@ -1579,6 +1579,19 @@
       }
     }
   },
+  "docker_restart": {
+    "docker": {
+      "restart": {
+        "id": "docker/abc123",
+        "names": [
+          "plex"
+        ],
+        "image": "lscr.io/linuxserver/plex:latest",
+        "state": "RUNNING",
+        "status": "Up 2 seconds"
+      }
+    }
+  },
   "docker_pause": {
     "docker": {
       "pause": {
