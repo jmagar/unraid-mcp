@@ -213,9 +213,67 @@ pub mod testing {
                     "docker_update_containers" => {
                         json!({ "action": name, "ids": ["docker/abc123"] })
                     }
+                    "docker_create_folder" => json!({ "action": name, "name": "Media" }),
+                    "docker_create_folder_with_items" => {
+                        json!({ "action": name, "name": "Media" })
+                    }
+                    "docker_set_folder_children" => {
+                        json!({ "action": name, "children_ids": ["docker/abc123"] })
+                    }
+                    "docker_delete_entries" => {
+                        json!({ "action": name, "entry_ids": ["docker/abc123"] })
+                    }
+                    "docker_move_entries_to_folder" => json!({
+                        "action": name,
+                        "source_entry_ids": ["docker/abc123"],
+                        "destination_folder_id": "folder-1"
+                    }),
+                    "docker_move_items_to_position" => json!({
+                        "action": name,
+                        "source_entry_ids": ["docker/abc123"],
+                        "destination_folder_id": "folder-1",
+                        "position": 0
+                    }),
+                    "docker_rename_folder" => {
+                        json!({ "action": name, "folder_id": "folder-1", "new_name": "Media 2" })
+                    }
+                    "docker_update_view_preferences" => json!({ "action": name, "prefs": {} }),
+                    "docker_update_autostart_configuration" => json!({
+                        "action": name,
+                        "entries": [{ "id": "docker/abc123", "auto_start": true }]
+                    }),
                     n if n.starts_with("docker_") => {
                         json!({ "action": name, "id": "docker/abc123" })
                     }
+                    "customization_set_locale" => json!({ "action": name, "locale": "en_US" }),
+                    "customization_set_theme" => json!({ "action": name, "theme": "black" }),
+                    "onboarding_create_internal_boot_pool" => json!({
+                        "action": name,
+                        "pool_name": "boot",
+                        "devices": ["/dev/sdz"],
+                        "boot_size_mib": 512,
+                        "update_bios": false
+                    }),
+                    "onboarding_set_onboarding_override" => json!({ "action": name, "input": {} }),
+                    "connect_sign_in" => json!({ "action": name, "api_key": "connect-key" }),
+                    "setup_remote_access" => json!({ "action": name, "access_type": "DYNAMIC" }),
+                    "enable_dynamic_remote_access" => json!({
+                        "action": name,
+                        "access_url": { "type": "LAN", "name": "tower" },
+                        "enabled": true
+                    }),
+                    "update_ssh_settings" => json!({ "action": name, "enabled": true, "port": 22 }),
+                    "initiate_flash_backup" => json!({
+                        "action": name,
+                        "remote_name": "backup",
+                        "source_path": "/boot",
+                        "destination_path": "flash-backup"
+                    }),
+                    "notify_if_unique" => json!({
+                        "action": name,
+                        "title": "T", "subject": "S", "description": "D", "importance": "INFO"
+                    }),
+                    "update_settings" => json!({ "action": name, "input": {} }),
                     "array_set_state" => json!({ "action": name, "desired_state": "START" }),
                     "parity_check_start" => json!({ "action": name, "correct": true }),
                     n if n.starts_with("array_") => json!({ "action": name, "id": "disk/sdb" }),

@@ -590,6 +590,172 @@ impl UnraidClient {
         .await
     }
 
+    pub async fn docker_create_folder(
+        &self,
+        name: &str,
+        parent_id: Option<&str>,
+        children_ids: Option<&[String]>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{CreateDockerFolderMutation, CreateDockerFolderVars};
+        use cynic::MutationBuilder;
+        self.run_typed(CreateDockerFolderMutation::build(CreateDockerFolderVars {
+            name: name.to_string(),
+            parent_id: parent_id.map(str::to_string),
+            children_ids: children_ids.map(|v| v.to_vec()),
+        }))
+        .await
+    }
+
+    pub async fn docker_create_folder_with_items(
+        &self,
+        name: &str,
+        parent_id: Option<&str>,
+        source_entry_ids: Option<&[String]>,
+        position: Option<f64>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            CreateDockerFolderWithItemsMutation, CreateDockerFolderWithItemsVars,
+        };
+        use cynic::MutationBuilder;
+        self.run_typed(CreateDockerFolderWithItemsMutation::build(
+            CreateDockerFolderWithItemsVars {
+                name: name.to_string(),
+                parent_id: parent_id.map(str::to_string),
+                source_entry_ids: source_entry_ids.map(|v| v.to_vec()),
+                position,
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_set_folder_children(
+        &self,
+        folder_id: Option<&str>,
+        children_ids: &[String],
+    ) -> Result<Value> {
+        use crate::gql_typed::{SetDockerFolderChildrenMutation, SetDockerFolderChildrenVars};
+        use cynic::MutationBuilder;
+        self.run_typed(SetDockerFolderChildrenMutation::build(
+            SetDockerFolderChildrenVars {
+                folder_id: folder_id.map(str::to_string),
+                children_ids: children_ids.to_vec(),
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_delete_entries(&self, entry_ids: &[String]) -> Result<Value> {
+        use crate::gql_typed::{DeleteDockerEntriesMutation, DeleteDockerEntriesVars};
+        use cynic::MutationBuilder;
+        self.run_typed(DeleteDockerEntriesMutation::build(
+            DeleteDockerEntriesVars {
+                entry_ids: entry_ids.to_vec(),
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_move_entries_to_folder(
+        &self,
+        source_entry_ids: &[String],
+        destination_folder_id: &str,
+    ) -> Result<Value> {
+        use crate::gql_typed::{MoveDockerEntriesToFolderMutation, MoveDockerEntriesToFolderVars};
+        use cynic::MutationBuilder;
+        self.run_typed(MoveDockerEntriesToFolderMutation::build(
+            MoveDockerEntriesToFolderVars {
+                source_entry_ids: source_entry_ids.to_vec(),
+                destination_folder_id: destination_folder_id.to_string(),
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_move_items_to_position(
+        &self,
+        source_entry_ids: &[String],
+        destination_folder_id: &str,
+        position: f64,
+    ) -> Result<Value> {
+        use crate::gql_typed::{MoveDockerItemsToPositionMutation, MoveDockerItemsToPositionVars};
+        use cynic::MutationBuilder;
+        self.run_typed(MoveDockerItemsToPositionMutation::build(
+            MoveDockerItemsToPositionVars {
+                source_entry_ids: source_entry_ids.to_vec(),
+                destination_folder_id: destination_folder_id.to_string(),
+                position,
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_rename_folder(&self, folder_id: &str, new_name: &str) -> Result<Value> {
+        use crate::gql_typed::{RenameDockerFolderMutation, RenameDockerFolderVars};
+        use cynic::MutationBuilder;
+        self.run_typed(RenameDockerFolderMutation::build(RenameDockerFolderVars {
+            folder_id: folder_id.to_string(),
+            new_name: new_name.to_string(),
+        }))
+        .await
+    }
+
+    pub async fn docker_update_view_preferences(
+        &self,
+        view_id: Option<&str>,
+        prefs: Value,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            Json, UpdateDockerViewPreferencesMutation, UpdateDockerViewPreferencesVars,
+        };
+        use cynic::MutationBuilder;
+        self.run_typed(UpdateDockerViewPreferencesMutation::build(
+            UpdateDockerViewPreferencesVars {
+                view_id: view_id.map(str::to_string),
+                prefs: Json(prefs),
+            },
+        ))
+        .await
+    }
+
+    pub async fn docker_update_autostart_configuration(
+        &self,
+        entries: Value,
+        persist_user_preferences: Option<bool>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            DockerAutostartEntryInput, DockerUpdateAutostartConfigurationMutation,
+            UpdateAutostartConfigurationVars,
+        };
+        use cynic::MutationBuilder;
+        let entries: Vec<DockerAutostartEntryInput> = serde_json::from_value(entries)
+            .map_err(|e| UpstreamError::Other(format!("invalid autostart entries: {e}")))?;
+        self.run_typed(DockerUpdateAutostartConfigurationMutation::build(
+            UpdateAutostartConfigurationVars {
+                entries,
+                persist_user_preferences,
+            },
+        ))
+        .await
+    }
+
+    pub async fn refresh_docker_digests(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::RefreshDockerDigestsMutation::build(()))
+            .await
+    }
+
+    pub async fn reset_docker_template_mappings(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::ResetDockerTemplateMappingsMutation::build(()))
+            .await
+    }
+
+    pub async fn sync_docker_template_paths(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::SyncDockerTemplatePathsMutation::build(()))
+            .await
+    }
+
     pub async fn docker_pause(&self, id: &str) -> Result<Value> {
         use crate::gql_typed::{DockerIdVars, DockerPauseMutation, PrefixedID};
         use cynic::MutationBuilder;
@@ -932,6 +1098,81 @@ impl UnraidClient {
             .await
     }
 
+    pub async fn onboarding_bypass_onboarding(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingBypassMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_clear_onboarding_override(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingClearOverrideMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_close_onboarding(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingCloseMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_open_onboarding(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingOpenMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_resume_onboarding(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingResumeMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_refresh_internal_boot_context(&self) -> Result<Value> {
+        use cynic::MutationBuilder;
+        self.run_typed(crate::gql_typed::OnboardingRefreshInternalBootContextMutation::build(()))
+            .await
+    }
+
+    pub async fn onboarding_set_onboarding_override(&self, input: Value) -> Result<Value> {
+        use crate::gql_typed::{
+            OnboardingOverrideInput, OnboardingSetOverrideMutation, SetOnboardingOverrideVars,
+        };
+        use cynic::MutationBuilder;
+        let input: OnboardingOverrideInput = serde_json::from_value(input)
+            .map_err(|e| UpstreamError::Other(format!("invalid onboarding override: {e}")))?;
+        self.run_typed(OnboardingSetOverrideMutation::build(
+            SetOnboardingOverrideVars { input },
+        ))
+        .await
+    }
+
+    pub async fn onboarding_create_internal_boot_pool(
+        &self,
+        pool_name: &str,
+        devices: &[String],
+        boot_size_mib: i32,
+        update_bios: bool,
+        reboot: Option<bool>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            CreateInternalBootPoolInput, CreateInternalBootPoolVars,
+            OnboardingCreateInternalBootPoolMutation,
+        };
+        use cynic::MutationBuilder;
+        let input = CreateInternalBootPoolInput {
+            pool_name: pool_name.to_string(),
+            devices: devices.to_vec(),
+            boot_size_mi_b: boot_size_mib,
+            update_bios,
+            reboot,
+        };
+        self.run_typed(OnboardingCreateInternalBootPoolMutation::build(
+            CreateInternalBootPoolVars { input },
+        ))
+        .await
+    }
+
     pub async fn archive_notifications(&self, ids: &[String]) -> Result<Value> {
         use crate::gql_typed::{ArchiveNotificationsMutation, NotificationIdsVars, PrefixedID};
         use cynic::MutationBuilder;
@@ -1055,6 +1296,209 @@ impl UnraidClient {
         use cynic::MutationBuilder;
         self.run_typed(crate::gql_typed::ConnectSignOutMutation::build(()))
             .await
+    }
+
+    pub async fn connect_sign_in(&self, api_key: &str, user_info: Option<Value>) -> Result<Value> {
+        use crate::gql_typed::{ConnectSignInInput, ConnectSignInMutation, ConnectSignInVars};
+        use cynic::MutationBuilder;
+        let user_info = match user_info {
+            Some(v) => Some(
+                serde_json::from_value(v)
+                    .map_err(|e| UpstreamError::Other(format!("invalid user_info: {e}")))?,
+            ),
+            None => None,
+        };
+        let input = ConnectSignInInput {
+            api_key: api_key.to_string(),
+            user_info,
+        };
+        self.run_typed(ConnectSignInMutation::build(ConnectSignInVars { input }))
+            .await
+    }
+
+    pub async fn setup_remote_access(
+        &self,
+        access_type: &str,
+        forward_type: Option<&str>,
+        port: Option<i32>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            SetupRemoteAccessInput, SetupRemoteAccessMutation, SetupRemoteAccessVars,
+        };
+        use cynic::MutationBuilder;
+        let access_type = serde_json::from_value(json!(access_type))
+            .map_err(|e| UpstreamError::Other(format!("invalid access_type: {e}")))?;
+        let forward_type = match forward_type {
+            Some(v) => Some(
+                serde_json::from_value(json!(v))
+                    .map_err(|e| UpstreamError::Other(format!("invalid forward_type: {e}")))?,
+            ),
+            None => None,
+        };
+        let input = SetupRemoteAccessInput {
+            access_type,
+            forward_type,
+            port,
+        };
+        self.run_typed(SetupRemoteAccessMutation::build(SetupRemoteAccessVars {
+            input,
+        }))
+        .await
+    }
+
+    pub async fn enable_dynamic_remote_access(&self, url: Value, enabled: bool) -> Result<Value> {
+        use crate::gql_typed::{
+            AccessUrlInput, EnableDynamicRemoteAccessInput, EnableDynamicRemoteAccessMutation,
+            EnableDynamicRemoteAccessVars,
+        };
+        use cynic::MutationBuilder;
+        let url: AccessUrlInput = serde_json::from_value(url)
+            .map_err(|e| UpstreamError::Other(format!("invalid url: {e}")))?;
+        let input = EnableDynamicRemoteAccessInput { url, enabled };
+        self.run_typed(EnableDynamicRemoteAccessMutation::build(
+            EnableDynamicRemoteAccessVars { input },
+        ))
+        .await
+    }
+
+    pub async fn update_api_settings(
+        &self,
+        access_type: Option<&str>,
+        forward_type: Option<&str>,
+        port: Option<i32>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            ConnectSettingsInput, UpdateApiSettingsMutation, UpdateApiSettingsVars,
+        };
+        use cynic::MutationBuilder;
+        let access_type = match access_type {
+            Some(v) => Some(
+                serde_json::from_value(json!(v))
+                    .map_err(|e| UpstreamError::Other(format!("invalid access_type: {e}")))?,
+            ),
+            None => None,
+        };
+        let forward_type = match forward_type {
+            Some(v) => Some(
+                serde_json::from_value(json!(v))
+                    .map_err(|e| UpstreamError::Other(format!("invalid forward_type: {e}")))?,
+            ),
+            None => None,
+        };
+        let input = ConnectSettingsInput {
+            access_type,
+            forward_type,
+            port,
+        };
+        self.run_typed(UpdateApiSettingsMutation::build(UpdateApiSettingsVars {
+            input,
+        }))
+        .await
+    }
+
+    pub async fn update_settings(&self, input: Value) -> Result<Value> {
+        use crate::gql_typed::{Json, UpdateSettingsMutation, UpdateSettingsVars};
+        use cynic::MutationBuilder;
+        self.run_typed(UpdateSettingsMutation::build(UpdateSettingsVars {
+            input: Json(input),
+        }))
+        .await
+    }
+
+    pub async fn update_ssh_settings(&self, enabled: bool, port: i32) -> Result<Value> {
+        use crate::gql_typed::{UpdateSshInput, UpdateSshSettingsMutation, UpdateSshSettingsVars};
+        use cynic::MutationBuilder;
+        let input = UpdateSshInput { enabled, port };
+        self.run_typed(UpdateSshSettingsMutation::build(UpdateSshSettingsVars {
+            input,
+        }))
+        .await
+    }
+
+    pub async fn initiate_flash_backup(
+        &self,
+        remote_name: &str,
+        source_path: &str,
+        destination_path: &str,
+        options: Option<Value>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            InitiateFlashBackupInput, InitiateFlashBackupMutation, InitiateFlashBackupVars, Json,
+        };
+        use cynic::MutationBuilder;
+        let input = InitiateFlashBackupInput {
+            remote_name: remote_name.to_string(),
+            source_path: source_path.to_string(),
+            destination_path: destination_path.to_string(),
+            options: options.map(Json),
+        };
+        self.run_typed(InitiateFlashBackupMutation::build(
+            InitiateFlashBackupVars { input },
+        ))
+        .await
+    }
+
+    pub async fn notify_if_unique(
+        &self,
+        title: &str,
+        subject: &str,
+        description: &str,
+        importance: &str,
+        link: Option<&str>,
+    ) -> Result<Value> {
+        use crate::gql_typed::{
+            NotificationData, NotificationImportance, NotifyIfUniqueMutation, NotifyIfUniqueVars,
+        };
+        use cynic::MutationBuilder;
+        let importance: NotificationImportance = serde_json::from_value(json!(importance))
+            .map_err(|e| {
+                UpstreamError::Other(format!(
+                    "invalid importance (expected ALERT/INFO/WARNING): {e}"
+                ))
+            })?;
+        let input = NotificationData {
+            title: title.to_string(),
+            subject: subject.to_string(),
+            description: description.to_string(),
+            importance,
+            link: link.map(|s| s.to_string()),
+        };
+        self.run_typed(NotifyIfUniqueMutation::build(NotifyIfUniqueVars { input }))
+            .await
+    }
+
+    pub async fn customization_set_locale(&self, locale: &str) -> Result<Value> {
+        use crate::gql_typed::{CustomizationSetLocaleMutation, SetLocaleVars};
+        use cynic::MutationBuilder;
+        self.run_typed(CustomizationSetLocaleMutation::build(SetLocaleVars {
+            locale: locale.to_string(),
+        }))
+        .await
+    }
+
+    pub async fn customization_set_theme(&self, theme: &str) -> Result<Value> {
+        use crate::gql_typed::{CustomizationSetThemeMutation, SetThemeVars};
+        use cynic::MutationBuilder;
+        let theme = serde_json::from_value(json!(theme))
+            .map_err(|e| UpstreamError::Other(format!("invalid theme: {e}")))?;
+        self.run_typed(CustomizationSetThemeMutation::build(SetThemeVars { theme }))
+            .await
+    }
+
+    pub async fn preview_effective_permissions(
+        &self,
+        roles: Option<&[String]>,
+        permissions: &Value,
+    ) -> Result<Value> {
+        use crate::gql_typed::{PreviewEffectivePermissionsQuery, PreviewEffectivePermissionsVars};
+        use cynic::QueryBuilder;
+        self.run_typed(PreviewEffectivePermissionsQuery::build(
+            PreviewEffectivePermissionsVars {
+                roles: parse_roles(roles)?,
+                permissions: parse_permissions(permissions)?,
+            },
+        ))
+        .await
     }
 
     // ── queries ───────────────────────────────────────────────────────────────

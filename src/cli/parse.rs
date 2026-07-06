@@ -88,6 +88,9 @@ impl CliCommand {
             ["get-permissions-for-roles", roles @ ..] if !roles.is_empty() => {
                 Self::GetPermissionsForRoles(roles.iter().map(|r| r.to_string()).collect())
             }
+            ["preview-effective-permissions", roles @ ..] => Self::PreviewEffectivePermissions(
+                (!roles.is_empty()).then(|| roles.iter().map(|r| r.to_string()).collect()),
+            ),
             ["recalculate-overview"] => Self::RecalculateOverview,
             ["delete-archived-notifications"] => Self::DeleteArchivedNotifications,
             ["archive-notification", id] => Self::ArchiveNotification(id.to_string()),
@@ -118,6 +121,56 @@ impl CliCommand {
                 Self::DockerUpdateContainers(ids.iter().map(|s| s.to_string()).collect())
             }
             ["docker-update-all-containers"] => Self::DockerUpdateAllContainers,
+            ["docker-create-folder", name] => Self::DockerCreateFolder {
+                name: name.to_string(),
+                parent_id: None,
+                children_ids: None,
+            },
+            ["docker-create-folder-with-items", name] => Self::DockerCreateFolderWithItems {
+                name: name.to_string(),
+                parent_id: None,
+                source_entry_ids: None,
+                position: None,
+            },
+            ["docker-set-folder-children", children_ids @ ..] if !children_ids.is_empty() => {
+                Self::DockerSetFolderChildren {
+                    folder_id: None,
+                    children_ids: children_ids.iter().map(|s| s.to_string()).collect(),
+                }
+            }
+            ["docker-delete-entries", entry_ids @ ..] if !entry_ids.is_empty() => {
+                Self::DockerDeleteEntries(entry_ids.iter().map(|s| s.to_string()).collect())
+            }
+            ["docker-move-entries-to-folder", destination_folder_id, source_entry_ids @ ..]
+                if !source_entry_ids.is_empty() =>
+            {
+                Self::DockerMoveEntriesToFolder {
+                    source_entry_ids: source_entry_ids.iter().map(|s| s.to_string()).collect(),
+                    destination_folder_id: destination_folder_id.to_string(),
+                }
+            }
+            ["docker-move-items-to-position", destination_folder_id, position, source_entry_ids @ ..]
+                if !source_entry_ids.is_empty() =>
+            {
+                Self::DockerMoveItemsToPosition {
+                    source_entry_ids: source_entry_ids.iter().map(|s| s.to_string()).collect(),
+                    destination_folder_id: destination_folder_id.to_string(),
+                    position: position
+                        .parse()
+                        .map_err(|e| anyhow::anyhow!("invalid position \"{position}\": {e}"))?,
+                }
+            }
+            ["docker-rename-folder", folder_id, new_name] => Self::DockerRenameFolder {
+                folder_id: folder_id.to_string(),
+                new_name: new_name.to_string(),
+            },
+            ["refresh-docker-digests"] => Self::RefreshDockerDigests,
+            ["reset-docker-template-mappings"] => Self::ResetDockerTemplateMappings,
+            ["sync-docker-template-paths"] => Self::SyncDockerTemplatePaths,
+            ["customization-set-locale", locale] => {
+                Self::CustomizationSetLocale(locale.to_string())
+            }
+            ["customization-set-theme", theme] => Self::CustomizationSetTheme(theme.to_string()),
             ["array-set-state", ds] => Self::ArraySetState(ds.to_string()),
             ["array-add-disk-to-array", id] => Self::ArrayAddDiskToArray(id.to_string()),
             ["array-remove-disk-from-array", id] => Self::ArrayRemoveDiskFromArray(id.to_string()),
@@ -155,6 +208,27 @@ impl CliCommand {
             }
             ["onboarding-complete"] => Self::OnboardingComplete,
             ["onboarding-reset"] => Self::OnboardingReset,
+            ["onboarding-bypass"] => Self::OnboardingBypass,
+            ["onboarding-clear-override"] => Self::OnboardingClearOverride,
+            ["onboarding-close"] => Self::OnboardingClose,
+            ["onboarding-open"] => Self::OnboardingOpen,
+            ["onboarding-resume"] => Self::OnboardingResume,
+            ["onboarding-refresh-internal-boot-context"] => {
+                Self::OnboardingRefreshInternalBootContext
+            }
+            ["onboarding-create-internal-boot-pool", pool_name, boot_size_mib, update_bios, devices @ ..]
+                if !devices.is_empty() =>
+            {
+                Self::OnboardingCreateInternalBootPool {
+                    pool_name: pool_name.to_string(),
+                    devices: devices.iter().map(|s| s.to_string()).collect(),
+                    boot_size_mib: boot_size_mib.parse().map_err(|e| {
+                        anyhow::anyhow!("invalid boot_size_mib \"{boot_size_mib}\": {e}")
+                    })?,
+                    update_bios: update_bios.eq_ignore_ascii_case("true"),
+                    reboot: None,
+                }
+            }
             ["archive-notifications", ids @ ..] if !ids.is_empty() => {
                 Self::ArchiveNotifications(ids.iter().map(|s| s.to_string()).collect())
             }
@@ -166,6 +240,51 @@ impl CliCommand {
             ["unarchive-all", rest @ ..] => Self::UnarchiveAll(rest.first().map(|s| s.to_string())),
             ["update-server-identity", name] => Self::UpdateServerIdentity(name.to_string()),
             ["connect-sign-out"] => Self::ConnectSignOut,
+            ["connect-sign-in", api_key] => Self::ConnectSignIn(api_key.to_string()),
+            ["setup-remote-access", access_type, rest @ ..] => Self::SetupRemoteAccess {
+                access_type: access_type.to_string(),
+                forward_type: rest.first().map(|s| s.to_string()),
+                port: match rest.get(1) {
+                    None => None,
+                    Some(p) => Some(
+                        p.parse()
+                            .map_err(|e| anyhow::anyhow!("invalid port \"{p}\": {e}"))?,
+                    ),
+                },
+            },
+            ["update-api-settings", rest @ ..] => Self::UpdateApiSettings {
+                access_type: rest.first().map(|s| s.to_string()),
+                forward_type: rest.get(1).map(|s| s.to_string()),
+                port: match rest.get(2) {
+                    None => None,
+                    Some(p) => Some(
+                        p.parse()
+                            .map_err(|e| anyhow::anyhow!("invalid port \"{p}\": {e}"))?,
+                    ),
+                },
+            },
+            ["update-ssh-settings", enabled, port] => Self::UpdateSshSettings {
+                enabled: enabled.eq_ignore_ascii_case("true"),
+                port: port
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("invalid port \"{port}\": {e}"))?,
+            },
+            ["initiate-flash-backup", remote_name, source_path, destination_path] => {
+                Self::InitiateFlashBackup {
+                    remote_name: remote_name.to_string(),
+                    source_path: source_path.to_string(),
+                    destination_path: destination_path.to_string(),
+                }
+            }
+            ["notify-if-unique", title, subject, description, importance, rest @ ..] => {
+                Self::NotifyIfUnique {
+                    title: title.to_string(),
+                    subject: subject.to_string(),
+                    description: description.to_string(),
+                    importance: importance.to_string(),
+                    link: rest.first().map(|s| s.to_string()),
+                }
+            }
             ["doctor"] => Self::Doctor,
             ["setup", "check"] => Self::Setup(SetupCommand::Check),
             ["setup", "repair"] => Self::Setup(SetupCommand::Repair),

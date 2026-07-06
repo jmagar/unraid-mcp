@@ -1989,5 +1989,384 @@
   },
   "connect_sign_out": {
     "connectSignOut": true
+  },
+  "docker_create_folder": {
+    "createDockerFolder": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [
+            {
+              "id": "folder-1",
+              "type": "folder",
+              "name": "Media",
+              "parentId": null,
+              "depth": 0,
+              "position": 0,
+              "path": ["folder-1"],
+              "hasChildren": false,
+              "childrenIds": [],
+              "meta": null
+            }
+          ],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_create_folder_with_items": {
+    "createDockerFolderWithItems": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [
+            {
+              "id": "folder-1",
+              "type": "folder",
+              "name": "Media",
+              "parentId": null,
+              "depth": 0,
+              "position": 0,
+              "path": ["folder-1"],
+              "hasChildren": true,
+              "childrenIds": ["docker/abc123"],
+              "meta": null
+            },
+            {
+              "id": "docker/abc123",
+              "type": "container",
+              "name": "plex",
+              "parentId": "folder-1",
+              "depth": 1,
+              "position": 0,
+              "path": ["folder-1", "docker/abc123"],
+              "hasChildren": false,
+              "childrenIds": [],
+              "meta": {
+                "id": "docker/abc123",
+                "names": ["plex"],
+                "image": "lscr.io/linuxserver/plex:latest",
+                "state": "RUNNING",
+                "status": "Up 3 seconds"
+              }
+            }
+          ],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_set_folder_children": {
+    "setDockerFolderChildren": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_delete_entries": {
+    "deleteDockerEntries": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_move_entries_to_folder": {
+    "moveDockerEntriesToFolder": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_move_items_to_position": {
+    "moveDockerItemsToPosition": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_rename_folder": {
+    "renameDockerFolder": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [
+            {
+              "id": "folder-1",
+              "type": "folder",
+              "name": "Media 2",
+              "parentId": null,
+              "depth": 0,
+              "position": 0,
+              "path": ["folder-1"],
+              "hasChildren": false,
+              "childrenIds": [],
+              "meta": null
+            }
+          ],
+          "prefs": null
+        }
+      ]
+    }
+  },
+  "docker_update_view_preferences": {
+    "updateDockerViewPreferences": {
+      "version": 1,
+      "views": [
+        {
+          "id": "default",
+          "name": "Default",
+          "rootId": "root",
+          "flatEntries": [],
+          "prefs": { "sortBy": "name" }
+        }
+      ]
+    }
+  },
+  "docker_update_autostart_configuration": {
+    "docker": {
+      "updateAutostartConfiguration": true
+    }
+  },
+  "refresh_docker_digests": {
+    "refreshDockerDigests": true
+  },
+  "reset_docker_template_mappings": {
+    "resetDockerTemplateMappings": true
+  },
+  "sync_docker_template_paths": {
+    "syncDockerTemplatePaths": {
+      "scanned": 12,
+      "matched": 10,
+      "skipped": 2,
+      "errors": []
+    }
+  },
+  "customization_set_locale": {
+    "customization": {
+      "setLocale": "en_US"
+    }
+  },
+  "customization_set_theme": {
+    "customization": {
+      "setTheme": {
+        "name": "black",
+        "showBannerImage": true,
+        "showBannerGradient": true,
+        "showHeaderDescription": true,
+        "headerBackgroundColor": "#1c1b1b",
+        "headerPrimaryTextColor": "#f2f2f2",
+        "headerSecondaryTextColor": "#a7bcc9"
+      }
+    }
+  },
+  "onboarding_bypass_onboarding": {
+    "onboarding": {
+      "bypassOnboarding": {
+        "status": "COMPLETED",
+        "completed": true
+      }
+    }
+  },
+  "onboarding_clear_onboarding_override": {
+    "onboarding": {
+      "clearOnboardingOverride": {
+        "status": "INCOMPLETE",
+        "completed": false
+      }
+    }
+  },
+  "onboarding_close_onboarding": {
+    "onboarding": {
+      "closeOnboarding": {
+        "status": "COMPLETED",
+        "completed": true
+      }
+    }
+  },
+  "onboarding_open_onboarding": {
+    "onboarding": {
+      "openOnboarding": {
+        "status": "INCOMPLETE",
+        "completed": false
+      }
+    }
+  },
+  "onboarding_resume_onboarding": {
+    "onboarding": {
+      "resumeOnboarding": {
+        "status": "INCOMPLETE",
+        "completed": false
+      }
+    }
+  },
+  "onboarding_refresh_internal_boot_context": {
+    "onboarding": {
+      "refreshInternalBootContext": {
+        "arrayStopped": true,
+        "bootEligible": true,
+        "bootedFromFlashWithInternalBootSetup": false,
+        "enableBootTransfer": null,
+        "reservedNames": ["bzimage", "bzroot"],
+        "shareNames": ["appdata"],
+        "poolNames": ["cache"],
+        "assignableDisks": [
+          {
+            "id": "0000-0000-DISK-0001",
+            "device": "/dev/sde",
+            "type": "HDD",
+            "name": "WDC_WD80EFAX",
+            "vendor": "Western Digital",
+            "size": 8001563222016,
+            "serialNum": "VAGH9012",
+            "interfaceType": "SATA",
+            "smartStatus": "OK",
+            "temperature": 31,
+            "isSpinning": true,
+            "partitions": [
+              {
+                "name": "sde1",
+                "fsType": "XFS",
+                "size": 8001561124864
+              }
+            ]
+          }
+        ],
+        "driveWarnings": []
+      }
+    }
+  },
+  "onboarding_set_onboarding_override": {
+    "onboarding": {
+      "setOnboardingOverride": {
+        "status": "INCOMPLETE",
+        "completed": false
+      }
+    }
+  },
+  "onboarding_create_internal_boot_pool": {
+    "onboarding": {
+      "createInternalBootPool": {
+        "ok": true,
+        "code": 0,
+        "output": "pool created"
+      }
+    }
+  },
+  "connect_sign_in": {
+    "connectSignIn": true
+  },
+  "setup_remote_access": {
+    "setupRemoteAccess": true
+  },
+  "enable_dynamic_remote_access": {
+    "enableDynamicRemoteAccess": true
+  },
+  "update_api_settings": {
+    "updateApiSettings": {
+      "accessType": "DYNAMIC",
+      "forwardType": null,
+      "port": null
+    }
+  },
+  "update_settings": {
+    "updateSettings": {
+      "restartRequired": false,
+      "values": { "foo": "bar" },
+      "warnings": []
+    }
+  },
+  "update_ssh_settings": {
+    "updateSshSettings": {
+      "version": "7.0.0",
+      "name": "Tower",
+      "timeZone": "America/New_York",
+      "comment": "Home media + storage",
+      "sysModel": "Custom",
+      "useSsl": false,
+      "port": 80,
+      "portssl": 443,
+      "useSsh": true,
+      "portssh": 22,
+      "useTelnet": false,
+      "porttelnet": 23,
+      "startArray": true,
+      "spindownDelay": "30",
+      "shareSmbEnabled": true,
+      "shareNfsEnabled": false,
+      "shareAfpEnabled": false,
+      "configValid": true,
+      "configError": null,
+      "regState": "PRO",
+      "regTo": "Jacob Magar",
+      "deviceCount": 4,
+      "flashGuid": "0000-0000-DEADBEEF-0000",
+      "flashProduct": "Cruzer Fit",
+      "flashVendor": "SanDisk",
+      "sbName": "/boot/config/super.dat",
+      "sbVersion": "2.9.13",
+      "sbUpdated": "2026-06-08T12:29:00.000Z",
+      "sbState": "normal"
+    }
+  },
+  "initiate_flash_backup": {
+    "initiateFlashBackup": {
+      "status": "queued",
+      "jobId": "backup-job-1"
+    }
+  },
+  "notify_if_unique": {
+    "notifyIfUnique": {
+      "id": "ntf-1",
+      "title": "Test notification",
+      "subject": "Created via API",
+      "description": "A notification created through the MCP write API.",
+      "importance": "INFO",
+      "link": null,
+      "type": "UNREAD",
+      "timestamp": "2026-06-15T18:00:00.000Z",
+      "formattedTimestamp": "Jun 15, 2026 18:00"
+    }
+  },
+  "preview_effective_permissions": {
+    "previewEffectivePermissions": [
+      { "resource": "DOCKER", "actions": ["READ_ANY"] }
+    ]
   }
 }

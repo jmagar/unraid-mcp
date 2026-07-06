@@ -263,6 +263,10 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
         scope: Scope::Read,
     },
     ActionSpec {
+        name: "preview_effective_permissions",
+        scope: Scope::Read,
+    },
+    ActionSpec {
         name: "recalculate_overview",
         scope: Scope::Write,
     },
@@ -340,6 +344,62 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         name: "docker_update_all_containers",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_create_folder",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_create_folder_with_items",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_set_folder_children",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_delete_entries",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_move_entries_to_folder",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_move_items_to_position",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_rename_folder",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_update_view_preferences",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "docker_update_autostart_configuration",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "refresh_docker_digests",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "reset_docker_template_mappings",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "sync_docker_template_paths",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "customization_set_locale",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "customization_set_theme",
         scope: Scope::Write,
     },
     ActionSpec {
@@ -427,6 +487,38 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
         scope: Scope::Write,
     },
     ActionSpec {
+        name: "onboarding_bypass_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_clear_onboarding_override",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_close_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_open_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_resume_onboarding",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_refresh_internal_boot_context",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_set_onboarding_override",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "onboarding_create_internal_boot_pool",
+        scope: Scope::Write,
+    },
+    ActionSpec {
         name: "archive_notifications",
         scope: Scope::Write,
     },
@@ -472,6 +564,38 @@ pub(super) const ACTIONS: &[ActionSpec] = &[
     },
     ActionSpec {
         name: "connect_sign_out",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "connect_sign_in",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "setup_remote_access",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "enable_dynamic_remote_access",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_api_settings",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_settings",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "update_ssh_settings",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "initiate_flash_backup",
+        scope: Scope::Write,
+    },
+    ActionSpec {
+        name: "notify_if_unique",
         scope: Scope::Write,
     },
     ActionSpec {
@@ -557,7 +681,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 },
                 "name": {
                     "type": "string",
-                    "description": "Filter shares or plugins by name substring (case-insensitive)."
+                    "description": "Filter shares or plugins by name substring (case-insensitive); also folder name (docker_create_folder/docker_create_folder_with_items)."
                 },
                 "token": {
                     "type": "string",
@@ -566,7 +690,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "roles": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "Role names — required for action=get_permissions_for_roles."
+                    "description": "Role names — required for action=get_permissions_for_roles, optional filter for action=preview_effective_permissions."
                 },
                 "title": { "type": "string", "description": "Notification title (create_notification)." },
                 "subject": { "type": "string", "description": "Notification subject (create_notification)." },
@@ -582,7 +706,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "ids": { "type": "array", "items": { "type": "string" }, "description": "Container IDs (docker_update_containers) / API key IDs (api_key_delete)." },
                 "api_key_id": { "type": "string", "description": "API key ID (api_key_add_role/remove_role)." },
                 "role": { "type": "string", "description": "Role name (api_key_add_role/remove_role)." },
-                "permissions": { "type": "array", "items": { "type": "object" }, "description": "Permissions [{resource, actions}] (api_key_create/update)." },
+                "permissions": { "type": "array", "items": { "type": "object" }, "description": "Permissions [{resource, actions}] (api_key_create/update, preview_effective_permissions)." },
                 "overwrite": { "type": "boolean", "description": "Overwrite existing key (api_key_create)." },
                 "url": { "type": "string", "description": "Plugin .plg URL (unraid_plugins_install_*)." },
                 "forced": { "type": "boolean", "description": "Force install (unraid_plugins_install_*)." },
@@ -591,7 +715,37 @@ pub(super) fn tool_definitions() -> Vec<Value> {
                 "comment": { "type": "string", "description": "Server comment (update_server_identity)." },
                 "sys_model": { "type": "string", "description": "Server model (update_server_identity)." },
                 "config": { "type": "object", "description": "UPS config object (configure_ups)." },
-                "input": { "type": "object", "description": "Input object for update_system_time / update_temperature_config / add_plugin / remove_plugin." }
+                "input": { "type": "object", "description": "Input object for update_system_time / update_temperature_config / add_plugin / remove_plugin / update_settings / onboarding_set_onboarding_override." },
+                "parent_id": { "type": "string", "description": "Parent folder ID, or omit for root (docker_create_folder, docker_create_folder_with_items)." },
+                "children_ids": { "type": "array", "items": { "type": "string" }, "description": "Child entry IDs (docker_create_folder, docker_set_folder_children)." },
+                "entry_ids": { "type": "array", "items": { "type": "string" }, "description": "Docker organizer entry IDs to delete (docker_delete_entries)." },
+                "source_entry_ids": { "type": "array", "items": { "type": "string" }, "description": "Docker organizer entry IDs to move (docker_create_folder_with_items, docker_move_entries_to_folder, docker_move_items_to_position)." },
+                "destination_folder_id": { "type": "string", "description": "Destination folder ID (docker_move_entries_to_folder, docker_move_items_to_position)." },
+                "position": { "type": "number", "description": "Sort position (docker_create_folder_with_items, docker_move_items_to_position)." },
+                "folder_id": { "type": "string", "description": "Folder ID, or omit for root (docker_set_folder_children, docker_rename_folder)." },
+                "new_name": { "type": "string", "description": "New folder name (docker_rename_folder)." },
+                "view_id": { "type": "string", "description": "Organizer view ID, default \"default\" (docker_update_view_preferences)." },
+                "prefs": { "type": "object", "description": "Organizer view preferences JSON (docker_update_view_preferences)." },
+                "entries": { "type": "array", "items": { "type": "object" }, "description": "Autostart entries [{id, auto_start, wait}] (docker_update_autostart_configuration)." },
+                "persist_user_preferences": { "type": "boolean", "description": "Persist as user preference (docker_update_autostart_configuration)." },
+                "locale": { "type": "string", "description": "Locale code (customization_set_locale)." },
+                "theme": { "type": "string", "enum": ["azure", "black", "gray", "white"], "description": "Theme name (customization_set_theme)." },
+                "api_key": { "type": "string", "description": "Connect API key (connect_sign_in)." },
+                "user_info": { "type": "object", "description": "Connect user info {preferred_username, email, avatar} (connect_sign_in)." },
+                "access_type": { "type": "string", "description": "WAN access type: DISABLED/DYNAMIC/STATIC/UPNP (setup_remote_access, update_api_settings)." },
+                "forward_type": { "type": "string", "description": "WAN forward type: STATIC/UPNP (setup_remote_access, update_api_settings)." },
+                "port": { "type": "integer", "description": "Port number (setup_remote_access, update_api_settings, update_ssh_settings)." },
+                "access_url": { "type": "object", "description": "AccessUrl object {type, name, ipv4, ipv6} (enable_dynamic_remote_access)." },
+                "enabled": { "type": "boolean", "description": "Enable/disable flag (enable_dynamic_remote_access, update_ssh_settings)." },
+                "remote_name": { "type": "string", "description": "RClone remote name to back up to (initiate_flash_backup)." },
+                "source_path": { "type": "string", "description": "Backup source path (initiate_flash_backup)." },
+                "destination_path": { "type": "string", "description": "Backup destination path on the remote (initiate_flash_backup)." },
+                "options": { "type": "object", "description": "Extra backup options, e.g. --dry-run/--transfers (initiate_flash_backup)." },
+                "pool_name": { "type": "string", "description": "Pool name (onboarding_create_internal_boot_pool)." },
+                "devices": { "type": "array", "items": { "type": "string" }, "description": "Device paths (onboarding_create_internal_boot_pool)." },
+                "boot_size_mib": { "type": "integer", "description": "Boot partition size in MiB (onboarding_create_internal_boot_pool)." },
+                "update_bios": { "type": "boolean", "description": "Whether to update BIOS boot order (onboarding_create_internal_boot_pool)." },
+                "reboot": { "type": "boolean", "description": "Whether to reboot after creating the pool (onboarding_create_internal_boot_pool)." }
             },
             "required": ["action"]
         }
