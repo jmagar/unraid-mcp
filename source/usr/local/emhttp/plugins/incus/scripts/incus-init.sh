@@ -18,6 +18,33 @@ fi
 INCUS="${PREFIX}/bin/incus"
 log() { logger -t incus-init "$*"; echo "incus-init: $*"; }
 
+# ---------- L6: Prevent concurrent execution ----------
+LOCKFILE="/var/run/incus-init.lock"
+exec 200>"$LOCKFILE"
+flock -n 200 || { log "Another instance is already running. Exiting."; exit 0; }
+
+# ---------- H1: Ensure default values for all config variables ----------
+STORAGE_DRIVER="${STORAGE_DRIVER:-zfs}"
+STORAGE_SOURCE="${STORAGE_SOURCE:-nvme/incus}"
+STORAGE_POOL_NAME="${STORAGE_POOL_NAME:-default}"
+JAIL_BRIDGE="${JAIL_BRIDGE:-agentbr0}"
+JAIL_SUBNET="${JAIL_SUBNET:-198.18.0.1/24}"
+JAIL_NAT="${JAIL_NAT:-true}"
+JAIL_IPV6="${JAIL_IPV6:-none}"
+ACL_NAME="${ACL_NAME:-agent-block-lan}"
+ACL_BLOCK="${ACL_BLOCK:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16}"
+ACL_ALLOW="${ACL_ALLOW:-}"
+ACL_DEFAULT_EGRESS="${ACL_DEFAULT_EGRESS:-allow}"
+ACL_DEFAULT_INGRESS="${ACL_DEFAULT_INGRESS:-drop}"
+JAIL_PROFILE="${JAIL_PROFILE:-agent-jail}"
+JAIL_IMAGE="${JAIL_IMAGE:-images:debian/trixie/cloud}"
+JAIL_NESTING="${JAIL_NESTING:-false}"
+JAIL_CPU="${JAIL_CPU:-2}"
+JAIL_MEMORY="${JAIL_MEMORY:-4GiB}"
+JAIL_WORKSPACE_ROOT="${JAIL_WORKSPACE_ROOT:-/srv/agent-jails}"
+JAIL_AGENT_UID="${JAIL_AGENT_UID:-1000}"
+JAIL_AGENT_GID="${JAIL_AGENT_GID:-1000}"
+
 # ---------- 1. daemon first-run init (storage pool + core), guarded ----------
 if [ ! -e "${INCUS_DIR}/database/global/db.bin" ]; then
   log "first-run: incus admin init (storage=${STORAGE_DRIVER})"
