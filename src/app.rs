@@ -253,6 +253,16 @@ impl UnraidService {
         self.client.get_permissions_for_roles(roles).await
     }
 
+    pub async fn preview_effective_permissions(
+        &self,
+        roles: Option<&[String]>,
+        permissions: &Value,
+    ) -> Result<Value> {
+        self.client
+            .preview_effective_permissions(roles, permissions)
+            .await
+    }
+
     pub async fn recalculate_overview(&self) -> Result<Value> {
         self.client.recalculate_overview().await
     }
@@ -313,6 +323,104 @@ impl UnraidService {
         self.client.docker_stop(id).await
     }
 
+    pub async fn docker_restart(&self, id: &str) -> Result<Value> {
+        self.client.docker_restart(id).await
+    }
+
+    pub async fn docker_create_folder(
+        &self,
+        name: &str,
+        parent_id: Option<&str>,
+        children_ids: Option<&[String]>,
+    ) -> Result<Value> {
+        self.client
+            .docker_create_folder(name, parent_id, children_ids)
+            .await
+    }
+
+    pub async fn docker_create_folder_with_items(
+        &self,
+        name: &str,
+        parent_id: Option<&str>,
+        source_entry_ids: Option<&[String]>,
+        position: Option<f64>,
+    ) -> Result<Value> {
+        self.client
+            .docker_create_folder_with_items(name, parent_id, source_entry_ids, position)
+            .await
+    }
+
+    pub async fn docker_set_folder_children(
+        &self,
+        folder_id: Option<&str>,
+        children_ids: &[String],
+    ) -> Result<Value> {
+        self.client
+            .docker_set_folder_children(folder_id, children_ids)
+            .await
+    }
+
+    pub async fn docker_delete_entries(&self, entry_ids: &[String]) -> Result<Value> {
+        self.client.docker_delete_entries(entry_ids).await
+    }
+
+    pub async fn docker_move_entries_to_folder(
+        &self,
+        source_entry_ids: &[String],
+        destination_folder_id: &str,
+    ) -> Result<Value> {
+        self.client
+            .docker_move_entries_to_folder(source_entry_ids, destination_folder_id)
+            .await
+    }
+
+    pub async fn docker_move_items_to_position(
+        &self,
+        source_entry_ids: &[String],
+        destination_folder_id: &str,
+        position: f64,
+    ) -> Result<Value> {
+        self.client
+            .docker_move_items_to_position(source_entry_ids, destination_folder_id, position)
+            .await
+    }
+
+    pub async fn docker_rename_folder(&self, folder_id: &str, new_name: &str) -> Result<Value> {
+        self.client.docker_rename_folder(folder_id, new_name).await
+    }
+
+    pub async fn docker_update_view_preferences(
+        &self,
+        view_id: Option<&str>,
+        prefs: Value,
+    ) -> Result<Value> {
+        self.client
+            .docker_update_view_preferences(view_id, prefs)
+            .await
+    }
+
+    pub async fn docker_update_autostart_configuration(
+        &self,
+        entries: Value,
+        persist_user_preferences: Option<bool>,
+    ) -> Result<Value> {
+        self.client
+            .docker_update_autostart_configuration(entries, persist_user_preferences)
+            .await
+    }
+
+    pub async fn refresh_docker_digests(&self) -> Result<Value> {
+        self.client.refresh_docker_digests().await
+    }
+
+    pub async fn reset_docker_template_mappings(&self) -> Result<Value> {
+        self.client.reset_docker_template_mappings().await
+    }
+
+    pub async fn sync_docker_template_paths(&self) -> Result<Value> {
+        self.client.sync_docker_template_paths().await
+    }
+
     pub async fn docker_pause(&self, id: &str) -> Result<Value> {
         self.client.docker_pause(id).await
     }
@@ -340,8 +448,15 @@ impl UnraidService {
     pub async fn docker_update_all_containers(&self) -> Result<Value> {
         self.client.docker_update_all_containers().await
     }
-    pub async fn array_set_state(&self, desired_state: &str) -> Result<Value> {
-        self.client.array_set_state(desired_state).await
+    pub async fn array_set_state(
+        &self,
+        desired_state: &str,
+        decryption_password: Option<&str>,
+        decryption_keyfile: Option<&str>,
+    ) -> Result<Value> {
+        self.client
+            .array_set_state(desired_state, decryption_password, decryption_keyfile)
+            .await
     }
     pub async fn array_add_disk_to_array(&self, id: &str, slot: Option<i32>) -> Result<Value> {
         self.client.array_add_disk_to_array(id, slot).await
@@ -442,6 +557,45 @@ impl UnraidService {
     pub async fn onboarding_reset_onboarding(&self) -> Result<Value> {
         self.client.onboarding_reset_onboarding().await
     }
+    pub async fn onboarding_bypass_onboarding(&self) -> Result<Value> {
+        self.client.onboarding_bypass_onboarding().await
+    }
+    pub async fn onboarding_clear_onboarding_override(&self) -> Result<Value> {
+        self.client.onboarding_clear_onboarding_override().await
+    }
+    pub async fn onboarding_close_onboarding(&self) -> Result<Value> {
+        self.client.onboarding_close_onboarding().await
+    }
+    pub async fn onboarding_open_onboarding(&self) -> Result<Value> {
+        self.client.onboarding_open_onboarding().await
+    }
+    pub async fn onboarding_resume_onboarding(&self) -> Result<Value> {
+        self.client.onboarding_resume_onboarding().await
+    }
+    pub async fn onboarding_refresh_internal_boot_context(&self) -> Result<Value> {
+        self.client.onboarding_refresh_internal_boot_context().await
+    }
+    pub async fn onboarding_set_onboarding_override(&self, input: Value) -> Result<Value> {
+        self.client.onboarding_set_onboarding_override(input).await
+    }
+    pub async fn onboarding_create_internal_boot_pool(
+        &self,
+        pool_name: &str,
+        devices: &[String],
+        boot_size_mib: i32,
+        update_bios: bool,
+        reboot: Option<bool>,
+    ) -> Result<Value> {
+        self.client
+            .onboarding_create_internal_boot_pool(
+                pool_name,
+                devices,
+                boot_size_mib,
+                update_bios,
+                reboot,
+            )
+            .await
+    }
     pub async fn archive_notifications(&self, ids: &[String]) -> Result<Value> {
         self.client.archive_notifications(ids).await
     }
@@ -484,6 +638,67 @@ impl UnraidService {
     }
     pub async fn connect_sign_out(&self) -> Result<Value> {
         self.client.connect_sign_out().await
+    }
+    pub async fn connect_sign_in(&self, api_key: &str, user_info: Option<Value>) -> Result<Value> {
+        self.client.connect_sign_in(api_key, user_info).await
+    }
+    pub async fn setup_remote_access(
+        &self,
+        access_type: &str,
+        forward_type: Option<&str>,
+        port: Option<i32>,
+    ) -> Result<Value> {
+        self.client
+            .setup_remote_access(access_type, forward_type, port)
+            .await
+    }
+    pub async fn enable_dynamic_remote_access(&self, url: Value, enabled: bool) -> Result<Value> {
+        self.client.enable_dynamic_remote_access(url, enabled).await
+    }
+    pub async fn update_api_settings(
+        &self,
+        access_type: Option<&str>,
+        forward_type: Option<&str>,
+        port: Option<i32>,
+    ) -> Result<Value> {
+        self.client
+            .update_api_settings(access_type, forward_type, port)
+            .await
+    }
+    pub async fn update_settings(&self, input: Value) -> Result<Value> {
+        self.client.update_settings(input).await
+    }
+    pub async fn update_ssh_settings(&self, enabled: bool, port: i32) -> Result<Value> {
+        self.client.update_ssh_settings(enabled, port).await
+    }
+    pub async fn initiate_flash_backup(
+        &self,
+        remote_name: &str,
+        source_path: &str,
+        destination_path: &str,
+        options: Option<Value>,
+    ) -> Result<Value> {
+        self.client
+            .initiate_flash_backup(remote_name, source_path, destination_path, options)
+            .await
+    }
+    pub async fn notify_if_unique(
+        &self,
+        title: &str,
+        subject: &str,
+        description: &str,
+        importance: &str,
+        link: Option<&str>,
+    ) -> Result<Value> {
+        self.client
+            .notify_if_unique(title, subject, description, importance, link)
+            .await
+    }
+    pub async fn customization_set_locale(&self, locale: &str) -> Result<Value> {
+        self.client.customization_set_locale(locale).await
+    }
+    pub async fn customization_set_theme(&self, theme: &str) -> Result<Value> {
+        self.client.customization_set_theme(theme).await
     }
 
     pub async fn rclone(&self) -> Result<Value> {

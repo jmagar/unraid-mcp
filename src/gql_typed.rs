@@ -1260,6 +1260,27 @@ pub struct DockerStopNs {
     pub stop: DockerContainerRef,
 }
 
+// ---- restart ---------------------------------------------------------------
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", variables = "DockerIdVars")]
+#[serde(rename_all = "camelCase")]
+pub struct DockerRestartMutation {
+    pub docker: DockerRestartNs,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "DockerMutations",
+    variables = "DockerIdVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerRestartNs {
+    #[arguments(id: $id)]
+    pub restart: DockerContainerRef,
+}
+
 // ---- pause -----------------------------------------------------------------
 
 #[derive(cynic::QueryFragment, serde::Serialize)]
@@ -1417,6 +1438,11 @@ pub struct ArrayDiskRef {
 #[cynic(rename_all = "camelCase")]
 pub struct ArrayStateInput {
     pub desired_state: ArrayStateInputState,
+    /// Optional password used to unlock encrypted array disks when starting the array.
+    pub decryption_password: Option<String>,
+    /// Optional keyfile contents (data URL or raw base64) used to unlock encrypted
+    /// array disks when starting the array.
+    pub decryption_keyfile: Option<String>,
 }
 
 #[derive(cynic::InputObject, Debug, Clone)]
@@ -1717,6 +1743,181 @@ pub struct InstallPluginInput {
     pub forced: Option<bool>,
 }
 
+// The structs below derive `serde::Deserialize` (no rename_all — Rust field
+// names match the snake_case JSON keys MCP callers send) alongside
+// `cynic::InputObject` (which maps those same fields to camelCase on the wire),
+// same dual-derive pattern as `UPSConfigInput`/`TemperatureConfigInput`. cynic's
+// `Scalar` derive is transparent to serde (see the `Json`/`BigInt` doc comments
+// above), so `PrefixedID`/`Url`/`Json` fields deserialize like their inner type.
+
+// SDL declares `preferred_username` as literal snake_case (not camelCase like its siblings).
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+pub struct ConnectUserInfoInput {
+    #[cynic(rename = "preferred_username")]
+    pub preferred_username: String,
+    pub email: String,
+    pub avatar: Option<String>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct ConnectSignInInput {
+    pub api_key: String,
+    pub user_info: Option<ConnectUserInfoInput>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct SetupRemoteAccessInput {
+    pub access_type: WanAccessType,
+    pub forward_type: Option<WanForwardType>,
+    pub port: Option<i32>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct AccessUrlInput {
+    #[cynic(rename = "type")]
+    pub r#type: UrlType,
+    pub name: Option<String>,
+    pub ipv4: Option<Url>,
+    pub ipv6: Option<Url>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct EnableDynamicRemoteAccessInput {
+    pub url: AccessUrlInput,
+    pub enabled: bool,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct ConnectSettingsInput {
+    pub access_type: Option<WanAccessType>,
+    pub forward_type: Option<WanForwardType>,
+    pub port: Option<i32>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct UpdateSshInput {
+    pub enabled: bool,
+    pub port: i32,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct InitiateFlashBackupInput {
+    pub remote_name: String,
+    pub source_path: String,
+    pub destination_path: String,
+    pub options: Option<Json>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct DockerAutostartEntryInput {
+    pub id: PrefixedID,
+    pub auto_start: bool,
+    pub wait: Option<i32>,
+}
+
+// ── onboarding override input tree (deep, admin/debug-only surface) ───────────
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+pub struct PartnerLinkInput {
+    pub title: String,
+    pub url: String,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct PartnerConfigInput {
+    pub name: Option<String>,
+    pub url: Option<String>,
+    pub hardware_specs_url: Option<String>,
+    pub manual_url: Option<String>,
+    pub support_url: Option<String>,
+    pub extra_links: Option<Vec<PartnerLinkInput>>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct BrandingConfigInput {
+    pub header: Option<String>,
+    pub headermetacolor: Option<String>,
+    pub background: Option<String>,
+    pub show_banner_gradient: Option<bool>,
+    pub theme: Option<String>,
+    pub banner_image: Option<String>,
+    pub case_model: Option<String>,
+    pub case_model_image: Option<String>,
+    pub partner_logo_light_url: Option<String>,
+    pub partner_logo_dark_url: Option<String>,
+    pub has_partner_logo: Option<bool>,
+    pub onboarding_title: Option<String>,
+    pub onboarding_subtitle: Option<String>,
+    pub onboarding_title_fresh_install: Option<String>,
+    pub onboarding_subtitle_fresh_install: Option<String>,
+    pub onboarding_title_upgrade: Option<String>,
+    pub onboarding_subtitle_upgrade: Option<String>,
+    pub onboarding_title_downgrade: Option<String>,
+    pub onboarding_subtitle_downgrade: Option<String>,
+    pub onboarding_title_incomplete: Option<String>,
+    pub onboarding_subtitle_incomplete: Option<String>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct SystemConfigInput {
+    pub server_name: Option<String>,
+    pub model: Option<String>,
+    pub comment: Option<String>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+pub struct ActivationCodeOverrideInput {
+    pub code: Option<String>,
+    pub partner: Option<PartnerConfigInput>,
+    pub branding: Option<BrandingConfigInput>,
+    pub system: Option<SystemConfigInput>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct PartnerInfoOverrideInput {
+    pub partner: Option<PartnerConfigInput>,
+    pub branding: Option<BrandingConfigInput>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct OnboardingOverrideCompletionInput {
+    pub completed: Option<bool>,
+    pub completed_at_version: Option<String>,
+    pub force_open: Option<bool>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct OnboardingOverrideInput {
+    pub onboarding: Option<OnboardingOverrideCompletionInput>,
+    pub activation_code: Option<ActivationCodeOverrideInput>,
+    pub partner_info: Option<PartnerInfoOverrideInput>,
+    pub registration_state: Option<RegistrationState>,
+}
+
+#[derive(cynic::InputObject, Debug, Clone, serde::Deserialize)]
+#[cynic(rename_all = "camelCase")]
+pub struct CreateInternalBootPoolInput {
+    pub pool_name: String,
+    pub devices: Vec<String>,
+    pub boot_size_mi_b: i32,
+    pub update_bios: bool,
+    pub reboot: Option<bool>,
+}
+
 // Note: InputObject field renaming — cynic InputObject does NOT honor a struct-level
 // `rename_all`, so snake_case Rust fields (`api_key_id`) map to camelCase SDL
 // (`apiKeyId`) automatically ONLY if you add `#[cynic(rename_all = "camelCase")]`.
@@ -1741,6 +1942,120 @@ pub struct RCloneRemoteRef {
     pub name: String,
     #[cynic(rename = "type")]
     pub r#type: String,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "ConnectSettingsValues", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectSettingsValuesRef {
+    pub access_type: WanAccessType,
+    pub forward_type: Option<WanForwardType>,
+    pub port: Option<i32>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "UpdateSettingsResponse", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSettingsResponseRef {
+    pub restart_required: bool,
+    pub values: Json,
+    pub warnings: Option<Vec<String>>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "FlashBackupStatus", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct FlashBackupStatusRef {
+    pub status: String,
+    pub job_id: Option<String>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "DockerTemplateSyncResult", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct DockerTemplateSyncResultRef {
+    pub scanned: i32,
+    pub matched: i32,
+    pub skipped: i32,
+    pub errors: Vec<String>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "OnboardingInternalBootResult",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingInternalBootResultRef {
+    pub ok: bool,
+    pub code: Option<i32>,
+    pub output: String,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "OnboardingInternalBootDriveWarning",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingInternalBootDriveWarningRef {
+    pub disk_id: String,
+    pub device: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "OnboardingInternalBootContext",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingInternalBootContextRef {
+    pub array_stopped: bool,
+    pub boot_eligible: Option<bool>,
+    pub booted_from_flash_with_internal_boot_setup: bool,
+    pub enable_boot_transfer: Option<String>,
+    pub reserved_names: Vec<String>,
+    pub share_names: Vec<String>,
+    pub pool_names: Vec<String>,
+    pub assignable_disks: Vec<AssignableDisk>,
+    pub drive_warnings: Vec<OnboardingInternalBootDriveWarningRef>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "FlatOrganizerEntry", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct FlatOrganizerEntryRef {
+    pub id: String,
+    #[cynic(rename = "type")]
+    pub r#type: String,
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub depth: f64,
+    pub position: f64,
+    pub path: Vec<String>,
+    pub has_children: bool,
+    pub children_ids: Vec<String>,
+    pub meta: Option<DockerContainerRef>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "ResolvedOrganizerView", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedOrganizerViewRef {
+    pub id: String,
+    pub name: String,
+    pub root_id: String,
+    pub flat_entries: Vec<FlatOrganizerEntryRef>,
+    pub prefs: Option<Json>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "ResolvedOrganizerV1", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedOrganizerV1Ref {
+    pub version: f64,
+    pub views: Vec<ResolvedOrganizerViewRef>,
 }
 
 // --- variables ----------------------------------------------------------------
@@ -1776,6 +2091,107 @@ pub struct DeleteRCloneRemoteVars {
 #[derive(cynic::QueryVariables)]
 pub struct InstallPluginVars {
     pub input: InstallPluginInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct SetLocaleVars {
+    pub locale: String,
+}
+#[derive(cynic::QueryVariables)]
+pub struct SetThemeVars {
+    pub theme: ThemeName,
+}
+#[derive(cynic::QueryVariables)]
+pub struct CreateDockerFolderVars {
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub children_ids: Option<Vec<String>>,
+}
+#[derive(cynic::QueryVariables)]
+pub struct CreateDockerFolderWithItemsVars {
+    pub name: String,
+    pub parent_id: Option<String>,
+    pub source_entry_ids: Option<Vec<String>>,
+    pub position: Option<f64>,
+}
+#[derive(cynic::QueryVariables)]
+pub struct SetDockerFolderChildrenVars {
+    pub folder_id: Option<String>,
+    pub children_ids: Vec<String>,
+}
+#[derive(cynic::QueryVariables)]
+pub struct DeleteDockerEntriesVars {
+    pub entry_ids: Vec<String>,
+}
+#[derive(cynic::QueryVariables)]
+pub struct MoveDockerEntriesToFolderVars {
+    pub source_entry_ids: Vec<String>,
+    pub destination_folder_id: String,
+}
+#[derive(cynic::QueryVariables)]
+pub struct MoveDockerItemsToPositionVars {
+    pub source_entry_ids: Vec<String>,
+    pub destination_folder_id: String,
+    pub position: f64,
+}
+#[derive(cynic::QueryVariables)]
+pub struct RenameDockerFolderVars {
+    pub folder_id: String,
+    pub new_name: String,
+}
+#[derive(cynic::QueryVariables)]
+pub struct UpdateDockerViewPreferencesVars {
+    pub view_id: Option<String>,
+    pub prefs: Json,
+}
+#[derive(cynic::QueryVariables)]
+pub struct UpdateAutostartConfigurationVars {
+    pub entries: Vec<DockerAutostartEntryInput>,
+    pub persist_user_preferences: Option<bool>,
+}
+#[derive(cynic::QueryVariables)]
+pub struct ConnectSignInVars {
+    pub input: ConnectSignInInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct SetupRemoteAccessVars {
+    pub input: SetupRemoteAccessInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct EnableDynamicRemoteAccessVars {
+    pub input: EnableDynamicRemoteAccessInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct UpdateApiSettingsVars {
+    pub input: ConnectSettingsInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct UpdateSettingsVars {
+    pub input: Json,
+}
+#[derive(cynic::QueryVariables)]
+pub struct UpdateSshSettingsVars {
+    pub input: UpdateSshInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct InitiateFlashBackupVars {
+    pub input: InitiateFlashBackupInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct NotifyIfUniqueVars {
+    pub input: NotificationData,
+}
+#[derive(cynic::QueryVariables)]
+pub struct SetOnboardingOverrideVars {
+    pub input: OnboardingOverrideInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct CreateInternalBootPoolVars {
+    pub input: CreateInternalBootPoolInput,
+}
+#[derive(cynic::QueryVariables)]
+pub struct PreviewEffectivePermissionsVars {
+    pub roles: Option<Vec<Role>>,
+    pub permissions: Option<Vec<AddPermissionInput>>,
 }
 
 // --- apiKey namespace ---------------------------------------------------------
@@ -2271,6 +2687,432 @@ pub struct RemovePluginMutation {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectSignOutMutation {
     pub connect_sign_out: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "ConnectSignInVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectSignInMutation {
+    #[arguments(input: $input)]
+    pub connect_sign_in: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "SetupRemoteAccessVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupRemoteAccessMutation {
+    #[arguments(input: $input)]
+    pub setup_remote_access: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "EnableDynamicRemoteAccessVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct EnableDynamicRemoteAccessMutation {
+    #[arguments(input: $input)]
+    pub enable_dynamic_remote_access: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "UpdateApiSettingsVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateApiSettingsMutation {
+    #[arguments(input: $input)]
+    pub update_api_settings: ConnectSettingsValuesRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "UpdateSettingsVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSettingsMutation {
+    #[arguments(input: $input)]
+    pub update_settings: UpdateSettingsResponseRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "UpdateSshSettingsVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSshSettingsMutation {
+    #[arguments(input: $input)]
+    pub update_ssh_settings: VarsRead,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "InitiateFlashBackupVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct InitiateFlashBackupMutation {
+    #[arguments(input: $input)]
+    pub initiate_flash_backup: FlashBackupStatusRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "NotifyIfUniqueVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct NotifyIfUniqueMutation {
+    #[arguments(input: $input)]
+    pub notify_if_unique: Option<Notification>,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct RefreshDockerDigestsMutation {
+    pub refresh_docker_digests: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResetDockerTemplateMappingsMutation {
+    pub reset_docker_template_mappings: bool,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct SyncDockerTemplatePathsMutation {
+    pub sync_docker_template_paths: DockerTemplateSyncResultRef,
+}
+
+// ── mutations: docker Organizer (folder-based container grouping) ─────────────
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "CreateDockerFolderVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDockerFolderMutation {
+    #[arguments(name: $name, parentId: $parent_id, childrenIds: $children_ids)]
+    pub create_docker_folder: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "CreateDockerFolderWithItemsVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDockerFolderWithItemsMutation {
+    #[arguments(
+        name: $name,
+        parentId: $parent_id,
+        sourceEntryIds: $source_entry_ids,
+        position: $position
+    )]
+    pub create_docker_folder_with_items: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "SetDockerFolderChildrenVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDockerFolderChildrenMutation {
+    #[arguments(folderId: $folder_id, childrenIds: $children_ids)]
+    pub set_docker_folder_children: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "DeleteDockerEntriesVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteDockerEntriesMutation {
+    #[arguments(entryIds: $entry_ids)]
+    pub delete_docker_entries: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "MoveDockerEntriesToFolderVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveDockerEntriesToFolderMutation {
+    #[arguments(sourceEntryIds: $source_entry_ids, destinationFolderId: $destination_folder_id)]
+    pub move_docker_entries_to_folder: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "MoveDockerItemsToPositionVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveDockerItemsToPositionMutation {
+    #[arguments(
+        sourceEntryIds: $source_entry_ids,
+        destinationFolderId: $destination_folder_id,
+        position: $position
+    )]
+    pub move_docker_items_to_position: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "RenameDockerFolderVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameDockerFolderMutation {
+    #[arguments(folderId: $folder_id, newName: $new_name)]
+    pub rename_docker_folder: ResolvedOrganizerV1Ref,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "UpdateDockerViewPreferencesVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDockerViewPreferencesMutation {
+    #[arguments(viewId: $view_id, prefs: $prefs)]
+    pub update_docker_view_preferences: ResolvedOrganizerV1Ref,
+}
+
+// ── mutations: docker namespace — updateAutostartConfiguration ────────────────
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "UpdateAutostartConfigurationVars"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerUpdateAutostartConfigurationMutation {
+    pub docker: DockerUpdateAutostartConfigurationNs,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "DockerMutations",
+    variables = "UpdateAutostartConfigurationVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerUpdateAutostartConfigurationNs {
+    #[arguments(entries: $entries, persistUserPreferences: $persist_user_preferences)]
+    pub update_autostart_configuration: bool,
+}
+
+// ── mutations: customization namespace ─────────────────────────────────────────
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", variables = "SetLocaleVars")]
+#[serde(rename_all = "camelCase")]
+pub struct CustomizationSetLocaleMutation {
+    pub customization: CustomizationSetLocaleNs,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "CustomizationMutations",
+    variables = "SetLocaleVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomizationSetLocaleNs {
+    #[arguments(locale: $locale)]
+    pub set_locale: String,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation", variables = "SetThemeVars")]
+#[serde(rename_all = "camelCase")]
+pub struct CustomizationSetThemeMutation {
+    pub customization: CustomizationSetThemeNs,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "CustomizationMutations",
+    variables = "SetThemeVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomizationSetThemeNs {
+    #[arguments(theme: $theme)]
+    pub set_theme: Theme,
+}
+
+// ── mutations: onboarding namespace — remaining lifecycle ops ──────────────────
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingBypassMutation {
+    pub onboarding: OnboardingBypassNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingBypassNs {
+    pub bypass_onboarding: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingClearOverrideMutation {
+    pub onboarding: OnboardingClearOverrideNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingClearOverrideNs {
+    pub clear_onboarding_override: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingCloseMutation {
+    pub onboarding: OnboardingCloseNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingCloseNs {
+    pub close_onboarding: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingOpenMutation {
+    pub onboarding: OnboardingOpenNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingOpenNs {
+    pub open_onboarding: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingResumeMutation {
+    pub onboarding: OnboardingResumeNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingResumeNs {
+    pub resume_onboarding: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "Mutation")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingRefreshInternalBootContextMutation {
+    pub onboarding: OnboardingRefreshInternalBootContextNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(graphql_type = "OnboardingMutations", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingRefreshInternalBootContextNs {
+    pub refresh_internal_boot_context: OnboardingInternalBootContextRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "SetOnboardingOverrideVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingSetOverrideMutation {
+    pub onboarding: OnboardingSetOverrideNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "OnboardingMutations",
+    variables = "SetOnboardingOverrideVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingSetOverrideNs {
+    #[arguments(input: $input)]
+    pub set_onboarding_override: OnboardingRef,
+}
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Mutation",
+    variables = "CreateInternalBootPoolVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingCreateInternalBootPoolMutation {
+    pub onboarding: OnboardingCreateInternalBootPoolNs,
+}
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "OnboardingMutations",
+    variables = "CreateInternalBootPoolVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingCreateInternalBootPoolNs {
+    #[arguments(input: $input)]
+    pub create_internal_boot_pool: OnboardingInternalBootResultRef,
+}
+
+// ── query: previewEffectivePermissions ─────────────────────────────────────────
+
+#[derive(cynic::QueryFragment, serde::Serialize)]
+#[cynic(
+    graphql_type = "Query",
+    variables = "PreviewEffectivePermissionsVars",
+    rename_all = "camelCase"
+)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewEffectivePermissionsQuery {
+    #[arguments(roles: $roles, permissions: $permissions)]
+    pub preview_effective_permissions: Vec<Permission>,
 }
 
 // UPS config enums (configureUps batch) — hand-written for graphql_type (SDL uses UPS*).

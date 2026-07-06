@@ -106,7 +106,7 @@ fn cors_layer(config: &crate::config::McpConfig) -> CorsLayer {
 }
 
 /// GET /health — always returns 200; status is "ok" or "degraded".
-/// No authentication required. Performs a lightweight upstream probe (1s timeout).
+/// No authentication required. Performs a lightweight, short-timeout upstream probe.
 async fn health(State(state): State<AppState>) -> impl IntoResponse {
     let started = Instant::now();
     let (client, url, key) = state.service.raw_client_parts();

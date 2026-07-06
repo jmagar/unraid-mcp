@@ -51,6 +51,16 @@ pub struct CounterSnapshot {
     pub upstream_errors: u64,
 }
 
+/// Timeout for the upstream health probe. Chosen to sit within a range: long
+/// enough to absorb a realistic DNS+TLS+latency round-trip to the externally
+/// resolved Unraid endpoint (so a transient spike does not register as a
+/// failure and fire warn-level alert noise while the API is actually healthy),
+/// yet strictly *below* the container healthcheck's curl timeout (5s) so this
+/// probe resolves and `/health` returns its own error category before curl
+/// gives up — otherwise a slow upstream would fail the container healthcheck
+/// rather than surfacing as `degraded`.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+
 /// Result of a lightweight upstream health probe.
 #[derive(Debug, serde::Serialize)]
 pub struct UpstreamHealth {
@@ -77,7 +87,8 @@ impl UpstreamHealth {
     }
 }
 
-/// Probe upstream with a 1-second timeout via a simple info query.
+/// Probe upstream with a short timeout (see [`PROBE_TIMEOUT`]) via a simple
+/// info query.
 pub async fn probe_upstream(client: &reqwest::Client, url: &str, api_key: &str) -> UpstreamHealth {
     let started = Instant::now();
     let res = client
@@ -85,16 +96,19 @@ pub async fn probe_upstream(client: &reqwest::Client, url: &str, api_key: &str) 
         .header("x-api-key", api_key)
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({ "query": "query { info { time } }" }))
-        .timeout(Duration::from_secs(1))
+        .timeout(PROBE_TIMEOUT)
         .send()
         .await;
     match res {
         Ok(r) if r.status().is_success() => UpstreamHealth::ok(started.elapsed()),
         Ok(r) => UpstreamHealth::down(format!("HTTP {}", r.status())),
         Err(e) => {
-            // `/health` is public — log the full error (which may embed the
-            // upstream URL) server-side, but return only a category to the caller.
-            tracing::warn!(error = %e, "upstream health probe failed");
+            // `/health` is public — log the full error server-side (which may
+            // embed the upstream URL), but return only a category to the caller.
+            // Use `?e`: reqwest's `Debug` renders the whole `source()` chain
+            // (timeout vs DNS vs connect vs TLS), whereas `Display` only shows
+            // the outer "error sending request" line.
+            tracing::warn!(error = ?e, "upstream health probe failed");
             let category = if e.is_timeout() {
                 "request timed out"
             } else if e.is_connect() {

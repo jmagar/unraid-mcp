@@ -1,5 +1,12 @@
 name: Release
 
+# Triggers on the vX.Y.Z tag that release-please pushes (via
+# RELEASE_PLEASE_TOKEN, so this workflow actually fires — the default
+# GITHUB_TOKEN would not trigger it). Builds the release binary and attaches
+# it to the GitHub Release release-please already created; it does not
+# create a new release or touch the changelog-based release notes
+# release-please wrote.
+
 on:
   push:
     tags:
@@ -19,10 +26,6 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             artifact: runraid
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: runraid
-            cross: true
 
     steps:
       - uses: actions/checkout@v4
@@ -35,17 +38,8 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - name: Install cross
-        if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build (native)
-        if: "!matrix.cross"
+      - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
-
-      - name: Build (cross)
-        if: matrix.cross
-        run: cross build --release --locked --target ${{ matrix.target }}
 
       - name: Rename artifact
         run: |
@@ -60,7 +54,7 @@ jobs:
           path: ${{ matrix.artifact }}-${{ matrix.target }}
 
   release:
-    name: Create Release
+    name: Attach Release Assets
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -74,8 +68,10 @@ jobs:
           path: artifacts/
           merge-multiple: true
 
-      - name: Create GitHub Release
+      # Adds these assets to the release-please-created release for this tag.
+      # No `generate_release_notes`/`body` here — that would overwrite the
+      # changelog-based notes release-please already wrote.
+      - name: Attach binaries to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**
-          generate_release_notes: true

@@ -6,6 +6,17 @@ pub(crate) fn string_arg(args: &Value, name: &str) -> Option<String> {
     args.get(name).and_then(|v| v.as_str()).map(String::from)
 }
 
+/// Extract an optional array-of-strings field. `None` if absent or not an array;
+/// non-string elements are silently dropped (mirrors the existing inline
+/// `ids`/`roles` extraction pattern used before this helper existed).
+pub(crate) fn string_array_arg(args: &Value, name: &str) -> Option<Vec<String>> {
+    args.get(name).and_then(|v| v.as_array()).map(|a| {
+        a.iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect()
+    })
+}
+
 /// Extract an optional i64 field; error if the field is present but not an integer.
 pub(crate) fn i64_arg(args: &Value, name: &str) -> anyhow::Result<Option<i64>> {
     let Some(v) = args.get(name) else {

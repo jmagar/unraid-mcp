@@ -27,6 +27,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where relevant), returning a `{items, total, limit, offset, has_more, next_offset}`
   envelope (MCP surface).
 - ~40 KB truncation cap on MCP tool responses.
+- `docker_restart` action (`unraid:admin`), added after re-vendoring
+  `schema/unraid-schema.graphql` from `unraid/api@2679fda1` picked up a new
+  `DockerMutations.restart` mutation.
+- `array_set_state` accepts optional `decryption_password`/`decryption_keyfile`
+  (MCP-only — not exposed via the CLI, to avoid putting secrets in shell
+  history/process listings), so an encrypted array can be started without the
+  web UI unlock step. Also picked up from the same schema re-vendor.
+- Full coverage of the remaining Unraid GraphQL surface found via the same
+  schema re-vendor (~142 total operations now implemented, up from 111): the
+  Docker Organizer subsystem (`docker_create_folder`,
+  `docker_create_folder_with_items`, `docker_set_folder_children`,
+  `docker_delete_entries`, `docker_move_entries_to_folder`,
+  `docker_move_items_to_position`, `docker_rename_folder`; CLI parity for all
+  of these), plus `docker_update_view_preferences` /
+  `docker_update_autostart_configuration` / `refresh_docker_digests` /
+  `reset_docker_template_mappings` / `sync_docker_template_paths` (MCP-only
+  for the two JSON-blob ones); `customization_set_locale` /
+  `customization_set_theme`; the full Onboarding lifecycle
+  (`onboarding_bypass_onboarding`, `onboarding_clear_onboarding_override`,
+  `onboarding_close_onboarding`, `onboarding_open_onboarding`,
+  `onboarding_resume_onboarding`, `onboarding_refresh_internal_boot_context`,
+  `onboarding_create_internal_boot_pool`, `onboarding_set_onboarding_override`
+  — the last MCP-only, its input tree is deeply nested); `connect_sign_in`,
+  `setup_remote_access`, `enable_dynamic_remote_access` (MCP-only, nested
+  input), `update_api_settings`, `update_settings` (MCP-only, raw JSON),
+  `update_ssh_settings`, `initiate_flash_backup`, `notify_if_unique`; and the
+  `preview_effective_permissions` query.
 
 ### Fixed
 

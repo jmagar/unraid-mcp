@@ -80,6 +80,29 @@ pub fn classify_query(query: &str) -> Option<std::borrow::Cow<'static, str>> {
                 )));
             }
         }
+        // The Docker Organizer mutations are direct Mutation-root fields (not
+        // nested under `docker { ... }`), but their MCP action names carry a
+        // `docker_` prefix for discoverability alongside docker_start/stop/etc.
+        // Map the bare root field name to that prefixed action/fixture key.
+        const DOCKER_ORGANIZER: &[(&str, &str)] = &[
+            ("createDockerFolder", "docker_create_folder"),
+            (
+                "createDockerFolderWithItems",
+                "docker_create_folder_with_items",
+            ),
+            ("setDockerFolderChildren", "docker_set_folder_children"),
+            ("deleteDockerEntries", "docker_delete_entries"),
+            ("moveDockerEntriesToFolder", "docker_move_entries_to_folder"),
+            ("moveDockerItemsToPosition", "docker_move_items_to_position"),
+            ("renameDockerFolder", "docker_rename_folder"),
+            (
+                "updateDockerViewPreferences",
+                "docker_update_view_preferences",
+            ),
+        ];
+        if let Some((_, key)) = DOCKER_ORGANIZER.iter().find(|(field, _)| *field == root) {
+            return Some(Cow::Borrowed(*key));
+        }
         return Some(Cow::Owned(to_snake_case(root)));
     }
 

@@ -108,6 +108,12 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
             "get_permissions_for_roles",
             service.get_permissions_for_roles(&roles).await?,
         ),
+        CliCommand::PreviewEffectivePermissions(roles) => (
+            "preview_effective_permissions",
+            service
+                .preview_effective_permissions(roles.as_deref(), &serde_json::Value::Null)
+                .await?,
+        ),
         CliCommand::RecalculateOverview => (
             "recalculate_overview",
             service.recalculate_overview().await?,
@@ -141,6 +147,7 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
         CliCommand::VmReset(id) => ("vm_reset", service.vm_reset(&id).await?),
         CliCommand::DockerStart(id) => ("docker_start", service.docker_start(&id).await?),
         CliCommand::DockerStop(id) => ("docker_stop", service.docker_stop(&id).await?),
+        CliCommand::DockerRestart(id) => ("docker_restart", service.docker_restart(&id).await?),
         CliCommand::DockerPause(id) => ("docker_pause", service.docker_pause(&id).await?),
         CliCommand::DockerUnpause(id) => ("docker_unpause", service.docker_unpause(&id).await?),
         CliCommand::DockerUpdateContainer(id) => (
@@ -159,7 +166,95 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
             "docker_update_all_containers",
             service.docker_update_all_containers().await?,
         ),
-        CliCommand::ArraySetState(ds) => ("array_set_state", service.array_set_state(&ds).await?),
+        CliCommand::DockerCreateFolder {
+            name,
+            parent_id,
+            children_ids,
+        } => (
+            "docker_create_folder",
+            service
+                .docker_create_folder(&name, parent_id.as_deref(), children_ids.as_deref())
+                .await?,
+        ),
+        CliCommand::DockerCreateFolderWithItems {
+            name,
+            parent_id,
+            source_entry_ids,
+            position,
+        } => (
+            "docker_create_folder_with_items",
+            service
+                .docker_create_folder_with_items(
+                    &name,
+                    parent_id.as_deref(),
+                    source_entry_ids.as_deref(),
+                    position,
+                )
+                .await?,
+        ),
+        CliCommand::DockerSetFolderChildren {
+            folder_id,
+            children_ids,
+        } => (
+            "docker_set_folder_children",
+            service
+                .docker_set_folder_children(folder_id.as_deref(), &children_ids)
+                .await?,
+        ),
+        CliCommand::DockerDeleteEntries(entry_ids) => (
+            "docker_delete_entries",
+            service.docker_delete_entries(&entry_ids).await?,
+        ),
+        CliCommand::DockerMoveEntriesToFolder {
+            source_entry_ids,
+            destination_folder_id,
+        } => (
+            "docker_move_entries_to_folder",
+            service
+                .docker_move_entries_to_folder(&source_entry_ids, &destination_folder_id)
+                .await?,
+        ),
+        CliCommand::DockerMoveItemsToPosition {
+            source_entry_ids,
+            destination_folder_id,
+            position,
+        } => (
+            "docker_move_items_to_position",
+            service
+                .docker_move_items_to_position(&source_entry_ids, &destination_folder_id, position)
+                .await?,
+        ),
+        CliCommand::DockerRenameFolder {
+            folder_id,
+            new_name,
+        } => (
+            "docker_rename_folder",
+            service.docker_rename_folder(&folder_id, &new_name).await?,
+        ),
+        CliCommand::RefreshDockerDigests => (
+            "refresh_docker_digests",
+            service.refresh_docker_digests().await?,
+        ),
+        CliCommand::ResetDockerTemplateMappings => (
+            "reset_docker_template_mappings",
+            service.reset_docker_template_mappings().await?,
+        ),
+        CliCommand::SyncDockerTemplatePaths => (
+            "sync_docker_template_paths",
+            service.sync_docker_template_paths().await?,
+        ),
+        CliCommand::CustomizationSetLocale(locale) => (
+            "customization_set_locale",
+            service.customization_set_locale(&locale).await?,
+        ),
+        CliCommand::CustomizationSetTheme(theme) => (
+            "customization_set_theme",
+            service.customization_set_theme(&theme).await?,
+        ),
+        CliCommand::ArraySetState(ds) => (
+            "array_set_state",
+            service.array_set_state(&ds, None, None).await?,
+        ),
         CliCommand::ArrayAddDiskToArray(id) => (
             "array_add_disk_to_array",
             service.array_add_disk_to_array(&id, None).await?,
@@ -242,6 +337,48 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
             "onboarding_reset_onboarding",
             service.onboarding_reset_onboarding().await?,
         ),
+        CliCommand::OnboardingBypass => (
+            "onboarding_bypass_onboarding",
+            service.onboarding_bypass_onboarding().await?,
+        ),
+        CliCommand::OnboardingClearOverride => (
+            "onboarding_clear_onboarding_override",
+            service.onboarding_clear_onboarding_override().await?,
+        ),
+        CliCommand::OnboardingClose => (
+            "onboarding_close_onboarding",
+            service.onboarding_close_onboarding().await?,
+        ),
+        CliCommand::OnboardingOpen => (
+            "onboarding_open_onboarding",
+            service.onboarding_open_onboarding().await?,
+        ),
+        CliCommand::OnboardingResume => (
+            "onboarding_resume_onboarding",
+            service.onboarding_resume_onboarding().await?,
+        ),
+        CliCommand::OnboardingRefreshInternalBootContext => (
+            "onboarding_refresh_internal_boot_context",
+            service.onboarding_refresh_internal_boot_context().await?,
+        ),
+        CliCommand::OnboardingCreateInternalBootPool {
+            pool_name,
+            devices,
+            boot_size_mib,
+            update_bios,
+            reboot,
+        } => (
+            "onboarding_create_internal_boot_pool",
+            service
+                .onboarding_create_internal_boot_pool(
+                    &pool_name,
+                    &devices,
+                    boot_size_mib,
+                    update_bios,
+                    reboot,
+                )
+                .await?,
+        ),
         CliCommand::ArchiveNotifications(ids) => (
             "archive_notifications",
             service.archive_notifications(&ids).await?,
@@ -264,6 +401,56 @@ pub async fn run(service: &UnraidService, cmd: CliCommand, json: bool) -> Result
             service.update_server_identity(&name, None, None).await?,
         ),
         CliCommand::ConnectSignOut => ("connect_sign_out", service.connect_sign_out().await?),
+        CliCommand::ConnectSignIn(api_key) => (
+            "connect_sign_in",
+            service.connect_sign_in(&api_key, None).await?,
+        ),
+        CliCommand::SetupRemoteAccess {
+            access_type,
+            forward_type,
+            port,
+        } => (
+            "setup_remote_access",
+            service
+                .setup_remote_access(&access_type, forward_type.as_deref(), port)
+                .await?,
+        ),
+        CliCommand::UpdateApiSettings {
+            access_type,
+            forward_type,
+            port,
+        } => (
+            "update_api_settings",
+            service
+                .update_api_settings(access_type.as_deref(), forward_type.as_deref(), port)
+                .await?,
+        ),
+        CliCommand::UpdateSshSettings { enabled, port } => (
+            "update_ssh_settings",
+            service.update_ssh_settings(enabled, port).await?,
+        ),
+        CliCommand::InitiateFlashBackup {
+            remote_name,
+            source_path,
+            destination_path,
+        } => (
+            "initiate_flash_backup",
+            service
+                .initiate_flash_backup(&remote_name, &source_path, &destination_path, None)
+                .await?,
+        ),
+        CliCommand::NotifyIfUnique {
+            title,
+            subject,
+            description,
+            importance,
+            link,
+        } => (
+            "notify_if_unique",
+            service
+                .notify_if_unique(&title, &subject, &description, &importance, link.as_deref())
+                .await?,
+        ),
         // Doctor and setup are intercepted in main.rs before reaching dispatch.
         CliCommand::Doctor | CliCommand::Setup(_) => {
             unreachable!("doctor/setup are handled before service construction")
