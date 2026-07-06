@@ -70,9 +70,11 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
     assert!(env_file.contains("UNRAID_MCP_TOKEN=mcp-secret"));
 }
 
-/// The plugin hook config must call the binary directly (no plugin-setup.sh).
+/// The plugin hook config calls the wrapper script, which degrades gracefully
+/// (exit 0 with a message) when `runraid` isn't on PATH instead of failing the
+/// hook outright.
 #[test]
-fn claude_hooks_call_binary_directly() {
+fn claude_hooks_call_setup_script() {
     let hooks: Value =
         serde_json::from_str(&std::fs::read_to_string("plugins/unraid/hooks/hooks.json").unwrap())
             .unwrap();
@@ -80,18 +82,16 @@ fn claude_hooks_call_binary_directly() {
         let command = hooks["hooks"][hook_name][0]["hooks"][0]["command"]
             .as_str()
             .unwrap();
-        assert_eq!(
-            command,
-            "${CLAUDE_PLUGIN_ROOT}/bin/runraid setup plugin-hook"
-        );
+        assert_eq!(command, "${CLAUDE_PLUGIN_ROOT}/scripts/plugin-setup.sh");
     }
 }
 
-/// The hook calls the binary directly now, so `apply_plugin_options()` (run
-/// before `Config::load()`) must map `CLAUDE_PLUGIN_OPTION_*` into the binary's
-/// `UNRAID_*` env vars. Setting the credential options here makes the
-/// `missing_unraid_api_url` / `missing_unraid_api_key` blocking failures
-/// disappear — proving the mapping reaches the loaded config.
+/// `apply_plugin_options()` (run before `Config::load()`) must map
+/// `CLAUDE_PLUGIN_OPTION_*` into the binary's `UNRAID_*` env vars regardless of
+/// whether the hook script or the binary itself performs the mapping. Setting
+/// the credential options here makes the `missing_unraid_api_url` /
+/// `missing_unraid_api_key` blocking failures disappear — proving the mapping
+/// reaches the loaded config.
 #[test]
 fn plugin_hook_maps_plugin_options_into_env() {
     let dir = tempdir().unwrap();
