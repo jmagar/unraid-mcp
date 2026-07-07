@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07p">
+  <!ENTITY version   "2026.07.07q">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-40-x86_64-1.txz">
-  <!ENTITY md5       "f8fdfbe3ec3c04e5efe68632ecb7db30">
+  <!ENTITY txz       "&name;-unraid-7.0.0-41-x86_64-1.txz">
+  <!ENTITY md5       "4186a4d09c66152456d28952d6365f01">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,6 +15,33 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.07q
+- Container Details panel: "Install a package (Homebrew)" now actually works
+  against a running container — best-effort, bootstraps Homebrew itself
+  (into ~/.linuxbrew, not the shared system path, since the official
+  installer needs sudo and the non-root "agent" user deliberately has none)
+  then installs the formula. Runs as a background job polled from the UI
+  rather than a blocking call — verified live that even a trivial formula
+  install could outlast the browser/reverse-proxy's request timeout while
+  still completing successfully server-side regardless.
+- Container Details panel: a container still sharing the profile's default
+  /workspace (rather than its own isolated one) now shows a warning with a
+  one-click "Isolate this container's workspace" fix.
+- CPU/memory limit fields (both the per-container override panel and
+  Config's global defaults) now validate before saving instead of silently
+  failing against the Incus API on bad input.
+- Container name field validates against real Incus/LXC naming rules before
+  Launch is enabled, instead of only finding out after the API call fails.
+- Containers tab: "Delete N stopped" bulk-removes every stopped container
+  (never touches running ones). Builder tab: "Prune stale records" checks
+  every saved image still exists in Incus and untracks any that don't
+  (e.g. deleted directly via the incus CLI) — both verified live.
+- README.md/MANIFEST.md rewritten to match the plugin's actual current
+  state (were still describing an early, much smaller version).
+- Added a first automated test suite (vitest) for the backend's trickiest
+  pure logic: package-search ranking/merging and incus.cfg/incus.json
+  round-trip parsing — 30 tests, previously zero test coverage existed.
+
 ###2026.07.07p
 - Config tab: replaced the rigid "one big card + one small card" 2-column
   pairing (which left large blank gaps under short cards like Tailscale and

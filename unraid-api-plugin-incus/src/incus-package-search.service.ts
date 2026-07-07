@@ -364,7 +364,7 @@ function parseDebianPackagesIndex(text: string): PackageSearchResult[] {
  * description-only hit, with a small penalty for longer names (a package named exactly
  * "curl" is a better match for "curl" than "libcurl4-gnutls-dev-transitional-compat").
  */
-function localMatchScore(name: string, description: string | undefined, query: string): number {
+export function localMatchScore(name: string, description: string | undefined, query: string): number {
   const n = name.toLowerCase();
   let score: number;
   if (n === query) score = 100;
@@ -388,7 +388,7 @@ function escapeRegExp(s: string): string {
  * match can still outrank a weak/unrelated npm result instead of npm always winning by
  * virtue of being listed first.
  */
-function mergeRanked(results: PackageSearchResult[], query: string): PackageSearchResult[] {
+export function mergeRanked(results: PackageSearchResult[], query: string): PackageSearchResult[] {
   const scored = results.map((r) => {
     const npmScore = (r as PackageSearchResult & { __score?: number }).__score;
     const score = npmScore !== undefined ? Math.min(100, Math.log10(npmScore + 1) * 30) : localMatchScore(r.name, r.description, query);

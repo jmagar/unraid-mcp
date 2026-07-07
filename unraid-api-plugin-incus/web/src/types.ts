@@ -36,6 +36,13 @@ export interface Jail {
 
 export type JailAction = "start" | "stop" | "restart" | "freeze" | "unfreeze";
 
+export interface HomebrewInstallStatus {
+  id: string;
+  formula: string;
+  status: "running" | "success" | "failed";
+  message: string;
+}
+
 export interface JailDetail {
   name: string;
   profiles: string[];

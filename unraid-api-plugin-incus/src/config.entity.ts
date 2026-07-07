@@ -233,6 +233,14 @@ export class JailDetail {
 }
 
 @ObjectType()
+export class HomebrewInstallStatus {
+  @Field(() => String) id!: string;
+  @Field(() => String) formula!: string;
+  @Field(() => String, { description: "running | success | failed" }) status!: string;
+  @Field(() => String) message!: string;
+}
+
+@ObjectType()
 export class BuilderPreset {
   @Field(() => String) name!: string;
   @Field(() => String) distro!: string;

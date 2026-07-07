@@ -193,12 +193,7 @@ export class IncusService {
     // this instance, so concurrent containers never see each other's files. The root
     // filesystem itself doesn't need this treatment — Incus already provisions an
     // independent storage volume per instance for that.
-    const workspaceRoot = resolve(this.config.get<string>("incus.jailWorkspaceRoot", "/srv/agent-jails"));
-    const instanceWorkspace = resolve(join(workspaceRoot, name));
-    if (instanceWorkspace !== workspaceRoot && !instanceWorkspace.startsWith(workspaceRoot + sep)) {
-      throw new Error(`Container name "${name}" produces an invalid workspace path`);
-    }
-    await mkdir(instanceWorkspace, { recursive: true });
+    const instanceWorkspace = await this.ensureInstanceWorkspaceDir(name);
 
     await this.callAndWait("POST", "/1.0/instances", {
       name,
@@ -239,6 +234,37 @@ export class IncusService {
   }
 
   /**
+   * Delete every currently-stopped container. Intentionally never touches a running one —
+   * "cleanup" should never be a way to accidentally kill something live. Each deletion is
+   * independent: one failure doesn't stop the rest, and the names that actually got deleted
+   * are returned so the caller can report exactly what happened.
+   */
+  async deleteStoppedJails(): Promise<string[]> {
+    const jails = await this.listJails();
+    const stopped = jails.filter((j) => j.status.toLowerCase() === "stopped");
+    const deleted: string[] = [];
+    for (const jail of stopped) {
+      try {
+        await this.callAndWait("DELETE", `/1.0/instances/${encodeURIComponent(jail.name)}`);
+        deleted.push(jail.name);
+      } catch (e) {
+        this.logger.warn(`Failed to delete stopped container "${jail.name}": ${(e as Error).message}`);
+      }
+    }
+    return deleted;
+  }
+
+  /** Whether an image alias still resolves against this daemon's own store. */
+  async imageExists(alias: string): Promise<boolean> {
+    try {
+      await this.call("GET", `/1.0/images/aliases/${encodeURIComponent(alias)}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Delete an image by alias. Incus deletes images by fingerprint, not alias
    * name, so this resolves the alias to its target fingerprint first — the
    * same two-step lookup the `incus image delete <alias>` CLI performs
@@ -251,6 +277,30 @@ export class IncusService {
       `/1.0/images/aliases/${encodeURIComponent(alias)}`
     );
     await this.callAndWait("DELETE", `/1.0/images/${encodeURIComponent(metadata.target)}`);
+  }
+
+  /** Resolve + create `${jailWorkspaceRoot}/${name}`, guarding against the name escaping the root. */
+  private async ensureInstanceWorkspaceDir(name: string): Promise<string> {
+    const workspaceRoot = resolve(this.config.get<string>("incus.jailWorkspaceRoot", "/srv/agent-jails"));
+    const instanceWorkspace = resolve(join(workspaceRoot, name));
+    if (instanceWorkspace !== workspaceRoot && !instanceWorkspace.startsWith(workspaceRoot + sep)) {
+      throw new Error(`Container name "${name}" produces an invalid workspace path`);
+    }
+    await mkdir(instanceWorkspace, { recursive: true });
+    return instanceWorkspace;
+  }
+
+  /**
+   * Give an already-running container (launched before per-instance workspaces existed, or
+   * one still explicitly reset to "use profile default") its own isolated workspace, matching
+   * what a fresh launchJail call gets automatically. This does NOT copy any files already
+   * sitting in the old shared directory — it points /workspace at a new, empty, per-container
+   * directory going forward. Old data stays exactly where it was on the host, just unmounted.
+   */
+  async migrateToOwnWorkspace(name: string): Promise<string> {
+    const instanceWorkspace = await this.ensureInstanceWorkspaceDir(name);
+    await this.setWorkspace(name, instanceWorkspace);
+    return instanceWorkspace;
   }
 
   /** Repoint a jail's workspace disk device to a host directory (bring-your-cwd). */

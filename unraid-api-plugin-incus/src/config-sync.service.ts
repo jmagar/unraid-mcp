@@ -233,8 +233,10 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Parse simple shell config (KEY="VALUE") into record.
+   * Public (not just private) so it's directly unit-testable; still not part
+   * of any external/GraphQL-facing contract.
    */
-  private parseShellConfig(content: string): Record<string, string> {
+  parseShellConfig(content: string): Record<string, string> {
     const result: Record<string, string> = {};
     const lines = content.split(/\r?\n/);
     for (const line of lines) {
@@ -261,8 +263,9 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Map parsed shell keys to the TypeScript IncusConfig entity properties.
+   * Public for unit testing (see parseShellConfig).
    */
-  private mapShellToTS(shell: Record<string, string>): Partial<IncusConfig> {
+  mapShellToTS(shell: Record<string, string>): Partial<IncusConfig> {
     const config: Partial<IncusConfig> = {};
     if (shell.SERVICE !== undefined) config.enabled = shell.SERVICE === "enabled";
     if (shell.INCUS_DIR !== undefined) config.stateDir = shell.INCUS_DIR;
@@ -298,8 +301,9 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Updates matching shell variables in shell config file line-by-line to preserve comments.
+   * Public for unit testing (see parseShellConfig).
    */
-  private updateShellConfig(content: string, updates: Partial<IncusConfig>): string {
+  updateShellConfig(content: string, updates: Partial<IncusConfig>): string {
     const lines = content.split(/\r?\n/);
     const keyMap: Record<keyof IncusConfig, string> = {
       enabled: "SERVICE",
