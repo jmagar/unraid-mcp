@@ -3,7 +3,6 @@
   "release-type": "rust",
   "include-v-in-tag": true,
   "include-component-in-tag": false,
-  "bootstrap-sha": "52b3eff2c81b0371c25eb74553757e1f8d9dca09",
   "label": "autorelease: pending,release-please",
   "release-label": "autorelease: tagged,release-please",
   "pull-request-header": "This release PR is managed by release-please. Merge it to let release-please create the tag and GitHub Release.",

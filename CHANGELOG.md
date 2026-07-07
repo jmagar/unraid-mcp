@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-06
+
 ### Changed
 
 - Renamed the binary `unraid` → `runraid` (package remains `unraid-mcp`; env vars and
@@ -17,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dotenvy` before `Config::load`, so it can find its credentials without a process
   manager. The loader is symlink-guarded (a symlinked `.env` is refused) and never
   overrides already-set env vars.
+- CI and release builds are now **linux/amd64 only** — the arm64 leg (QEMU-emulated,
+  taking 50+ minutes per build) has been dropped from both the Docker image build and
+  the release binary matrix. Documented in the README prerequisites.
 
 ### Added
 
@@ -62,6 +67,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - UTF-8 truncation panic: response truncation no longer splits a multi-byte character.
 - `/status` info leak: the endpoint no longer returns server details to unauthenticated
   callers.
+- Widened the `/health` upstream reachability probe timeout to 5s and log the
+  underlying error cause on failure (was too tight, causing false-negative
+  "unreachable" reports under normal upstream latency).
+- `quinn-proto` bumped to 0.11.15 for RUSTSEC-2026-0185 (remote memory
+  exhaustion via unbounded out-of-order stream reassembly); pulled in
+  transitively via `lab-auth` → `reqwest` 0.13.
+- Stale plugin-hook contract test (`tests/setup_contract.rs`) that still
+  asserted the pre-`e2c22d0` binary-direct hook command instead of the
+  current `scripts/plugin-setup.sh` wrapper.
 
 ## [0.1.1] - 2026-06-01
 
