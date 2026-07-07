@@ -1,0 +1,100 @@
+name: unraid-api-plugin-incus CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "unraid-api-plugin-incus/**"
+      - ".github/workflows/api-plugin-ci.yml"
+  pull_request:
+    paths:
+      - "unraid-api-plugin-incus/**"
+      - ".github/workflows/api-plugin-ci.yml"
+  workflow_dispatch:
+
+# This covers the two fully-reproducible build steps of the plugin: the
+# NestJS/GraphQL backend and its Vue frontend. It does NOT cover the classic
+# .txz OS package (incusd/lxcfs/distrobuilder/debootstrap binaries) — that
+# repackaging isn't currently scripted anywhere (see CLAUDE.md's "Deploying"
+# section: builds are carried forward from the previous .txz's extracted
+# contents, not rebuilt from a documented recipe), so it's out of scope here.
+
+jobs:
+  backend:
+    name: Backend (unraid-api-plugin-incus) — typecheck + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: unraid-api-plugin-incus
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # peerDependencies (@nestjs/*, class-validator, class-transformer) are
+      # normally provided by the real unraid-api host at deploy time — this
+      # repo never vendors them. For CI we install the real published NestJS
+      # packages (best-effort proxy for whatever version the actual host
+      # runs; re-pin here if that's ever confirmed) so the typecheck exercises
+      # real APIs, plus a local stub for @unraid/shared, the one peer with no
+      # public npm package (it's Unraid's internal, private monorepo).
+      # --no-save: peerDependencies stay peer — CI installing them shouldn't
+      # change what this package declares it needs from its host.
+      - name: Install peer dependencies for typecheck (host-provided at real deploy time)
+        run: |
+          npm install --no-save --no-package-lock \
+            @nestjs/common@latest @nestjs/config@latest @nestjs/graphql@latest \
+            class-transformer@latest class-validator@latest \
+            @unraid/shared@file:.ci-stubs/unraid-shared
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npx tsc
+
+      - name: Upload dist/
+        uses: actions/upload-artifact@v4
+        with:
+          name: unraid-api-plugin-incus-dist
+          path: unraid-api-plugin-incus/dist/
+          retention-days: 14
+
+  frontend:
+    name: Frontend (web/) — typecheck + build (settings + dashboard bundles)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: unraid-api-plugin-incus/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: unraid-api-plugin-incus/web/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx vue-tsc --noEmit
+
+      - name: Build (both bundles — npm run build chains build:settings + build:dashboard)
+        run: npm run build
+
+      - name: Upload incus-settings bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: incus-settings-bundle
+          path: unraid-api-plugin-incus/dist-web/
+          retention-days: 14
+
+      - name: Upload incus-dashboard bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: incus-dashboard-bundle
+          path: unraid-api-plugin-incus/dist-web-dashboard/
+          retention-days: 14

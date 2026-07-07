@@ -24,19 +24,25 @@ cd unraid-api-plugin-incus
 npx tsc --noEmit   # typecheck
 npx tsc            # build → dist/
 ```
-`node_modules` here is mostly symlinks into a sibling clone of the real `unraid-api` monorepo's pnpm store (`../upstream/unraid-api/node_modules/.pnpm/...`), which is how this package gets real `@nestjs/*`, `@unraid/shared`, `class-validator`, etc. to typecheck against without vendoring them. If a typecheck fails with a missing module, the fix is usually symlinking the missing package from that pnpm store, not `npm install`.
+`node_modules` here is mostly symlinks into a sibling clone of the real `unraid-api` monorepo's pnpm store (`../upstream/unraid-api/node_modules/.pnpm/...`), which is how this package gets real `@nestjs/*`, `@unraid/shared`, `class-validator`, etc. to typecheck against without vendoring them. If a typecheck fails with a missing module, the fix is usually symlinking the missing package from that pnpm store, not `npm install`. If that sibling clone isn't available (e.g. CI, or a fresh machine), `npm install --no-save` the real published `@nestjs/common`/`@nestjs/config`/`@nestjs/graphql`/`class-transformer`/`class-validator` packages plus the local `@unraid/shared@file:.ci-stubs/unraid-shared` stub instead — see `.github/workflows/api-plugin-ci.yml`, which does exactly this. It's a best-effort proxy for whatever version the real host actually runs, not a guarantee of an identical typecheck.
 
 **Frontend** (`unraid-api-plugin-incus/web/`):
 ```bash
 cd unraid-api-plugin-incus/web
 npx vue-tsc --noEmit   # typecheck
-npm run build           # build → ../dist-web/incus-settings.{js,css}
+npm run build           # builds BOTH bundles (chains build:settings + build:dashboard):
+                        #   ../dist-web/incus-settings.{js,css}     (full settings app)
+                        #   ../dist-web-dashboard/incus-dashboard.js (small Main/Dashboard widget)
 ```
 This builds a single-file Vue 3 custom element (`<incus-settings-app>`) — no code-splitting, everything inlined. It inherits Unraid's own CSS variables (`--primary` etc., driven by the host page's light/dark mode) rather than shipping its own palette; don't introduce a separate color system.
 
+## CI
+
+`.github/workflows/api-plugin-ci.yml` typechecks and builds the `unraid-api-plugin-incus` backend and `web/` frontend on every push/PR touching that directory (peerDependencies are installed from real published npm packages for the typecheck, plus a local `.ci-stubs/unraid-shared` stand-in for `@unraid/shared` — the one peer with no public package, since it's Unraid's internal monorepo). It does **not** cover the classic `.txz` OS package — see below for why that one isn't currently scriptable.
+
 ## Deploying to a real box
 
-Both the classic `.plg`/shell layer and the `unraid-api-plugin-incus` backend/frontend are deployed independently and by hand — there's no CI:
+Both the classic `.plg`/shell layer and the `unraid-api-plugin-incus` backend/frontend are deployed independently and by hand — CI only typechecks/builds the backend and frontend (see above), it doesn't deploy anything, and the `.txz` OS package isn't built by CI at all:
 
 - **Classic `.plg` / OS package**: the `packages/incus-unraid-*.txz` is a plain tar of everything under `source/`, laid down at `/usr/local/incus/` on the target (private-prefixed — nothing pollutes system paths). `upgradepkg --install-new` silently no-ops if the package name/version/build string is unchanged, so every content change requires bumping the build number in the txz filename and `incus.plg`'s `md5`/`txz` entities. When repackaging, always start from the *previous* build's extracted contents and overlay only what changed — rebuilding from `source/` alone drops the actual `incusd`/`lxcfs` binaries and bundled libs that live under `/usr/local/incus/{bin,lib,libexec}` in the already-deployed package, which is a destructive mistake (verify `tar -tJf` file counts match before installing).
 - **`unraid-api-plugin-incus` backend**: lives at `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus/` on the target, as just `dist/` + `package.json` (its own `ws`/`graphql-subscriptions` deps are already hoisted there from a prior deploy). Sync `dist/`, then `unraid-api restart` (pm2-managed) to reload — check `/var/log/graphql-api.log` for `IncusPluginModule` init and no errors.
