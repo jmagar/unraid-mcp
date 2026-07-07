@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07p">
+  <!ENTITY version   "2026.07.07q">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
@@ -15,6 +15,27 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.07q
+- Added a Main/Dashboard jail-status box (running/stopped/other counts),
+  toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg (existing
+  installs: add it manually or the toggle won't persist via Apply —
+  updateShellConfig only replaces existing keys; new installs get it
+  automatically since it's in the default incus.cfg).
+- Whitelist-validated (regex @Matches) the free-text updateIncusConfig
+  input fields (jailBridge/jailSubnet/aclBlock/aclAllow/aclDefaultEgress/
+  aclDefaultIngress/jailProfile/jailImage/jailCpu/jailMemory/
+  jailWorkspaceRoot/jailAgentUid/jailAgentGid/jailBindMounts/tsAuthKey).
+  Not a shell-injection fix — updateShellConfig already single-quotes every
+  value before writing it to incus.cfg, which is inert to bash expansion
+  regardless of content — this just rejects obviously-malformed input at
+  the mutation boundary with a clear message instead of letting it reach
+  incus-init.sh and fail there with an opaque Incus-side error.
+- Added locking (a sentinel-lockfile mutex) and atomic writes (temp file +
+  rename) around IncusConfigSyncService's incus.cfg/incus.json read-modify-
+  write, guarding against a hand-edit-over-SSH racing a settings-form save
+  and against a reader (incus-init.sh sourcing incus.cfg) ever seeing a
+  torn file mid-write.
+
 ###2026.07.07p
 - Config tab: replaced the rigid "one big card + one small card" 2-column
   pairing (which left large blank gaps under short cards like Tailscale and

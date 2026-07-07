@@ -1,7 +1,30 @@
 import { registerAs } from "@nestjs/config";
 import { Field, InputType, ObjectType } from "@nestjs/graphql";
 import { Exclude, Expose } from "class-transformer";
-import { IsArray, IsBoolean, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsOptional, IsString, Matches } from "class-validator";
+
+/**
+ * Whitelist patterns for IncusConfigInput's free-text fields. Not a
+ * shell-injection defense — updateShellConfig() already single-quotes every
+ * value before writing it to incus.cfg (see shellSingleQuote() in
+ * config-sync.service.ts), which neutralizes bash expansion regardless of
+ * content. These exist to reject obviously-malformed input at the mutation
+ * boundary — e.g. `JAIL_MEMORY='4gigs'` would otherwise reach incus-init.sh's
+ * `incus profile edit` and fail there with an opaque Incus-side error instead
+ * of a clear GraphQL validation message.
+ */
+const PATTERNS = {
+  ifname: /^[A-Za-z0-9_-]{1,15}$/, // Linux IFNAMSIZ limit
+  cidrList: /^$|^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}(,\d{1,3}(\.\d{1,3}){3}\/\d{1,2})*$/,
+  allowDrop: /^(allow|drop)$/,
+  shellSafeToken: /^[A-Za-z0-9:/_.-]{1,255}$/,
+  cpuCap: /^$|^\d{1,4}$/,
+  memoryCap: /^$|^\d+(\.\d+)?(B|KiB|MiB|GiB|TiB)$/,
+  absolutePath: /^\/[A-Za-z0-9_./-]*$/,
+  uidGid: /^\d{1,10}$/,
+  bindMounts: /^$|^[A-Za-z0-9:/_.,-]+$/,
+  tsAuthKey: /^$|^[A-Za-z0-9_-]{1,255}$/,
+};
 
 /**
  * Mirrors the shell `incus.cfg` so the daemon-side init and the API agree on
@@ -131,6 +154,11 @@ export class IncusConfig {
   @Field(() => String, { description: "Tailscale auth key to auto-join new jails with (empty = disabled)" })
   @IsString()
   tsAuthKey!: string;
+
+  @Expose()
+  @Field(() => Boolean, { description: "Show the jail-status box on Main/Dashboard" })
+  @IsBoolean()
+  dashboardWidgetEnable!: boolean;
 }
 
 export const configFeature = registerAs<IncusConfig>("incus", () => ({
@@ -158,6 +186,7 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
   jailAgentGid: "1000",
   jailBindMounts: "",
   tsAuthKey: "",
+  dashboardWidgetEnable: true,
 }));
 
 /**
@@ -174,25 +203,26 @@ export class IncusConfigInput {
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageDriver?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageSource?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storagePoolName?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailBridge?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailSubnet?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.ifname) jailBridge?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) jailSubnet?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNat?: boolean;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailIpv6?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() aclName?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() aclBlock?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() aclAllow?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() aclDefaultEgress?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() aclDefaultIngress?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailProfile?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailImage?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) aclName?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclBlock?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclAllow?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.allowDrop) aclDefaultEgress?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.allowDrop) aclDefaultIngress?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) jailProfile?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) jailImage?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNesting?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailCpu?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailMemory?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailWorkspaceRoot?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailAgentUid?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailAgentGid?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailBindMounts?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() tsAuthKey?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cpuCap) jailCpu?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.memoryCap) jailMemory?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.absolutePath) jailWorkspaceRoot?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentUid?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentGid?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.bindMounts) jailBindMounts?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.tsAuthKey) tsAuthKey?: string;
+  @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() dashboardWidgetEnable?: boolean;
 }
 
 @ObjectType()
