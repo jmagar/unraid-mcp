@@ -379,9 +379,21 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") return null;
         try {
-          const age = Date.now() - statSync(this.cfgLockPath).mtimeMs;
+          const before = statSync(this.cfgLockPath);
+          const age = Date.now() - before.mtimeMs;
           if (age > CFG_LOCK_STALE_MS) {
-            unlinkSync(this.cfgLockPath); // holder likely crashed; steal it
+            // Re-stat and compare inode immediately before unlinking — a bare
+            // "stat, then unlink" has a window where a legitimate new holder
+            // could create a fresh lock in between, which we'd then delete
+            // out from under them. An inode change (unlink+recreate always
+            // allocates a new inode on ext4/xfs/zfs) means that happened;
+            // abort the steal and retry instead. This narrows the race to
+            // the few microseconds between this second stat and the unlink
+            // call itself, rather than the whole stale-timeout window.
+            const now = statSync(this.cfgLockPath);
+            if (now.ino === before.ino && now.mtimeMs === before.mtimeMs) {
+              unlinkSync(this.cfgLockPath); // holder likely crashed; steal it
+            }
             continue;
           }
         } catch {
@@ -405,15 +417,40 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Write-to-temp-then-rename so a concurrent reader (e.g. bash sourcing incus.cfg) never sees a torn file. */
+  /**
+   * Write-to-temp-then-rename so a concurrent reader (e.g. bash sourcing
+   * incus.cfg) never sees a torn file. Carries over the existing file's mode
+   * rather than letting the temp file fall back to the process umask —
+   * incus.cfg can contain TS_AUTHKEY, and a wider default (e.g. umask 022 ->
+   * 0644, world-readable) would quietly loosen its permissions on every save.
+   */
   private writeFileAtomic(path: string, content: string): void {
     const tmpPath = `${path}.tmp-${process.pid}`;
-    writeFileSync(tmpPath, content, "utf-8");
+    const mode = existsSync(path) ? statSync(path).mode & 0o777 : 0o600;
+    writeFileSync(tmpPath, content, { encoding: "utf-8", mode });
     renameSync(tmpPath, path);
   }
 
+  /** Renders one config value the way updateShellConfig writes it (enabled/disabled, true/false, or as-is). */
+  private formatShellValue(
+    tsKey: keyof IncusConfig,
+    val: unknown,
+    booleanAsEnabledDisabled: Set<keyof IncusConfig>,
+    booleanAsTrueFalse: Set<keyof IncusConfig>
+  ): string {
+    if (booleanAsEnabledDisabled.has(tsKey)) return val ? "enabled" : "disabled";
+    if (booleanAsTrueFalse.has(tsKey)) return val ? "true" : "false";
+    return String(val);
+  }
+
   /**
-   * Updates matching shell variables in shell config file line-by-line to preserve comments.
+   * Updates matching shell variables in shell config file line-by-line to
+   * preserve comments. Keys with no existing line are appended — an install
+   * whose incus.cfg predates a given key (e.g. an existing install toggling
+   * the new DASHBOARD_WIDGET_ENABLE setting) would otherwise have the update
+   * silently discarded: the UI shows the new value, but since the key was
+   * never written, the actual file (and anything reading it, like
+   * IncusDashboard.page's Cond= gate) keeps its old default behavior forever.
    */
   private updateShellConfig(content: string, updates: Partial<IncusConfig>): string {
     const lines = content.split(/\r?\n/);
@@ -446,6 +483,7 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
     };
     const booleanAsEnabledDisabled = new Set<keyof IncusConfig>(["enabled"]);
     const booleanAsTrueFalse = new Set<keyof IncusConfig>(["jailNat", "jailNesting", "dashboardWidgetEnable"]);
+    const seen = new Set<keyof IncusConfig>();
 
     const newLines = lines.map((line) => {
       const trimmed = line.trim();
@@ -459,15 +497,8 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
         ) as keyof IncusConfig | undefined;
 
         if (tsKey && updates[tsKey] !== undefined) {
-          const val = updates[tsKey];
-          let strVal = "";
-          if (booleanAsEnabledDisabled.has(tsKey)) {
-            strVal = val ? "enabled" : "disabled";
-          } else if (booleanAsTrueFalse.has(tsKey)) {
-            strVal = val ? "true" : "false";
-          } else {
-            strVal = String(val);
-          }
+          seen.add(tsKey);
+          const strVal = this.formatShellValue(tsKey, updates[tsKey], booleanAsEnabledDisabled, booleanAsTrueFalse);
 
           const originalRightHand = trimmed.substring(eqIdx + 1).trim();
           // Retain comments if they were on the same line
@@ -485,6 +516,15 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       return line;
     });
 
-    return newLines.join("\n");
+    const appended: string[] = [];
+    for (const tsKey of Object.keys(updates) as Array<keyof IncusConfig>) {
+      if (updates[tsKey] === undefined || seen.has(tsKey)) continue;
+      const shellKey = keyMap[tsKey];
+      if (!shellKey) continue;
+      const strVal = this.formatShellValue(tsKey, updates[tsKey], booleanAsEnabledDisabled, booleanAsTrueFalse);
+      appended.push(`${shellKey}=${this.shellSingleQuote(strVal)}`);
+    }
+
+    return [...newLines, ...appended].join("\n");
   }
 }

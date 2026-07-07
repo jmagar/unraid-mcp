@@ -17,10 +17,14 @@
 <CHANGES>
 ###2026.07.07q
 - Added a Main/Dashboard jail-status box (running/stopped/other counts),
-  toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg (existing
-  installs: add it manually or the toggle won't persist via Apply —
-  updateShellConfig only replaces existing keys; new installs get it
-  automatically since it's in the default incus.cfg).
+  toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg.
+- Fix: updateShellConfig only replaced existing incus.cfg keys, silently
+  dropping an update for any key an install's file predates (the 07.07p
+  TS_AUTHKEY key had this same gap, worked around then by telling existing
+  installs to add it by hand — no longer necessary). Missing keys are now
+  appended, so e.g. toggling the new Dashboard widget off on an old install
+  actually takes effect instead of the UI showing "off" while the widget
+  stays visible because the key was never written.
 - Whitelist-validated (regex @Matches) the free-text updateIncusConfig
   input fields (jailBridge/jailSubnet/aclBlock/aclAllow/aclDefaultEgress/
   aclDefaultIngress/jailProfile/jailImage/jailCpu/jailMemory/
