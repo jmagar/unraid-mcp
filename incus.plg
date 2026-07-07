@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07o">
+  <!ENTITY version   "2026.07.07p">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-39-x86_64-1.txz">
-  <!ENTITY md5       "1298a77ea9d2bd2a54d499242d5a8225">
+  <!ENTITY txz       "&name;-unraid-7.0.0-40-x86_64-1.txz">
+  <!ENTITY md5       "f8fdfbe3ec3c04e5efe68632ecb7db30">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,6 +15,14 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.07p
+- Config tab: replaced the rigid "one big card + one small card" 2-column
+  pairing (which left large blank gaps under short cards like Tailscale and
+  Bind Mounts) with a real CSS masonry flow — all six cards balance across
+  both columns by actual content height, regardless of which logical group
+  they belong to. Each card keeps a small group eyebrow (Runtime, Network &
+  Access, Container Defaults) so the grouping context isn't lost.
+
 ###2026.07.07o
 - Containers now have a "Details" panel (Actions column) showing the
   resolved config Incus actually merges from profile + instance overrides:

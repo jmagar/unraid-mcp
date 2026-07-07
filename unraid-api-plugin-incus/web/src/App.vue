@@ -2300,11 +2300,13 @@ onBeforeUnmount(() => {
 
       <!-- Config tab -->
       <section v-else-if="activeTab === 'config'">
-        <!-- Group 1: Runtime — whether/where the daemon runs -->
-        <p class="mb-2 text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
-
-        <div class="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-        <section class="rounded-lg border border-border bg-card p-4">
+        <!-- Cards flow through a 2-column masonry (tall/short cards mix freely, balanced by
+             actual content height) rather than a rigid one-big-one-small pairing per group —
+             each card carries its own group eyebrow since group headers can't sit outside the
+             flow without breaking the balance. -->
+        <div class="columns-1 gap-4 xl:columns-2">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
           <h3 class="mb-4 text-base font-semibold">Service</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Enable Incus</Label>
@@ -2323,7 +2325,8 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="rounded-lg border border-border bg-card p-4">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
           <h3 class="mb-4 text-base font-semibold">Storage Pool</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Storage driver</Label>
@@ -2357,13 +2360,9 @@ onBeforeUnmount(() => {
             </HelpText>
           </div>
         </section>
-        </div>
 
-        <!-- Group 2: Network & Access — how jails reach the outside world -->
-        <p class="mb-2 text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground">Network &amp; Access</p>
-
-        <div class="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-        <section class="rounded-lg border border-border bg-card p-4">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Network &amp; Access</p>
           <h3 class="mb-4 text-base font-semibold">Network &amp; ACL (LAN-ban)</h3>
           <p class="mb-4 text-xs text-muted-foreground">
             Controls the bridge/subnet containers attach to and the firewall rules governing what they can reach.
@@ -2483,7 +2482,8 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="rounded-lg border border-border bg-card p-4">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Network &amp; Access</p>
           <h3 class="mb-4 text-base font-semibold">Tailscale</h3>
           <p class="mb-4 text-xs text-muted-foreground">
             Optional — when set, new containers automatically join your tailnet using this key.
@@ -2508,13 +2508,9 @@ onBeforeUnmount(() => {
             </HelpText>
           </div>
         </section>
-        </div>
 
-        <!-- Group 3: Container Defaults — what a freshly-launched container looks like -->
-        <p class="mb-2 text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground">Container Defaults</p>
-
-        <div class="mb-6 grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
-        <section class="rounded-lg border border-border bg-card p-4">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Container Defaults</p>
           <h3 class="mb-4 text-base font-semibold">Defaults</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Container profile</Label>
@@ -2571,7 +2567,8 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="rounded-lg border border-border bg-card p-4">
+        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
+          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Container Defaults</p>
           <h3 class="mb-4 text-base font-semibold">Bind Mounts</h3>
           <Label class="mb-2 block">Host config bind-mounts</Label>
           <Input v-model="config.jailBindMounts" class="w-full" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
