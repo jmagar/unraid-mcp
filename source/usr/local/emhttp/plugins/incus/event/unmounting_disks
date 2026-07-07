@@ -15,7 +15,7 @@ logger -t incus "array down: stopping jails"
 # Uses process substitution (not a pipe) so backgrounded jobs are children
 # of this shell and `wait` actually catches them.
 while IFS=, read -r name state; do
-  [ "$state" = "RUNNING" ] && { logger -t incus "stopping $name"; "${PREFIX}/bin/incus" stop "$name" --timeout=30 & }
-done < <("${PREFIX}/bin/incus" list -f csv -c n,s 2>/dev/null)
+  [ "$state" = "RUNNING" ] && { logger -t incus "stopping $name"; "${PREFIX}/bin/incus" stop "$name" --timeout=30 </dev/null & }
+done < <("${PREFIX}/bin/incus" list -f csv -c n,s </dev/null 2>/dev/null)
 wait
 /etc/rc.d/rc.incus stop

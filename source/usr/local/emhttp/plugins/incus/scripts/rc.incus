@@ -26,7 +26,7 @@ start() {
     echo $! > "$LXCFS_PID"
   fi
 
-  if [ -S "${INCUS_DIR}/unix.socket" ] && "${PREFIX}/bin/incus" info >/dev/null 2>&1; then
+  if [ -S "${INCUS_DIR}/unix.socket" ] && "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
     echo "incus: already running"; return 0
   fi
 
@@ -36,7 +36,7 @@ start() {
 
   # Wait for the API socket (up to ~15s).
   for _ in $(seq 1 30); do
-    "${PREFIX}/bin/incus" info >/dev/null 2>&1 && { echo "incus: ready"; return 0; }
+    "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1 && { echo "incus: ready"; return 0; }
     sleep 0.5
   done
   echo "incus: socket did not come up — check $LOG"; exit 1
@@ -45,16 +45,23 @@ start() {
 stop() {
   echo "incus: stopping"
   # Graceful daemon shutdown (stops instances per their config first).
-  "${PREFIX}/bin/incus" admin shutdown >/dev/null 2>&1 || \
-    { [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null; }
+  if ! "${PREFIX}/bin/incus" admin shutdown </dev/null >/dev/null 2>&1; then
+    # Graceful path needs INCUS_DIR to point at the socket the running
+    # daemon actually bound (e.g. right after an INCUS_DIR change it won't),
+    # so fall back to a raw kill by pidfile. That doesn't cascade to
+    # incusd's own spawned children (e.g. dnsmasq for a managed bridge),
+    # so reap those explicitly by their distinctive incus-only invocation.
+    [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
+    pkill -f 'dnsmasq.*-s incus ' 2>/dev/null
+  fi
   [ -f "$LXCFS_PID" ] && kill "$(cat "$LXCFS_PID")" 2>/dev/null
   fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null
   rm -f "$PIDFILE" "$LXCFS_PID"
 }
 
 status() {
-  if "${PREFIX}/bin/incus" info >/dev/null 2>&1; then
-    echo "incus: RUNNING"; "${PREFIX}/bin/incus" list 2>/dev/null
+  if "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
+    echo "incus: RUNNING"; "${PREFIX}/bin/incus" list </dev/null 2>/dev/null
   else
     echo "incus: STOPPED"
   fi

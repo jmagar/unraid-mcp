@@ -17,39 +17,63 @@ else
   say "glibc ${GLIBC:-unknown}" "FAIL — incusd needs >= 2.38"; FAIL=1
 fi
 
-# 2) Host-provided standard libs the bundle does NOT ship (relies on host).
-#    We only bundle the incus-specific closure; these must exist on Unraid.
+# 2) Standard libs incusd needs. Most fall through to the host loader path;
+#    a few (libselinux, libfuse3, libaudit + their own deps) aren't guaranteed
+#    present on Unraid, so we bundle those ourselves into ${PREFIX}/lib. Check
+#    both locations — only host-reliant libs missing from BOTH are fatal here.
+#    (Step 3 below re-validates via the real incusd binary as the final word.)
 for lib in libselinux.so.1 libseccomp.so.2 libsqlite3.so.0 libudev.so.1 \
            libcap.so.2 libacl.so.1 libdbus-1.so.3 libfuse3.so.4 \
            libgcc_s.so.1 libbsd.so.0 libaudit.so.1; do
-  if ldconfig -p 2>/dev/null | grep -q "$lib" || \
+  if [ -e "${PREFIX}/lib/${lib}" ]; then
+    say "$lib" "found (bundled)"
+  elif ldconfig -p 2>/dev/null | grep -q "$lib" || \
      find /lib /lib64 /usr/lib /usr/lib64 -name "$lib" 2>/dev/null | grep -q .; then
-    say "$lib" "found"
+    say "$lib" "found (host)"
   else
     say "$lib" "MISSING — bundle it into ${PREFIX}/lib"; FAIL=1
   fi
 done
 
-# 3) Confirm our bundled loader resolves for incusd (catches any lib we missed).
+# 3) unsquashfs — incusd shells out to it at startup (image/rootfs unpacking)
+#    and exits immediately if it's not on PATH. Bundled into ${PREFIX}/bin,
+#    which incus-env.sh puts on PATH ahead of the host.
+if command -v unsquashfs >/dev/null; then
+  say "unsquashfs" "found"
+else
+  say "unsquashfs" "MISSING — bundle it into ${PREFIX}/bin"; FAIL=1
+fi
+
+# 3b) nft — the LAN-ban ACL feature requires the nftables firewall driver,
+#     which shells out to `nft` to apply rules. Without it, ACL operations
+#     (network acl create/edit) hang rather than failing cleanly. Bundled
+#     into ${PREFIX}/bin.
+if command -v nft >/dev/null; then
+  say "nft" "found"
+else
+  say "nft" "MISSING — bundle it into ${PREFIX}/bin (ACL creation will hang)"; FAIL=1
+fi
+
+# 4) Confirm our bundled loader resolves for incusd (catches any lib we missed).
 if command -v ldd >/dev/null; then
   MISS="$(LD_LIBRARY_PATH="${PREFIX}/lib" ldd "${PREFIX}/libexec/incus/incusd" 2>/dev/null | awk '/not found/{print $1}')"
   if [ -z "$MISS" ]; then say "incusd link" "all resolved"; else
     say "incusd link" "UNRESOLVED: $MISS"; FAIL=1; fi
 fi
 
-# 4) cgroup v2 (incus 7.x prefers unified hierarchy).
+# 5) cgroup v2 (incus 7.x prefers unified hierarchy).
 CG="$(stat -fc %T /sys/fs/cgroup 2>/dev/null)"
 if [ "$CG" = "cgroup2fs" ]; then say "cgroup" "v2 (unified) OK"
 else say "cgroup" "v1/hybrid ($CG) — works but deprecated"; fi
 
-# 5) user namespaces (needed for unprivileged containers).
+# 6) user namespaces (needed for unprivileged containers).
 if [ "$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo 1)" = "1" ]; then
   say "userns" "enabled"
 else
   say "userns" "disabled — only privileged containers will work"
 fi
 
-# 6) subuid/subgid + uid-mapping helpers (unprivileged containers).
+# 7) subuid/subgid + uid-mapping helpers (unprivileged containers).
 if command -v newuidmap >/dev/null && command -v newgidmap >/dev/null; then
   say "uidmap" "newuidmap/newgidmap present"
 else

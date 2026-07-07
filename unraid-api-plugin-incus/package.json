@@ -22,7 +22,12 @@
     "class-transformer": "*",
     "class-validator": "*"
   },
+  "dependencies": {
+    "graphql-subscriptions": "^3.0.0",
+    "ws": "^8.18.0"
+  },
   "devDependencies": {
+    "@types/ws": "^8.5.13",
     "typescript": "^5.6.0"
   }
 }

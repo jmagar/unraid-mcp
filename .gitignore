@@ -1,6 +1,8 @@
 # Build artifacts
 unraid-api-plugin-incus/dist/
 unraid-api-plugin-incus/node_modules/
+unraid-api-plugin-incus/dist-web/
+unraid-api-plugin-incus/web/node_modules/
 
 # OS/editor
 .DS_Store
@@ -13,3 +15,4 @@ Thumbs.db
 
 # Logs
 *.log
+.env
