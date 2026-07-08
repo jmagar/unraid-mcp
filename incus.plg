@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07r">
+  <!ENTITY version   "2026.07.07s">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-42-x86_64-1.txz">
-  <!ENTITY md5       "33d3a97d6eab8d879c0216ba47e4bd13">
+  <!ENTITY txz       "&name;-unraid-7.0.0-43-x86_64-1.txz">
+  <!ENTITY md5       "5c0992a1c4dab02eb19e5b47aa0c515c">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,6 +15,21 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.07s
+- Fix: a build that failed instantly would show "queued" / "Waiting for
+  log output…" forever, never updating — even though the backend already
+  had the real "failed" status and error the whole time. Root cause: the
+  build-status poller was mutating the raw object captured at build-start
+  time instead of the reactive array element Vue actually tracks, so the
+  fetched status update never triggered a re-render (verified live by
+  instrumenting the page's network calls: the poll fired, got the correct
+  answer, and correctly stopped — the UI just never found out). Also
+  surfaced a real curation gap while chasing this: "Resolute (26.04 LTS)"
+  is listed as a buildable Ubuntu release, but the bundled debootstrap
+  doesn't have a release script for it yet, so any build targeting it
+  fails immediately with a clear "No such script" error — not fixed here,
+  but now at least visible instead of silently hanging.
+
 ###2026.07.07r
 - Launch Container: "Allow sudo (NOPASSWD) for the agent user" — opt-in,
   off by default. Grants immediately after boot; verified live

@@ -1778,7 +1778,13 @@ async function startBuild() {
       intervalId: null,
     };
     builds.value.unshift(build);
-    pollBuildStatus(build);
+    // Poll the reactive array element, not the raw `build` object above — mutating a plain
+    // object after it's been pushed into a reactive array doesn't trigger Vue's reactivity
+    // (only mutations through the array's own reactive-wrapped reference do). Verified live:
+    // a build that failed instantly correctly polled and got "failed" back, then stopped
+    // polling as designed — but the UI stayed stuck on "queued" forever because this exact
+    // mistake meant the fetched status update was invisible to the template.
+    pollBuildStatus(builds.value[0]);
 
     // Reset the form for the next build, keep distro since it's usually reused.
     const releases = CURATED_RELEASES[builderDistroSelect.value];
