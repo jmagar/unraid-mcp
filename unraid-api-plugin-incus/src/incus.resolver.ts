@@ -14,6 +14,7 @@ import {
   Jail,
   JailDetail,
   HomebrewInstallStatus,
+  PrivilegedCommandStatus,
   IncusConfig,
   IncusConfigInput,
   ImageBuildStatus,
@@ -93,7 +94,8 @@ export class IncusResolver {
   @Mutation(() => Boolean, { description: "Launch a new LAN-banned agent jail" })
   async launchJail(
     @Args("name") name: string,
-    @Args("image", { nullable: true }) image?: string
+    @Args("image", { nullable: true }) image?: string,
+    @Args("allowSudo", { nullable: true }) allowSudo?: boolean
   ): Promise<boolean> {
     await this.incus.launchJail(name, { image });
 
@@ -103,6 +105,13 @@ export class IncusResolver {
         await this.exec.runOnce(name, ["tailscale", "up", `--authkey=${tsAuthKey}`, `--hostname=${name}`]);
       } catch (err) {
         this.logger.warn(`Best-effort tailscale join failed for jail "${name}": ${(err as Error).message}`);
+      }
+    }
+
+    if (allowSudo) {
+      const result = await this.exec.grantSudo(name);
+      if (!result.success) {
+        this.logger.warn(`Sudo grant requested at launch for "${name}" but failed: ${result.message}`);
       }
     }
 
@@ -151,7 +160,33 @@ export class IncusResolver {
 
   @Query(() => JailDetail, { description: "Full resolved config for one jail — profile + instance overrides merged" })
   async jailDetail(@Args("name") name: string): Promise<JailDetail> {
-    return this.incus.getJailDetail(name);
+    const [detail, sudoEnabled] = await Promise.all([
+      this.incus.getJailDetail(name),
+      this.exec.checkSudoEnabled(name),
+    ]);
+    return { ...detail, sudoEnabled };
+  }
+
+  @Mutation(() => Boolean, { description: "Grant the container's non-root agent user NOPASSWD sudo (opt-in, retroactive)" })
+  async grantJailSudo(@Args("name") name: string): Promise<boolean> {
+    const result = await this.exec.grantSudo(name);
+    if (!result.success) {
+      throw new Error(result.message);
+    }
+    return true;
+  }
+
+  @Mutation(() => String, {
+    description:
+      "Run a command inside a container as root, mediated by the operator (not exposed to the container's own agent user) — returns a job id to poll via privilegedCommandStatus",
+  })
+  startPrivilegedCommand(@Args("name") name: string, @Args("command") command: string): string {
+    return this.exec.startPrivilegedCommand(name, command);
+  }
+
+  @Query(() => PrivilegedCommandStatus, { nullable: true, description: "Poll status/output for a privileged command job" })
+  privilegedCommandStatus(@Args("id") id: string): PrivilegedCommandStatus | undefined {
+    return this.exec.getPrivilegedCommandStatus(id);
   }
 
   @Mutation(() => Boolean, {

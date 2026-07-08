@@ -230,6 +230,19 @@ export class JailDetail {
   workspaceHostPath?: string;
   @Field(() => Boolean, { description: "True if workspaceHostPath is an instance-level override, not the profile's own value" })
   workspaceIsOverride!: boolean;
+  @Field(() => Boolean, { description: "Live-checked: whether the agent user currently has NOPASSWD sudo" })
+  sudoEnabled!: boolean;
+}
+
+@ObjectType()
+export class PrivilegedCommandStatus {
+  @Field(() => String) id!: string;
+  @Field(() => String) command!: string;
+  @Field(() => String, { description: "running | success | failed" }) status!: string;
+  @Field(() => Number, { nullable: true }) exitCode?: number;
+  @Field(() => String, { nullable: true }) stdout?: string;
+  @Field(() => String, { nullable: true }) stderr?: string;
+  @Field(() => String) message!: string;
 }
 
 @ObjectType()

@@ -34,6 +34,17 @@ export const graphqlSchemaExtension = async () => `
     memoryLimitIsOverride: Boolean!
     workspaceHostPath: String
     workspaceIsOverride: Boolean!
+    sudoEnabled: Boolean!
+  }
+
+  type PrivilegedCommandStatus {
+    id: String!
+    command: String!
+    status: String!
+    exitCode: Int
+    stdout: String
+    stderr: String
+    message: String!
   }
 
   type HomebrewInstallStatus {
@@ -103,6 +114,7 @@ export const graphqlSchemaExtension = async () => `
     jailDetail(name: String!): JailDetail!
     jailImageBuildStatus(buildId: String!): ImageBuildStatus
     homebrewInstallStatus(id: String!): HomebrewInstallStatus
+    privilegedCommandStatus(id: String!): PrivilegedCommandStatus
     builderPresets: [BuilderPreset!]!
     jailImages: [ImageRecord!]!
     searchPackages(ecosystem: PackageEcosystem!, query: String!, distro: String, release: String): [PackageSearchResult!]!
@@ -110,7 +122,7 @@ export const graphqlSchemaExtension = async () => `
   }
 
   extend type Mutation {
-    launchJail(name: String!, image: String): Boolean!
+    launchJail(name: String!, image: String, allowSudo: Boolean): Boolean!
     setJailState(name: String!, action: String!): Boolean!
     setJailWorkspace(name: String!, hostPath: String!): Boolean!
     clearJailWorkspace(name: String!): Boolean!
@@ -119,6 +131,8 @@ export const graphqlSchemaExtension = async () => `
     deleteJail(name: String!): Boolean!
     deleteStoppedJails: [String!]!
     installHomebrewFormula(name: String!, formula: String!): String!
+    grantJailSudo(name: String!): Boolean!
+    startPrivilegedCommand(name: String!, command: String!): String!
     buildJailImage(distro: String!, release: String!, packages: [String!]!, alias: String!, basedOn: String, postInstallCommands: [String!]): String!
     saveBuilderPreset(input: BuilderPresetInput!): BuilderPreset!
     deleteBuilderPreset(name: String!): Boolean!

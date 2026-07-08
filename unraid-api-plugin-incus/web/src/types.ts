@@ -57,6 +57,17 @@ export interface JailDetail {
   memoryLimitIsOverride: boolean;
   workspaceHostPath?: string | null;
   workspaceIsOverride: boolean;
+  sudoEnabled: boolean;
+}
+
+export interface PrivilegedCommandStatus {
+  id: string;
+  command: string;
+  status: "running" | "success" | "failed";
+  exitCode?: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  message: string;
 }
 
 export interface ImageBuildStatus {

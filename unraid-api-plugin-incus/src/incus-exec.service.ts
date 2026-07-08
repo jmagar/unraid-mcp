@@ -19,6 +19,17 @@ export interface HomebrewInstallJob {
   message: string;
 }
 
+export interface PrivilegedCommandJob {
+  id: string;
+  jailName: string;
+  command: string;
+  status: "running" | "success" | "failed";
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+  message: string;
+}
+
 const OUTPUT_TOPIC_PREFIX = "jailExecOutput:";
 
 /**
@@ -36,6 +47,7 @@ export class IncusExecService implements OnModuleDestroy {
   private readonly logger = new Logger(IncusExecService.name);
   private readonly sessions = new Map<string, ExecSession>();
   private readonly homebrewJobs = new Map<string, HomebrewInstallJob>();
+  private readonly privilegedJobs = new Map<string, PrivilegedCommandJob>();
   readonly pubsub = new PubSub();
 
   constructor(private readonly config: ConfigService) {}
@@ -104,9 +116,17 @@ export class IncusExecService implements OnModuleDestroy {
    * Non-interactive, fire-and-forget exec: runs `command` inside `jailName`
    * with no websockets, waits for the operation to finish, and returns its
    * exit code. Used for best-effort in-jail setup steps (e.g. `tailscale up`)
-   * where nothing needs to stream output back to a client.
+   * where nothing needs to stream output back to a client. Pass
+   * `captureOutput: true` to also fetch stdout/stderr — Incus writes these to
+   * retrievable log files when `record-output` is set; we fetch then delete
+   * them so they don't pile up on the container's own log storage.
    */
-  async runOnce(jailName: string, command: string[], timeoutSec = 60): Promise<{ exitCode: number }> {
+  async runOnce(
+    jailName: string,
+    command: string[],
+    timeoutSec = 60,
+    captureOutput = false
+  ): Promise<{ exitCode: number; stdout?: string; stderr?: string }> {
     const payload = JSON.stringify({
       command,
       "wait-for-websocket": false,
@@ -152,14 +172,24 @@ export class IncusExecService implements OnModuleDestroy {
     }
 
     const { metadata } = await this.waitForOperation(response.operation, timeoutSec);
-    return { exitCode: metadata?.metadata?.return ?? -1 };
+    const exitCode = metadata?.metadata?.return ?? -1;
+    if (!captureOutput) return { exitCode };
+
+    const output = metadata?.metadata?.output;
+    const [stdout, stderr] = await Promise.all([
+      output?.["1"] ? this.fetchAndDeleteLog(output["1"]) : Promise.resolve(undefined),
+      output?.["2"] ? this.fetchAndDeleteLog(output["2"]) : Promise.resolve(undefined),
+    ]);
+    return { exitCode, stdout, stderr };
   }
 
   /** GET /1.0/operations/{id}/wait and return its metadata once the operation reaches a terminal state. */
   private async waitForOperation(
     operationUrl: string,
     timeoutSec = 60
-  ): Promise<{ metadata?: { metadata?: { return?: number } } }> {
+  ): Promise<{
+    metadata?: { metadata?: { return?: number; output?: Record<string, string> } };
+  }> {
     return new Promise((resolve, reject) => {
       const req = httpRequest(
         {
@@ -187,6 +217,35 @@ export class IncusExecService implements OnModuleDestroy {
       req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
       req.end();
     });
+  }
+
+  /** GET a log file's content by its absolute API path, then DELETE it so exec output doesn't pile up. */
+  private async fetchAndDeleteLog(logPath: string): Promise<string> {
+    const content = await new Promise<string>((resolve, reject) => {
+      const req = httpRequest({ socketPath: this.socketPath, method: "GET", path: logPath, timeout: 15_000 }, (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => resolve(data));
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Incus log fetch timed out"));
+      });
+      req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
+      req.end();
+    });
+    await new Promise<void>((resolve) => {
+      const req = httpRequest({ socketPath: this.socketPath, method: "DELETE", path: logPath, timeout: 15_000 }, () =>
+        resolve()
+      );
+      req.on("timeout", () => {
+        req.destroy();
+        resolve();
+      });
+      req.on("error", () => resolve());
+      req.end();
+    });
+    return content;
   }
 
   private getSession(sessionId: string): ExecSession {
@@ -350,5 +409,91 @@ export class IncusExecService implements OnModuleDestroy {
     // `ws` supports unix sockets via the `ws+unix://<path>:<url-path>` scheme.
     const wsUrl = `ws+unix://${this.socketPath}:${operationUrl}/websocket?secret=${encodeURIComponent(secret)}`;
     return new WebSocket(wsUrl);
+  }
+
+  // --- Sudo grant/check for the container's non-root "agent" user -----------------------
+  // "No sudo for agent" is a deliberate default (see jailDetail HelpText / CLAUDE.md's
+  // threat model — a compromised dependency running as agent shouldn't be able to
+  // self-escalate). Granting it is an explicit, opt-in operator action, either at launch
+  // or retroactively on an already-running container. Runs as root (no `su -l agent`
+  // wrapper, unlike Homebrew) since only root can install the sudo package and write
+  // sudoers.d. Best-effort across package managers since the curated distro list spans
+  // apt/apk/dnf/yum.
+
+  // Newline-separated, not `&&`/`||`-joined on one line — joining a line that already
+  // ends in `||` with another `&&` produces `|| &&` back-to-back, which is invalid POSIX
+  // shell syntax (verified live: dash, Debian's default /bin/sh, rejected it outright).
+  private static readonly GRANT_SUDO_SCRIPT = [
+    "set -e",
+    "command -v sudo >/dev/null 2>&1 || apt-get install -y sudo || apk add --no-cache sudo || dnf install -y sudo || yum install -y sudo",
+    "mkdir -p /etc/sudoers.d",
+    "echo 'agent ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/agent",
+    "chmod 0440 /etc/sudoers.d/agent",
+  ].join("\n");
+
+  async grantSudo(jailName: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const result = await this.runOnce(jailName, ["sh", "-c", IncusExecService.GRANT_SUDO_SCRIPT], 120, true);
+      if (result.exitCode !== 0) {
+        return {
+          success: false,
+          message: `Granting sudo failed (exit ${result.exitCode}): ${(result.stderr || result.stdout || "").trim().slice(0, 300)}`,
+        };
+      }
+      return { success: true, message: "Sudo granted to agent (NOPASSWD)." };
+    } catch (e) {
+      return { success: false, message: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  async checkSudoEnabled(jailName: string): Promise<boolean> {
+    try {
+      const { exitCode } = await this.runOnce(jailName, ["test", "-f", "/etc/sudoers.d/agent"]);
+      return exitCode === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  // --- Operator-mediated privileged command — runs as root, never available to the ------
+  // container's own agent user. Safe complement to the sudo toggle: covers one-off needs
+  // (a forgotten apt package, a quick fix) on containers where sudo is deliberately left
+  // off, without ever handing the agent user itself any new capability. Fire-and-poll for
+  // the same reason as the Homebrew installer — an arbitrary command (e.g. `apt update &&
+  // apt install ...`) can easily outlast a blocking request's timeout.
+
+  startPrivilegedCommand(jailName: string, command: string): string {
+    const id = randomUUID();
+    this.privilegedJobs.set(id, { id, jailName, command, status: "running", message: "Running…" });
+    void this.runPrivilegedCommand(id, jailName, command);
+    return id;
+  }
+
+  getPrivilegedCommandStatus(id: string): PrivilegedCommandJob | undefined {
+    return this.privilegedJobs.get(id);
+  }
+
+  private async runPrivilegedCommand(jobId: string, jailName: string, command: string): Promise<void> {
+    try {
+      const result = await this.runOnce(jailName, ["sh", "-c", command], 180, true);
+      this.privilegedJobs.set(jobId, {
+        id: jobId,
+        jailName,
+        command,
+        status: result.exitCode === 0 ? "success" : "failed",
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        message: result.exitCode === 0 ? "Command finished." : `Command exited with code ${result.exitCode}.`,
+      });
+    } catch (e) {
+      this.privilegedJobs.set(jobId, {
+        id: jobId,
+        jailName,
+        command,
+        status: "failed",
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 }
