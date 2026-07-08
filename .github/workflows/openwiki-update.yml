@@ -30,10 +30,10 @@ jobs:
       - name: Run OpenWiki
         run: openwiki --update --print
         env:
-          OPENWIKI_PROVIDER: anthropic
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          OPENWIKI_MODEL_ID: claude-opus-4.8
+          OPENWIKI_PROVIDER: openai-compatible
+          OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
+          OPENAI_COMPATIBLE_BASE_URL: https://cli-api.tootie.tv/v1
+          OPENWIKI_MODEL_ID: gpt-5.3-codex-spark
 
       - name: Create OpenWiki update pull request
         uses: peter-evans/create-pull-request@v7
