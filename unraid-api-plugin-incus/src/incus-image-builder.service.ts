@@ -52,6 +52,16 @@ const DISTRO_DEFINITIONS: Record<
   // uname-style name ("x86_64") — verified live: Alpine's downloader builds
   // its mirror URL directly from `image.architecture` and silently produces
   // a broken URL (missing version segment) when given "amd64" instead.
+  // NOTE: intentionally no `same_as` fallback here — distrobuilder's debootstrap
+  // downloader hardcodes `/usr/share/debootstrap/scripts` as the location it tries
+  // to write the same_as symlink into, ignoring our DEBOOTSTRAP_DIR env override
+  // (verified live: fails with "Failed to create symlink: ... /usr/share/debootstrap/
+  // scripts/<release>: no such file or directory" since that system path doesn't
+  // exist on a bare Unraid box). Every curated release must instead have a real
+  // script (or symlink) present under the bundled
+  // source/usr/local/incus/share/debootstrap/scripts/ directory — see that dir's
+  // git history for how e.g. Ubuntu's "resolute" (26.04) was added as a symlink
+  // to "gutsy", the base script every modern Ubuntu release script points to.
   debian: {
     downloader: "debootstrap",
     manager: "apt",

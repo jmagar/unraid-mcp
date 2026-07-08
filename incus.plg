@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07s">
+  <!ENTITY version   "2026.07.07u">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-43-x86_64-1.txz">
-  <!ENTITY md5       "5c0992a1c4dab02eb19e5b47aa0c515c">
+  <!ENTITY txz       "&name;-unraid-7.0.0-44-x86_64-1.txz">
+  <!ENTITY md5       "08eb1a187e16b29abda66f90f26d470a">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,7 +15,28 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
-###2026.07.07t (pending — source only, not yet packaged into a .txz build)
+###2026.07.07u
+- Fix: EVERY debootstrap-based image build (all curated Debian/Ubuntu
+  releases, not just the reported "Resolute (26.04 LTS)" one) was silently
+  broken since the image-builder feature was added — root cause was a
+  missing `zstd`/`zstdcat`/`unzstd` in the bundled toolchain. debootstrap
+  falls back to the *system* zstdcat when ours is absent, and that system
+  binary — dynamically linked against the *system* libzstd — gets forced to
+  load our bundled (older) libzstd.so.1 via LD_LIBRARY_PATH, which is
+  missing a symbol (`POOL_create`) the system binary expects, crashing mid-
+  extraction with "symbol lookup error" on the very first .deb. Fixed by
+  bundling a `zstd` binary (with `zstdcat`/`unzstd` symlinks, matching
+  Debian trixie's zstd package — the same source the rest of the bundled
+  toolchain came from) so debootstrap always resolves our matched build
+  first. Verified live: full builds of ubuntu/jammy, ubuntu/noble,
+  ubuntu/resolute, debian/bookworm, and debian/trixie all now complete.
+- Fix: "Resolute (26.04 LTS)" specifically was ALSO missing its own
+  debootstrap release script in the bundled snapshot (curated in the
+  frontend before the release existed in the bundled snapshot). Added it as
+  a symlink to "gutsy", the same base script every other modern Ubuntu
+  release script (jammy, noble, plucky, questing) already points to.
+
+###2026.07.07t
 - Added a Main/Dashboard jail-status box (running/stopped/other counts),
   toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg.
 - Fix: updateShellConfig only replaced existing incus.cfg keys, silently
