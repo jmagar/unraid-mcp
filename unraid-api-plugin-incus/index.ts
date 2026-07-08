@@ -36,6 +36,13 @@ export const graphqlSchemaExtension = async () => `
     workspaceIsOverride: Boolean!
   }
 
+  type HomebrewInstallStatus {
+    id: String!
+    formula: String!
+    status: String!
+    message: String!
+  }
+
   type ImageBuildStatus {
     id: String!
     status: String!
@@ -95,6 +102,7 @@ export const graphqlSchemaExtension = async () => `
     jails: [Jail!]!
     jailDetail(name: String!): JailDetail!
     jailImageBuildStatus(buildId: String!): ImageBuildStatus
+    homebrewInstallStatus(id: String!): HomebrewInstallStatus
     builderPresets: [BuilderPreset!]!
     jailImages: [ImageRecord!]!
     searchPackages(ecosystem: PackageEcosystem!, query: String!, distro: String, release: String): [PackageSearchResult!]!
@@ -106,13 +114,17 @@ export const graphqlSchemaExtension = async () => `
     setJailState(name: String!, action: String!): Boolean!
     setJailWorkspace(name: String!, hostPath: String!): Boolean!
     clearJailWorkspace(name: String!): Boolean!
+    migrateJailWorkspace(name: String!): String!
     setJailLimits(name: String!, cpu: String, memory: String): Boolean!
     deleteJail(name: String!): Boolean!
+    deleteStoppedJails: [String!]!
+    installHomebrewFormula(name: String!, formula: String!): String!
     buildJailImage(distro: String!, release: String!, packages: [String!]!, alias: String!, basedOn: String, postInstallCommands: [String!]): String!
     saveBuilderPreset(input: BuilderPresetInput!): BuilderPreset!
     deleteBuilderPreset(name: String!): Boolean!
     setMasterImage(alias: String!, isMaster: Boolean!): ImageRecord!
     deleteJailImage(alias: String!): Boolean!
+    pruneStaleImageRecords: [String!]!
   }
 `;
 

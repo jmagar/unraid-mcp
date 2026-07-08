@@ -13,6 +13,7 @@ import { IncusPackageSearchService } from "./incus-package-search.service.js";
 import {
   Jail,
   JailDetail,
+  HomebrewInstallStatus,
   IncusConfig,
   IncusConfigInput,
   ImageBuildStatus,
@@ -141,6 +142,13 @@ export class IncusResolver {
     return true;
   }
 
+  @Mutation(() => String, {
+    description: "Give a container (still on the profile's shared default workspace) its own isolated workspace directory; returns the new host path",
+  })
+  async migrateJailWorkspace(@Args("name") name: string): Promise<string> {
+    return this.incus.migrateToOwnWorkspace(name);
+  }
+
   @Query(() => JailDetail, { description: "Full resolved config for one jail — profile + instance overrides merged" })
   async jailDetail(@Args("name") name: string): Promise<JailDetail> {
     return this.incus.getJailDetail(name);
@@ -266,6 +274,39 @@ export class IncusResolver {
       this.logger.warn(`deleteImage(${alias}) failed, untracking anyway: ${(e as Error).message}`);
     }
     return this.imageBuilder.untrackImage(alias);
+  }
+
+  @Mutation(() => [String!], {
+    description: "Untrack any saved image record whose Incus image no longer actually exists (e.g. deleted via the incus CLI directly); returns the aliases pruned",
+  })
+  async pruneStaleImageRecords(): Promise<string[]> {
+    const images = await this.imageBuilder.listImages();
+    const pruned: string[] = [];
+    for (const image of images) {
+      if (!(await this.incus.imageExists(image.alias))) {
+        await this.imageBuilder.untrackImage(image.alias);
+        pruned.push(image.alias);
+      }
+    }
+    return pruned;
+  }
+
+  @Mutation(() => [String!], { description: "Delete every currently-stopped container; returns the names deleted" })
+  async deleteStoppedJails(): Promise<string[]> {
+    return this.incus.deleteStoppedJails();
+  }
+
+  @Mutation(() => String, {
+    description:
+      "Kick off a best-effort Homebrew formula install into a running container (bootstrapping Homebrew itself first if needed); returns a job id to poll via homebrewInstallStatus",
+  })
+  installHomebrewFormula(@Args("name") name: string, @Args("formula") formula: string): string {
+    return this.exec.startHomebrewInstall(name, formula);
+  }
+
+  @Query(() => HomebrewInstallStatus, { nullable: true, description: "Poll status for a Homebrew install job" })
+  homebrewInstallStatus(@Args("id") id: string): HomebrewInstallStatus | undefined {
+    return this.exec.getHomebrewInstallStatus(id);
   }
 
   @Query(() => [PackageSearchResult], {

@@ -9,6 +9,7 @@ import type {
   Jail,
   JailAction,
   JailDetail,
+  HomebrewInstallStatus,
   ImageBuildStatus,
   BuilderPreset,
   ImageRecord,
@@ -97,6 +98,15 @@ const JAIL_IMAGES_QUERY = `
 const SET_MASTER_IMAGE_MUTATION = `
   mutation($alias: String!, $isMaster: Boolean!) { setMasterImage(alias: $alias, isMaster: $isMaster) { alias isMaster } }
 `;
+const PRUNE_STALE_IMAGE_RECORDS_MUTATION = `mutation { pruneStaleImageRecords }`;
+const DELETE_STOPPED_JAILS_MUTATION = `mutation { deleteStoppedJails }`;
+const MIGRATE_JAIL_WORKSPACE_MUTATION = `mutation($name: String!) { migrateJailWorkspace(name: $name) }`;
+const INSTALL_HOMEBREW_FORMULA_MUTATION = `
+  mutation($name: String!, $formula: String!) { installHomebrewFormula(name: $name, formula: $formula) }
+`;
+const HOMEBREW_INSTALL_STATUS_QUERY = `
+  query($id: String!) { homebrewInstallStatus(id: $id) { id formula status message } }
+`;
 
 type Tab = "builder" | "jails" | "config";
 const activeTab = ref<Tab>("jails");
@@ -110,6 +120,9 @@ const error = ref<string | null>(null);
 const incusHealthy = ref(false);
 const jails = ref<Jail[]>([]);
 const newJailName = ref("");
+const newJailNameError = computed(() => validateContainerName(newJailName.value));
+const configCpuError = computed(() => validateCpuLimit(config.jailCpu));
+const configMemoryError = computed(() => validateMemoryLimit(config.jailMemory));
 const launchImageSelect = ref("");
 const consoleJail = ref<string | null>(null);
 
@@ -218,8 +231,28 @@ async function deleteJail(name: string) {
   }
 }
 
+const deletingStopped = ref(false);
+
+async function deleteStoppedJails() {
+  if (!confirm("Delete every stopped container? Running containers are never touched. This cannot be undone."))
+    return;
+  deletingStopped.value = true;
+  error.value = null;
+  try {
+    const data = await gql<{ deleteStoppedJails: string[] }>(DELETE_STOPPED_JAILS_MUTATION);
+    if (data.deleteStoppedJails.length === 0) {
+      error.value = "No stopped containers to delete.";
+    }
+    await refreshStatus();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    deletingStopped.value = false;
+  }
+}
+
 async function launchJail() {
-  if (!newJailName.value.trim()) return;
+  if (!newJailName.value.trim() || newJailNameError.value) return;
   error.value = null;
   try {
     await gql(LAUNCH_JAIL_MUTATION, {
@@ -245,12 +278,17 @@ const editMemoryLimit = ref("");
 const editWorkspacePath = ref("");
 
 async function toggleJailDetails(name: string) {
+  stopInstallPolling();
+  installingFormula.value = false;
   if (detailsJailName.value === name) {
     detailsJailName.value = null;
     jailDetail.value = null;
     return;
   }
   detailsJailName.value = name;
+  installFormula.value = "";
+  installResult.value = "";
+  installError.value = "";
   await loadJailDetail(name);
 }
 
@@ -274,6 +312,11 @@ async function loadJailDetail(name: string) {
 // alone doesn't also stamp an instance-level override onto an untouched Memory value.
 async function saveJailCpuLimit() {
   if (!detailsJailName.value) return;
+  const validationError = validateCpuLimit(editCpuLimit.value);
+  if (validationError) {
+    detailError.value = validationError;
+    return;
+  }
   detailSaving.value = true;
   detailError.value = "";
   try {
@@ -288,6 +331,11 @@ async function saveJailCpuLimit() {
 
 async function saveJailMemoryLimit() {
   if (!detailsJailName.value) return;
+  const validationError = validateMemoryLimit(editMemoryLimit.value);
+  if (validationError) {
+    detailError.value = validationError;
+    return;
+  }
   detailSaving.value = true;
   detailError.value = "";
   try {
@@ -344,6 +392,88 @@ async function resetJailWorkspace() {
     detailError.value = e instanceof Error ? e.message : String(e);
   } finally {
     detailSaving.value = false;
+  }
+}
+
+// A container whose workspace isn't an instance-level override and whose path ends in
+// the profile's shared "default-workspace" folder is sharing live data with every other
+// container still on that default — worth calling out and offering a one-click fix.
+function isOnSharedDefaultWorkspace(detail: JailDetail): boolean {
+  return !detail.workspaceIsOverride && !!detail.workspaceHostPath?.endsWith("/default-workspace");
+}
+
+const migratingWorkspace = ref(false);
+
+async function migrateJailWorkspace() {
+  if (!detailsJailName.value) return;
+  migratingWorkspace.value = true;
+  detailError.value = "";
+  try {
+    await gql(MIGRATE_JAIL_WORKSPACE_MUTATION, { name: detailsJailName.value });
+    await loadJailDetail(detailsJailName.value);
+  } catch (e) {
+    detailError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    migratingWorkspace.value = false;
+  }
+}
+
+// --- Homebrew post-launch install — best-effort exec into a running container --------
+// Fire-and-poll, not a blocking mutation: bootstrapping Homebrew plus a formula install can
+// comfortably outlast a browser/reverse-proxy request timeout (verified live — even the
+// "hello" formula's blocking call hit an HTTP 504 while the install kept running server-side
+// regardless). Mirrors the same startBuild/pollBuildStatus pattern already used for image builds.
+
+const installFormula = ref("");
+const installingFormula = ref(false);
+const installResult = ref("");
+const installError = ref("");
+let installPollHandle: ReturnType<typeof setInterval> | null = null;
+
+function stopInstallPolling() {
+  if (installPollHandle !== null) {
+    clearInterval(installPollHandle);
+    installPollHandle = null;
+  }
+}
+
+async function installHomebrewFormula() {
+  if (!detailsJailName.value || !installFormula.value.trim()) return;
+  stopInstallPolling();
+  installingFormula.value = true;
+  installResult.value = "";
+  installError.value = "";
+  try {
+    const data = await gql<{ installHomebrewFormula: string }>(INSTALL_HOMEBREW_FORMULA_MUTATION, {
+      name: detailsJailName.value,
+      formula: installFormula.value.trim(),
+    });
+    const jobId = data.installHomebrewFormula;
+    installPollHandle = setInterval(async () => {
+      try {
+        const poll = await gql<{ homebrewInstallStatus: HomebrewInstallStatus | null }>(
+          HOMEBREW_INSTALL_STATUS_QUERY,
+          { id: jobId }
+        );
+        const job = poll.homebrewInstallStatus;
+        if (!job || job.status === "running") return;
+        stopInstallPolling();
+        installingFormula.value = false;
+        if (job.status === "success") {
+          installResult.value = job.message;
+          installFormula.value = "";
+        } else {
+          installError.value = job.message;
+        }
+      } catch (e) {
+        stopInstallPolling();
+        installingFormula.value = false;
+        installError.value = e instanceof Error ? e.message : String(e);
+      }
+    }, 2000);
+  } catch (e) {
+    installError.value = e instanceof Error ? e.message : String(e);
+    installingFormula.value = false;
   }
 }
 
@@ -566,6 +696,35 @@ function blockedCidrCount(): number {
 // CIDR chip editors for the two comma-separated ACL fields — lets the user add/remove
 // one range at a time instead of hand-editing a raw comma-separated string.
 const CIDR_PATTERN = /^[0-9a-fA-F:.]+\/\d{1,3}$/;
+
+// Incus's own limits.cpu accepts a core count ("2") or a CPU set/range ("0-3", "0,2,4-5").
+const CPU_LIMIT_PATTERN = /^\d+(-\d+)?(,\d+(-\d+)?)*$/;
+// Incus's own limits.memory accepts a bare byte count or a number with a unit suffix.
+const MEMORY_LIMIT_PATTERN = /^\d+(\.\d+)?(B|KB|MB|GB|TB|PB|KiB|MiB|GiB|TiB|PiB)?$/i;
+// Incus/LXC instance names follow hostname-like rules: alphanumeric and hyphens, must not
+// start or end with a hyphen, max 63 characters.
+const CONTAINER_NAME_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+
+function validateCpuLimit(value: string): string {
+  if (!value.trim()) return "";
+  return CPU_LIMIT_PATTERN.test(value.trim())
+    ? ""
+    : `"${value}" doesn't look like a CPU limit — expected a core count (e.g. 2) or a set/range (e.g. 0-3).`;
+}
+
+function validateMemoryLimit(value: string): string {
+  if (!value.trim()) return "";
+  return MEMORY_LIMIT_PATTERN.test(value.trim())
+    ? ""
+    : `"${value}" doesn't look like a memory limit — expected a byte count with an optional unit (e.g. 4GiB).`;
+}
+
+function validateContainerName(value: string): string {
+  if (!value.trim()) return "";
+  return CONTAINER_NAME_PATTERN.test(value.trim())
+    ? ""
+    : `"${value}" isn't a valid container name — letters, digits, and hyphens only, can't start or end with a hyphen.`;
+}
 
 const blockedCidrList = computed(() => parseCidrList(config.aclBlock));
 const allowCidrList = computed(() => parseCidrList(config.aclAllow));
@@ -1452,6 +1611,29 @@ function packageSummary(packages: string[]): string {
   return packages.join(", ");
 }
 
+const pruningImages = ref(false);
+const pruneResult = ref("");
+
+/** Untrack any saved image record whose Incus image was deleted out-of-band (e.g. via the incus CLI). */
+async function pruneStaleImageRecords() {
+  pruningImages.value = true;
+  imagesError.value = null;
+  pruneResult.value = "";
+  try {
+    const data = await gql<{ pruneStaleImageRecords: string[] }>(PRUNE_STALE_IMAGE_RECORDS_MUTATION);
+    if (data.pruneStaleImageRecords.length === 0) {
+      pruneResult.value = "Nothing to prune — every saved image still exists in Incus.";
+    } else {
+      pruneResult.value = `Untracked ${data.pruneStaleImageRecords.length}: ${data.pruneStaleImageRecords.join(", ")}`;
+      jailImages.value = jailImages.value.filter((i) => !data.pruneStaleImageRecords.includes(i.alias));
+    }
+  } catch (e) {
+    imagesError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    pruningImages.value = false;
+  }
+}
+
 function stopPolling(build: BuildRow) {
   if (build.intervalId !== null) {
     clearInterval(build.intervalId);
@@ -1551,6 +1733,7 @@ function buildStatusBadgeVariant(status: string | undefined): "green" | "gray" |
 onBeforeUnmount(() => {
   for (const build of builds.value) stopPolling(build);
   stopStatusPolling();
+  stopInstallPolling();
   if (searchDebounceHandle) clearTimeout(searchDebounceHandle);
 });
 </script>
@@ -1643,9 +1826,21 @@ onBeforeUnmount(() => {
 
           <!-- Saved images -->
           <div class="mt-5 border-t border-border pt-4">
-            <h3 class="mb-2 text-sm font-semibold">Saved images</h3>
+            <div class="mb-2 flex items-center justify-between gap-3">
+              <h3 class="text-sm font-semibold">Saved images</h3>
+              <Button
+                v-if="jailImages.length > 0"
+                size="sm"
+                variant="outline"
+                :disabled="pruningImages"
+                @click="pruneStaleImageRecords"
+              >{{ pruningImages ? "Checking…" : "Prune stale records" }}</Button>
+            </div>
             <p v-if="imagesError" class="mb-3 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {{ imagesError }}
+            </p>
+            <p v-if="pruneResult" class="mb-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs">
+              {{ pruneResult }}
             </p>
             <p v-if="jailImages.length === 0" class="text-sm text-muted-foreground">
               No images built yet — the first one you build can become the golden master.
@@ -1686,6 +1881,8 @@ onBeforeUnmount(() => {
               Marking it also sets it as the default image new containers launch from (Config → Container
               Defaults), so this is more than a label. "Build variant" pre-fills the form from that image's
               distro/release/packages so you can edit, extend, or strip it down before building a new one.
+              "Prune stale records" checks every saved image still actually exists in Incus and untracks any
+              that don't — useful if one was deleted directly via the incus CLI instead of through here.
             </HelpText>
           </div>
 
@@ -2084,8 +2281,9 @@ onBeforeUnmount(() => {
                 </option>
               </select>
             </div>
-            <Button size="sm" variant="secondary" @click="launchJail">Launch</Button>
+            <Button size="sm" variant="secondary" :disabled="!!newJailNameError" @click="launchJail">Launch</Button>
           </div>
+          <p v-if="newJailName && newJailNameError" class="mt-2 text-xs text-destructive">{{ newJailNameError }}</p>
           <HelpText>
             "Default" launches from Config → Container Defaults' image (the golden master, if one is set).
             Picking a specific image here launches from that image instead, just for this container — it
@@ -2096,7 +2294,16 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="rounded-lg border border-border bg-card p-4">
-          <h3 class="mb-4 text-base font-semibold">Containers</h3>
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h3 class="text-base font-semibold">Containers</h3>
+            <Button
+              v-if="stoppedJailsCount > 0"
+              size="sm"
+              variant="outline"
+              :disabled="deletingStopped"
+              @click="deleteStoppedJails"
+            >{{ deletingStopped ? "Deleting…" : `Delete ${stoppedJailsCount} stopped` }}</Button>
+          </div>
           <HelpText>
             "On bridge" means this container's address falls inside the configured subnet — a real check, not a
             claim that the LAN-ban ACL is actively enforced for it specifically (that's a daemon-level policy on
@@ -2279,6 +2486,22 @@ onBeforeUnmount(() => {
                         </div>
                       </div>
 
+                      <div
+                        v-if="isOnSharedDefaultWorkspace(jailDetail)"
+                        class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs"
+                      >
+                        <span>
+                          This container shares <span class="font-mono">/workspace</span> with every other
+                          container still on the profile's default — file writes are live-visible between them.
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          :disabled="migratingWorkspace"
+                          @click="migrateJailWorkspace"
+                        >{{ migratingWorkspace ? "Isolating…" : "Isolate this container's workspace" }}</Button>
+                      </div>
+
                       <p v-if="detailError" class="mt-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                         {{ detailError }}
                       </p>
@@ -2287,8 +2510,39 @@ onBeforeUnmount(() => {
                         and apply to every container using it. Applying here overrides just this one instance —
                         it won't touch the profile or any other container. Memory limit changes need a restart
                         of this container to actually take effect on a running instance (verified: clearing an
-                        override alone doesn't shrink an already-larger live cgroup limit back down).
+                        override alone doesn't shrink an already-larger live cgroup limit back down). Isolating
+                        a shared workspace points it at a new, empty per-container directory — it does not copy
+                        any files already sitting in the old shared one.
                       </HelpText>
+
+                      <div class="mt-4 border-t border-border pt-3">
+                        <Label class="mb-1 block text-xs">Install a package (Homebrew)</Label>
+                        <div class="flex flex-wrap gap-2">
+                          <Input
+                            v-model="installFormula"
+                            class="w-48 font-mono"
+                            placeholder="e.g. wget"
+                            @keydown.enter.prevent="installHomebrewFormula"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="!installFormula.trim() || installingFormula"
+                            @click="installHomebrewFormula"
+                          >{{ installingFormula ? "Installing…" : "Install" }}</Button>
+                        </div>
+                        <p v-if="installResult" class="mt-1.5 text-xs text-unraid-green-800">{{ installResult }}</p>
+                        <p v-if="installError" class="mt-1.5 text-xs text-destructive">{{ installError }}</p>
+                        <HelpText>
+                          Best-effort: bootstraps Homebrew itself under this container's non-root "agent" user
+                          if it isn't already present (needs bash and git inside the container), installing to
+                          <span class="font-mono">~/.linuxbrew</span> rather than Homebrew's usual shared system
+                          path — the official installer needs <span class="font-mono">sudo</span> for that path,
+                          and "agent" deliberately has none inside these containers. This runs against the LIVE
+                          container over exec — it isn't baked into the image, so a rebuilt or replacement
+                          container won't have it.
+                        </HelpText>
+                      </div>
                     </template>
                   </div>
                 </td>
@@ -2545,9 +2799,11 @@ onBeforeUnmount(() => {
 
             <Label>CPU limit</Label>
             <Input v-model="config.jailCpu" class="w-24 justify-self-end" placeholder="empty = no cap" />
+            <p v-if="configCpuError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configCpuError }}</p>
 
             <Label>Memory limit</Label>
             <Input v-model="config.jailMemory" class="w-24 justify-self-end" placeholder="empty = no cap" />
+            <p v-if="configMemoryError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configMemoryError }}</p>
             <HelpText class="col-span-2">
               Hard resource ceiling applied via the container profile at launch — CPU as a core count (e.g.
               <span class="font-mono">2</span>), memory with a unit (e.g. <span class="font-mono">4GiB</span>). Leave either empty for no cap.
@@ -2592,7 +2848,7 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="mb-8 flex justify-end">
-          <Button :disabled="saving" @click="applySettings">{{ saving ? "Applying…" : "Apply" }}</Button>
+          <Button :disabled="saving || !!configCpuError || !!configMemoryError" @click="applySettings">{{ saving ? "Applying…" : "Apply" }}</Button>
         </div>
       </section>
     </template>

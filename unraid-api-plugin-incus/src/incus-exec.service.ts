@@ -11,6 +11,14 @@ interface ExecSession {
   controlSocket: WebSocket;
 }
 
+export interface HomebrewInstallJob {
+  id: string;
+  jailName: string;
+  formula: string;
+  status: "running" | "success" | "failed";
+  message: string;
+}
+
 const OUTPUT_TOPIC_PREFIX = "jailExecOutput:";
 
 /**
@@ -27,6 +35,7 @@ const OUTPUT_TOPIC_PREFIX = "jailExecOutput:";
 export class IncusExecService implements OnModuleDestroy {
   private readonly logger = new Logger(IncusExecService.name);
   private readonly sessions = new Map<string, ExecSession>();
+  private readonly homebrewJobs = new Map<string, HomebrewInstallJob>();
   readonly pubsub = new PubSub();
 
   constructor(private readonly config: ConfigService) {}
@@ -97,7 +106,7 @@ export class IncusExecService implements OnModuleDestroy {
    * exit code. Used for best-effort in-jail setup steps (e.g. `tailscale up`)
    * where nothing needs to stream output back to a client.
    */
-  async runOnce(jailName: string, command: string[]): Promise<{ exitCode: number }> {
+  async runOnce(jailName: string, command: string[], timeoutSec = 60): Promise<{ exitCode: number }> {
     const payload = JSON.stringify({
       command,
       "wait-for-websocket": false,
@@ -142,7 +151,7 @@ export class IncusExecService implements OnModuleDestroy {
       throw new Error("Incus exec did not return an operation");
     }
 
-    const { metadata } = await this.waitForOperation(response.operation);
+    const { metadata } = await this.waitForOperation(response.operation, timeoutSec);
     return { exitCode: metadata?.metadata?.return ?? -1 };
   }
 
@@ -184,6 +193,98 @@ export class IncusExecService implements OnModuleDestroy {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`Unknown exec session: ${sessionId}`);
     return session;
+  }
+
+  /** A tap/formula name — letters, digits, and .-@/ (covers `wget`, `python@3.12`, `homebrew/core/wget`). */
+  private static readonly HOMEBREW_FORMULA_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._@/-]*$/;
+
+  /**
+   * Kick off a best-effort post-launch package install via Homebrew and return immediately
+   * with a job id to poll — bootstrapping Homebrew plus a formula install can comfortably
+   * run past a browser/reverse-proxy's default request timeout (verified live: even the
+   * tiny "hello" formula's mutation call hit an HTTP 504 while the actual install kept
+   * running to completion server-side regardless, since nothing was cancelling it — the
+   * proxy just gave up waiting). Mirrors the same fire-and-poll pattern already used for
+   * distrobuilder image builds (startBuild/getStatus) rather than blocking a mutation.
+   */
+  startHomebrewInstall(jailName: string, formula: string): string {
+    const id = randomUUID();
+    if (!IncusExecService.HOMEBREW_FORMULA_PATTERN.test(formula)) {
+      this.homebrewJobs.set(id, {
+        id,
+        jailName,
+        formula,
+        status: "failed",
+        message: `"${formula}" doesn't look like a valid Homebrew formula name.`,
+      });
+      return id;
+    }
+    this.homebrewJobs.set(id, { id, jailName, formula, status: "running", message: "Installing…" });
+    void this.runHomebrewInstall(id, jailName, formula);
+    return id;
+  }
+
+  getHomebrewInstallStatus(id: string): HomebrewInstallJob | undefined {
+    return this.homebrewJobs.get(id);
+  }
+
+  /**
+   * The actual work behind startHomebrewInstall, run in the background. Uses the same
+   * runOnce mechanism already used for Tailscale auto-join, just aimed at a running
+   * container instead of build time — Homebrew can't be baked into a build (it refuses to
+   * run inside a chroot, same root-cause as it refusing to run as root at all), so this is
+   * the only real way to actually install something from the Homebrew search results in
+   * the Builder tab.
+   *
+   * Deliberately does NOT use Homebrew's official installer — verified live that it always
+   * tries to create the shared system path /home/linuxbrew/.linuxbrew and requires `sudo`
+   * to do so, which the agent-jail profile's non-root "agent" user doesn't have (no sudo
+   * inside these containers, on purpose — see the jailDetail Homebrew HelpText). Uses
+   * Homebrew's own documented no-sudo alternative instead: clone the `brew` script straight
+   * into a prefix under the agent's own home directory, which needs no elevated privileges
+   * at all since it's a normal write inside a directory the user already owns.
+   */
+  private async runHomebrewInstall(jobId: string, jailName: string, formula: string): Promise<void> {
+    const fail = (message: string) => this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: "failed", message });
+    try {
+      const brewPrefix = "/home/agent/.linuxbrew";
+      const brewShellenv = `eval "$(${brewPrefix}/bin/brew shellenv)"`;
+      const { exitCode: hasBrew } = await this.runOnce(jailName, ["test", "-x", `${brewPrefix}/bin/brew`]);
+
+      if (hasBrew !== 0) {
+        this.logger.log(`Homebrew not present in "${jailName}" — bootstrapping before installing "${formula}"`);
+        const install = await this.runOnce(
+          jailName,
+          [
+            "su",
+            "-l",
+            "agent",
+            "-c",
+            `mkdir -p ${brewPrefix}/bin && git clone --depth=1 https://github.com/Homebrew/brew ${brewPrefix}/Homebrew && ln -s ${brewPrefix}/Homebrew/bin/brew ${brewPrefix}/bin/brew`,
+          ],
+          180
+        );
+        if (install.exitCode !== 0) {
+          fail(
+            `Homebrew isn't installed in this container and bootstrapping it failed (exit ${install.exitCode}). It needs bash and git available inside the container.`
+          );
+          return;
+        }
+      }
+
+      const result = await this.runOnce(
+        jailName,
+        ["su", "-l", "agent", "-c", `${brewShellenv} && brew install ${formula}`],
+        180
+      );
+      if (result.exitCode !== 0) {
+        fail(`brew install ${formula} failed (exit ${result.exitCode}).`);
+        return;
+      }
+      this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: "success", message: `${formula} installed.` });
+    } catch (e) {
+      fail(e instanceof Error ? e.message : String(e));
+    }
   }
 
   /** POST /1.0/instances/{name}/exec and wait for the operation to report its websocket fds. */
