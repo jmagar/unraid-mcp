@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07u">
+  <!ENTITY version   "2026.07.08a">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-44-x86_64-1.txz">
-  <!ENTITY md5       "08eb1a187e16b29abda66f90f26d470a">
+  <!ENTITY txz       "&name;-unraid-7.0.0-45-x86_64-1.txz">
+  <!ENTITY md5       "071cf19bacd5a019f3ee34e6e7e308d0">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,6 +15,48 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.08a
+- Fix: the packaged OS .txz never actually shipped incus-dashboard.js — every
+  build since the Main/Dashboard widget feature was added was silently
+  missing it from the installed plugin, even though the settings page and
+  repo both had it. Now included (verified: build 44's package was missing
+  it, build 45 has it, confirmed via tar listing diff).
+- Fix: the unraid-api-plugin-incus backend deployed on the box was stale —
+  several git-pulled commits (dashboard widget, config-sync locking, CI)
+  were never redeployed to /usr/local/unraid-api/node_modules/, so the live
+  GraphQL schema lacked the new dashboardWidgetEnable field entirely. Every
+  page load's very first query (Config tab's incusConfig fetch) failed with
+  a GraphQL validation error surfaced as a raw "HTTP 400", leaving the
+  Network & ACL / Container Defaults cards blank until a manual mid-session
+  fix. Redeployed dist/ and restarted unraid-api; verified clean across
+  repeated fresh page loads.
+- Hardening: the frontend GraphQL client now waits for window.csrf_token to
+  be set (a host-page timing dependency, not guaranteed by mount time) and
+  retries once on any non-GraphQL HTTP failure, so a future instance of this
+  same class of transient failure surfaces a working page instead of a
+  permanent error banner.
+- UI/UX pass across all three tabs:
+  - Config tab: merged 6 cards down to 3 (Runtime / Network & Access /
+    Container Defaults), each carrying subsections instead of duplicating
+    the same group eyebrow label across separate cards (previously read
+    like a rendering bug, not intentional grouping).
+  - Every raw browser-default <select> (Distro, Release, Launch image,
+    Storage driver, Default egress/ingress action) replaced with a
+    restyled dropdown matching Input/Button's border, focus ring, and
+    chevron — no more browser-chrome dropdowns next to custom-styled
+    fields.
+  - Extended the existing monospace-for-data convention (already used for
+    IPs/CIDRs/container names) to every remaining technical field: paths,
+    bridge/subnet/ACL names, CPU/memory limits, container profile/image,
+    UID/GID, bind-mount triples, Tailscale key, container name input.
+  - Builder tab's "No builds started yet" and Containers tab's "No
+    containers found" empty states rewritten with actual next-step
+    guidance instead of a bare status line; Builder's empty state reuses
+    the existing terminal log styling (dark background, blinking cursor)
+    instead of introducing a new visual language.
+  - Launch Container's sudo checkbox replaced with the same Switch
+    component used everywhere else (was a bare unstyled HTML checkbox).
+
 ###2026.07.07u
 - Fix: EVERY debootstrap-based image build (all curated Debian/Ubuntu
   releases, not just the reported "Resolute (26.04 LTS)" one) was silently

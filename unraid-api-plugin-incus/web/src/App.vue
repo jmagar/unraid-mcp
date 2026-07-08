@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import { Button, Switch, Badge, Input, Label, HelpText } from "./components/ui";
+import { Button, Switch, Badge, Input, Select, Label, HelpText } from "./components/ui";
 import Terminal from "./components/Terminal.vue";
 import { gql } from "./graphql-client";
 import * as TOML from "smol-toml";
@@ -2082,13 +2082,10 @@ onBeforeUnmount(() => {
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Distro</Label>
             <div class="flex justify-self-end gap-2">
-              <select
-                v-model="builderDistroSelect"
-                class="border-input bg-background h-10 w-48 rounded-md border px-3 py-2 text-sm"
-              >
+              <Select v-model="builderDistroSelect" class="w-48">
                 <option v-for="d in CURATED_DISTROS" :key="d.value" :value="d.value">{{ d.label }}</option>
                 <option :value="OTHER_DISTRO">Other… (custom)</option>
-              </select>
+              </Select>
               <Input
                 v-if="isCustomDistro"
                 v-model="builderDistroCustom"
@@ -2103,13 +2100,10 @@ onBeforeUnmount(() => {
 
             <Label>Release</Label>
             <div class="flex justify-self-end gap-2">
-              <select
-                v-model="builderReleaseSelect"
-                class="border-input bg-background h-10 w-48 rounded-md border px-3 py-2 text-sm"
-              >
+              <Select v-model="builderReleaseSelect" class="w-48">
                 <option v-for="r in releaseOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
                 <option :value="OTHER_RELEASE">Other… (custom)</option>
-              </select>
+              </Select>
               <Input
                 v-if="isCustomRelease"
                 v-model="builderReleaseCustom"
@@ -2233,7 +2227,17 @@ onBeforeUnmount(() => {
             resets on page reload — successful builds still land in Saved images above, but the log history
             itself isn't persisted.
           </HelpText>
-          <p v-if="builds.length === 0" class="text-sm text-muted-foreground">No builds started yet.</p>
+          <div
+            v-if="builds.length === 0"
+            class="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-950 px-3 py-2.5"
+          >
+            <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-700" />
+            <span class="font-mono text-[11px] text-neutral-500">
+              Pick a distro and release above, then hit Build — progress and logs stream in here.<span
+                class="motion-safe:animate-pulse"
+              >_</span>
+            </span>
+          </div>
           <div v-else class="flex flex-col gap-4">
             <div v-for="build in builds" :key="build.buildId" class="rounded-md border border-border p-3">
               <div class="mb-2 flex items-center justify-between gap-3">
@@ -2361,27 +2365,26 @@ onBeforeUnmount(() => {
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div class="flex-1">
               <Label class="mb-2 block">Container name</Label>
-              <Input v-model="newJailName" placeholder="new-container-name" class="w-full" />
+              <Input v-model="newJailName" placeholder="new-container-name" class="w-full font-mono" />
             </div>
             <div class="flex-1">
               <Label class="mb-2 block">Image</Label>
-              <select
-                v-model="launchImageSelect"
-                class="border-input bg-background h-10 w-full rounded-md border px-3 py-2 text-sm"
-              >
+              <Select v-model="launchImageSelect" class="w-full">
                 <option value="">Default ({{ config.jailImage || "—" }})</option>
                 <option v-for="image in jailImages" :key="image.alias" :value="image.alias">
                   {{ image.alias }}{{ image.isMaster ? " (golden master)" : "" }} — {{ image.distro }}/{{ image.release }}
                 </option>
-              </select>
+              </Select>
             </div>
             <Button size="sm" variant="secondary" :disabled="!!newJailNameError" @click="launchJail">Launch</Button>
           </div>
           <p v-if="newJailName && newJailNameError" class="mt-2 text-xs text-destructive">{{ newJailNameError }}</p>
-          <label class="mt-3 flex items-center gap-2 text-xs">
-            <input type="checkbox" v-model="launchAllowSudo" class="h-3.5 w-3.5" />
-            Allow sudo (NOPASSWD) for the agent user
-          </label>
+          <div class="mt-3 flex items-center gap-2.5">
+            <Switch v-model="launchAllowSudo" />
+            <span class="cursor-pointer text-xs" @click="launchAllowSudo = !launchAllowSudo">
+              Allow sudo (NOPASSWD) for the agent user
+            </span>
+          </div>
           <HelpText>
             "Default" launches from Config → Container Defaults' image (the golden master, if one is set).
             Picking a specific image here launches from that image instead, just for this container — it
@@ -2412,7 +2415,9 @@ onBeforeUnmount(() => {
             client-side window as the summary cards above.
           </HelpText>
 
-          <p v-if="jails.length === 0" class="text-sm text-muted-foreground">No containers found.</p>
+          <p v-if="jails.length === 0" class="text-sm text-muted-foreground">
+            No containers yet — launch one above to get started.
+          </p>
           <template v-else>
           <p class="mb-3 text-xs text-muted-foreground">
             Total: {{ runningJails.length }} container{{ runningJails.length === 1 ? "" : "s" }} running,
@@ -2506,7 +2511,7 @@ onBeforeUnmount(() => {
                   <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div>
                       <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Image</p>
-                      <p class="mt-1 text-xs">
+                      <p class="mt-1 font-mono text-xs">
                         {{ jailDetail.imageOs || "—" }} {{ jailDetail.imageRelease || "" }}
                       </p>
                     </div>
@@ -2694,10 +2699,10 @@ onBeforeUnmount(() => {
 
       <!-- Config tab -->
       <section v-else-if="activeTab === 'config'">
-        <!-- Cards flow through a 2-column masonry (tall/short cards mix freely, balanced by
-             actual content height) rather than a rigid one-big-one-small pairing per group —
-             each card carries its own group eyebrow since group headers can't sit outside the
-             flow without breaking the balance. -->
+        <!-- Three cards, one per group (Runtime / Network & Access / Container Defaults) — each
+             group's related settings live in one card as sub-sections (h4 + divider), rather than
+             splitting across multiple cards that each repeat the same eyebrow label. Cards flow
+             through a 2-column masonry, balanced by actual content height. -->
         <div class="columns-1 gap-4 xl:columns-2">
         <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
           <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
@@ -2717,47 +2722,43 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label>Incus state directory</Label>
-            <Input v-model="config.stateDir" class="w-96 justify-self-end" />
+            <Input v-model="config.stateDir" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Where incusd keeps its database, storage pool, and container state. Must be real persistent
               storage on the array, not tmpfs — this is the one thing that survives a reboot or plugin update.
             </HelpText>
           </div>
-        </section>
 
-        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
-          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
-          <h3 class="mb-4 text-base font-semibold">Storage Pool</h3>
-          <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Storage driver</Label>
-            <select
-              v-model="config.storageDriver"
-              class="border-input bg-background h-10 justify-self-end rounded-md border px-3 py-2 text-sm"
-            >
-              <option value="dir">dir (simple, no pool required)</option>
-              <option value="zfs">zfs (snapshots/speed, needs existing pool)</option>
-            </select>
-            <HelpText class="col-span-2">
-              <span class="font-mono">dir</span> needs no existing pool and always works — it's the default for
-              exactly that reason. <span class="font-mono">zfs</span> gets snapshots and speed, but the pool or
-              dataset must already exist on your system; there's no safe way to auto-create one on your array.
-            </HelpText>
-
-            <template v-if="isZfs">
-              <Label>ZFS pool/dataset</Label>
-              <Input v-model="config.storageSource" class="w-96 justify-self-end" />
+          <div class="mt-4 border-t border-border pt-4">
+            <h4 class="mb-3 text-sm font-semibold">Storage pool</h4>
+            <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
+              <Label>Storage driver</Label>
+              <Select v-model="config.storageDriver" class="w-56 justify-self-end">
+                <option value="dir">dir (simple, no pool required)</option>
+                <option value="zfs">zfs (snapshots/speed, needs existing pool)</option>
+              </Select>
               <HelpText class="col-span-2">
-                An existing pool or dataset path, e.g. <span class="font-mono">nvme/incus</span>. A dataset
-                under this path is created if missing, but the pool itself must already exist.
+                <span class="font-mono">dir</span> needs no existing pool and always works — it's the default for
+                exactly that reason. <span class="font-mono">zfs</span> gets snapshots and speed, but the pool or
+                dataset must already exist on your system; there's no safe way to auto-create one on your array.
               </HelpText>
-            </template>
 
-            <Label>Incus storage pool name</Label>
-            <Input v-model="config.storagePoolName" class="w-48 justify-self-end" />
-            <HelpText class="col-span-2">
-              The name Incus itself uses for this storage pool internally — cosmetic, doesn't need to match
-              anything else on the host.
-            </HelpText>
+              <template v-if="isZfs">
+                <Label>ZFS pool/dataset</Label>
+                <Input v-model="config.storageSource" class="w-96 justify-self-end font-mono" />
+                <HelpText class="col-span-2">
+                  An existing pool or dataset path, e.g. <span class="font-mono">nvme/incus</span>. A dataset
+                  under this path is created if missing, but the pool itself must already exist.
+                </HelpText>
+              </template>
+
+              <Label>Incus storage pool name</Label>
+              <Input v-model="config.storagePoolName" class="w-48 justify-self-end font-mono" />
+              <HelpText class="col-span-2">
+                The name Incus itself uses for this storage pool internally — cosmetic, doesn't need to match
+                anything else on the host.
+              </HelpText>
+            </div>
           </div>
         </section>
 
@@ -2769,14 +2770,14 @@ onBeforeUnmount(() => {
           </p>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Container bridge</Label>
-            <Input v-model="config.jailBridge" class="w-48 justify-self-end" />
+            <Input v-model="config.jailBridge" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               A dedicated NAT bridge name for containers, kept separate from Unraid's own br0 so container
               traffic never touches host networking directly.
             </HelpText>
 
             <Label>Container subnet</Label>
-            <Input v-model="config.jailSubnet" class="w-48 justify-self-end" />
+            <Input v-model="config.jailSubnet" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               CIDR for the bridge. Defaults to an RFC 2544 benchmark range specifically because it won't
               collide with a typical home or office LAN.
@@ -2790,33 +2791,27 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label>IPv6</Label>
-            <Input v-model="config.jailIpv6" class="w-48 justify-self-end" />
+            <Input v-model="config.jailIpv6" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">An IPv6 address for the bridge, or <span class="font-mono">none</span> to disable IPv6 for containers entirely.</HelpText>
 
             <Label>ACL name</Label>
-            <Input v-model="config.aclName" class="w-48 justify-self-end" />
+            <Input v-model="config.aclName" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The name of the Incus network ACL that enforces the LAN ban — created and applied to the bridge
               by the array-start init script.
             </HelpText>
 
             <Label>Default egress action</Label>
-            <select
-              v-model="config.aclDefaultEgress"
-              class="border-input bg-background h-10 justify-self-end rounded-md border px-3 py-2 text-sm"
-            >
+            <Select v-model="config.aclDefaultEgress" class="w-32 justify-self-end">
               <option value="allow">allow</option>
               <option value="drop">drop</option>
-            </select>
+            </Select>
 
             <Label>Default ingress action</Label>
-            <select
-              v-model="config.aclDefaultIngress"
-              class="border-input bg-background h-10 justify-self-end rounded-md border px-3 py-2 text-sm"
-            >
+            <Select v-model="config.aclDefaultIngress" class="w-32 justify-self-end">
               <option value="allow">allow</option>
               <option value="drop">drop</option>
-            </select>
+            </Select>
             <HelpText class="col-span-2">
               What happens to traffic not covered by a rule above. Egress defaults to allow (deny-list model —
               Internet stays reachable unless explicitly blocked); ingress defaults to drop (nothing reaches
@@ -2880,32 +2875,31 @@ onBeforeUnmount(() => {
               service (a local LLM, a search index) a container legitimately needs to reach.
             </HelpText>
           </div>
-        </section>
 
-        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
-          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Network &amp; Access</p>
-          <h3 class="mb-4 text-base font-semibold">Tailscale</h3>
-          <p class="mb-4 text-xs text-muted-foreground">
-            Optional — when set, new containers automatically join your tailnet using this key.
-          </p>
-          <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Tailscale auth key</Label>
-            <div class="flex justify-self-end gap-2">
-              <Input
-                v-model="config.tsAuthKey"
-                :type="showTsAuthKey ? 'text' : 'password'"
-                class="w-72"
-                placeholder="tskey-auth-…"
-              />
-              <Button size="sm" variant="outline" @click="showTsAuthKey = !showTsAuthKey">
-                {{ showTsAuthKey ? "Hide" : "Show" }}
-              </Button>
+          <div class="mt-4 border-t border-border pt-4">
+            <h4 class="mb-3 text-sm font-semibold">Tailscale</h4>
+            <p class="mb-4 text-xs text-muted-foreground">
+              Optional — when set, new containers automatically join your tailnet using this key.
+            </p>
+            <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
+              <Label>Tailscale auth key</Label>
+              <div class="flex justify-self-end gap-2">
+                <Input
+                  v-model="config.tsAuthKey"
+                  :type="showTsAuthKey ? 'text' : 'password'"
+                  class="w-72 font-mono"
+                  placeholder="tskey-auth-…"
+                />
+                <Button size="sm" variant="outline" @click="showTsAuthKey = !showTsAuthKey">
+                  {{ showTsAuthKey ? "Hide" : "Show" }}
+                </Button>
+              </div>
+              <HelpText class="col-span-2">
+                A reusable or ephemeral key from your Tailscale admin console. Best-effort: if a container's
+                image doesn't have Tailscale installed, joining is silently skipped rather than failing the
+                launch — it never blocks a container from starting.
+              </HelpText>
             </div>
-            <HelpText class="col-span-2">
-              A reusable or ephemeral key from your Tailscale admin console. Best-effort: if a container's
-              image doesn't have Tailscale installed, joining is silently skipped rather than failing the
-              launch — it never blocks a container from starting.
-            </HelpText>
           </div>
         </section>
 
@@ -2914,14 +2908,14 @@ onBeforeUnmount(() => {
           <h3 class="mb-4 text-base font-semibold">Defaults</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
             <Label>Container profile</Label>
-            <Input v-model="config.jailProfile" class="w-48 justify-self-end" />
+            <Input v-model="config.jailProfile" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The Incus profile new containers launch with — sets resource limits, network, and mounts, defined
               in the array-start init script's profile template.
             </HelpText>
 
             <Label>Default image</Label>
-            <Input v-model="config.jailImage" class="w-96 justify-self-end" />
+            <Input v-model="config.jailImage" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Used when launching a container without picking a specific image — either a remote reference like
               <span class="font-mono">images:debian/trixie/cloud</span>, or a locally-built image's alias.
@@ -2936,11 +2930,11 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label>CPU limit</Label>
-            <Input v-model="config.jailCpu" class="w-24 justify-self-end" placeholder="empty = no cap" />
+            <Input v-model="config.jailCpu" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
             <p v-if="configCpuError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configCpuError }}</p>
 
             <Label>Memory limit</Label>
-            <Input v-model="config.jailMemory" class="w-24 justify-self-end" placeholder="empty = no cap" />
+            <Input v-model="config.jailMemory" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
             <p v-if="configMemoryError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configMemoryError }}</p>
             <HelpText class="col-span-2">
               Hard resource ceiling applied via the container profile at launch — CPU as a core count (e.g.
@@ -2948,7 +2942,7 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label>Workspace root</Label>
-            <Input v-model="config.jailWorkspaceRoot" class="w-96 justify-self-end" />
+            <Input v-model="config.jailWorkspaceRoot" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Host directory holding per-container workspaces, bind-mounted in with idmap shifting. Must be
               real persistent storage — the init script refuses to start if it's tmpfs, since that would
@@ -2958,30 +2952,29 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label>Agent UID</Label>
-            <Input v-model="config.jailAgentUid" class="w-24 justify-self-end" />
+            <Input v-model="config.jailAgentUid" class="w-24 justify-self-end font-mono" />
 
             <Label>Agent GID</Label>
-            <Input v-model="config.jailAgentGid" class="w-24 justify-self-end" />
+            <Input v-model="config.jailAgentGid" class="w-24 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The uid/gid inside each container mapped to your host user — match your own host user if you
               want files under the bind-mounted workspace to show correct ownership from outside the container.
             </HelpText>
           </div>
-        </section>
 
-        <section class="mb-4 break-inside-avoid rounded-lg border border-border bg-card p-4">
-          <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Container Defaults</p>
-          <h3 class="mb-4 text-base font-semibold">Bind Mounts</h3>
-          <Label class="mb-2 block">Host config bind-mounts</Label>
-          <Input v-model="config.jailBindMounts" class="w-full" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
-          <p class="mt-2 text-xs text-muted-foreground">
-            Comma-separated host:container[:ro] triples, mounted into every dev container for agent auth/config reuse.
-          </p>
-          <HelpText>
-            Mounted into every container at launch, not baked into any built image — so updating credentials or
-            config on the host applies to containers immediately, without rebuilding. Append <span class="font-mono">:ro</span>
-            to a triple to mount it read-only (e.g. for something you don't want an agent able to modify).
-          </HelpText>
+          <div class="mt-4 border-t border-border pt-4">
+            <h4 class="mb-3 text-sm font-semibold">Bind mounts</h4>
+            <Label class="mb-2 block">Host config bind-mounts</Label>
+            <Input v-model="config.jailBindMounts" class="w-full font-mono" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
+            <p class="mt-2 text-xs text-muted-foreground">
+              Comma-separated host:container[:ro] triples, mounted into every dev container for agent auth/config reuse.
+            </p>
+            <HelpText>
+              Mounted into every container at launch, not baked into any built image — so updating credentials or
+              config on the host applies to containers immediately, without rebuilding. Append <span class="font-mono">:ro</span>
+              to a triple to mount it read-only (e.g. for something you don't want an agent able to modify).
+            </HelpText>
+          </div>
         </section>
         </div>
 
