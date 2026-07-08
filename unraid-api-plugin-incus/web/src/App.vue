@@ -10,6 +10,7 @@ import type {
   JailAction,
   JailDetail,
   HomebrewInstallStatus,
+  PrivilegedCommandStatus,
   ImageBuildStatus,
   BuilderPreset,
   ImageRecord,
@@ -41,13 +42,23 @@ const SET_JAIL_STATE_MUTATION = `
 `;
 const DELETE_JAIL_MUTATION = `mutation($name: String!) { deleteJail(name: $name) }`;
 const LAUNCH_JAIL_MUTATION = `
-  mutation($name: String!, $image: String) { launchJail(name: $name, image: $image) }
+  mutation($name: String!, $image: String, $allowSudo: Boolean) {
+    launchJail(name: $name, image: $image, allowSudo: $allowSudo)
+  }
 `;
 const JAIL_DETAIL_QUERY = `
   query($name: String!) { jailDetail(name: $name) {
     name profiles imageOs imageRelease imageDescription storagePool networkBridge
     cpuLimit cpuLimitIsOverride memoryLimit memoryLimitIsOverride workspaceHostPath workspaceIsOverride
+    sudoEnabled
   } }
+`;
+const GRANT_JAIL_SUDO_MUTATION = `mutation($name: String!) { grantJailSudo(name: $name) }`;
+const START_PRIVILEGED_COMMAND_MUTATION = `
+  mutation($name: String!, $command: String!) { startPrivilegedCommand(name: $name, command: $command) }
+`;
+const PRIVILEGED_COMMAND_STATUS_QUERY = `
+  query($id: String!) { privilegedCommandStatus(id: $id) { id command status exitCode stdout stderr message } }
 `;
 const SET_JAIL_WORKSPACE_MUTATION = `
   mutation($name: String!, $hostPath: String!) { setJailWorkspace(name: $name, hostPath: $hostPath) }
@@ -124,6 +135,7 @@ const newJailNameError = computed(() => validateContainerName(newJailName.value)
 const configCpuError = computed(() => validateCpuLimit(config.jailCpu));
 const configMemoryError = computed(() => validateMemoryLimit(config.jailMemory));
 const launchImageSelect = ref("");
+const launchAllowSudo = ref(false);
 const consoleJail = ref<string | null>(null);
 
 const config = reactive<IncusConfig>({
@@ -258,8 +270,10 @@ async function launchJail() {
     await gql(LAUNCH_JAIL_MUTATION, {
       name: newJailName.value.trim(),
       image: launchImageSelect.value || null,
+      allowSudo: launchAllowSudo.value,
     });
     newJailName.value = "";
+    launchAllowSudo.value = false;
     await refreshStatus();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -280,6 +294,8 @@ const editWorkspacePath = ref("");
 async function toggleJailDetails(name: string) {
   stopInstallPolling();
   installingFormula.value = false;
+  stopPrivilegedPolling();
+  runningPrivilegedCommand.value = false;
   if (detailsJailName.value === name) {
     detailsJailName.value = null;
     jailDetail.value = null;
@@ -289,6 +305,8 @@ async function toggleJailDetails(name: string) {
   installFormula.value = "";
   installResult.value = "";
   installError.value = "";
+  privilegedCommand.value = "";
+  privilegedCommandStatus.value = null;
   await loadJailDetail(name);
 }
 
@@ -474,6 +492,75 @@ async function installHomebrewFormula() {
   } catch (e) {
     installError.value = e instanceof Error ? e.message : String(e);
     installingFormula.value = false;
+  }
+}
+
+// --- Sudo grant — opt-in, explicit, retroactive on an already-running container ------
+
+const grantingSudo = ref(false);
+
+async function grantJailSudo() {
+  if (!detailsJailName.value) return;
+  grantingSudo.value = true;
+  detailError.value = "";
+  try {
+    await gql(GRANT_JAIL_SUDO_MUTATION, { name: detailsJailName.value });
+    await loadJailDetail(detailsJailName.value);
+  } catch (e) {
+    detailError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    grantingSudo.value = false;
+  }
+}
+
+// --- Operator-mediated privileged command — runs as root, never exposed to the ---------
+// container's own agent user. Same fire-and-poll shape as the Homebrew installer, for the
+// same reason: an arbitrary command can easily outlast a blocking request's timeout.
+
+const privilegedCommand = ref("");
+const runningPrivilegedCommand = ref(false);
+const privilegedCommandStatus = ref<PrivilegedCommandStatus | null>(null);
+let privilegedPollHandle: ReturnType<typeof setInterval> | null = null;
+
+function stopPrivilegedPolling() {
+  if (privilegedPollHandle !== null) {
+    clearInterval(privilegedPollHandle);
+    privilegedPollHandle = null;
+  }
+}
+
+async function runPrivilegedCommand() {
+  if (!detailsJailName.value || !privilegedCommand.value.trim()) return;
+  stopPrivilegedPolling();
+  runningPrivilegedCommand.value = true;
+  privilegedCommandStatus.value = null;
+  detailError.value = "";
+  try {
+    const data = await gql<{ startPrivilegedCommand: string }>(START_PRIVILEGED_COMMAND_MUTATION, {
+      name: detailsJailName.value,
+      command: privilegedCommand.value.trim(),
+    });
+    const jobId = data.startPrivilegedCommand;
+    privilegedPollHandle = setInterval(async () => {
+      try {
+        const poll = await gql<{ privilegedCommandStatus: PrivilegedCommandStatus | null }>(
+          PRIVILEGED_COMMAND_STATUS_QUERY,
+          { id: jobId }
+        );
+        const job = poll.privilegedCommandStatus;
+        if (!job || job.status === "running") return;
+        stopPrivilegedPolling();
+        runningPrivilegedCommand.value = false;
+        privilegedCommandStatus.value = job;
+      } catch (e) {
+        stopPrivilegedPolling();
+        runningPrivilegedCommand.value = false;
+        detailError.value = e instanceof Error ? e.message : String(e);
+      }
+    }, 2000);
+  } catch (e) {
+    detailError.value = e instanceof Error ? e.message : String(e);
+    runningPrivilegedCommand.value = false;
   }
 }
 
@@ -1734,6 +1821,7 @@ onBeforeUnmount(() => {
   for (const build of builds.value) stopPolling(build);
   stopStatusPolling();
   stopInstallPolling();
+  stopPrivilegedPolling();
   if (searchDebounceHandle) clearTimeout(searchDebounceHandle);
 });
 </script>
@@ -2284,11 +2372,18 @@ onBeforeUnmount(() => {
             <Button size="sm" variant="secondary" :disabled="!!newJailNameError" @click="launchJail">Launch</Button>
           </div>
           <p v-if="newJailName && newJailNameError" class="mt-2 text-xs text-destructive">{{ newJailNameError }}</p>
+          <label class="mt-3 flex items-center gap-2 text-xs">
+            <input type="checkbox" v-model="launchAllowSudo" class="h-3.5 w-3.5" />
+            Allow sudo (NOPASSWD) for the agent user
+          </label>
           <HelpText>
             "Default" launches from Config → Container Defaults' image (the golden master, if one is set).
             Picking a specific image here launches from that image instead, just for this container — it
             doesn't change the default. Every launch, from any image, gets its own independent root filesystem;
-            nothing is shared between containers built from the same source image.
+            nothing is shared between containers built from the same source image. Sudo is off by default on
+            purpose — the agent user having no path to root is what keeps a compromised dependency from
+            escalating inside the container. Turning it on trades that away for convenience; you can also grant
+            or check it later, per-container, from its Details panel.
           </HelpText>
         </div>
         </div>
@@ -2317,32 +2412,30 @@ onBeforeUnmount(() => {
             Total: {{ runningJails.length }} container{{ runningJails.length === 1 ? "" : "s" }} running,
             {{ formatBytes(totalMemoryUsageBytes) }} memory, CPU time {{ formatDuration(totalCpuUsageNs) }}
           </p>
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-border text-left text-muted-foreground">
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase">Name</th>
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase">Status</th>
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase">IPv4</th>
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase" :title="`Live rate, % ${cpuRateSuffix()}`">CPU</th>
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase">Memory</th>
-                <th class="py-2 text-xs font-semibold tracking-[0.06em] uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <template v-for="jail in jails" :key="jail.name">
-              <tr class="border-b border-border/60">
-                <td class="py-2 font-mono text-[13px]">
-                  {{ jail.name }}
+          <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div
+              v-for="jail in jails"
+              :key="jail.name"
+              class="rounded-lg border border-border p-3"
+              :class="detailsJailName === jail.name ? 'border-primary/50' : 'border-border'"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="truncate font-mono text-[13px] font-medium">{{ jail.name }}</span>
                   <span
                     v-if="jailOnBridgeSubnet(jail)"
-                    class="ml-1.5 inline-flex items-center rounded-full bg-unraid-green-200 px-1.5 py-0.5 text-[10px] font-semibold text-unraid-green-800"
+                    class="shrink-0 inline-flex items-center rounded-full bg-unraid-green-200 px-1.5 py-0.5 text-[10px] font-semibold text-unraid-green-800"
                     title="This container's IPv4 falls within the configured subnet."
                   >on bridge</span>
-                </td>
-                <td class="py-2"><Badge :variant="statusBadgeVariant(jail.status)">{{ jail.status }}</Badge></td>
-                <td class="py-2 font-mono text-[13px] text-muted-foreground">{{ jail.ipv4 || "—" }}</td>
-                <td class="py-2">
-                  <div class="flex items-center gap-2">
+                  <Badge :variant="statusBadgeVariant(jail.status)">{{ jail.status }}</Badge>
+                </div>
+                <span class="shrink-0 font-mono text-xs text-muted-foreground">{{ jail.ipv4 || "—" }}</span>
+              </div>
+
+              <div class="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <p class="text-[10px] font-semibold tracking-[0.06em] uppercase text-muted-foreground" :title="`Live rate, % ${cpuRateSuffix()}`">CPU</p>
+                  <div class="mt-1 flex items-center gap-2">
                     <div class="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
                       <div
                         v-if="cpuRatePct(jail) !== null"
@@ -2351,205 +2444,244 @@ onBeforeUnmount(() => {
                       />
                     </div>
                     <span class="font-mono text-[13px]">{{ cpuRateLabel(jail) }}</span>
+                    <svg
+                      v-if="jailCpuHistory(jail.name).length >= 2"
+                      viewBox="0 0 80 24"
+                      width="60"
+                      height="18"
+                      class="text-primary"
+                      preserveAspectRatio="none"
+                    >
+                      <polyline :points="sparklinePoints(jailCpuHistory(jail.name), 'cpuPct')" fill="none" stroke="currentColor" stroke-width="1.5" />
+                    </svg>
                   </div>
-                </td>
-                <td class="py-2">
-                  <div class="font-mono text-[13px]">{{ formatMemory(jail) }}</div>
+                </div>
+                <div>
+                  <p class="text-[10px] font-semibold tracking-[0.06em] uppercase text-muted-foreground">Memory</p>
+                  <div class="mt-1 flex items-center gap-2">
+                    <span class="font-mono text-[13px]">{{ formatMemory(jail) }}</span>
+                    <svg
+                      v-if="jailCpuHistory(jail.name).length >= 2"
+                      viewBox="0 0 80 24"
+                      width="60"
+                      height="18"
+                      class="text-primary"
+                      preserveAspectRatio="none"
+                    >
+                      <polyline :points="sparklinePoints(jailCpuHistory(jail.name), 'memPct')" fill="none" stroke="currentColor" stroke-width="1.5" />
+                    </svg>
+                  </div>
                   <div v-if="memoryFillPct(jail) !== null" class="mt-1 h-1 w-20 overflow-hidden rounded-full bg-muted">
-                    <div
-                      class="h-full rounded-full bg-primary"
-                      :style="{ width: memoryFillPct(jail) + '%' }"
-                    />
+                    <div class="h-full rounded-full bg-primary" :style="{ width: memoryFillPct(jail) + '%' }" />
                   </div>
-                </td>
-                <td class="py-2">
-                  <div class="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" @click="jailAction(jail.name, 'start')">Start</Button>
-                    <Button size="sm" variant="outline" @click="jailAction(jail.name, 'stop')">Stop</Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      :disabled="jail.status.toLowerCase() !== 'running'"
-                      @click="consoleJail = jail.name"
-                    >Console</Button>
+                </div>
+              </div>
+
+              <div class="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" @click="jailAction(jail.name, 'start')">Start</Button>
+                <Button size="sm" variant="outline" @click="jailAction(jail.name, 'stop')">Stop</Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  :disabled="jail.status.toLowerCase() !== 'running'"
+                  @click="consoleJail = jail.name"
+                >Console</Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  @click="toggleJailDetails(jail.name)"
+                >{{ detailsJailName === jail.name ? "Hide manage" : "Manage" }}</Button>
+                <Button size="sm" variant="destructive" @click="deleteJail(jail.name)">Delete</Button>
+              </div>
+
+              <div v-if="detailsJailName === jail.name" class="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                <p v-if="detailLoading" class="text-xs text-muted-foreground">Loading…</p>
+                <template v-else-if="jailDetail">
+                  <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div>
+                      <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Image</p>
+                      <p class="mt-1 text-xs">
+                        {{ jailDetail.imageOs || "—" }} {{ jailDetail.imageRelease || "" }}
+                      </p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Profiles</p>
+                      <p class="mt-1 font-mono text-xs">{{ jailDetail.profiles.join(", ") }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Storage pool</p>
+                      <p class="mt-1 font-mono text-xs">{{ jailDetail.storagePool || "—" }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Bridge</p>
+                      <p class="mt-1 font-mono text-xs">{{ jailDetail.networkBridge || "—" }}</p>
+                    </div>
+                  </div>
+
+                  <div class="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
+                    <div class="flex flex-wrap items-end gap-2">
+                      <div>
+                        <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                          CPU limit
+                          <Badge v-if="jailDetail.cpuLimitIsOverride" variant="orange">override</Badge>
+                        </Label>
+                        <div class="flex gap-1.5">
+                          <Input v-model="editCpuLimit" class="w-24 font-mono" placeholder="e.g. 2" />
+                          <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailCpuLimit">Apply</Button>
+                        </div>
+                      </div>
+                      <div>
+                        <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                          Memory limit
+                          <Badge v-if="jailDetail.memoryLimitIsOverride" variant="orange">override</Badge>
+                        </Label>
+                        <div class="flex gap-1.5">
+                          <Input v-model="editMemoryLimit" class="w-24 font-mono" placeholder="e.g. 4GiB" />
+                          <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailMemoryLimit">Apply</Button>
+                        </div>
+                      </div>
+                      <Button
+                        v-if="jailDetail.cpuLimitIsOverride || jailDetail.memoryLimitIsOverride"
+                        size="sm"
+                        variant="outline"
+                        :disabled="detailSaving"
+                        @click="resetJailLimits"
+                      >Use profile default</Button>
+                    </div>
+
+                    <div>
+                      <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                        Workspace host path (/workspace)
+                        <Badge v-if="jailDetail.workspaceIsOverride" variant="orange">override</Badge>
+                      </Label>
+                      <div class="flex gap-2">
+                        <Input v-model="editWorkspacePath" class="flex-1 font-mono" />
+                        <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailWorkspace">Apply</Button>
+                        <Button
+                          v-if="jailDetail.workspaceIsOverride"
+                          size="sm"
+                          variant="outline"
+                          :disabled="detailSaving"
+                          @click="resetJailWorkspace"
+                        >Use profile default</Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="isOnSharedDefaultWorkspace(jailDetail)"
+                    class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs"
+                  >
+                    <span>
+                      This container shares <span class="font-mono">/workspace</span> with every other
+                      container still on the profile's default — file writes are live-visible between them.
+                    </span>
                     <Button
                       size="sm"
                       variant="outline"
-                      @click="toggleJailDetails(jail.name)"
-                    >{{ detailsJailName === jail.name ? "Hide details" : "Details" }}</Button>
-                    <Button size="sm" variant="destructive" @click="deleteJail(jail.name)">Delete</Button>
+                      :disabled="migratingWorkspace"
+                      @click="migrateJailWorkspace"
+                    >{{ migratingWorkspace ? "Isolating…" : "Isolate this container's workspace" }}</Button>
                   </div>
-                </td>
-              </tr>
-              <tr class="border-b border-border last:border-0">
-                <td colspan="6" class="pb-2">
-                  <div v-if="jailCpuHistory(jail.name).length >= 2" class="flex items-center gap-4 pl-0">
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-[10px] font-semibold tracking-[0.06em] uppercase text-muted-foreground">CPU</span>
-                      <svg viewBox="0 0 80 24" width="80" height="24" class="text-primary" preserveAspectRatio="none">
-                        <polyline
-                          :points="sparklinePoints(jailCpuHistory(jail.name), 'cpuPct')"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        />
-                      </svg>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span class="text-[10px] font-semibold tracking-[0.06em] uppercase text-muted-foreground">Mem</span>
-                      <svg viewBox="0 0 80 24" width="80" height="24" class="text-primary" preserveAspectRatio="none">
-                        <polyline
-                          :points="sparklinePoints(jailCpuHistory(jail.name), 'memPct')"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        />
-                      </svg>
-                    </div>
-                    <span class="text-[10px] text-muted-foreground">last ~2 min, resets on reload</span>
+
+                  <p v-if="detailError" class="mt-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {{ detailError }}
+                  </p>
+                  <HelpText>
+                    Values without an "override" badge are inherited straight from the container's profile
+                    and apply to every container using it. Applying here overrides just this one instance —
+                    it won't touch the profile or any other container. Memory limit changes need a restart
+                    of this container to actually take effect on a running instance (verified: clearing an
+                    override alone doesn't shrink an already-larger live cgroup limit back down). Isolating
+                    a shared workspace points it at a new, empty per-container directory — it does not copy
+                    any files already sitting in the old shared one.
+                  </HelpText>
+
+                  <div class="mt-4 border-t border-border pt-3">
+                    <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                      Sudo (agent user)
+                      <Badge :variant="jailDetail.sudoEnabled ? 'green' : 'gray'">{{ jailDetail.sudoEnabled ? "enabled" : "disabled" }}</Badge>
+                    </Label>
+                    <Button
+                      v-if="!jailDetail.sudoEnabled"
+                      size="sm"
+                      variant="outline"
+                      :disabled="grantingSudo"
+                      @click="grantJailSudo"
+                    >{{ grantingSudo ? "Granting…" : "Grant sudo (NOPASSWD)" }}</Button>
+                    <HelpText>
+                      Off by default on purpose — this is what keeps a compromised dependency from escalating
+                      to root inside the container. Granting sudo here applies immediately to the running
+                      container and can't be un-granted from this panel (remove
+                      <span class="font-mono">/etc/sudoers.d/agent</span> manually, or via the privileged
+                      command box below, if you need to revoke it).
+                    </HelpText>
                   </div>
-                </td>
-              </tr>
-              <tr v-if="detailsJailName === jail.name" class="border-b border-border last:border-0">
-                <td colspan="6" class="pb-4">
-                  <div class="rounded-md border border-border bg-muted/30 p-3">
-                    <p v-if="detailLoading" class="text-xs text-muted-foreground">Loading…</p>
-                    <template v-else-if="jailDetail">
-                      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        <div>
-                          <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Image</p>
-                          <p class="mt-1 text-xs">
-                            {{ jailDetail.imageOs || "—" }} {{ jailDetail.imageRelease || "" }}
-                          </p>
-                        </div>
-                        <div>
-                          <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Profiles</p>
-                          <p class="mt-1 font-mono text-xs">{{ jailDetail.profiles.join(", ") }}</p>
-                        </div>
-                        <div>
-                          <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Storage pool</p>
-                          <p class="mt-1 font-mono text-xs">{{ jailDetail.storagePool || "—" }}</p>
-                        </div>
-                        <div>
-                          <p class="text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Bridge</p>
-                          <p class="mt-1 font-mono text-xs">{{ jailDetail.networkBridge || "—" }}</p>
-                        </div>
-                      </div>
 
-                      <div class="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
-                        <div class="flex flex-wrap items-end gap-2">
-                          <div>
-                            <Label class="mb-1 flex items-center gap-1.5 text-xs">
-                              CPU limit
-                              <Badge v-if="jailDetail.cpuLimitIsOverride" variant="orange">override</Badge>
-                            </Label>
-                            <div class="flex gap-1.5">
-                              <Input v-model="editCpuLimit" class="w-24 font-mono" placeholder="e.g. 2" />
-                              <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailCpuLimit">Apply</Button>
-                            </div>
-                          </div>
-                          <div>
-                            <Label class="mb-1 flex items-center gap-1.5 text-xs">
-                              Memory limit
-                              <Badge v-if="jailDetail.memoryLimitIsOverride" variant="orange">override</Badge>
-                            </Label>
-                            <div class="flex gap-1.5">
-                              <Input v-model="editMemoryLimit" class="w-24 font-mono" placeholder="e.g. 4GiB" />
-                              <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailMemoryLimit">Apply</Button>
-                            </div>
-                          </div>
-                          <Button
-                            v-if="jailDetail.cpuLimitIsOverride || jailDetail.memoryLimitIsOverride"
-                            size="sm"
-                            variant="outline"
-                            :disabled="detailSaving"
-                            @click="resetJailLimits"
-                          >Use profile default</Button>
-                        </div>
+                  <div class="mt-4 border-t border-border pt-3">
+                    <Label class="mb-1 block text-xs">Install a package (Homebrew)</Label>
+                    <div class="flex flex-wrap gap-2">
+                      <Input
+                        v-model="installFormula"
+                        class="w-48 font-mono"
+                        placeholder="e.g. wget"
+                        @keydown.enter.prevent="installHomebrewFormula"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="!installFormula.trim() || installingFormula"
+                        @click="installHomebrewFormula"
+                      >{{ installingFormula ? "Installing…" : "Install" }}</Button>
+                    </div>
+                    <p v-if="installResult" class="mt-1.5 text-xs text-unraid-green-800">{{ installResult }}</p>
+                    <p v-if="installError" class="mt-1.5 text-xs text-destructive">{{ installError }}</p>
+                    <HelpText>
+                      Best-effort: bootstraps Homebrew itself under this container's non-root "agent" user
+                      if it isn't already present (needs bash and git inside the container), installing to
+                      <span class="font-mono">~/.linuxbrew</span> rather than Homebrew's usual shared system
+                      path — the official installer needs <span class="font-mono">sudo</span> for that path,
+                      and "agent" deliberately has none inside these containers. This runs against the LIVE
+                      container over exec — it isn't baked into the image, so a rebuilt or replacement
+                      container won't have it.
+                    </HelpText>
+                  </div>
 
-                        <div>
-                          <Label class="mb-1 flex items-center gap-1.5 text-xs">
-                            Workspace host path (/workspace)
-                            <Badge v-if="jailDetail.workspaceIsOverride" variant="orange">override</Badge>
-                          </Label>
-                          <div class="flex gap-2">
-                            <Input v-model="editWorkspacePath" class="flex-1 font-mono" />
-                            <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailWorkspace">Apply</Button>
-                            <Button
-                              v-if="jailDetail.workspaceIsOverride"
-                              size="sm"
-                              variant="outline"
-                              :disabled="detailSaving"
-                              @click="resetJailWorkspace"
-                            >Use profile default</Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div
-                        v-if="isOnSharedDefaultWorkspace(jailDetail)"
-                        class="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs"
-                      >
-                        <span>
-                          This container shares <span class="font-mono">/workspace</span> with every other
-                          container still on the profile's default — file writes are live-visible between them.
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          :disabled="migratingWorkspace"
-                          @click="migrateJailWorkspace"
-                        >{{ migratingWorkspace ? "Isolating…" : "Isolate this container's workspace" }}</Button>
-                      </div>
-
-                      <p v-if="detailError" class="mt-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                        {{ detailError }}
+                  <div class="mt-4 border-t border-border pt-3">
+                    <Label class="mb-1 block text-xs">Run a privileged command</Label>
+                    <div class="flex flex-wrap gap-2">
+                      <Input
+                        v-model="privilegedCommand"
+                        class="flex-1 font-mono"
+                        placeholder="e.g. apt-get install -y htop"
+                        @keydown.enter.prevent="runPrivilegedCommand"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        :disabled="!privilegedCommand.trim() || runningPrivilegedCommand"
+                        @click="runPrivilegedCommand"
+                      >{{ runningPrivilegedCommand ? "Running…" : "Run" }}</Button>
+                    </div>
+                    <div v-if="privilegedCommandStatus" class="mt-2">
+                      <p class="text-xs" :class="privilegedCommandStatus.status === 'success' ? 'text-unraid-green-800' : 'text-destructive'">
+                        {{ privilegedCommandStatus.message }}
                       </p>
-                      <HelpText>
-                        Values without an "override" badge are inherited straight from the container's profile
-                        and apply to every container using it. Applying here overrides just this one instance —
-                        it won't touch the profile or any other container. Memory limit changes need a restart
-                        of this container to actually take effect on a running instance (verified: clearing an
-                        override alone doesn't shrink an already-larger live cgroup limit back down). Isolating
-                        a shared workspace points it at a new, empty per-container directory — it does not copy
-                        any files already sitting in the old shared one.
-                      </HelpText>
-
-                      <div class="mt-4 border-t border-border pt-3">
-                        <Label class="mb-1 block text-xs">Install a package (Homebrew)</Label>
-                        <div class="flex flex-wrap gap-2">
-                          <Input
-                            v-model="installFormula"
-                            class="w-48 font-mono"
-                            placeholder="e.g. wget"
-                            @keydown.enter.prevent="installHomebrewFormula"
-                          />
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            :disabled="!installFormula.trim() || installingFormula"
-                            @click="installHomebrewFormula"
-                          >{{ installingFormula ? "Installing…" : "Install" }}</Button>
-                        </div>
-                        <p v-if="installResult" class="mt-1.5 text-xs text-unraid-green-800">{{ installResult }}</p>
-                        <p v-if="installError" class="mt-1.5 text-xs text-destructive">{{ installError }}</p>
-                        <HelpText>
-                          Best-effort: bootstraps Homebrew itself under this container's non-root "agent" user
-                          if it isn't already present (needs bash and git inside the container), installing to
-                          <span class="font-mono">~/.linuxbrew</span> rather than Homebrew's usual shared system
-                          path — the official installer needs <span class="font-mono">sudo</span> for that path,
-                          and "agent" deliberately has none inside these containers. This runs against the LIVE
-                          container over exec — it isn't baked into the image, so a rebuilt or replacement
-                          container won't have it.
-                        </HelpText>
-                      </div>
-                    </template>
+                      <pre
+                        v-if="privilegedCommandStatus.stdout || privilegedCommandStatus.stderr"
+                        class="mt-1 max-h-40 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-2 text-[11px] whitespace-pre-wrap text-neutral-200"
+                      >{{ [privilegedCommandStatus.stdout, privilegedCommandStatus.stderr].filter(Boolean).join('\n') }}</pre>
+                    </div>
+                    <HelpText>
+                      Runs as root, mediated by you here in the UI — the container's own "agent" user never
+                      gets this capability, so this stays safe even with sudo left off. Good for one-off fixes
+                      (a forgotten package) without needing the sudo toggle at all.
+                    </HelpText>
                   </div>
-                </td>
-              </tr>
-              </template>
-            </tbody>
-          </table>
+                </template>
+              </div>
+            </div>
+          </div>
           </template>
         </div>
       </section>

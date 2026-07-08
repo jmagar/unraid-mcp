@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.07q">
+  <!ENTITY version   "2026.07.07r">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-41-x86_64-1.txz">
-  <!ENTITY md5       "4186a4d09c66152456d28952d6365f01">
+  <!ENTITY txz       "&name;-unraid-7.0.0-42-x86_64-1.txz">
+  <!ENTITY md5       "33d3a97d6eab8d879c0216ba47e4bd13">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,7 +15,7 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
-###2026.07.07r (pending — source only, not yet packaged into a .txz build)
+###2026.07.07s (pending — source only, not yet packaged into a .txz build)
 - Added a Main/Dashboard jail-status box (running/stopped/other counts),
   toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg.
 - Fix: updateShellConfig only replaced existing incus.cfg keys, silently
@@ -41,6 +41,24 @@
   torn file mid-write.
 - CI: added .github/workflows/api-plugin-ci.yml, typechecking and building
   the backend and both frontend bundles on every push/PR.
+
+###2026.07.07r
+- Launch Container: "Allow sudo (NOPASSWD) for the agent user" — opt-in,
+  off by default. Grants immediately after boot; verified live
+  (`sudo -n whoami` → root).
+- Container manage panel: sudo status (live-checked) with a retroactive
+  "Grant sudo" for already-running containers, and a new "Run a privileged
+  command" box that execs as root mediated by the operator — never exposed
+  to the container's own agent user, so it stays safe even with sudo left
+  off. Verified live: apt-installed htop into a running container with
+  neither sudo nor a rebuild.
+- Fixed a real bug caught in that same testing: the sudo-grant script had
+  a `|| &&` adjacency from a bad array-join, which is invalid POSIX shell
+  and made every grant attempt fail outright on Debian's default /bin/sh.
+- Containers tab: replaced the dense table + expandable-row layout with a
+  responsive card grid — each container's stats, quick actions, and full
+  manage panel (limits, workspace, sudo, Homebrew, privileged commands) now
+  live directly in its own card instead of a cramped colspan table row.
 
 ###2026.07.07q
 - Container Details panel: "Install a package (Homebrew)" now actually works
