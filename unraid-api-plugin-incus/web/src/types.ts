@@ -23,6 +23,7 @@ export interface IncusConfig {
   jailAgentGid: string;
   jailBindMounts: string;
   tsAuthKey: string;
+  dashboardWidgetEnable: boolean;
 }
 
 export interface Jail {

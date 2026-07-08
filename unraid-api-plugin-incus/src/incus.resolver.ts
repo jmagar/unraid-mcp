@@ -77,7 +77,7 @@ export class IncusResolver {
       "Merge changes into incus.cfg and apply them (restarts incusd + re-runs the environment setup if SERVICE is enabled, else stops it).",
   })
   async updateIncusConfig(@Args("input") input: IncusConfigInput): Promise<IncusConfig> {
-    const merged = this.configSync.applyConfigUpdate(input);
+    const merged = await this.configSync.applyConfigUpdate(input);
     try {
       await execFileAsync(APPLY_SETTINGS_SCRIPT, [], { timeout: 90_000 });
     } catch (err) {

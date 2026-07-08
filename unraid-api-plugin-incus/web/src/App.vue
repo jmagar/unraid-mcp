@@ -28,6 +28,7 @@ const CONFIG_QUERY = `
     aclName aclBlock aclAllow aclDefaultEgress aclDefaultIngress
     jailProfile jailImage jailNesting jailCpu jailMemory
     jailWorkspaceRoot jailAgentUid jailAgentGid jailBindMounts tsAuthKey
+    dashboardWidgetEnable
   } }
 `;
 const STATUS_QUERY = `
@@ -162,6 +163,7 @@ const config = reactive<IncusConfig>({
   jailAgentGid: "",
   jailBindMounts: "",
   tsAuthKey: "",
+  dashboardWidgetEnable: true,
 });
 
 const isZfs = computed(() => config.storageDriver === "zfs");
@@ -2706,6 +2708,12 @@ onBeforeUnmount(() => {
             <HelpText class="col-span-2">
               Starts incusd on array start. Leaving this off keeps the daemon — and its private-prefixed
               binaries under <span class="font-mono">/usr/local/incus/</span> — installed but never running.
+            </HelpText>
+
+            <Label>Show Dashboard widget</Label>
+            <Switch v-model="config.dashboardWidgetEnable" />
+            <HelpText class="col-span-2">
+              Shows a jail-status box (running/stopped/other counts) on Unraid's Main/Dashboard tab.
             </HelpText>
 
             <Label>Incus state directory</Label>

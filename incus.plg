@@ -15,6 +15,33 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.07t (pending — source only, not yet packaged into a .txz build)
+- Added a Main/Dashboard jail-status box (running/stopped/other counts),
+  toggleable via a new DASHBOARD_WIDGET_ENABLE key in incus.cfg.
+- Fix: updateShellConfig only replaced existing incus.cfg keys, silently
+  dropping an update for any key an install's file predates (the 07.07p
+  TS_AUTHKEY key had this same gap, worked around then by telling existing
+  installs to add it by hand — no longer necessary). Missing keys are now
+  appended, so e.g. toggling the new Dashboard widget off on an old install
+  actually takes effect instead of the UI showing "off" while the widget
+  stays visible because the key was never written.
+- Whitelist-validated (regex @Matches) the free-text updateIncusConfig
+  input fields (jailBridge/jailSubnet/aclBlock/aclAllow/aclDefaultEgress/
+  aclDefaultIngress/jailProfile/jailImage/jailCpu/jailMemory/
+  jailWorkspaceRoot/jailAgentUid/jailAgentGid/jailBindMounts/tsAuthKey).
+  Not a shell-injection fix — updateShellConfig already single-quotes every
+  value before writing it to incus.cfg, which is inert to bash expansion
+  regardless of content — this just rejects obviously-malformed input at
+  the mutation boundary with a clear message instead of letting it reach
+  incus-init.sh and fail there with an opaque Incus-side error.
+- Added locking (a sentinel-lockfile mutex) and atomic writes (temp file +
+  rename) around IncusConfigSyncService's incus.cfg/incus.json read-modify-
+  write, guarding against a hand-edit-over-SSH racing a settings-form save
+  and against a reader (incus-init.sh sourcing incus.cfg) ever seeing a
+  torn file mid-write.
+- CI: added .github/workflows/api-plugin-ci.yml, typechecking and building
+  the backend and both frontend bundles on every push/PR.
+
 ###2026.07.07s
 - Fix: a build that failed instantly would show "queued" / "Waiting for
   log output…" forever, never updating — even though the backend already
