@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use unraid_mcp::app::UnraidService;
+use unraid_rmcp::app::UnraidService;
 
 use super::commands::CliCommand;
 use super::format::print_human;

@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use serde::Serialize;
 
-use unraid_mcp::config::{default_data_dir, AuthMode, Config};
+use unraid_rmcp::config::{default_data_dir, AuthMode, Config};
 
 /// A single check result emitted by `doctor`.
 #[derive(Debug, Serialize)]

@@ -3,7 +3,7 @@ use rmcp::{transport::stdio, ServiceExt};
 use std::sync::Arc;
 use tracing::info;
 
-use unraid_mcp::{
+use unraid_rmcp::{
     app::UnraidService,
     config::{AuthMode, Config},
     graphql::UnraidClient,
@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     // Load ~/.unraid/.env (or /data/.env in a container) before any Config::load
     // so the binary works on bare metal without a process manager injecting env.
     // Non-overriding: explicit process env still wins.
-    unraid_mcp::config::load_dotenv();
+    unraid_rmcp::config::load_dotenv();
 
     let stdio_mode = matches!(args.as_slice(), [c] if c == "mcp");
     let serve_mode = args.is_empty()
@@ -49,12 +49,12 @@ async fn main() -> Result<()> {
                     .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
             )
             .with_writer(std::io::stderr)
-            .with_ansi(unraid_mcp::logging::should_colorize())
+            .with_ansi(unraid_rmcp::logging::should_colorize())
             .try_init()
             .ok();
     } else {
-        let data_dir = unraid_mcp::config::default_data_dir();
-        if let Err(e) = unraid_mcp::logging::init_logging(&data_dir, "unraid-rmcp") {
+        let data_dir = unraid_rmcp::config::default_data_dir();
+        if let Err(e) = unraid_rmcp::logging::init_logging(&data_dir, "unraid-rmcp") {
             // Fall back to simple stderr logging if file init fails.
             eprintln!("Warning: could not init file logging: {e}");
             tracing_subscriber::fmt()
@@ -199,7 +199,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     if config.mcp.auth.mode == AuthMode::OAuth {
         let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
             .env_prefix("UNRAID_RMCP")
-            .session_cookie_name("unraid_mcp_session")
+            .session_cookie_name("unraid_rmcp_session")
             .scopes_supported(vec!["unraid:read".into(), "unraid:admin".into()])
             .default_scope("unraid:read")
             .resource_path("/mcp")

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde::Serialize;
 
-use unraid_mcp::config::{default_data_dir, AuthMode, Config};
+use unraid_rmcp::config::{default_data_dir, AuthMode, Config};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SetupCommand {
