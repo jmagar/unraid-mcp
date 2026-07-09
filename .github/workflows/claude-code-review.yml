@@ -36,7 +36,7 @@ jobs:
         uses: anthropics/claude-code-action@353cf256821e54f4bc89e4c7246f4c938acfb1cc
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_bots: claude
+          allowed_bots: claude,dependabot
           prompt: |
             Review pull request ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
             Focus on bugs, regressions, security issues, and missing tests.
