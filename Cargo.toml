@@ -4,7 +4,7 @@ default-members = ["."]
 resolver = "2"
 
 [package]
-name = "unraid-mcp"
+name = "unraid-rmcp"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.90"
@@ -76,7 +76,7 @@ cynic-codegen = "3"
 test-support = ["dep:graphql-parser"]
 
 [dev-dependencies]
-unraid-mcp = { path = ".", features = ["test-support"] }
+unraid-rmcp = { path = ".", features = ["test-support"] }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }
 rmcp = { version = "1.6.0", default-features = false, features = [

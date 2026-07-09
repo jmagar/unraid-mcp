@@ -1,4 +1,4 @@
-# Component Inventory — unraid-mcp
+# Component Inventory — unraid-rmcp
 
 Complete listing of all MCP actions, CLI commands, env vars, HTTP endpoints, and dependencies.
 
@@ -162,15 +162,15 @@ Server/transport commands:
 | `UNRAID_API_URL` | **yes** | — | Unraid GraphQL endpoint |
 | `UNRAID_API_KEY` | **yes** | — | API key sent as `x-api-key` header |
 | `UNRAID_API_SKIP_TLS_VERIFY` | no | `false` | Skip TLS certificate verification |
-| `UNRAID_MCP_HOST` | no | `0.0.0.0` | Bind host for the MCP HTTP server |
-| `UNRAID_MCP_PORT` | no | `40010` | Bind port |
-| `UNRAID_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
-| `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (1/true/yes) |
-| `UNRAID_MCP_NO_AUTH` | no | `false` | Alias for disabling auth |
-| `UNRAID_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
-| `UNRAID_MCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
-| `UNRAID_MCP_PUBLIC_URL` | no | — | Public URL for OAuth metadata and allowed hosts |
-| `UNRAID_MCP_AUTH_ADMIN_EMAIL` | no | — | Admin email for OAuth mode |
+| `UNRAID_RMCP_HOST` | no | `0.0.0.0` | Bind host for the MCP HTTP server |
+| `UNRAID_RMCP_PORT` | no | `40010` | Bind port |
+| `UNRAID_RMCP_TOKEN` | no | — | Static bearer token for `/mcp` |
+| `UNRAID_RMCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (1/true/yes) |
+| `UNRAID_RMCP_NO_AUTH` | no | `false` | Alias for disabling auth |
+| `UNRAID_RMCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
+| `UNRAID_RMCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
+| `UNRAID_RMCP_PUBLIC_URL` | no | — | Public URL for OAuth metadata and allowed hosts |
+| `UNRAID_RMCP_AUTH_ADMIN_EMAIL` | no | — | Admin email for OAuth mode |
 | `RUST_LOG` | no | `info` (server) / `warn` (stdio/CLI) | Log filter |
 
 ## Runtime dependencies

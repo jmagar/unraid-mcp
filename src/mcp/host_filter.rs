@@ -60,7 +60,7 @@ fn push_host_variants(hosts: &mut Vec<String>, host: &str, port: u16) {
 
 fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
     let Ok(parsed) = url::Url::parse(url) else {
-        tracing::warn!(public_url = url, "UNRAID_MCP_PUBLIC_URL is not a valid URL");
+        tracing::warn!(public_url = url, "UNRAID_RMCP_PUBLIC_URL is not a valid URL");
         return;
     };
     let Some(host) = parsed.host_str() else {
@@ -69,7 +69,7 @@ fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
     if host.contains('*') {
         tracing::warn!(
             host,
-            "UNRAID_MCP_PUBLIC_URL host contains wildcard; skipping"
+            "UNRAID_RMCP_PUBLIC_URL host contains wildcard; skipping"
         );
         return;
     }
@@ -107,7 +107,7 @@ fn has_port(host: &str) -> bool {
 
 fn extract_origin(url: &str) -> Option<String> {
     let parsed = url::Url::parse(url)
-        .map_err(|e| tracing::warn!(public_url = url, error = %e, "invalid UNRAID_MCP_PUBLIC_URL"))
+        .map_err(|e| tracing::warn!(public_url = url, error = %e, "invalid UNRAID_RMCP_PUBLIC_URL"))
         .ok()?;
     let scheme = parsed.scheme();
     let host = parsed.host_str()?;

@@ -18,19 +18,19 @@ x-common-service: &common-service
       compress: "true"
 
 services:
-  unraid-mcp:
+  unraid-rmcp:
     <<: *common-service
     # Default pins to a known, immutable version for safe rollback.
     # Override with VERSION to deploy/roll back, e.g.: VERSION=0.1.0 docker compose up -d
-    image: ghcr.io/jmagar/unrust:${VERSION:-0.1.1}
-    container_name: unraid-mcp
+    image: ghcr.io/jmagar/unraid-rmcp:${VERSION:-0.1.1}
+    container_name: unraid-rmcp
     env_file:
       - path: .env
         required: false
     ports:
-      - "${UNRAID_MCP_HOST_PORT:-40010}:40010/tcp"
+      - "${UNRAID_RMCP_HOST_PORT:-40010}:40010/tcp"
     volumes:
-      - ${UNRAID_MCP_DATA_VOLUME:-${HOME}/.unraid}:/data
+      - ${UNRAID_RMCP_DATA_VOLUME:-${HOME}/.unraid}:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:40010/health || exit 1"]
       interval: 30s

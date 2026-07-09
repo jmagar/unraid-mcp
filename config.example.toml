@@ -1,4 +1,4 @@
-# unraid-mcp configuration example
+# unraid-rmcp configuration example
 # Copy this to config.toml and adjust as needed.
 # Secrets and URLs belong in .env — not here.
 # All non-secret settings live here. Env vars override values below.
@@ -19,7 +19,7 @@ host = "0.0.0.0"
 port = 40010
 
 # Server name reported in MCP metadata.
-server_name = "unraid-mcp"
+server_name = "unraid-rmcp"
 
 # Disable all HTTP auth. ONLY use when fronted by a gateway that enforces auth.
 # When set, UNRAID_NOAUTH=true must also be set if binding to a non-loopback address.

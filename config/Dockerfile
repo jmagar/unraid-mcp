@@ -24,14 +24,14 @@ RUN sed -i 's/, \"xtask\"//g; s/\"xtask\", //g; s/\"xtask\"//g' Cargo.toml
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=unraid-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=unraid-cargo-target,target=/app/target,sharing=locked \
-    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked -p unraid-mcp && rm -rf src
+    mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release --locked -p unraid-rmcp && rm -rf src
 
 # Build real binary
 COPY src/ src/
 RUN --mount=type=cache,id=unraid-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,id=unraid-cargo-git,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,id=unraid-cargo-target,target=/app/target,sharing=locked \
-    touch src/main.rs && cargo build --release --locked -p unraid-mcp && cp target/release/runraid /usr/local/bin/runraid
+    touch src/main.rs && cargo build --release --locked -p unraid-rmcp && cp target/release/runraid /usr/local/bin/runraid
 
 # Runtime image — minimal Debian with TLS certs and curl for healthcheck
 # TODO: digest-pin (debian:bookworm-slim@sha256:...) for fully reproducible builds.
@@ -62,7 +62,7 @@ EXPOSE 40010/tcp
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -sf http://localhost:40010/health || exit 1
 
-LABEL io.modelcontextprotocol.server.name="tv.tootie/unraid-mcp"
+LABEL io.modelcontextprotocol.server.name="tv.tootie/unraid-rmcp"
 
 # entrypoint validates env, sets up /data, then drops to 1000:1000
 ENTRYPOINT ["/entrypoint.sh"]

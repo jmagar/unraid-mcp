@@ -31,7 +31,7 @@ pub struct McpConfig {
     pub server_name: String,
     /// Disable auth entirely (only legal when bound to loopback)
     pub no_auth: bool,
-    /// Static bearer token (UNRAID_MCP_TOKEN)
+    /// Static bearer token (UNRAID_RMCP_TOKEN)
     pub api_token: Option<String>,
     pub allowed_hosts: Vec<String>,
     pub allowed_origins: Vec<String>,
@@ -130,7 +130,7 @@ fn default_mcp_port() -> u16 {
     40010
 }
 fn default_server_name() -> String {
-    "unraid-mcp".into()
+    "unraid-rmcp".into()
 }
 fn default_auth_sqlite_path() -> String {
     default_data_dir()
@@ -212,30 +212,30 @@ impl Config {
             Err(e) => return Err(anyhow::anyhow!("Failed to read config.toml: {e}")),
         }
 
-        // Env overrides (UNRAID_MCP_* prefix)
-        env_str("UNRAID_MCP_HOST", &mut config.mcp.host);
-        env_parse("UNRAID_MCP_PORT", &mut config.mcp.port)?;
-        env_bool("UNRAID_MCP_NO_AUTH", &mut config.mcp.no_auth)?;
-        env_opt_str("UNRAID_MCP_TOKEN", &mut config.mcp.api_token);
-        env_list("UNRAID_MCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
+        // Env overrides (UNRAID_RMCP_* prefix)
+        env_str("UNRAID_RMCP_HOST", &mut config.mcp.host);
+        env_parse("UNRAID_RMCP_PORT", &mut config.mcp.port)?;
+        env_bool("UNRAID_RMCP_NO_AUTH", &mut config.mcp.no_auth)?;
+        env_opt_str("UNRAID_RMCP_TOKEN", &mut config.mcp.api_token);
+        env_list("UNRAID_RMCP_ALLOWED_HOSTS", &mut config.mcp.allowed_hosts);
         env_list(
-            "UNRAID_MCP_ALLOWED_ORIGINS",
+            "UNRAID_RMCP_ALLOWED_ORIGINS",
             &mut config.mcp.allowed_origins,
         );
-        env_opt_str("UNRAID_MCP_PUBLIC_URL", &mut config.mcp.auth.public_url);
+        env_opt_str("UNRAID_RMCP_PUBLIC_URL", &mut config.mcp.auth.public_url);
         env_str(
-            "UNRAID_MCP_AUTH_ADMIN_EMAIL",
+            "UNRAID_RMCP_AUTH_ADMIN_EMAIL",
             &mut config.mcp.auth.admin_email,
         );
         env_opt_str(
-            "UNRAID_MCP_GOOGLE_CLIENT_ID",
+            "UNRAID_RMCP_GOOGLE_CLIENT_ID",
             &mut config.mcp.auth.google_client_id,
         );
         env_opt_str(
-            "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
+            "UNRAID_RMCP_GOOGLE_CLIENT_SECRET",
             &mut config.mcp.auth.google_client_secret,
         );
-        if let Ok(v) = std::env::var("UNRAID_MCP_AUTH_MODE") {
+        if let Ok(v) = std::env::var("UNRAID_RMCP_AUTH_MODE") {
             if !v.is_empty() {
                 config.mcp.auth.mode = match v.to_lowercase().as_str() {
                     "oauth" => AuthMode::OAuth,
@@ -252,8 +252,8 @@ impl Config {
             &mut config.unraid.skip_tls_verify,
         )?;
 
-        // Honour UNRAID_MCP_DISABLE_HTTP_AUTH from the existing .env
-        if std::env::var("UNRAID_MCP_DISABLE_HTTP_AUTH")
+        // Honour UNRAID_RMCP_DISABLE_HTTP_AUTH from the existing .env
+        if std::env::var("UNRAID_RMCP_DISABLE_HTTP_AUTH")
             .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
             .unwrap_or(false)
         {

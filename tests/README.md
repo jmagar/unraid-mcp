@@ -1,4 +1,4 @@
-# Tests — unraid-mcp
+# Tests — unraid-rmcp
 
 ## Overview
 
@@ -38,7 +38,7 @@ Tests `--help` and `--version` flags.
 
 **Coverage:**
 - `--help` / `-h` / `help` — prints usage text without error
-- `--version` / `-V` / `version` — prints version string containing `unraid-mcp`
+- `--version` / `-V` / `version` — prints version string containing `unraid-rmcp`
 
 ---
 
@@ -88,11 +88,11 @@ Tests that Axum HTTP extensions (used for auth context propagation) are correctl
 
 ### `tests/test_live.sh`
 
-Shell integration test. **This file is stale** — it references syslog-mcp actions (`syslog search`, `syslog tail`, etc.) and is not applicable to unraid-mcp.
+Shell integration test. **This file is stale** — it references syslog-mcp actions (`syslog search`, `syslog tail`, etc.) and is not applicable to unraid-rmcp.
 
 ### `tests/TEST_COVERAGE.md`
 
-**Stale** — documents the syslog-mcp test suite. Does not apply to unraid-mcp.
+**Stale** — documents the syslog-mcp test suite. Does not apply to unraid-rmcp.
 
 ### `tests/mcporter/test-tools.sh`
 

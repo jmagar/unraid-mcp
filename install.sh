@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# install.sh — One-line installer for unraid-mcp
+# install.sh — One-line installer for unraid-rmcp
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-mcp/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
 #
 # What it does:
 #   1. Runs pre-flight checks (OS/arch, tools, disk space, PATH, port)
@@ -15,9 +15,9 @@
 
 set -euo pipefail
 
-REPO="jmagar/unraid-mcp"
+REPO="jmagar/unraid-rmcp"
 BIN_NAME="runraid"
-SERVICE="unraid-mcp"
+SERVICE="unraid-rmcp"
 INSTALL_DIR="${HOME}/.local/bin"
 DATA_DIR="${HOME}/.unraid"
 
@@ -112,9 +112,9 @@ preflight() {
   fi
 
   # 7. Port 40010 availability (warn only)
-  local port="${UNRAID_MCP_PORT:-40010}"
+  local port="${UNRAID_RMCP_PORT:-40010}"
   if ss -tlnp 2>/dev/null | awk '{print $4}' | grep -q ":${port}$" 2>/dev/null; then
-    echo "  ⚠  Port ${port}: already in use (change UNRAID_MCP_PORT if needed)"
+    echo "  ⚠  Port ${port}: already in use (change UNRAID_RMCP_PORT if needed)"
   else
     echo "  ✓ Port ${port}: available"
   fi
@@ -205,7 +205,7 @@ build_from_source() {
   info "cargo found — building from source (this may take a few minutes)..."
 
   # If we're inside the repo, build here; otherwise clone to tmp
-  if [[ -f "Cargo.toml" ]] && grep -q 'name = "unraid-mcp"' Cargo.toml 2>/dev/null; then
+  if [[ -f "Cargo.toml" ]] && grep -q 'name = "unraid-rmcp"' Cargo.toml 2>/dev/null; then
     cargo build --release --quiet
     mkdir -p "${INSTALL_DIR}"
     cp "target/release/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
@@ -248,7 +248,7 @@ write_starter_env() {
   fi
 
   cat > "${env_target}" << 'EOF'
-# unraid-mcp configuration
+# unraid-rmcp configuration
 # Fill in your Unraid server details before running the server.
 
 # Required: Unraid GraphQL API endpoint
@@ -258,11 +258,11 @@ UNRAID_API_URL=https://your-unraid-host:31337/graphql
 UNRAID_API_KEY=your_unraid_api_key
 
 # MCP server bearer token (generate with: openssl rand -hex 32)
-UNRAID_MCP_TOKEN=your_bearer_token
+UNRAID_RMCP_TOKEN=your_bearer_token
 
 # Optional: bind host and port (default: 0.0.0.0:40010)
-# UNRAID_MCP_HOST=127.0.0.1
-# UNRAID_MCP_PORT=40010
+# UNRAID_RMCP_HOST=127.0.0.1
+# UNRAID_RMCP_PORT=40010
 
 # Optional: skip TLS verification for self-signed certs (not recommended)
 # UNRAID_API_SKIP_TLS_VERIFY=true
@@ -313,7 +313,7 @@ post_install() {
 # ── Main ──────────────────────────────────────────────────────────────────────
 main() {
   printf '%b%s%b\n' "${C_BOLD}" "$(printf '=%.0s' {1..60})" "${C_RESET}"
-  printf '%b  unraid-mcp installer%b\n' "${C_BOLD}" "${C_RESET}"
+  printf '%b  unraid-rmcp installer%b\n' "${C_BOLD}" "${C_RESET}"
   printf '%b%s%b\n' "${C_BOLD}" "$(printf '=%.0s' {1..60})" "${C_RESET}"
 
   # Run pre-flight first — abort if hard checks fail

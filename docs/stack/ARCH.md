@@ -1,8 +1,8 @@
-# Architecture — unraid-mcp
+# Architecture — unraid-rmcp
 
 ## Overview
 
-`unraid-mcp` is a thin GraphQL proxy. It exposes 24 read-only data actions (plus a `status` observability action and `help`) through the Model Context Protocol and an equivalent CLI. There is no local database, no ingestion pipeline, and no background tasks. All data comes from the Unraid GraphQL API on demand.
+`unraid-rmcp` is a thin GraphQL proxy. It exposes 24 read-only data actions (plus a `status` observability action and `help`) through the Model Context Protocol and an equivalent CLI. There is no local database, no ingestion pipeline, and no background tasks. All data comes from the Unraid GraphQL API on demand.
 
 ```
                       ┌─────────────────────────────────────────┐
@@ -43,7 +43,7 @@
 MCP client (Claude / curl / MCP inspector)
     │  POST /mcp  JSON-RPC 2.0
     ▼
-axum HTTP listener  (bind UNRAID_MCP_HOST:UNRAID_MCP_PORT)
+axum HTTP listener  (bind UNRAID_RMCP_HOST:UNRAID_RMCP_PORT)
     │
     ▼
 lab-auth AuthLayer  (bearer token or OAuth JWT, or no-op on loopback)

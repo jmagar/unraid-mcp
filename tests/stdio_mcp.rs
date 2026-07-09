@@ -20,9 +20,9 @@ async fn stdio_client(
         cmd.arg("mcp")
             .env("UNRAID_API_URL", "http://localhost:1/graphql")
             .env("UNRAID_API_KEY", "test")
-            .env("UNRAID_MCP_NO_AUTH", "true")
+            .env("UNRAID_RMCP_NO_AUTH", "true")
             .env("RUST_LOG", "warn")
-            .env_remove("UNRAID_MCP_TOKEN");
+            .env_remove("UNRAID_RMCP_TOKEN");
     }))
     .stderr(Stdio::piped())
     .spawn()?;

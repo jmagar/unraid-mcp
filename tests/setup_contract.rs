@@ -15,8 +15,8 @@ fn base_command(data_dir: &std::path::Path) -> Command {
         .env("UNRAID_HOME", data_dir)
         .env("UNRAID_API_URL", "https://tower.example/graphql")
         .env("UNRAID_API_KEY", "secret")
-        .env("UNRAID_MCP_PORT", "0")
-        .env("UNRAID_MCP_TOKEN", "mcp-secret");
+        .env("UNRAID_RMCP_PORT", "0")
+        .env("UNRAID_RMCP_TOKEN", "mcp-secret");
     cmd
 }
 
@@ -67,7 +67,7 @@ fn setup_repair_creates_env_file_without_upstream_contact() {
     let env_file = std::fs::read_to_string(missing.join(".env")).unwrap();
     assert!(env_file.contains("UNRAID_API_URL=https://tower.example/graphql"));
     assert!(env_file.contains("UNRAID_API_KEY=secret"));
-    assert!(env_file.contains("UNRAID_MCP_TOKEN=mcp-secret"));
+    assert!(env_file.contains("UNRAID_RMCP_TOKEN=mcp-secret"));
 }
 
 /// The plugin hook config calls the wrapper script, which degrades gracefully
@@ -100,7 +100,7 @@ fn plugin_hook_maps_plugin_options_into_env() {
         .env("HOME", dir.path())
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("UNRAID_HOME", dir.path())
-        .env("UNRAID_MCP_PORT", "0")
+        .env("UNRAID_RMCP_PORT", "0")
         // Supply credentials only via plugin options — not UNRAID_* directly.
         .env(
             "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL",

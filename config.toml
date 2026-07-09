@@ -1,4 +1,4 @@
-# unraid-mcp configuration
+# unraid-rmcp configuration
 # Secrets and URLs belong in .env — not here.
 # All non-secret settings live here. Env vars override values below.
 
@@ -11,7 +11,7 @@ skip_tls_verify = false
 [mcp]
 host = "0.0.0.0"
 port = 40010
-server_name = "unraid-mcp"
+server_name = "unraid-rmcp"
 # no_auth = false  # set true only when fronted by a gateway that enforces auth
 # allowed_hosts = ["unraid.example.com"]
 # allowed_origins = ["https://unraid.example.com"]

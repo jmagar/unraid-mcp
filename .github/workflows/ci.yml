@@ -124,3 +124,18 @@ jobs:
             exit 1
           fi
           echo "OK — no tracked .env files."
+
+  npm:
+    name: npm launcher
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test npm launcher
+        run: npm test --prefix packages/unraid-rmcp
+      - name: Check npm launcher syntax
+        run: npm run check --prefix packages/unraid-rmcp
+      - name: Dry-run npm package
+        run: npm pack --dry-run --json ./packages/unraid-rmcp

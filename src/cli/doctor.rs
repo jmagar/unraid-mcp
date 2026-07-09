@@ -310,7 +310,7 @@ fn check_port_available(port: u16) -> DoctorCheck {
             category: "mcp_server",
             name: format!("MCP port {port}"),
             ok: true, // warn-only: port in use doesn't prevent running
-            value: Some("already in use (change UNRAID_MCP_PORT if needed)".to_string()),
+            value: Some("already in use (change UNRAID_RMCP_PORT if needed)".to_string()),
             hint: None,
             latency_ms: None,
             warn_only: true,
@@ -330,8 +330,8 @@ fn check_auth_config(config: &Config) -> DoctorCheck {
                 format!("no-auth on non-loopback {host} — SECURITY RISK"),
                 false,
                 Some(
-                    "Set UNRAID_MCP_TOKEN or use auth_mode=oauth, \
-                     or bind to 127.0.0.1 (UNRAID_MCP_HOST=127.0.0.1)"
+                    "Set UNRAID_RMCP_TOKEN or use auth_mode=oauth, \
+                     or bind to 127.0.0.1 (UNRAID_RMCP_HOST=127.0.0.1)"
                         .to_string(),
                 ),
             )
@@ -344,7 +344,7 @@ fn check_auth_config(config: &Config) -> DoctorCheck {
         (
             "bearer (no token — MCP endpoint is unprotected)".to_string(),
             false,
-            Some("Set UNRAID_MCP_TOKEN=<token> in your .env".to_string()),
+            Some("Set UNRAID_RMCP_TOKEN=<token> in your .env".to_string()),
         )
     };
 
@@ -364,7 +364,7 @@ fn check_auth_config(config: &Config) -> DoctorCheck {
 fn print_doctor_report(checks: &[DoctorCheck]) {
     let version = env!("CARGO_PKG_VERSION");
     eprintln!();
-    eprintln!("unraid-mcp v{version} — environment check");
+    eprintln!("unraid-rmcp v{version} — environment check");
     eprintln!();
 
     let categories = [

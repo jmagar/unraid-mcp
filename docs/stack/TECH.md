@@ -1,4 +1,4 @@
-# Technology Choices — unraid-mcp
+# Technology Choices — unraid-rmcp
 
 Technology stack reference and crate selection rationale.
 
@@ -68,7 +68,7 @@ Used for timestamp formatting in CLI output. `features = ["serde"]` for config s
 
 ## URL parsing: url
 
-Used in `mcp/rmcp_server.rs` to parse `UNRAID_MCP_PUBLIC_URL` for allowed host/origin computation.
+Used in `mcp/rmcp_server.rs` to parse `UNRAID_RMCP_PUBLIC_URL` for allowed host/origin computation.
 
 ## Logging: tracing + tracing-subscriber
 
@@ -86,7 +86,7 @@ Structured, span-based logging:
 
 ## CORS: tower-http
 
-`CorsLayer` in `routes.rs` allows `POST` and `GET` from configured origins. Allowed origins include loopback by default plus any `UNRAID_MCP_ALLOWED_ORIGINS` values and the public URL origin.
+`CorsLayer` in `routes.rs` allows `POST` and `GET` from configured origins. Allowed origins include loopback by default plus any `UNRAID_RMCP_ALLOWED_ORIGINS` values and the public URL origin.
 
 ## Development dependencies
 

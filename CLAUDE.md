@@ -1,8 +1,8 @@
-# unraid-mcp — Claude Code instructions
+# unraid-rmcp — Claude Code instructions
 
 ## What this project is
 
-`unraid-mcp` is a Rust binary (`runraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It covers the **full GraphQL surface** — all read queries **and** mutations (write operations). Read actions require the `unraid:read` scope; mutating actions require `unraid:admin` (see the scope model below).
+`unraid-rmcp` is a Rust binary (`runraid`) that bridges Claude to the Unraid server GraphQL API via the Model Context Protocol. It covers the **full GraphQL surface** — all read queries **and** mutations (write operations). Read actions require the `unraid:read` scope; mutating actions require `unraid:admin` (see the scope model below).
 
 ## Module map
 
@@ -51,18 +51,18 @@
 UNRAID_API_URL                Unraid GraphQL endpoint (required)
 UNRAID_API_KEY                API key for x-api-key header (required)
 UNRAID_API_SKIP_TLS_VERIFY    Skip TLS cert check (default false)
-UNRAID_MCP_HOST               Bind host (default 0.0.0.0)
-UNRAID_MCP_PORT               Bind port (default 40010)
-UNRAID_MCP_TOKEN              Static bearer token for /mcp
-UNRAID_MCP_DISABLE_HTTP_AUTH  Disable MCP auth entirely (1/true/yes)
-UNRAID_MCP_NO_AUTH            Alias that disables MCP auth entirely (1/true/yes)
-UNRAID_MCP_ALLOWED_HOSTS      Extra comma-separated Host header values
-UNRAID_MCP_ALLOWED_ORIGINS    Extra comma-separated CORS origins
-UNRAID_MCP_PUBLIC_URL         Public URL for OAuth metadata
-UNRAID_MCP_AUTH_MODE          Auth mode: `bearer` (default) or `oauth`
-UNRAID_MCP_AUTH_ADMIN_EMAIL   Admin email for OAuth policy
-UNRAID_MCP_GOOGLE_CLIENT_ID       Google OAuth client ID
-UNRAID_MCP_GOOGLE_CLIENT_SECRET   Google OAuth client secret
+UNRAID_RMCP_HOST               Bind host (default 0.0.0.0)
+UNRAID_RMCP_PORT               Bind port (default 40010)
+UNRAID_RMCP_TOKEN              Static bearer token for /mcp
+UNRAID_RMCP_DISABLE_HTTP_AUTH  Disable MCP auth entirely (1/true/yes)
+UNRAID_RMCP_NO_AUTH            Alias that disables MCP auth entirely (1/true/yes)
+UNRAID_RMCP_ALLOWED_HOSTS      Extra comma-separated Host header values
+UNRAID_RMCP_ALLOWED_ORIGINS    Extra comma-separated CORS origins
+UNRAID_RMCP_PUBLIC_URL         Public URL for OAuth metadata
+UNRAID_RMCP_AUTH_MODE          Auth mode: `bearer` (default) or `oauth`
+UNRAID_RMCP_AUTH_ADMIN_EMAIL   Admin email for OAuth policy
+UNRAID_RMCP_GOOGLE_CLIENT_ID       Google OAuth client ID
+UNRAID_RMCP_GOOGLE_CLIENT_SECRET   Google OAuth client secret
 UNRAID_NOAUTH                 Permits a NON-loopback bind without auth being mounted.
                               This is NOT the same as the two flags above — it does
                               NOT disable auth; it only lifts main.rs's safety check

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# refresh-docs.sh — Refresh local reference documentation for unraid-mcp
+# refresh-docs.sh — Refresh local reference documentation for unraid-rmcp
 #
 # Crawls the Unraid API/docs sites and packs relevant GitHub repos
 # into docs/references/ for use as AI context during development.
@@ -153,7 +153,7 @@ write_index() {
   [[ -d "$REF_DIR/mcp/docs"   ]] && mcp_docs="$(find "$REF_DIR/mcp/docs"   -type f | wc -l | tr -d ' ')"
 
   cat > "$REF_DIR/INDEX.md" <<EOF
-# Reference Index — unraid-mcp
+# Reference Index — unraid-rmcp
 
 | Path | Contents | Source |
 | --- | --- | --- |
@@ -185,7 +185,7 @@ ensure_changes_file() {
   [[ -f "$CHANGES_FILE" ]] && return 0
   cat > "$CHANGES_FILE" <<EOF
 ---
-title: Reference Refresh Change Log — unraid-mcp
+title: Reference Refresh Change Log — unraid-rmcp
 generated_by: scripts/refresh-docs.sh
 created_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 ---

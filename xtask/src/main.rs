@@ -1,4 +1,4 @@
-//! xtask — project automation for unraid-mcp
+//! xtask — project automation for unraid-rmcp
 //!
 //! Usage: cargo xtask <command>
 //!
@@ -110,7 +110,7 @@ fn check_env() -> anyhow::Result<()> {
     ];
 
     let optional = [
-        ("UNRAID_MCP_TOKEN", "Bearer token for MCP auth"),
+        ("UNRAID_RMCP_TOKEN", "Bearer token for MCP auth"),
         ("RUST_LOG", "Log filter (default: info)"),
     ];
 

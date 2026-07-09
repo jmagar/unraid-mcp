@@ -1,4 +1,4 @@
-# gitleaks config for unraid-mcp.
+# gitleaks config for unraid-rmcp.
 #
 # We keep the full upstream ruleset (useDefault = true) and only carve out the
 # tests/ tree. Everything under tests/ is offline scaffolding with SYNTHETIC

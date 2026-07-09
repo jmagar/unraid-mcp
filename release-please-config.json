@@ -61,8 +61,11 @@
   ],
   "packages": {
     ".": {
-      "package-name": "unraid-mcp",
-      "changelog-path": "CHANGELOG.md"
+      "package-name": "unraid-rmcp",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "packages/unraid-rmcp/package.json"
+      ]
     }
   },
   "always-update": true

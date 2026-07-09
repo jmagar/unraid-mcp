@@ -87,35 +87,35 @@ pub mod testing {
 
     pub async fn build_auth_state(data_dir: &std::path::Path) -> lab_auth::state::AuthState {
         let vars: Vec<(String, String)> = vec![
-            ("UNRAID_MCP_AUTH_MODE".into(), "oauth".into()),
+            ("UNRAID_RMCP_AUTH_MODE".into(), "oauth".into()),
             (
-                "UNRAID_MCP_PUBLIC_URL".into(),
+                "UNRAID_RMCP_PUBLIC_URL".into(),
                 "https://unraid.example.com".into(),
             ),
             (
-                "UNRAID_MCP_GOOGLE_CLIENT_ID".into(),
+                "UNRAID_RMCP_GOOGLE_CLIENT_ID".into(),
                 "test-client-id".into(),
             ),
             (
-                "UNRAID_MCP_GOOGLE_CLIENT_SECRET".into(),
+                "UNRAID_RMCP_GOOGLE_CLIENT_SECRET".into(),
                 "test-client-secret".into(),
             ),
             (
-                "UNRAID_MCP_AUTH_ADMIN_EMAIL".into(),
+                "UNRAID_RMCP_AUTH_ADMIN_EMAIL".into(),
                 "admin@example.com".into(),
             ),
             (
-                "UNRAID_MCP_AUTH_SQLITE_PATH".into(),
+                "UNRAID_RMCP_AUTH_SQLITE_PATH".into(),
                 data_dir.join("auth.db").to_str().unwrap().into(),
             ),
             (
-                "UNRAID_MCP_AUTH_KEY_PATH".into(),
+                "UNRAID_RMCP_AUTH_KEY_PATH".into(),
                 data_dir.join("auth-jwt.pem").to_str().unwrap().into(),
             ),
         ];
 
         let auth_config = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("UNRAID_MCP")
+            .env_prefix("UNRAID_RMCP")
             .session_cookie_name("unraid_mcp_session")
             .scopes_supported(vec!["unraid:read".into(), "unraid:admin".into()])
             .default_scope("unraid:read")

@@ -85,12 +85,12 @@ gen-token:
 repair:
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "==> Stopping unraid-mcp..."
-    if systemctl --user is-active --quiet unraid-mcp.service 2>/dev/null; then
-      systemctl --user stop unraid-mcp.service
+    echo "==> Stopping unraid-rmcp..."
+    if systemctl --user is-active --quiet unraid-rmcp.service 2>/dev/null; then
+      systemctl --user stop unraid-rmcp.service
       echo "    stopped systemd unit"
-    elif docker ps --filter 'name=^/unraid-mcp$' --quiet 2>/dev/null | grep -q .; then
-      docker stop unraid-mcp 2>/dev/null || true
+    elif docker ps --filter 'name=^/unraid-rmcp$' --quiet 2>/dev/null | grep -q .; then
+      docker stop unraid-rmcp 2>/dev/null || true
       echo "    stopped docker container"
     else
       echo "    no running instance found"
@@ -98,9 +98,9 @@ repair:
     echo "==> Rebuilding..."
     cargo build --release
     echo "==> Restarting..."
-    if systemctl --user list-unit-files unraid-mcp.service 2>/dev/null | grep -q unraid-mcp; then
+    if systemctl --user list-unit-files unraid-rmcp.service 2>/dev/null | grep -q unraid-rmcp; then
       install -m 755 target/release/runraid "${HOME}/.local/bin/runraid"
-      systemctl --user start unraid-mcp.service
+      systemctl --user start unraid-rmcp.service
       echo "    started systemd unit"
     elif [ -f docker-compose.yml ]; then
       docker compose build
@@ -122,7 +122,7 @@ validate-skills:
 validate-plugin: validate-skills
 
 runtime-current:
-    bash scripts/check-runtime-current.sh --unit unraid-mcp.service --service unraid-mcp --expected-binary target/release/runraid
+    bash scripts/check-runtime-current.sh --unit unraid-rmcp.service --service unraid-rmcp --expected-binary target/release/runraid
 
 # Generate a standalone CLI for this server (requires running server; HTTP-only transport)
 generate-cli:
@@ -132,7 +132,7 @@ generate-cli:
     echo "⚠  Generated CLI embeds your token — do not commit or share"
     mkdir -p dist dist/.cache
     current_hash=$(timeout 10 curl -sf \
-      -H "Authorization: Bearer ${UNRAID_MCP_TOKEN:-}" \
+      -H "Authorization: Bearer ${UNRAID_RMCP_TOKEN:-}" \
       -H "Accept: application/json, text/event-stream" \
       http://localhost:40010/mcp/tools/list 2>/dev/null | sha256sum | cut -d' ' -f1 || echo "nohash")
     cache_file="dist/.cache/unraid-cli.schema_hash"
@@ -142,7 +142,7 @@ generate-cli:
     fi
     timeout 30 mcporter generate-cli \
       --command http://localhost:40010/mcp \
-      --header "Authorization: Bearer ${UNRAID_MCP_TOKEN:-}" \
+      --header "Authorization: Bearer ${UNRAID_RMCP_TOKEN:-}" \
       --name unraid-cli \
       --output dist/unraid-cli
     printf '%s' "$current_hash" > "$cache_file"

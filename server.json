@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "tv.tootie/unraid-mcp",
+  "name": "tv.tootie/unraid-rmcp",
   "title": "Unraid MCP",
   "description": "Read-only MCP server for Unraid homelab servers — query array health, Docker containers, VMs, metrics, and more via the Unraid GraphQL API.",
   "repository": {
-    "url": "https://github.com/jmagar/unrust",
+    "url": "https://github.com/jmagar/unraid-rmcp",
     "source": "github"
   },
   "version": "0.1.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/unrust:0.1.1",
+      "identifier": "ghcr.io/jmagar/unraid-rmcp:0.1.1",
       "version": "0.1.1",
       "environmentVariables": [
         {
@@ -27,7 +27,7 @@
           "isSecret": true
         },
         {
-          "name": "UNRAID_MCP_TOKEN",
+          "name": "UNRAID_RMCP_TOKEN",
           "description": "Bearer token for authenticating MCP endpoint requests.",
           "isRequired": false,
           "isSecret": true

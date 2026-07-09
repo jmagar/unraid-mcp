@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# test-tools.sh — Integration smoke-test for unraid-mcp MCP server tools
+# test-tools.sh — Integration smoke-test for unraid-rmcp MCP server tools
 #
 # Exercises all non-destructive actions of the `unraid` MCP tool and validates
 # that each response contains real Unraid data, not just an empty response.
@@ -14,8 +14,8 @@
 # Resource tested: unraid://schema/mcp-tool
 #
 # Credentials are sourced from:
-#   1. ~/.claude-homelab/.env  (UNRAID_MCP_HOST, UNRAID_MCP_PORT, UNRAID_MCP_TOKEN)
-#   2. .env in repo root       (UNRAID_MCP_TOKEN, UNRAID_MCP_PORT)
+#   1. ~/.claude-homelab/.env  (UNRAID_RMCP_HOST, UNRAID_RMCP_PORT, UNRAID_RMCP_TOKEN)
+#   2. .env in repo root       (UNRAID_RMCP_TOKEN, UNRAID_RMCP_PORT)
 #
 # Usage:
 #   ./tests/mcporter/test-tools.sh [--timeout-ms N] [--parallel] [--verbose]
@@ -81,18 +81,18 @@ load_env() {
   fi
   if [[ -f "${REPO_ENV}" ]]; then
     local repo_token repo_port
-    repo_token="$(awk -F= '$1 == "UNRAID_MCP_TOKEN" {print substr($0, index($0,"=")+1); exit}' "${REPO_ENV}" 2>/dev/null || true)"
-    repo_port="$(awk -F= '$1 == "UNRAID_MCP_PORT" {print substr($0, index($0,"=")+1); exit}' "${REPO_ENV}" 2>/dev/null || true)"
-    [[ -z "${UNRAID_MCP_TOKEN:-}" && -n "${repo_token}" ]] && UNRAID_MCP_TOKEN="${repo_token}"
-    [[ -z "${UNRAID_MCP_PORT:-}"  && -n "${repo_port}"  ]] && UNRAID_MCP_PORT="${repo_port}"
+    repo_token="$(awk -F= '$1 == "UNRAID_RMCP_TOKEN" {print substr($0, index($0,"=")+1); exit}' "${REPO_ENV}" 2>/dev/null || true)"
+    repo_port="$(awk -F= '$1 == "UNRAID_RMCP_PORT" {print substr($0, index($0,"=")+1); exit}' "${REPO_ENV}" 2>/dev/null || true)"
+    [[ -z "${UNRAID_RMCP_TOKEN:-}" && -n "${repo_token}" ]] && UNRAID_RMCP_TOKEN="${repo_token}"
+    [[ -z "${UNRAID_RMCP_PORT:-}"  && -n "${repo_port}"  ]] && UNRAID_RMCP_PORT="${repo_port}"
   fi
 
-  local host="${UNRAID_MCP_HOST:-localhost}"
+  local host="${UNRAID_RMCP_HOST:-localhost}"
   [[ "${host}" == "0.0.0.0" ]] && host="localhost"
-  MCP_URL="http://${host}:${UNRAID_MCP_PORT:-6970}/mcp"
+  MCP_URL="http://${host}:${UNRAID_RMCP_PORT:-6970}/mcp"
 
   MCPORTER_HEADER_ARGS=()
-  [[ -n "${UNRAID_MCP_TOKEN:-}" ]] && MCPORTER_HEADER_ARGS+=(--header "Authorization: Bearer ${UNRAID_MCP_TOKEN}")
+  [[ -n "${UNRAID_RMCP_TOKEN:-}" ]] && MCPORTER_HEADER_ARGS+=(--header "Authorization: Bearer ${UNRAID_RMCP_TOKEN}")
 
   log_info "MCP URL: ${MCP_URL}"
   [[ ${#MCPORTER_HEADER_ARGS[@]} -gt 0 ]] && log_info "Auth: Bearer token configured" || log_info "Auth: none"
@@ -117,7 +117,7 @@ smoke_test_server() {
 
   if [[ "${health_status}" != "ok" ]]; then
     log_error "Health endpoint at ${base_url}/health did not return status=ok (got: '${health_status}')"
-    log_error "Is unraid-mcp running?  curl ${base_url}/health"
+    log_error "Is unraid-rmcp running?  curl ${base_url}/health"
     return 2
   fi
   log_info "Health OK"
@@ -207,10 +207,10 @@ skip_test() {
 # ── Test suites ───────────────────────────────────────────────────────────────
 
 suite_auth() {
-  if [[ -z "${UNRAID_MCP_TOKEN:-}" ]]; then
+  if [[ -z "${UNRAID_RMCP_TOKEN:-}" ]]; then
     printf '\n%b== auth (skipped — token unset) ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
-    skip_test "auth: unauthenticated request returns 401" "UNRAID_MCP_TOKEN unset"
-    skip_test "auth: bad token returns 401"               "UNRAID_MCP_TOKEN unset"
+    skip_test "auth: unauthenticated request returns 401" "UNRAID_RMCP_TOKEN unset"
+    skip_test "auth: bad token returns 401"               "UNRAID_RMCP_TOKEN unset"
     return
   fi
   printf '\n%b== auth enforcement ==%b\n' "${C_BOLD}" "${C_RESET}" | tee -a "${LOG_FILE}"
@@ -441,7 +441,7 @@ main() {
   load_env
 
   printf '%b%s%b\n' "${C_BOLD}" "$(printf '=%.0s' {1..65})" "${C_RESET}"
-  printf '%b  unraid-mcp integration smoke-test%b\n' "${C_BOLD}" "${C_RESET}"
+  printf '%b  unraid-rmcp integration smoke-test%b\n' "${C_BOLD}" "${C_RESET}"
   printf '%b  Project:  %s%b\n' "${C_BOLD}" "${PROJECT_DIR}" "${C_RESET}"
   printf '%b  MCP URL:  %s%b\n' "${C_BOLD}" "${MCP_URL}" "${C_RESET}"
   printf '%b  Timeout:  %dms/call | Parallel: %s%b\n' "${C_BOLD}" "${CALL_TIMEOUT_MS}" "${USE_PARALLEL}" "${C_RESET}"

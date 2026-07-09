@@ -4,7 +4,7 @@
   "author": {
     "name": "jmagar"
   },
-  "repository": "https://github.com/jmagar/unraid-mcp",
+  "repository": "https://github.com/jmagar/unraid-rmcp",
   "license": "MIT",
   "keywords": [
     "unraid",
@@ -17,21 +17,21 @@
     "server_url": {
       "type": "string",
       "title": "Server URL",
-      "description": "Base URL the MCP client connects to. Keep the default http://localhost:40010 when Claude Code runs on the same machine as the unraid-mcp server. Change to e.g. http://nas:40010 or https://unraid.example.com when connecting to a remote instance. Do NOT append /mcp — the plugin adds it.",
+      "description": "Base URL the MCP client connects to. Keep the default http://localhost:40010 when Claude Code runs on the same machine as the unraid-rmcp server. Change to e.g. http://nas:40010 or https://unraid.example.com when connecting to a remote instance. Do NOT append /mcp — the plugin adds it.",
       "required": true,
       "default": "http://localhost:40010"
     },
     "api_token": {
       "type": "string",
       "title": "API token",
-      "description": "Bearer token for MCP HTTP authentication (Authorization: Bearer <token>). Must match UNRAID_MCP_TOKEN on the server. Generate one with: openssl rand -hex 32",
+      "description": "Bearer token for MCP HTTP authentication (Authorization: Bearer <token>). Must match UNRAID_RMCP_TOKEN on the server. Generate one with: openssl rand -hex 32",
       "sensitive": true,
       "required": false
     },
     "no_auth": {
       "type": "boolean",
       "title": "Disable service auth",
-      "description": "Run unraid-mcp without MCP auth. Use only when an upstream gateway enforces auth before traffic reaches this service.",
+      "description": "Run unraid-rmcp without MCP auth. Use only when an upstream gateway enforces auth before traffic reaches this service.",
       "required": true,
       "default": false
     },

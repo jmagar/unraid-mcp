@@ -1,6 +1,38 @@
-# unraid-mcp
+# unraid-rmcp
 
 Rust MCP server that bridges Claude (and any MCP client) to the Unraid server GraphQL API. Exposes 24 read-only data actions covering array health, Docker, VMs, shares, logs, metrics, UPS, and more, plus a `status` observability action and a `help` action.
+
+
+## Rust MCP naming pattern
+
+This repo follows the Rust MCP server naming convention:
+
+- Repo: `unraid-rmcp`
+- CLI alias: `runraid`
+- npm package: `unraid-rmcp`
+
+## npm / npx
+
+Run the stdio MCP server or CLI without a manual binary install:
+
+```bash
+npx -y unraid-rmcp --help
+```
+
+MCP clients can use the same launcher:
+
+```json
+{
+  "mcpServers": {
+    "unraid-rmcp": {
+      "command": "npx",
+      "args": ["-y", "unraid-rmcp"]
+    }
+  }
+}
+```
+
+The npm package downloads the `runraid` binary from GitHub Releases during `postinstall` and keeps the release tag aligned with `packages/unraid-rmcp/package.json`.
 
 ## Architecture
 
@@ -38,14 +70,14 @@ Rust MCP server that bridges Claude (and any MCP client) to the Unraid server Gr
 ### Run
 
 ```bash
-git clone https://github.com/jmagar/unraid-mcp
-cd unraid-mcp
+git clone https://github.com/jmagar/unraid-rmcp
+cd unraid-rmcp
 
 # Set required environment variables
 export UNRAID_API_URL="https://10-1-0-2.<hash>.myunraid.net:31337/graphql"
 export UNRAID_API_KEY="your-api-key-here"
-export UNRAID_MCP_PORT=40010
-export UNRAID_MCP_DISABLE_HTTP_AUTH=true
+export UNRAID_RMCP_PORT=40010
+export UNRAID_RMCP_DISABLE_HTTP_AUTH=true
 
 # Or copy .env and edit it
 cp .env .env.local
@@ -265,14 +297,14 @@ Configuration loads from three sources, highest priority first:
 | `UNRAID_API_URL` | **yes** | — | Unraid GraphQL endpoint |
 | `UNRAID_API_KEY` | **yes** | — | API key sent as `x-api-key` header |
 | `UNRAID_API_SKIP_TLS_VERIFY` | no | `false` | Skip TLS certificate check |
-| `UNRAID_MCP_HOST` | no | `0.0.0.0` | Bind host |
-| `UNRAID_MCP_PORT` | no | `40010` | Bind port |
-| `UNRAID_MCP_TOKEN` | no | — | Static bearer token for `/mcp` |
-| `UNRAID_MCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (safe on loopback or trusted networks) |
-| `UNRAID_MCP_NO_AUTH` | no | `false` | Alias for disabling auth |
-| `UNRAID_MCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
-| `UNRAID_MCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
-| `UNRAID_MCP_PUBLIC_URL` | no | — | Public URL for OAuth metadata |
+| `UNRAID_RMCP_HOST` | no | `0.0.0.0` | Bind host |
+| `UNRAID_RMCP_PORT` | no | `40010` | Bind port |
+| `UNRAID_RMCP_TOKEN` | no | — | Static bearer token for `/mcp` |
+| `UNRAID_RMCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (safe on loopback or trusted networks) |
+| `UNRAID_RMCP_NO_AUTH` | no | `false` | Alias for disabling auth |
+| `UNRAID_RMCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
+| `UNRAID_RMCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
+| `UNRAID_RMCP_PUBLIC_URL` | no | — | Public URL for OAuth metadata |
 | `RUST_LOG` | no | `info` | Log filter (e.g. `debug`, `warn`) |
 
 ### config.toml
@@ -286,7 +318,7 @@ api_key  = "your-api-key"
 [mcp]
 host = "0.0.0.0"
 port = 40010
-server_name = "unraid-mcp"
+server_name = "unraid-rmcp"
 # allowed_hosts = ["unraid.example.com"]
 # allowed_origins = ["https://unraid.example.com"]
 ```
@@ -295,11 +327,11 @@ server_name = "unraid-mcp"
 
 Three auth modes are supported:
 
-**No auth (loopback or trusted network):** Set `UNRAID_MCP_DISABLE_HTTP_AUTH=true`. Auth is also automatically disabled when the bind host starts with `127.`.
+**No auth (loopback or trusted network):** Set `UNRAID_RMCP_DISABLE_HTTP_AUTH=true`. Auth is also automatically disabled when the bind host starts with `127.`.
 
-**Static bearer token:** Set `UNRAID_MCP_TOKEN=<token>`. All `/mcp` requests must include `Authorization: Bearer <token>`. `/health` remains unauthenticated.
+**Static bearer token:** Set `UNRAID_RMCP_TOKEN=<token>`. All `/mcp` requests must include `Authorization: Bearer <token>`. `/health` remains unauthenticated.
 
-**OAuth (Google):** Set `UNRAID_MCP_PUBLIC_URL`, `UNRAID_MCP_GOOGLE_CLIENT_ID`, `UNRAID_MCP_GOOGLE_CLIENT_SECRET`, and `UNRAID_MCP_AUTH_ADMIN_EMAIL`. The server issues RS256 JWTs after Google login. Scopes: `unraid:read`, `unraid:admin`.
+**OAuth (Google):** Set `UNRAID_RMCP_PUBLIC_URL`, `UNRAID_RMCP_GOOGLE_CLIENT_ID`, `UNRAID_RMCP_GOOGLE_CLIENT_SECRET`, and `UNRAID_RMCP_AUTH_ADMIN_EMAIL`. The server issues RS256 JWTs after Google login. Scopes: `unraid:read`, `unraid:admin`.
 
 ## Development
 
@@ -319,7 +351,7 @@ just gen-token # openssl rand -hex 32
 ```json
 {
   "mcpServers": {
-    "unraid-mcp": {
+    "unraid-rmcp": {
       "command": "/path/to/runraid",
       "args": ["mcp"],
       "env": {

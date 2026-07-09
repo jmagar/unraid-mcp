@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Renamed the binary `unraid` → `runraid` (package remains `unraid-mcp`; env vars and
+- Renamed the binary `unraid` → `runraid` (package remains `unraid-rmcp`; env vars and
   the `~/.unraid` data dir are unchanged — only the executable name moved).
 - Default MCP port is now **40010** (`config.rs` `default_mcp_port()` and `config.toml`
   agree). Earlier docs referencing 3100/6970 were incorrect.
@@ -91,13 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial release of unraid-mcp
+- Initial release of unraid-rmcp
 - 24 read-only MCP actions via the Unraid GraphQL API
 - RMCP Streamable HTTP transport on port 6970
 - stdio MCP transport (`unraid mcp`)
 - CLI with human-readable and `--json` output for all 24 actions
 - Static bearer token auth and OAuth (Google) auth via lab-auth
-- `LoopbackDev` auth bypass when bound to 127.x or `UNRAID_MCP_DISABLE_HTTP_AUTH=true`
+- `LoopbackDev` auth bypass when bound to 127.x or `UNRAID_RMCP_DISABLE_HTTP_AUTH=true`
 - `unraid://schema/mcp-tool` MCP resource exposing the tool JSON Schema
 - `server_summary` MCP prompt
 - Integration tests: auth modes, CLI help, OAuth flow, RMCP compat, stdio transport

@@ -2,10 +2,10 @@ name: unrust
 
 # Local development stack. Builds from this checkout.
 services:
-  unraid-mcp:
+  unraid-rmcp:
     extends:
       file: docker-compose.prod.yml
-      service: unraid-mcp
+      service: unraid-rmcp
     image: unrust:dev
     pull_policy: build
     build:

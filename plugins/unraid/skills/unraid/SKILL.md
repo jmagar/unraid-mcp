@@ -237,7 +237,7 @@ The path must be exact (e.g., `/var/log/syslog`).
 
 ### Auth modes
 - MCP server running on loopback (`127.x.x.x`) automatically uses no-auth mode.
-- HTTP mode requires either a bearer token (`UNRAID_MCP_TOKEN`) or OAuth.
+- HTTP mode requires either a bearer token (`UNRAID_RMCP_TOKEN`) or OAuth.
 - Required scope for all data actions: `unraid:read` (or `unraid:admin` which satisfies it).
 - `help` action has no scope requirement.
 

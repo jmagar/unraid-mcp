@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
             return Ok(());
         }
         [f] if matches!(f.as_str(), "--version" | "-V" | "version") => {
-            println!("unraid-mcp {}", env!("CARGO_PKG_VERSION"));
+            println!("unraid-rmcp {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         _ => {}
@@ -54,7 +54,7 @@ async fn main() -> Result<()> {
             .ok();
     } else {
         let data_dir = unraid_mcp::config::default_data_dir();
-        if let Err(e) = unraid_mcp::logging::init_logging(&data_dir, "unraid-mcp") {
+        if let Err(e) = unraid_mcp::logging::init_logging(&data_dir, "unraid-rmcp") {
             // Fall back to simple stderr logging if file init fails.
             eprintln!("Warning: could not init file logging: {e}");
             tracing_subscriber::fmt()
@@ -113,8 +113,8 @@ fn validate_bind_security(config: &Config) -> Result<()> {
                 "Security error: binding to non-loopback address '{}' with auth disabled.\n\
                  This exposes the MCP endpoint without any authentication.\n\
                  Options:\n\
-                 1. Set UNRAID_MCP_HOST=127.0.0.1 to restrict to local connections\n\
-                 2. Remove no_auth=true / UNRAID_MCP_DISABLE_HTTP_AUTH from your config\n\
+                 1. Set UNRAID_RMCP_HOST=127.0.0.1 to restrict to local connections\n\
+                 2. Remove no_auth=true / UNRAID_RMCP_DISABLE_HTTP_AUTH from your config\n\
                  3. Set UNRAID_NOAUTH=true to explicitly acknowledge this risk",
                 host
             );
@@ -136,7 +136,7 @@ async fn serve_mcp() -> Result<()> {
         bind = %state.config.bind_addr(),
         server_name = %state.config.server_name,
         auth = ?state.auth_policy,
-        "unraid-mcp starting"
+        "unraid-rmcp starting"
     );
 
     let bind = state.config.bind_addr();
@@ -198,7 +198,7 @@ async fn build_auth_policy(config: &Config) -> Result<AuthPolicy> {
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
         let auth_cfg = lab_auth::config::AuthConfigBuilder::new()
-            .env_prefix("UNRAID_MCP")
+            .env_prefix("UNRAID_RMCP")
             .session_cookie_name("unraid_mcp_session")
             .scopes_supported(vec!["unraid:read".into(), "unraid:admin".into()])
             .default_scope("unraid:read")
@@ -269,9 +269,9 @@ Environment:
   UNRAID_API_URL                  Unraid GraphQL endpoint (required)
   UNRAID_API_KEY                  Unraid API key (required)
   UNRAID_API_SKIP_TLS_VERIFY      Skip TLS cert check
-  UNRAID_MCP_HOST                 Bind host (default 0.0.0.0)
-  UNRAID_MCP_PORT                 Bind port (default 40010)
-  UNRAID_MCP_DISABLE_HTTP_AUTH    Disable MCP auth
+  UNRAID_RMCP_HOST                 Bind host (default 0.0.0.0)
+  UNRAID_RMCP_PORT                 Bind port (default 40010)
+  UNRAID_RMCP_DISABLE_HTTP_AUTH    Disable MCP auth
   RUST_LOG                        Log filter"
     );
 }

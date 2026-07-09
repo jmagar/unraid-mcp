@@ -1,5 +1,5 @@
 #!/bin/sh
-# entrypoint.sh — Docker container entrypoint for unraid-mcp
+# entrypoint.sh — Docker container entrypoint for unraid-rmcp
 # Runs as root, then drops to service user (1000:1000).
 # Defense in numbers: validate every assumption before exec'ing the service.
 set -e
@@ -59,8 +59,8 @@ echo "[entrypoint] Binary:   ${BINARY}"
 echo "[entrypoint] Data dir: ${DATA_DIR}"
 echo "[entrypoint] User:     1000:1000"
 # Log non-secret config values only
-[ -n "${UNRAID_MCP_PORT:-}" ]  && echo "[entrypoint] MCP port: ${UNRAID_MCP_PORT}"
-[ -n "${UNRAID_MCP_HOST:-}" ]  && echo "[entrypoint] MCP host: ${UNRAID_MCP_HOST}"
+[ -n "${UNRAID_RMCP_PORT:-}" ]  && echo "[entrypoint] MCP port: ${UNRAID_RMCP_PORT}"
+[ -n "${UNRAID_RMCP_HOST:-}" ]  && echo "[entrypoint] MCP host: ${UNRAID_RMCP_HOST}"
 # Confirm required vars are set without printing their values
 echo "[entrypoint] UNRAID_API_URL: set"
 echo "[entrypoint] UNRAID_API_KEY: set"

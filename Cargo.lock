@@ -3603,7 +3603,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
-name = "unraid-mcp"
+name = "unraid-rmcp"
 version = "0.2.0"
 dependencies = [
  "anyhow",
@@ -3627,7 +3627,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
- "unraid-mcp",
+ "unraid-rmcp",
  "url",
  "wiremock",
 ]

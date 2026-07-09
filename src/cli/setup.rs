@@ -77,28 +77,28 @@ impl SetupReport {
 pub fn apply_plugin_options() {
     // CLAUDE_PLUGIN_OPTION_<OPT> -> <UNRAID_ENVVAR>
     let map = [
-        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "UNRAID_MCP_TOKEN"),
-        ("CLAUDE_PLUGIN_OPTION_MCP_PORT", "UNRAID_MCP_PORT"),
+        ("CLAUDE_PLUGIN_OPTION_API_TOKEN", "UNRAID_RMCP_TOKEN"),
+        ("CLAUDE_PLUGIN_OPTION_MCP_PORT", "UNRAID_RMCP_PORT"),
         ("CLAUDE_PLUGIN_OPTION_UNRAID_API_URL", "UNRAID_API_URL"),
         ("CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY", "UNRAID_API_KEY"),
         (
             "CLAUDE_PLUGIN_OPTION_UNRAID_SKIP_TLS",
             "UNRAID_API_SKIP_TLS_VERIFY",
         ),
-        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "UNRAID_MCP_NO_AUTH"),
-        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "UNRAID_MCP_AUTH_MODE"),
-        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "UNRAID_MCP_PUBLIC_URL"),
+        ("CLAUDE_PLUGIN_OPTION_NO_AUTH", "UNRAID_RMCP_NO_AUTH"),
+        ("CLAUDE_PLUGIN_OPTION_AUTH_MODE", "UNRAID_RMCP_AUTH_MODE"),
+        ("CLAUDE_PLUGIN_OPTION_PUBLIC_URL", "UNRAID_RMCP_PUBLIC_URL"),
         (
             "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_ID",
-            "UNRAID_MCP_GOOGLE_CLIENT_ID",
+            "UNRAID_RMCP_GOOGLE_CLIENT_ID",
         ),
         (
             "CLAUDE_PLUGIN_OPTION_GOOGLE_CLIENT_SECRET",
-            "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
+            "UNRAID_RMCP_GOOGLE_CLIENT_SECRET",
         ),
         (
             "CLAUDE_PLUGIN_OPTION_AUTH_ADMIN_EMAIL",
-            "UNRAID_MCP_AUTH_ADMIN_EMAIL",
+            "UNRAID_RMCP_AUTH_ADMIN_EMAIL",
         ),
     ];
     for (opt, dest) in map {
@@ -250,7 +250,7 @@ fn validate_auth(config: &Config, report: &mut SetupReport) {
         {
             report.blocking_failures.push(SetupFailure {
                 code: "missing_oauth_public_url",
-                message: "UNRAID_MCP_PUBLIC_URL is required for OAuth mode".into(),
+                message: "UNRAID_RMCP_PUBLIC_URL is required for OAuth mode".into(),
             });
         }
         if config
@@ -263,7 +263,7 @@ fn validate_auth(config: &Config, report: &mut SetupReport) {
         {
             report.blocking_failures.push(SetupFailure {
                 code: "missing_oauth_client_id",
-                message: "UNRAID_MCP_GOOGLE_CLIENT_ID is required for OAuth mode".into(),
+                message: "UNRAID_RMCP_GOOGLE_CLIENT_ID is required for OAuth mode".into(),
             });
         }
         if config
@@ -276,19 +276,19 @@ fn validate_auth(config: &Config, report: &mut SetupReport) {
         {
             report.blocking_failures.push(SetupFailure {
                 code: "missing_oauth_client_secret",
-                message: "UNRAID_MCP_GOOGLE_CLIENT_SECRET is required for OAuth mode".into(),
+                message: "UNRAID_RMCP_GOOGLE_CLIENT_SECRET is required for OAuth mode".into(),
             });
         }
         if config.mcp.auth.admin_email.is_empty() {
             report.blocking_failures.push(SetupFailure {
                 code: "missing_oauth_admin_email",
-                message: "UNRAID_MCP_AUTH_ADMIN_EMAIL is required for OAuth mode".into(),
+                message: "UNRAID_RMCP_AUTH_ADMIN_EMAIL is required for OAuth mode".into(),
             });
         }
     } else if config.mcp.api_token.as_deref().unwrap_or("").is_empty() {
         report.blocking_failures.push(SetupFailure {
             code: "missing_mcp_token",
-            message: "UNRAID_MCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
+            message: "UNRAID_RMCP_TOKEN is required unless no_auth or OAuth mode is enabled".into(),
         });
     }
 }
@@ -315,9 +315,9 @@ fn setup_data_dir() -> PathBuf {
 fn write_env_file(data_dir: &Path, config: &Config) -> Result<()> {
     let env_path = data_dir.join(".env");
     let mut lines = vec![
-        format!("UNRAID_MCP_HOST={}", config.mcp.host),
-        format!("UNRAID_MCP_PORT={}", config.mcp.port),
-        format!("UNRAID_MCP_NO_AUTH={}", config.mcp.no_auth),
+        format!("UNRAID_RMCP_HOST={}", config.mcp.host),
+        format!("UNRAID_RMCP_PORT={}", config.mcp.port),
+        format!("UNRAID_RMCP_NO_AUTH={}", config.mcp.no_auth),
     ];
 
     if let Some(token) = config
@@ -326,7 +326,7 @@ fn write_env_file(data_dir: &Path, config: &Config) -> Result<()> {
         .as_deref()
         .filter(|value| !value.is_empty())
     {
-        lines.push(format!("UNRAID_MCP_TOKEN={token}"));
+        lines.push(format!("UNRAID_RMCP_TOKEN={token}"));
     }
     if !config.unraid.api_url.is_empty() {
         lines.push(format!("UNRAID_API_URL={}", config.unraid.api_url));
@@ -338,19 +338,19 @@ fn write_env_file(data_dir: &Path, config: &Config) -> Result<()> {
         lines.push("UNRAID_API_SKIP_TLS_VERIFY=true".into());
     }
     if config.mcp.auth.mode == AuthMode::OAuth {
-        lines.push("UNRAID_MCP_AUTH_MODE=oauth".into());
+        lines.push("UNRAID_RMCP_AUTH_MODE=oauth".into());
         if let Some(value) = &config.mcp.auth.public_url {
-            lines.push(format!("UNRAID_MCP_PUBLIC_URL={value}"));
+            lines.push(format!("UNRAID_RMCP_PUBLIC_URL={value}"));
         }
         if let Some(value) = &config.mcp.auth.google_client_id {
-            lines.push(format!("UNRAID_MCP_GOOGLE_CLIENT_ID={value}"));
+            lines.push(format!("UNRAID_RMCP_GOOGLE_CLIENT_ID={value}"));
         }
         if let Some(value) = &config.mcp.auth.google_client_secret {
-            lines.push(format!("UNRAID_MCP_GOOGLE_CLIENT_SECRET={value}"));
+            lines.push(format!("UNRAID_RMCP_GOOGLE_CLIENT_SECRET={value}"));
         }
         if !config.mcp.auth.admin_email.is_empty() {
             lines.push(format!(
-                "UNRAID_MCP_AUTH_ADMIN_EMAIL={}",
+                "UNRAID_RMCP_AUTH_ADMIN_EMAIL={}",
                 config.mcp.auth.admin_email
             ));
         }

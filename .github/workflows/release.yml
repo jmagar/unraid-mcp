@@ -1,77 +1,204 @@
 name: Release
 
-# Triggers on the vX.Y.Z tag that release-please pushes (via
-# RELEASE_PLEASE_TOKEN, so this workflow actually fires — the default
-# GITHUB_TOKEN would not trigger it). Builds the release binary and attaches
-# it to the GitHub Release release-please already created; it does not
-# create a new release or touch the changelog-based release notes
-# release-please wrote.
-
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing release tag to attach assets to, e.g. v0.2.0"
+        required: true
 
-env:
-  CARGO_TERM_COLOR: always
+permissions:
+  contents: write
 
 jobs:
+  release-meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: meta
+        name: Resolve release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
+            release_name="${{ github.event.release.name }}"
+          else
+            tag="${{ inputs.tag_name }}"
+            if [[ -z "$tag" ]]; then
+              echo "::error::tag_name is required for manual releases"
+              exit 1
+            fi
+            release_name="unraid-rmcp ${tag}"
+          fi
+          echo "tag_name=${tag}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${release_name}" >> "$GITHUB_OUTPUT"
+
   build:
-    name: Build ${{ matrix.target }}
-    runs-on: ${{ matrix.os }}
+    needs: release-meta
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            artifact: runraid
-
+            artifact: runraid-linux-x86_64
+            archive: runraid-x86_64.tar.gz
+            ext: ""
+          - target: x86_64-pc-windows-msvc
+            artifact: runraid-windows-x86_64.exe
+            archive: runraid-windows-x86_64.tar.gz
+            ext: ".exe"
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-meta.outputs.tag_name }}
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install cross toolchain
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm llvm clang lld
+          cargo install cargo-xwin --locked
+
+      - name: Build web assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f apps/web/package.json ]]; then
+            cd apps/web
+            npm install -g "$(node -p "require('./package.json').packageManager")"
+            pnpm install --frozen-lockfile
+            pnpm build
+          fi
 
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
 
-      - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Build (linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin runraid
 
-      - name: Rename artifact
+      - name: Build (windows cross)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo xwin build --release --locked --target ${{ matrix.target }} --bin runraid
+
+      - name: Stage artifact + checksum
         run: |
-          src="target/${{ matrix.target }}/release/${{ matrix.artifact }}"
-          dst="${{ matrix.artifact }}-${{ matrix.target }}"
-          mv "$src" "$dst"
+          cp "target/${{ matrix.target }}/release/runraid${{ matrix.ext }}" "${{ matrix.artifact }}"
+          sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          mkdir -p archive
+          cp "${{ matrix.artifact }}" "archive/runraid${{ matrix.ext }}"
+          tar -C archive -czf "${{ matrix.archive }}" "runraid${{ matrix.ext }}"
+          sha256sum "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
 
-      - name: Upload artifact
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ matrix.artifact }}
+
+      - name: Upload as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-${{ matrix.target }}
-          path: ${{ matrix.artifact }}-${{ matrix.target }}
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
 
-  release:
-    name: Attach Release Assets
-    needs: build
+  publish-release:
+    needs: [release-meta, build]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download artifacts
+      - name: Download release assets
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: dist/release-assets
           merge-multiple: true
 
-      # Adds these assets to the release-please-created release for this tag.
-      # No `generate_release_notes`/`body` here — that would overwrite the
-      # changelog-based notes release-please already wrote.
-      - name: Attach binaries to GitHub Release
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**
+          tag_name: ${{ needs.release-meta.outputs.tag_name }}
+          name: ${{ needs.release-meta.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          files: dist/release-assets/*
+
+  npm:
+    needs: [release-meta, publish-release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-meta.outputs.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm package version matches release tag
+        id: npm-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.release-meta.outputs.tag_name }}"
+          version="$(node -p "require('./packages/unraid-rmcp/package.json').version")"
+          if [[ "$tag" != "v${version}" ]]; then
+            echo "::error::release tag ${tag} does not match packages/unraid-rmcp/package.json version ${version}"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Test npm launcher
+        run: npm test --prefix packages/unraid-rmcp
+      - name: Check npm launcher syntax
+        run: npm run check --prefix packages/unraid-rmcp
+      - name: Dry-run npm package
+        run: npm pack --dry-run --json ./packages/unraid-rmcp
+
+      - name: Check whether npm version is already published
+        id: published
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view "unraid-rmcp@${{ steps.npm-version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm package
+        if: steps.published.outputs.exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public ./packages/unraid-rmcp
+
+      - name: Smoke published npm launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="$(mktemp -d)"
+          trap 'rm -rf "$cache"' EXIT
+          npm_config_cache="$cache" npx -y "unraid-rmcp@${{ steps.npm-version.outputs.version }}" --version

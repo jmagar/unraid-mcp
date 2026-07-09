@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "unraid": {
-      "type": "http",
-      "url": "${user_config.server_url}/mcp",
-      "headers": {
-        "Authorization": "Bearer ${user_config.api_token}"
-      }
+      "command": "npx",
+      "args": ["-y", "unraid-rmcp"]
     }
   }
 }

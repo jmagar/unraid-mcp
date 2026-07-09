@@ -24,7 +24,7 @@ fn version_flag_reports_package_name() {
     assert!(output.status.success(), "--version failed: {output:?}");
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
-        stdout.contains("unraid-mcp"),
-        "version output should mention unraid-mcp, got:\n{stdout}"
+        stdout.contains("unraid-rmcp"),
+        "version output should mention unraid-rmcp, got:\n{stdout}"
     );
 }
