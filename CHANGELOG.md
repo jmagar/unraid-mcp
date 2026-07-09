@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.3](https://github.com/jmagar/unraid-mcp/compare/v2.3.2...v2.3.3) (2026-07-09)
+
+
+### Bug Fixes
+
+* **ci:** switch OpenWiki to local openai-compatible proxy ([9ce93a6](https://github.com/jmagar/unraid-mcp/commit/9ce93a62ff675f3e3d3ad4238e586db487bdd699))
+
+
+### Documentation
+
+* update OpenWiki ([297319c](https://github.com/jmagar/unraid-mcp/commit/297319c8f3410c05234a923698d16059f49474e2))
+* update OpenWiki ([adf9a5f](https://github.com/jmagar/unraid-mcp/commit/adf9a5f3f483752a479ddca4b6dfc609c93fbdc5))
+
 ## [2.3.2](https://github.com/jmagar/unraid-mcp/compare/v2.3.1...v2.3.2) (2026-07-02)
 
 
