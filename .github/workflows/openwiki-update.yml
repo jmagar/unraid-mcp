@@ -36,7 +36,7 @@ jobs:
           OPENWIKI_MODEL_ID: gpt-5.3-codex-spark
 
       - name: Create OpenWiki update pull request
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           add-paths: openwiki
           branch: openwiki/update
