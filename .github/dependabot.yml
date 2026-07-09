@@ -7,15 +7,27 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps"
+      include: "scope"
 
   # Keep the Dockerfile base images fresh.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps"
+      include: "scope"
 
   # Python dependencies (pyproject.toml + uv.lock, including dependency-groups).
   - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps"
+      include: "scope"

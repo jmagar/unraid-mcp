@@ -3,7 +3,14 @@
   "release-type": "python",
   "include-v-in-tag": true,
   "include-component-in-tag": false,
+  "always-update": true,
   "bootstrap-sha": "074315f84feac865f6648d294c06f6f1095d8077",
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "deps", "section": "Dependencies" },
+    { "type": "docs", "section": "Documentation" }
+  ],
   "packages": {
     ".": {
       "package-name": "unraid-mcp",
