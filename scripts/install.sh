@@ -3,6 +3,7 @@ set -euo pipefail
 REPO="${UNRAID_RMCP_REPO:-jmagar/unraid-rmcp}"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${UNRAID_RMCP_VERSION:-latest}"
+RELEASE_BASE_URL="${UNRAID_RMCP_RELEASE_BASE_URL:-}"
 BINARY_NAME="runraid"
 usage() {
   cat <<'USAGE'
@@ -32,7 +33,7 @@ need curl; need install; need mktemp; need tar
 asset="$(target_asset)"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "${tmpdir}"' EXIT
-if [[ "${VERSION}" == "latest" ]]; then url="https://github.com/${REPO}/releases/latest/download/${asset}"; else url="https://github.com/${REPO}/releases/download/${VERSION}/${asset}"; fi
+if [[ -n "${RELEASE_BASE_URL}" ]]; then url="${RELEASE_BASE_URL%/}/${VERSION}/${asset}"; elif [[ "${VERSION}" == "latest" ]]; then url="https://github.com/${REPO}/releases/latest/download/${asset}"; else url="https://github.com/${REPO}/releases/download/${VERSION}/${asset}"; fi
 mkdir -p "${INSTALL_DIR}"
 if [[ ! -w "${INSTALL_DIR}" ]]; then printf 'error: install dir is not writable: %s
 ' "${INSTALL_DIR}" >&2; exit 1; fi
