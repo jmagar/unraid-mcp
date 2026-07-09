@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.4](https://github.com/jmagar/unraid-mcp/compare/v2.3.3...v2.3.4) (2026-07-09)
+
+
+### Dependencies
+
+* **deps-dev:** bump build from 1.5.0 to 1.5.1 ([#160](https://github.com/jmagar/unraid-mcp/issues/160)) ([d39ddd5](https://github.com/jmagar/unraid-mcp/commit/d39ddd5f6084176655a3476de6acb7842c1c4d97))
+* **deps-dev:** bump hypothesis from 6.156.1 to 6.156.4 ([#161](https://github.com/jmagar/unraid-mcp/issues/161)) ([7dd5d6a](https://github.com/jmagar/unraid-mcp/commit/7dd5d6a4462f1e0c4bf6aec9859b2910af0c7ced))
+* **deps-dev:** bump ty from 0.0.56 to 0.0.57 ([#162](https://github.com/jmagar/unraid-mcp/issues/162)) ([78b265a](https://github.com/jmagar/unraid-mcp/commit/78b265aa1cfbd0f8d567749f597fe0cee8c39534))
+* **deps:** bump actions/checkout from 4 to 7 ([#155](https://github.com/jmagar/unraid-mcp/issues/155)) ([fc51265](https://github.com/jmagar/unraid-mcp/commit/fc51265b55c51befdacf42c3216c84bb89fcca97))
+* **deps:** bump actions/setup-node from 4 to 6 ([#157](https://github.com/jmagar/unraid-mcp/issues/157)) ([d288e6c](https://github.com/jmagar/unraid-mcp/commit/d288e6c6e47c0f3acb591145e6355006f43031f9))
+* **deps:** bump astral-sh/setup-uv from 8.2.0 to 8.3.2 ([#158](https://github.com/jmagar/unraid-mcp/issues/158)) ([29b575e](https://github.com/jmagar/unraid-mcp/commit/29b575e5a0e1064154e233b1d88a9e6ead3a5765))
+* **deps:** bump docker/setup-buildx-action from 4.1.0 to 4.2.0 ([#156](https://github.com/jmagar/unraid-mcp/issues/156)) ([ae5cce1](https://github.com/jmagar/unraid-mcp/commit/ae5cce1b18e4e6376365fd10cabd6fa9747ef591))
+* **deps:** bump fastmcp from 3.4.2 to 3.4.4 ([#159](https://github.com/jmagar/unraid-mcp/issues/159)) ([3ecaee2](https://github.com/jmagar/unraid-mcp/commit/3ecaee2b9752f9149ad60a9ac8544dc0c9c31581))
+* **deps:** bump peter-evans/create-pull-request from 7 to 8 ([#154](https://github.com/jmagar/unraid-mcp/issues/154)) ([d91a639](https://github.com/jmagar/unraid-mcp/commit/d91a63926026fc6d648f1db013a46b99beda3fff))
+
 ## [2.3.3](https://github.com/jmagar/unraid-mcp/compare/v2.3.2...v2.3.3) (2026-07-09)
 
 
