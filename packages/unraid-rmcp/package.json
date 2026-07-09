@@ -1,6 +1,6 @@
 {
   "name": "unraid-rmcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Node launcher for the unraid-rmcp Rust MCP server and CLI binary.",
   "license": "MIT",
   "homepage": "https://github.com/jmagar/unraid-rmcp#readme",
