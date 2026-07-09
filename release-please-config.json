@@ -17,6 +17,10 @@
       "section": "Fixed"
     },
     {
+      "type": "deps",
+      "section": "Dependencies"
+    },
+    {
       "type": "perf",
       "section": "Changed"
     },
@@ -60,5 +64,6 @@
       "package-name": "unraid-mcp",
       "changelog-path": "CHANGELOG.md"
     }
-  }
+  },
+  "always-update": true
 }
