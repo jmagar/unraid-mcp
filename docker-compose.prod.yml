@@ -21,8 +21,8 @@ services:
   unraid-rmcp:
     <<: *common-service
     # Default pins to a known, immutable version for safe rollback.
-    # Override with VERSION to deploy/roll back, e.g.: VERSION=0.1.0 docker compose up -d
-    image: ghcr.io/jmagar/unraid-rmcp:${VERSION:-0.1.1}
+    # Override with VERSION to deploy/roll back, e.g.: VERSION=0.2.2 docker compose up -d
+    image: ghcr.io/jmagar/unraid-rmcp:${VERSION:-0.2.2}
     container_name: unraid-rmcp
     env_file:
       - path: .env
