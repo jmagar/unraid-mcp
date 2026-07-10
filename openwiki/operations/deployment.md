@@ -175,7 +175,7 @@ sudo systemctl status unraid-rmcp
 
 **Config:**
 ```nginx
-upstream unraid_mcp {
+upstream unraid_rmcp {
     server 127.0.0.1:40010;
 }
 
@@ -187,7 +187,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location /mcp {
-        proxy_pass http://unraid_mcp;
+        proxy_pass http://unraid_rmcp;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -201,7 +201,7 @@ server {
     }
 
     location /health {
-        proxy_pass http://unraid_mcp;
+        proxy_pass http://unraid_rmcp;
         access_log off;
     }
 }
@@ -265,7 +265,7 @@ scrape_configs:
   "timestamp": "2026-06-15T12:34:56.789Z",
   "level": "INFO",
   "message": "tools/call succeeded",
-  "target": "unraid_mcp::mcp::tools",
+  "target": "unraid_rmcp::mcp::tools",
   "action": "server",
   "duration_ms": 234
 }

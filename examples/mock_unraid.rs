@@ -35,7 +35,7 @@ use axum::{
     Json, Router,
 };
 use serde_json::{json, Value};
-use unraid_mcp::mock::{Scenario, SCENARIOS};
+use unraid_rmcp::mock::{Scenario, SCENARIOS};
 
 #[derive(Clone)]
 struct AppState {

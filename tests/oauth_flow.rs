@@ -12,7 +12,7 @@ use lab_auth::jwt::AccessClaims;
 use lab_auth::metadata::canonical_resource_url;
 use tempfile::TempDir;
 use tower::util::ServiceExt;
-use unraid_mcp::{mcp::router, testing};
+use unraid_rmcp::{mcp::router, testing};
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

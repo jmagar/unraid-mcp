@@ -2,7 +2,7 @@
 //! `src/mcp/host_filter.rs` (P2-9). These functions are security-adjacent:
 //! they decide which `Host` headers and CORS origins the MCP server accepts.
 //!
-//! The test-support API is re-exported from `unraid_mcp::testing`:
+//! The test-support API is re-exported from `unraid_rmcp::testing`:
 //!   - `allowed_hosts(&McpConfig) -> Vec<String>`
 //!   - `allowed_origins(&McpConfig) -> Vec<String>`
 //!
@@ -14,8 +14,8 @@
 //!   - http public_url with no explicit port -> bare host + `host:80`.
 //!   - public_url with an explicit port -> `host` and `host:<port>`.
 
-use unraid_mcp::config::McpConfig;
-use unraid_mcp::testing::{allowed_hosts, allowed_origins};
+use unraid_rmcp::config::McpConfig;
+use unraid_rmcp::testing::{allowed_hosts, allowed_origins};
 
 fn has(v: &[String], needle: &str) -> bool {
     v.iter().any(|s| s == needle)

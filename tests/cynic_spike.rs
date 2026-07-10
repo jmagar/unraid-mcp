@@ -5,9 +5,9 @@
 //! round-tripping, and camelCase field mapping.
 
 use serde_json::Value;
-use unraid_mcp::config::UnraidConfig;
-use unraid_mcp::graphql::UnraidClient;
-use unraid_mcp::mock::Scenario;
+use unraid_rmcp::config::UnraidConfig;
+use unraid_rmcp::graphql::UnraidClient;
+use unraid_rmcp::mock::Scenario;
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 struct ScenarioResponder {

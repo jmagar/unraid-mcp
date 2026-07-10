@@ -24,13 +24,13 @@ use apollo_compiler::schema::ExtendedType;
 use apollo_compiler::validation::Valid;
 use apollo_compiler::{ExecutableDocument, Name, Schema};
 use serde_json::Value;
-use unraid_mcp::mock::{Scenario, SCENARIOS};
-use unraid_mcp::testing::{execute_tool, state_with_upstream};
+use unraid_rmcp::mock::{Scenario, SCENARIOS};
+use unraid_rmcp::testing::{execute_tool, state_with_upstream};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 const SCHEMA_SDL: &str = include_str!("../schema/unraid-schema.graphql");
 
-use unraid_mcp::testing::{mutation_action_calls, upstream_action_calls};
+use unraid_rmcp::testing::{mutation_action_calls, upstream_action_calls};
 
 /// Every query AND mutation, so the contract test validates the whole surface.
 fn action_calls() -> Vec<(&'static str, Value)> {

@@ -18,7 +18,7 @@ use axum::{
 };
 use tempfile::TempDir;
 use tower::util::ServiceExt;
-use unraid_mcp::{mcp::router, testing};
+use unraid_rmcp::{mcp::router, testing};
 
 // ── shared helpers ────────────────────────────────────────────────────────────
 

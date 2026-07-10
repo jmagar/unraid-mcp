@@ -12,7 +12,7 @@
 use std::process::Command;
 
 use serde_json::Value;
-use unraid_mcp::mock::Scenario;
+use unraid_rmcp::mock::Scenario;
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 struct ScenarioResponder {

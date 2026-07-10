@@ -12,7 +12,7 @@
 
 use serde_json::json;
 
-use unraid_mcp::testing::{execute_tool, i64_arg, loopback_state, string_arg, usize_arg};
+use unraid_rmcp::testing::{execute_tool, i64_arg, loopback_state, string_arg, usize_arg};
 
 // ── Dispatch validation: the error MESSAGE is the contract ─────────────────────
 

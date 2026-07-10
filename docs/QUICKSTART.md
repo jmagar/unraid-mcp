@@ -48,8 +48,8 @@ cargo run -- serve mcp
 
 You should see:
 ```
-INFO unraid_mcp: unraid-rmcp starting bind=0.0.0.0:40010
-INFO unraid_mcp: MCP HTTP server listening bind=0.0.0.0:40010
+INFO unraid_rmcp: unraid-rmcp starting bind=0.0.0.0:40010
+INFO unraid_rmcp: MCP HTTP server listening bind=0.0.0.0:40010
 ```
 
 ## 4. Verify

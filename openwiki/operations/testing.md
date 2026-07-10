@@ -204,7 +204,7 @@ pub fn stub_service() -> UnraidService
 
 **Usage:**
 ```rust
-use unraid_mcp::testing;
+use unraid_rmcp::testing;
 
 let state = testing::loopback_state();
 // Use in Axum test request
@@ -301,7 +301,7 @@ just test   # cargo nextest run --profile ci
 ### Test template
 
 ```rust
-use unraid_mcp::testing;
+use unraid_rmcp::testing;
 use axum::body::Body;
 use http::{Request, StatusCode};
 use tower::ServiceExt;
@@ -312,7 +312,7 @@ async fn your_test_name() {
     let state = testing::loopback_state();
 
     // Act: make request
-    let app = unraid_mcp::mcp::routes::router(state);
+    let app = unraid_rmcp::mcp::routes::router(state);
     let response = app
         .oneshot(
             Request::builder()
@@ -336,7 +336,7 @@ async fn test_requires_auth() {
     let state = testing::bearer_state("test-token");
 
     // Without Authorization header
-    let app = unraid_mcp::mcp::routes::router(state);
+    let app = unraid_rmcp::mcp::routes::router(state);
     let response = app
         .oneshot(Request::post("/mcp").body(Body::empty()).unwrap())
         .await
@@ -349,7 +349,7 @@ async fn test_requires_auth() {
 ### Testing action dispatch
 
 ```rust
-use unraid_mcp::mcp::tools;
+use unraid_rmcp::mcp::tools;
 use serde_json::json;
 
 #[tokio::test]

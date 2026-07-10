@@ -452,7 +452,7 @@ RUST_LOG=debug cargo run -- serve mcp
 ### Enable tracing
 
 ```bash
-RUST_LOG=unraid_mcp=debug,tower_http=trace cargo run -- serve mcp
+RUST_LOG=unraid_rmcp=debug,tower_http=trace cargo run -- serve mcp
 ```
 
 ### Debug queries

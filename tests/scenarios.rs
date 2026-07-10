@@ -8,8 +8,8 @@
 //! payload and the dispatch would fail.
 
 use serde_json::{json, Value};
-use unraid_mcp::mock::{Scenario, SCENARIOS};
-use unraid_mcp::testing::{execute_tool, state_with_upstream};
+use unraid_rmcp::mock::{Scenario, SCENARIOS};
+use unraid_rmcp::testing::{execute_tool, state_with_upstream};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 /// wiremock responder that classifies each incoming GraphQL query and replies
@@ -37,7 +37,7 @@ async fn mock_server_for(scenario: &str) -> MockServer {
     server
 }
 
-use unraid_mcp::testing::upstream_action_calls as action_calls;
+use unraid_rmcp::testing::upstream_action_calls as action_calls;
 
 /// Does any string anywhere in the JSON tree contain `needle`?
 fn tree_contains(value: &Value, needle: &str) -> bool {
@@ -55,7 +55,7 @@ async fn every_mutation_dispatches() {
     // so this exercises dispatch + the typed round-trip for the write surface.
     let server = mock_server_for("healthy").await;
     let state = state_with_upstream(&server.uri());
-    for (action, args) in unraid_mcp::testing::mutation_action_calls() {
+    for (action, args) in unraid_rmcp::testing::mutation_action_calls() {
         let result = execute_tool(&state, "unraid", args).await;
         assert!(
             result.is_ok(),

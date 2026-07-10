@@ -1,5 +1,5 @@
 use serde_json::json;
-use unraid_mcp::testing::paginate_array;
+use unraid_rmcp::testing::paginate_array;
 
 #[test]
 fn basic_pagination_reports_has_more_and_next_offset() {

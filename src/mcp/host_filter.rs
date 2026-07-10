@@ -60,7 +60,10 @@ fn push_host_variants(hosts: &mut Vec<String>, host: &str, port: u16) {
 
 fn push_public_url_hosts(hosts: &mut Vec<String>, url: &str, listen_port: u16) {
     let Ok(parsed) = url::Url::parse(url) else {
-        tracing::warn!(public_url = url, "UNRAID_RMCP_PUBLIC_URL is not a valid URL");
+        tracing::warn!(
+            public_url = url,
+            "UNRAID_RMCP_PUBLIC_URL is not a valid URL"
+        );
         return;
     };
     let Some(host) = parsed.host_str() else {

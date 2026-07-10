@@ -57,7 +57,7 @@ Set to `true` if your Unraid API uses a self-signed certificate.
 
 Examples:
 - `RUST_LOG=debug` - verbose debugging
-- `RUST_LOG=unraid_mcp=debug` - debug only for this crate
+- `RUST_LOG=unraid_rmcp=debug` - debug only for this crate
 - `RUST_LOG=warn` - warnings only
 
 ## Config files
