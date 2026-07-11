@@ -17,7 +17,8 @@ import importlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.provider import AccessToken, AuthorizationParams
+from mcp.shared.auth import OAuthClientInformationFull
 
 import unraid_mcp.config.settings as s
 from unraid_mcp.core.google_auth import (
@@ -322,6 +323,36 @@ class TestProviderConstruction:
         from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
 
         assert isinstance(provider._client_storage, FernetEncryptionWrapper)
+
+    async def test_authorization_delegates_consent_to_google(self):
+        with _google_settings(
+            UNRAID_MCP_GOOGLE_CLIENT_ID="x.apps.googleusercontent.com",
+            UNRAID_MCP_GOOGLE_CLIENT_SECRET="GOCSPX-secret",
+            UNRAID_MCP_GOOGLE_BASE_URL="https://mcp.example.com",
+            UNRAID_MCP_GOOGLE_ALLOWED_EMAILS="owner@example.com",
+        ):
+            provider = build_google_provider()
+
+        assert provider is not None
+        client = OAuthClientInformationFull(
+            client_id="debug-client",
+            redirect_uris=["http://127.0.0.1:12345/callback"],
+            token_endpoint_auth_method="none",
+        )
+        authorize_url = await provider.authorize(
+            client,
+            AuthorizationParams(
+                state="state",
+                scopes=["openid", "https://www.googleapis.com/auth/userinfo.email"],
+                code_challenge="A" * 43,
+                redirect_uri="http://127.0.0.1:12345/callback",
+                redirect_uri_provided_explicitly=True,
+            ),
+        )
+
+        assert authorize_url.startswith("https://accounts.google.com/")
+        assert "mcp.example.com/consent" not in authorize_url
+        assert "prompt=consent" in authorize_url
 
 
 class TestAuthorizedGoogleTokenVerifier:

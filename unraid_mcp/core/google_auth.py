@@ -368,6 +368,10 @@ def build_google_provider() -> GoogleProvider | None:
         redirect_path=redirect_path,
         client_storage=client_storage,
         jwt_signing_key=jwt_signing_key,
+        # GoogleProvider already forces Google's own consent screen
+        # (prompt=consent). Avoid FastMCP's local consent interstitial because
+        # repeated browser GETs can rotate its CSRF token before form submit.
+        require_authorization_consent="external",
     )
     setattr(  # noqa: B010 - private FastMCP hook; typed assignment is rejected by ty.
         provider,
