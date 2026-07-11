@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.5](https://github.com/jmagar/unraid-mcp/compare/v2.3.4...v2.3.5) (2026-07-11)
+
+
+### Bug Fixes
+
+* delegate google oauth consent to provider ([efa864a](https://github.com/jmagar/unraid-mcp/commit/efa864ad1e897e229025cacb74a517aa38cfb183))
+
 ## [2.3.4](https://github.com/jmagar/unraid-mcp/compare/v2.3.3...v2.3.4) (2026-07-09)
 
 
