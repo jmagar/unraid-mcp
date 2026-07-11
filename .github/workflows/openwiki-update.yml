@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   update:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux-lab]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -27,14 +27,70 @@ jobs:
       - name: Install OpenWiki
         run: npm install --global openwiki
 
+      - name: Preflight OpenWiki API
+        env:
+          OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
+          OPENAI_COMPATIBLE_BASE_URL: http://100.120.242.29:8317/v1
+        run: |
+          set -euo pipefail
+
+          for env_file in "$HOME/docs/.env" /home/jmagar/docs/.env; do
+            if [[ -f "$env_file" ]]; then
+              set -a
+              source "$env_file"
+              set +a
+              break
+            fi
+          done
+          export OPENAI_COMPATIBLE_BASE_URL="http://100.120.242.29:8317/v1"
+
+          if [[ -z "${OPENAI_COMPATIBLE_API_KEY:-}" ]]; then
+            echo "::error::OPENAI_COMPATIBLE_API_KEY is required for OpenWiki updates"
+            exit 1
+          fi
+
+          response="$(mktemp)"
+          status="$(
+            curl --silent --show-error --location \
+              --output "$response" \
+              --write-out "%{http_code}" \
+              --header "Authorization: Bearer ${OPENAI_COMPATIBLE_API_KEY}" \
+              "${OPENAI_COMPATIBLE_BASE_URL%/}/models" || true
+          )"
+          if [[ "$status" != "200" ]]; then
+            echo "::error::OpenWiki API preflight failed for ${OPENAI_COMPATIBLE_BASE_URL%/}/models with HTTP ${status}"
+            head -c 300 "$response"
+            echo
+            exit 1
+          fi
+
       - name: Run OpenWiki
-        run: openwiki --update --print
         env:
           OPENWIKI_PROVIDER: openai-compatible
           OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
           OPENAI_COMPATIBLE_BASE_URL: http://100.120.242.29:8317/v1
           OPENWIKI_MODEL_ID: gpt-5.3-codex-spark
+        run: |
+          set -euo pipefail
 
+          for env_file in "$HOME/docs/.env" /home/jmagar/docs/.env; do
+            if [[ -f "$env_file" ]]; then
+              set -a
+              source "$env_file"
+              set +a
+              break
+            fi
+          done
+          export OPENWIKI_PROVIDER="${OPENWIKI_PROVIDER:-openai-compatible}"
+          export OPENAI_COMPATIBLE_BASE_URL="http://100.120.242.29:8317/v1"
+          export OPENWIKI_MODEL_ID="${OPENWIKI_MODEL_ID:-gpt-5.3-codex-spark}"
+
+          if [[ -z "${OPENAI_COMPATIBLE_API_KEY:-}" ]]; then
+            echo "::error::OPENAI_COMPATIBLE_API_KEY is required for OpenWiki updates"
+            exit 1
+          fi
+
+          openwiki --update --print
       - name: Create OpenWiki update pull request
         uses: peter-evans/create-pull-request@v7
         with:
