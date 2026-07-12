@@ -6,6 +6,10 @@ function packageVersion() {
   return require("../package.json").version;
 }
 
+function binaryVersion() {
+  return require("../package.json").binaryVersion || packageVersion();
+}
+
 function targetFor(platform = process.platform, arch = process.arch) {
   if (platform === "linux" && arch === "x64") {
     return { asset: "runraid-x86_64.tar.gz", binary: "runraid" };
@@ -17,7 +21,7 @@ function targetFor(platform = process.platform, arch = process.arch) {
 }
 
 function releaseVersion(env = process.env) {
-  const raw = env.UNRAID_RMCP_BINARY_VERSION || env.UNRAID_RMCP_VERSION || packageVersion();
+  const raw = env.UNRAID_RMCP_BINARY_VERSION || env.UNRAID_RMCP_VERSION || binaryVersion();
   return raw.startsWith("v") ? raw : `v${raw}`;
 }
 
@@ -39,4 +43,4 @@ function binaryPath(platform = process.platform, arch = process.arch) {
   return path.join(installRoot(), target.binary);
 }
 
-module.exports = { binaryPath, downloadUrl, releaseBaseUrl, installRoot, packageVersion, releaseVersion, targetFor };
+module.exports = { binaryPath, binaryVersion, downloadUrl, releaseBaseUrl, installRoot, packageVersion, releaseVersion, targetFor };

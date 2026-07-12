@@ -1,6 +1,6 @@
 {
   "name": "unraid-rmcp",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Node launcher for the Unraid Rust MCP server and runraid CLI for NAS, Docker, VM, and storage workflows.",
   "license": "MIT",
   "homepage": "https://github.com/jmagar/unraid-rmcp#readme",
@@ -49,5 +49,7 @@
     "gemini",
     "automation",
     "oauth"
-  ]
+  ],
+  "mcpName": "ai.dinglebear/unraid-rmcp",
+  "binaryVersion": "0.2.2"
 }
