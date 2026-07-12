@@ -67,6 +67,10 @@ done
 if [ -n "${CARGO_BIN_ARTIFACT_WRAPPER_DELEGATE:-}" ]; then
   delegate=("$CARGO_BIN_ARTIFACT_WRAPPER_DELEGATE" "$rustc")
 elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] \
+  && command -v sccache-wrapper >/dev/null 2>&1 \
+  && sccache-wrapper "$rustc" -vV >/dev/null 2>&1; then
+  delegate=(sccache-wrapper "$rustc")
+elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] \
   && command -v sccache >/dev/null 2>&1 \
   && sccache --version >/dev/null 2>&1; then
   delegate=(sccache "$rustc")
