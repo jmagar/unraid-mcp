@@ -1,7 +1,7 @@
 {
   "name": "unraid-rmcp",
   "version": "0.2.2",
-  "description": "Node launcher for the unraid-rmcp Rust MCP server and CLI binary.",
+  "description": "Node launcher for the Unraid Rust MCP server and runraid CLI for NAS, Docker, VM, and storage workflows.",
   "license": "MIT",
   "homepage": "https://github.com/jmagar/unraid-rmcp#readme",
   "repository": {
@@ -32,7 +32,22 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "rmcp",
+    "rust",
     "unraid",
-    "graphql"
+    "nas",
+    "graphql",
+    "storage",
+    "docker",
+    "virtualization",
+    "homelab",
+    "cli",
+    "claude-code",
+    "codex",
+    "gemini",
+    "automation",
+    "oauth"
   ]
 }

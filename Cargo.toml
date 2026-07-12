@@ -8,7 +8,11 @@ name = "unraid-rmcp"
 version = "0.2.2"
 edition = "2021"
 rust-version = "1.90"
-description = "Unraid MCP server — GraphQL API bridge"
+categories = ["command-line-utilities", "development-tools"]
+keywords = ["mcp", "unraid", "graphql", "nas", "rmcp"]
+repository = "https://github.com/jmagar/unraid-rmcp"
+homepage = "https://github.com/jmagar/unraid-rmcp#readme"
+description = "Rust MCP server and CLI for Unraid GraphQL operations across NAS, Docker, VM, and storage workflows."
 autobins = false
 
 [[bin]]
