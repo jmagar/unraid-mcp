@@ -7,12 +7,12 @@
     "url": "https://github.com/jmagar/unraid-rmcp",
     "source": "github"
   },
-  "version": "0.1.1",
+  "version": "0.2.2",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/jmagar/unraid-rmcp:0.1.1",
-      "version": "0.1.1",
+      "identifier": "ghcr.io/jmagar/unraid-rmcp:0.2.2",
+      "version": "0.2.2",
       "environmentVariables": [
         {
           "name": "UNRAID_API_URL",

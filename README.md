@@ -1,369 +1,508 @@
 # unraid-rmcp
 
-Rust MCP server that bridges Claude (and any MCP client) to the Unraid server GraphQL API. Exposes 24 read-only data actions covering array health, Docker, VMs, shares, logs, metrics, UPS, and more, plus a `status` observability action and a `help` action.
+`unraid-rmcp` is a Rust MCP server and CLI for querying an Unraid NAS through
+the Unraid GraphQL API.
 
+It exposes one MCP tool, `unraid`, plus the `runraid` CLI. Agents can inspect
+array health, disks, Docker containers and logs, VMs, shares, notifications,
+system metrics, UPS, logs, network settings, plugins, parity history, rclone,
+remote access, and Unraid Connect through stdio MCP, Streamable HTTP MCP, or
+direct shell commands.
 
-## Rust MCP naming pattern
+**30-second path:** set `UNRAID_API_URL` and `UNRAID_API_KEY`, then run
+`npx -y unraid-rmcp server --json` -> start loopback HTTP with
+`UNRAID_RMCP_HOST=127.0.0.1 npx -y unraid-rmcp serve mcp` -> call `tools/call`
+with `{"action":"server"}`.
 
-This repo follows the Rust MCP server naming convention:
+**Status:** operational RMCP upstream-client server. Read-only action surface;
+no Unraid mutations are exposed. HTTP MCP supports loopback dev mode, static
+bearer tokens, and Google OAuth through `lab-auth`. Release binaries and Docker
+images target linux/amd64 only.
 
-- Repo: `unraid-rmcp`
-- CLI alias: `runraid`
-- npm package: `unraid-rmcp`
+**Not for:** replacing the Unraid web UI, mutating array/docker/VM state,
+running arbitrary shell commands, storing API keys for callers, multi-tenant
+isolation, or passing Unraid API keys through MCP tool arguments.
 
-## npm / npx
+## Contents
+
+- [Naming](#naming)
+- [Capabilities And Boundaries](#capabilities-and-boundaries)
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [Client Configuration](#client-configuration)
+- [Runtime Surfaces](#runtime-surfaces)
+- [MCP Tool Reference](#mcp-tool-reference)
+- [CLI Reference](#cli-reference)
+- [Configuration](#configuration)
+- [Authentication](#authentication)
+- [Safety And Trust Model](#safety-and-trust-model)
+- [Architecture](#architecture)
+- [Distribution Contract](#distribution-contract)
+- [Development](#development)
+- [Verification](#verification)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
+- [Related Servers](#related-servers)
+- [Documentation](#documentation)
+- [License](#license)
+
+## Naming
+
+| Surface | This repo |
+|---|---|
+| Repository | `unraid-rmcp` |
+| Rust crate | `unraid-rmcp` |
+| Binary / CLI | `runraid` |
+| npm package | `unraid-rmcp` |
+| npm binary aliases | `unraid-rmcp`, `runraid` |
+| MCP tool | `unraid` |
+| Config home | `~/.unraid` on hosts, `/data` in containers |
+| Env prefixes | `UNRAID_*`, `UNRAID_RMCP_*` |
+
+This repo is a small naming exception in the RMCP family: MCP/server variables
+use `UNRAID_RMCP_*` rather than `UNRAID_MCP_*` for compatibility with the
+existing deployment config.
+
+## Capabilities And Boundaries
+
+- Read Unraid array state, parity status, disk health, SMART summaries, and
+  capacity.
+- Read Docker containers, container logs, VMs, shares, notifications, services,
+  network URLs, live metrics, config vars, registration, flash device details,
+  UPS, plugins, parity history, rclone, remote access, and Unraid Connect.
+- Provide pagination/filtering for MCP list actions and output truncation for
+  large MCP responses.
+- Expose the `server_summary` prompt and `unraid://schema/mcp-tool` schema
+  resource.
+- Provide setup and doctor commands for local plugin/runtime checks.
+
+| This repo owns | Unraid owns | Explicitly out of scope |
+|---|---|---|
+| MCP/CLI projection, GraphQL query selection, response shaping, pagination, auth policy, setup checks, prompt/resource metadata, and read-only safety. | NAS state, array/docker/VM behavior, GraphQL schema, Unraid API key issuance, remote access, and Connect state. | Mutations, shell execution, controller UI replacement, credential brokerage, background monitoring, multi-tenant sandboxing, and direct filesystem writes. |
+
+## Install
+
+| Path | Command | Best for | Notes |
+|---|---|---|---|
+| npm / npx | `npx -y unraid-rmcp --help` | Local MCP clients and quick trials. | Downloads the matching `runraid` binary from GitHub Releases. |
+| Release installer | `curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/scripts/install.sh \| bash` | Host installs without Node. | Installs `runraid` for linux/amd64. |
+| Docker / Compose | `docker compose up -d` | Shared HTTP MCP deployments. | Reads `.env` and exposes container port `40010`. |
+| Build from source | `cargo build --release` | Development and audits. | Produces `target/release/runraid`. |
+| Plugin | `claude plugin install plugins/unraid` | Claude Code local plugin setup from this checkout. | Uses the packaged setup hook, skill, and local runtime metadata. |
+
+### npm / npx
 
 Run the stdio MCP server or CLI without a manual binary install:
 
 ```bash
 npx -y unraid-rmcp --help
+npx -y unraid-rmcp mcp
+npx -y unraid-rmcp server --json
 ```
 
-MCP clients can use the same launcher:
+The npm package downloads `runraid` during `postinstall`. Override download
+behavior only when testing packaging:
 
-```json
-{
-  "mcpServers": {
-    "unraid-rmcp": {
-      "command": "npx",
-      "args": ["-y", "unraid-rmcp"]
-    }
-  }
-}
-```
+| Variable | Purpose |
+|---|---|
+| `UNRAID_RMCP_SKIP_DOWNLOAD=1` | Skip postinstall binary download. |
+| `UNRAID_RMCP_VERSION` or `UNRAID_RMCP_BINARY_VERSION` | Select the GitHub Release tag. |
+| `UNRAID_RMCP_REPO` | Select the GitHub repo used for release downloads. |
+| `UNRAID_RMCP_RELEASE_BASE_URL` | Select a custom release base URL. |
 
-The npm package downloads the `runraid` binary from GitHub Releases during `postinstall` and keeps the release tag aligned with `packages/unraid-rmcp/package.json`.
-
-## Architecture
-
-```
-                      ┌────────────────────────────────────┐
-  Claude / MCP ◀────▶ │  POST /mcp  (RMCP Streamable HTTP) │
-  stdio client ◀────▶ │  runraid mcp  (stdio transport)     │
-                      │                                    │
-                      │  mcp/tools.rs  ─▶  app.rs          │
-                      │                       │            │
-                      │                  graphql.rs        │
-                      │                       │            │
-                      │             POST <UNRAID_API_URL>   │
-                      │             x-api-key: <key>       │
-                      └───────────────────────┼────────────┘
-                                              │
-                              Unraid GraphQL API (myunraid.net)
-```
-
-- `graphql.rs` — HTTP client: POSTs GraphQL queries to the Unraid API with the `x-api-key` header
-- `app.rs` — `UnraidService`: business layer, one method per action, no logic
-- `mcp/tools.rs` — thin shim: parse JSON args, call service, return `Value`
-- `cli.rs` — thin shim: parse CLI args, call service, format and print
-- `main.rs` — mode dispatch: HTTP MCP server, stdio MCP, or CLI
-
-## Quickstart
-
-### Prerequisites
-
-- Rust 1.90+ (`rustup show`)
-- Unraid API URL and API key (Settings → API Management in Unraid)
-- **Platform: linux/amd64 only.** Release binaries, the Docker image, and CI builds
-  target `x86_64` exclusively — arm64/aarch64 is not built or supported.
-
-### Run
+### Build From Source
 
 ```bash
 git clone https://github.com/jmagar/unraid-rmcp
 cd unraid-rmcp
+cargo build --release
+./target/release/runraid --help
+```
 
-# Set required environment variables
+Minimum supported Rust version: 1.90.
+
+## Quickstart
+
+### 1. Configure Unraid
+
+Create an Unraid API key in Settings -> API Management, then set:
+
+```bash
 export UNRAID_API_URL="https://10-1-0-2.<hash>.myunraid.net:31337/graphql"
 export UNRAID_API_KEY="your-api-key-here"
-export UNRAID_RMCP_PORT=40010
-export UNRAID_RMCP_DISABLE_HTTP_AUTH=true
-
-# Or copy .env and edit it
-cp .env .env.local
-
-# Start the MCP HTTP server
-cargo run -- serve mcp
-
-# Verify it is up
-curl -sf http://localhost:40010/health | jq .
-# → {"status":"ok"}
 ```
 
-### First MCP call
+Set `UNRAID_API_SKIP_TLS_VERIFY=true` only when your Unraid GraphQL endpoint uses
+a certificate your host does not trust.
+
+### 2. Run A Safe CLI Call
 
 ```bash
-curl -s -X POST http://localhost:40010/mcp \
+npx -y unraid-rmcp server --json
+```
+
+### 3. Start Loopback HTTP MCP
+
+```bash
+UNRAID_RMCP_HOST=127.0.0.1 npx -y unraid-rmcp serve mcp
+```
+
+In another shell:
+
+```bash
+curl -sf http://127.0.0.1:40010/health
+```
+
+### 4. Make A First MCP Call
+
+```bash
+curl -s -X POST http://127.0.0.1:40010/mcp \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "unraid",
-      "arguments": {"action": "server"}
-    }
-  }' | jq .result.content[0].text | jq -r . | jq .
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"unraid","arguments":{"action":"server"}}}'
 ```
 
-## Transports
+## Client Configuration
 
-| Mode | Command | Description |
-|------|---------|-------------|
-| HTTP MCP | `runraid serve mcp` or `runraid` (no args) | RMCP Streamable HTTP on `POST /mcp` |
-| stdio MCP | `runraid mcp` | For MCP clients that launch the server as a child process |
-| CLI | `runraid <command>` | Human-readable or `--json` output |
-
-## MCP Tool Reference
-
-One tool is exposed: `unraid`. Set the required `action` argument to select the operation.
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "method": "tools/call",
-  "params": {
-    "name": "unraid",
-    "arguments": {"action": "array"}
-  }
-}
-```
-
-### Core actions
-
-| Action | Description |
-|--------|-------------|
-| `array` | Array state, disk health, parity check status, capacity |
-| `disks` | Physical disks with SMART status, temperature, interface type |
-| `docker` | All Docker containers: state, status, ports, update availability |
-| `docker_logs` | Container logs — requires `id`, optional `tail` (default 100) |
-| `vms` | Virtual machines and their state |
-| `server` | Server identity, LAN/WAN IP, local and remote URLs |
-| `info` | OS, CPU, memory layout, Unraid and kernel versions |
-| `shares` | User shares with size, cache settings, LUKS status |
-| `notifications` | Active warnings and alerts with overview counts |
-
-### System actions
-
-| Action | Description |
-|--------|-------------|
-| `services` | Running system services with uptime |
-| `network` | Network access URLs (type, name, IPv4, IPv6) |
-| `metrics` | Live CPU percent per core, memory usage, temperature sensors |
-| `vars` | System configuration variables (hostname, sharing, SSL, SSH) |
-| `registration` | License type, state, expiry |
-| `flash` | USB flash drive vendor and product info |
-
-### Log actions
-
-| Action | Description | Extra args |
-|--------|-------------|-----------|
-| `log_files` | List available log files with sizes and modification times | — |
-| `log_file` | Read a log file | `path` (required), `lines`, `start_line` |
-
-### Storage actions
-
-| Action | Description |
-|--------|-------------|
-| `parity_history` | All past parity check results (date, duration, speed, errors) |
-| `rclone` | Backup remote configurations and drive names |
-
-### UPS actions
-
-| Action | Description |
-|--------|-------------|
-| `ups` | UPS devices: battery charge, estimated runtime, power load |
-| `ups_config` | UPS monitoring configuration (service, type, shutdown thresholds) |
-
-### Remote access actions
-
-| Action | Description |
-|--------|-------------|
-| `remote_access` | WAN access type and port forwarding configuration |
-| `connect` | Unraid Connect dynamic remote access status and settings |
-
-### Plugin actions
-
-| Action | Description |
-|--------|-------------|
-| `plugins` | Installed community plugins with versions |
-
-### Meta
-
-| Action | Description |
-|--------|-------------|
-| `status` | Server observability: version, PID, uptime, and request counters (requires `unraid:read`) |
-| `help` | Markdown reference for all actions (no auth required) |
-
-### Action parameters
-
-| Parameter | Type | Used by | Description |
-|-----------|------|---------|-------------|
-| `action` | string | all | Operation to perform (required) |
-| `id` | string | `docker_logs` | Container ID |
-| `path` | string | `log_file` | Log file path |
-| `lines` | integer | `log_file` | Number of lines to read |
-| `start_line` | integer | `log_file` | Starting line number (1-indexed) |
-| `tail` | integer | `docker_logs` | Lines to return (default 100) |
-| `limit` | integer | list actions | Max items per page (default 50, max 200) |
-| `offset` | integer | list actions | Number of items to skip (default 0) |
-| `state` | string | `docker` | Filter containers by state |
-| `name` | string | `shares`, `plugins` | Filter results by name |
-
-Pagination and filtering are MCP-only. List actions return a paginated envelope:
-
-```json
-{
-  "items": [ /* ... */ ],
-  "total": 120,
-  "limit": 50,
-  "offset": 0,
-  "has_more": true,
-  "next_offset": 50
-}
-```
-
-## CLI Reference
-
-All CLI commands accept `--json` for machine-readable output.
-
-```
-runraid [serve]                       Start MCP HTTP server (default)
-runraid mcp                           Start MCP stdio transport
-
-Core:
-  runraid array [--json]
-  runraid disks [--json]
-  runraid docker [--json]
-  runraid docker logs <id> [--tail N] [--json]
-  runraid vms [--json]
-  runraid server [--json]
-  runraid info [--json]
-  runraid shares [--json]
-  runraid notifications [--json]
-
-System:
-  runraid services [--json]
-  runraid network [--json]
-  runraid metrics [--json]
-  runraid vars [--json]
-  runraid registration [--json]
-  runraid flash [--json]
-
-Logs:
-  runraid log-files [--json]
-  runraid log <path> [--lines N] [--start-line N] [--json]
-
-Storage:
-  runraid parity-history [--json]
-  runraid rclone [--json]
-
-UPS:
-  runraid ups [--json]
-  runraid ups-config [--json]
-
-Remote access:
-  runraid remote-access [--json]
-  runraid connect [--json]
-
-Plugins:
-  runraid plugins [--json]
-```
-
-Every read-only data action is reachable from both the CLI and the MCP tool. A few capabilities are surface-specific: `status` is MCP-only, the `setup` and `doctor` commands are CLI-only, and pagination/filtering and output truncation apply only to MCP responses.
-
-## HTTP Endpoints
-
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/mcp` | POST | yes (when configured) | RMCP Streamable HTTP |
-| `/health` | GET | no | Always returns `{"status":"ok"}` |
-| `/mcp/.well-known/oauth-authorization-server` | GET | no | OAuth metadata (OAuth mode only) |
-
-## Configuration
-
-Configuration loads from three sources, highest priority first:
-
-1. Environment variables
-2. `config.toml` (if present in the working directory)
-3. Built-in defaults
-
-### Environment variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `UNRAID_API_URL` | **yes** | — | Unraid GraphQL endpoint |
-| `UNRAID_API_KEY` | **yes** | — | API key sent as `x-api-key` header |
-| `UNRAID_API_SKIP_TLS_VERIFY` | no | `false` | Skip TLS certificate check |
-| `UNRAID_RMCP_HOST` | no | `0.0.0.0` | Bind host |
-| `UNRAID_RMCP_PORT` | no | `40010` | Bind port |
-| `UNRAID_RMCP_TOKEN` | no | — | Static bearer token for `/mcp` |
-| `UNRAID_RMCP_DISABLE_HTTP_AUTH` | no | `false` | Disable MCP auth (safe on loopback or trusted networks) |
-| `UNRAID_RMCP_NO_AUTH` | no | `false` | Alias for disabling auth |
-| `UNRAID_RMCP_ALLOWED_HOSTS` | no | — | Extra comma-separated Host header values |
-| `UNRAID_RMCP_ALLOWED_ORIGINS` | no | — | Extra comma-separated CORS origins |
-| `UNRAID_RMCP_PUBLIC_URL` | no | — | Public URL for OAuth metadata |
-| `RUST_LOG` | no | `info` | Log filter (e.g. `debug`, `warn`) |
-
-### config.toml
-
-```toml
-[unraid]
-api_url = "https://10-1-0-2.<hash>.myunraid.net:31337/graphql"
-api_key  = "your-api-key"
-# skip_tls_verify = false
-
-[mcp]
-host = "0.0.0.0"
-port = 40010
-server_name = "unraid-rmcp"
-# allowed_hosts = ["unraid.example.com"]
-# allowed_origins = ["https://unraid.example.com"]
-```
-
-## Authentication
-
-Three auth modes are supported:
-
-**No auth (loopback or trusted network):** Set `UNRAID_RMCP_DISABLE_HTTP_AUTH=true`. Auth is also automatically disabled when the bind host starts with `127.`.
-
-**Static bearer token:** Set `UNRAID_RMCP_TOKEN=<token>`. All `/mcp` requests must include `Authorization: Bearer <token>`. `/health` remains unauthenticated.
-
-**OAuth (Google):** Set `UNRAID_RMCP_PUBLIC_URL`, `UNRAID_RMCP_GOOGLE_CLIENT_ID`, `UNRAID_RMCP_GOOGLE_CLIENT_SECRET`, and `UNRAID_RMCP_AUTH_ADMIN_EMAIL`. The server issues RS256 JWTs after Google login. Scopes: `unraid:read`, `unraid:admin`.
-
-## Development
-
-```bash
-just dev       # cargo run -- serve mcp
-just check     # cargo check
-just lint      # cargo clippy -- -D warnings
-just fmt       # cargo fmt
-just test      # cargo test
-just build     # cargo build
-just release   # cargo build --release
-just gen-token # openssl rand -hex 32
-```
-
-## Claude Code / stdio config
+### Claude Code Stdio
 
 ```json
 {
   "mcpServers": {
-    "unraid-rmcp": {
-      "command": "/path/to/runraid",
-      "args": ["mcp"],
+    "unraid": {
+      "command": "npx",
+      "args": ["-y", "unraid-rmcp", "mcp"],
       "env": {
-        "UNRAID_API_URL": "https://...",
-        "UNRAID_API_KEY": "your-key",
-        "RUST_LOG": "warn"
+        "UNRAID_API_URL": "https://10-1-0-2.<hash>.myunraid.net:31337/graphql",
+        "UNRAID_API_KEY": "your-api-key-here"
       }
     }
   }
 }
 ```
 
+### Claude Code HTTP
+
+```json
+{
+  "mcpServers": {
+    "unraid": {
+      "type": "http",
+      "url": "http://127.0.0.1:40010/mcp",
+      "headers": {
+        "Authorization": "Bearer ${UNRAID_RMCP_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+### Codex / Labby Gateway
+
+Register Unraid through Labby as an HTTP upstream when sharing one long-running
+server, or run it directly as stdio for local-only use.
+
+```toml
+[mcp_servers.unraid]
+command = "npx"
+args = ["-y", "unraid-rmcp", "mcp"]
+```
+
+### Generic MCP JSON
+
+```json
+{
+  "command": "runraid",
+  "args": ["mcp"],
+  "env": {
+    "UNRAID_API_URL": "https://10-1-0-2.<hash>.myunraid.net:31337/graphql",
+    "UNRAID_API_KEY": "your-api-key-here"
+  }
+}
+```
+
+Do not put `UNRAID_API_KEY`, OAuth secrets, passwords, SSH keys, or upstream
+bearer tokens in MCP tool arguments. Use env, config files, or the MCP client's
+secret storage. MCP callers never provide credentials, tokens, keys, or secrets
+as action arguments.
+
+## Runtime Surfaces
+
+| Surface | Status | Entry point | Purpose |
+|---|---:|---|---|
+| MCP stdio | Supported | `runraid mcp`, `npx -y unraid-rmcp mcp` | Local child-process MCP clients. |
+| MCP HTTP | Supported | `runraid serve mcp`, `POST /mcp` | Streamable HTTP MCP for local or shared server deployments. |
+| CLI | Supported | `runraid <command>` | Scriptable parity and debugging. |
+| Prompt | Supported | `server_summary` | Guides a model to call `info` and summarize server state. |
+| Resource | Supported | `unraid://schema/mcp-tool` | JSON schema for the `unraid` tool. |
+| Health endpoint | Supported | `GET /health` | Unauthenticated liveness check. |
+| REST API | Not shipped | N/A | Unraid owns the GraphQL API. |
+| Web UI | Not shipped | N/A | Unraid owns the web UI. |
+
+## MCP Tool Reference
+
+One MCP tool is exposed: `unraid`. Pass the required `action` argument to select
+the operation.
+
+### Core Actions
+
+| Action | Description | Required params | Optional params |
+|---|---|---|---|
+| `array` | Array state, disk health, parity check status, and capacity. | none | none |
+| `disks` | Physical disks with SMART status, temperature, size, interface, and partitions. | none | `limit`, `offset`, `name` |
+| `docker` | Docker containers with state, status, ports, and update availability. | none | `limit`, `offset`, `state`, `name` |
+| `docker_logs` | Container log lines. | `id` | `tail` |
+| `vms` | Virtual machines and state. | none | `limit`, `offset`, `state`, `name` |
+| `server` | Server identity, LAN/WAN IP, local/remote URLs, GUID, and online status. | none | none |
+| `info` | OS, CPU, memory layout, Unraid version, and kernel version. | none | none |
+| `shares` | User shares with size, cache settings, and encryption state. | none | `limit`, `offset`, `name` |
+| `notifications` | Active warnings and alerts with overview counts. | none | none |
+
+### System Actions
+
+| Action | Description |
+|---|---|
+| `services` | Running system services with uptime. |
+| `network` | Network access URLs and addresses. |
+| `metrics` | Live CPU, memory, and temperature sensor data. |
+| `vars` | System configuration variables. |
+| `registration` | License type, state, and expiry. |
+| `flash` | USB flash drive details. |
+
+### Log And Storage Actions
+
+| Action | Description | Required params | Optional params |
+|---|---|---|---|
+| `log_files` | Available log files with sizes and modified times. | none | none |
+| `log_file` | Read a log file. | `path` | `lines`, `start_line` |
+| `parity_history` | Past parity check results. | none | none |
+| `rclone` | Backup remote configurations and drive names. | none | none |
+
+### UPS, Remote, Plugin, And Meta Actions
+
+| Action | Description |
+|---|---|
+| `ups` | UPS devices, charge, runtime, and load. |
+| `ups_config` | UPS monitoring configuration. |
+| `remote_access` | WAN access and port forwarding configuration. |
+| `connect` | Unraid Connect dynamic remote access state. |
+| `plugins` | Installed community plugins with versions. |
+| `status` | Server observability: version, PID, uptime, and counters. |
+| `help` | Markdown reference for all actions. |
+
+Pagination and filtering are MCP-only. List actions return a paginated envelope
+with `items`, `total`, `limit`, `offset`, `has_more`, and `next_offset`.
+
+## CLI Reference
+
+All CLI commands accept `--json` for machine-readable output.
+
+```bash
+runraid array [--json]
+runraid disks [--json]
+runraid docker [--json]
+runraid docker logs <id> [--tail N] [--json]
+runraid vms [--json]
+runraid server [--json]
+runraid info [--json]
+runraid shares [--json]
+runraid notifications [--json]
+runraid services [--json]
+runraid network [--json]
+runraid metrics [--json]
+runraid vars [--json]
+runraid registration [--json]
+runraid flash [--json]
+runraid log-files [--json]
+runraid log <path> [--lines N] [--start-line N] [--json]
+runraid parity-history [--json]
+runraid rclone [--json]
+runraid ups [--json]
+runraid ups-config [--json]
+runraid remote-access [--json]
+runraid connect [--json]
+runraid plugins [--json]
+runraid doctor [--json]
+runraid setup check [--json]
+runraid setup repair [--json]
+```
+
+`status` is MCP-only; `setup` and `doctor` are CLI-only.
+
+## Configuration
+
+Host installs read `~/.unraid/.env` before loading config. Containers read
+`/data/.env`. Process environment overrides both.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `UNRAID_API_URL` | unset | Full Unraid GraphQL endpoint URL. |
+| `UNRAID_API_KEY` | unset | API key for the `x-api-key` header. |
+| `UNRAID_API_SKIP_TLS_VERIFY` | `false` | Skip TLS certificate verification for self-signed endpoints. |
+| `UNRAID_RMCP_HOST` | `0.0.0.0` | HTTP bind host. |
+| `UNRAID_RMCP_PORT` | `40010` | HTTP bind port. |
+| `UNRAID_RMCP_SERVER_NAME` | `unraid-rmcp` | Advertised MCP server name. |
+| `UNRAID_RMCP_TOKEN` | unset | Static bearer token for HTTP MCP. |
+| `UNRAID_RMCP_NO_AUTH` | `false` | Disable auth only for loopback development. |
+| `UNRAID_RMCP_DISABLE_HTTP_AUTH` | `false` | Compatibility alias for disabling auth. |
+| `UNRAID_NOAUTH` | `false` | Trust an upstream gateway to enforce auth. |
+| `UNRAID_RMCP_ALLOWED_HOSTS` | unset | Extra accepted Host header values. |
+| `UNRAID_RMCP_ALLOWED_ORIGINS` | unset | Extra accepted CORS origins. |
+| `UNRAID_RMCP_PUBLIC_URL` | unset | Public URL for OAuth metadata. |
+| `UNRAID_RMCP_AUTH_MODE` | `bearer` | `bearer` or `oauth`. |
+| `UNRAID_RMCP_GOOGLE_CLIENT_ID` | unset | Google OAuth client ID. |
+| `UNRAID_RMCP_GOOGLE_CLIENT_SECRET` | unset | Google OAuth client secret. |
+| `UNRAID_RMCP_AUTH_ADMIN_EMAIL` | unset | Admin email for OAuth bootstrap. |
+
+## Authentication
+
+Stdio MCP runs as a local trusted child process and does not use HTTP auth.
+
+HTTP MCP auth policy:
+
+| State | Condition | Behavior |
+|---|---|---|
+| Loopback dev | `UNRAID_RMCP_HOST` starts with `127.` or auth is explicitly disabled on loopback | Local unauthenticated development is allowed. |
+| Mounted bearer | Non-loopback with `UNRAID_RMCP_TOKEN` | Requires `Authorization: Bearer <token>` and action scopes. |
+| Mounted OAuth | `UNRAID_RMCP_AUTH_MODE=oauth` | Uses Google OAuth/JWT through `lab-auth`. |
+| Trusted gateway | `UNRAID_NOAUTH=true` | Assumes a reverse proxy or gateway already enforced auth. |
+
+All data actions are read-only. OAuth exposes `unraid:read` and `unraid:admin`
+scopes, but no mutating Unraid action is currently registered.
+
+## Safety And Trust Model
+
+- Unraid API keys are loaded from config/env only.
+- MCP callers select read actions and filters, not upstream credentials.
+- No mutation, shell execution, filesystem write, Docker control, VM control, or
+  array-control action is exposed.
+- `log_file` reads through the Unraid GraphQL API, not arbitrary local files.
+- Non-loopback HTTP deployments must use bearer auth, OAuth, or a trusted
+  authenticated gateway.
+- This bridge does not sandbox Unraid itself. Unraid remains responsible for API
+  permissions and GraphQL response semantics.
+
+## Architecture
+
+```text
+GraphQL queries (src/graphql.rs)  typed/read-only query construction
+        |
+UnraidService (src/app.rs)       action behavior and response shaping
+        |
+MCP shim      (src/mcp/tools.rs) JSON args -> service -> Value
+CLI shim      (src/cli.rs)       argv -> service -> stdout
+```
+
+## Distribution Contract
+
+- `Cargo.toml`, `Cargo.lock`, `packages/unraid-rmcp/package.json`,
+  `.release-please-manifest.json`, and `server.json` must agree on the released
+  version.
+- GitHub Releases publish the linux/amd64 `runraid` binary consumed by the npm
+  launcher.
+- The npm package name is `unraid-rmcp`; binary aliases are `unraid-rmcp` and
+  `runraid`.
+- Docker/OCI metadata uses `ghcr.io/jmagar/unraid-rmcp:<version>`.
+- `plugins/unraid/.mcp.json` must launch `npx -y unraid-rmcp mcp` so stdio
+  clients start the MCP transport rather than the HTTP server.
+- The root README is curated. `docs/INVENTORY.md` is the curated inventory for
+  actions, CLI commands, env vars, HTTP endpoints, and dependencies.
+
+## Development
+
+```bash
+cargo fmt --check
+cargo test
+cargo clippy -- -D warnings
+cargo build --release
+npm --prefix packages/unraid-rmcp run check
+```
+
+## Verification
+
+```bash
+python3 /home/jmagar/workspace/soma/scripts/check-readme-guide.py README.md
+npm --prefix packages/unraid-rmcp run check
+cargo check
+cargo test
+git diff --check
+```
+
+Runtime smoke:
+
+```bash
+UNRAID_API_URL=https://10-1-0-2.<hash>.myunraid.net:31337/graphql \
+UNRAID_API_KEY=... \
+runraid server --json
+```
+
+HTTP smoke:
+
+```bash
+UNRAID_RMCP_HOST=127.0.0.1 runraid serve mcp
+curl -sf http://127.0.0.1:40010/health
+```
+
+## Deployment
+
+Use loopback for local development:
+
+```bash
+UNRAID_RMCP_HOST=127.0.0.1 runraid serve mcp
+```
+
+Use Docker Compose for shared HTTP deployment:
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+When binding to a non-loopback address, configure `UNRAID_RMCP_TOKEN`,
+`UNRAID_RMCP_AUTH_MODE=oauth`, or `UNRAID_NOAUTH=true` behind an authenticated
+gateway.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| `UNRAID_API_URL` or `UNRAID_API_KEY` is missing | Set it in env or `~/.unraid/.env`. |
+| TLS errors against Unraid | Set `UNRAID_API_SKIP_TLS_VERIFY=true` only for self-signed endpoints. |
+| HTTP `/mcp` returns unauthorized | Set `UNRAID_RMCP_TOKEN` and send `Authorization: Bearer <token>`. |
+| Stdio client hangs or logs JSON errors | Ensure client config runs `unraid-rmcp mcp`, not the default HTTP server mode. |
+| Large list response is truncated | Use `limit`, `offset`, `name`, or `state` filters on MCP list actions. |
+| `docker_logs` fails | Pass a valid container `id` and optional `tail`. |
+
+## Related Servers
+
+- `unifi-rmcp / rustifi` - UniFi controller REST API bridge.
+- `tailscale-rmcp / rustscale` - Tailscale API bridge for devices, users, and tailnet operations.
+- `apprise-rmcp` - Apprise notification fan-out bridge for many delivery backends.
+- `gotify-rmcp` - Gotify push notification bridge for sends, messages, apps, and clients.
+- `arcane-rmcp` - Arcane Docker management bridge for containers and related resources.
+- `yarr-rmcp` - Media-stack bridge for Sonarr, Radarr, Prowlarr, Plex, and related services.
+- `ytdl-mcp` - Media download and metadata workflow server.
+- `synapse` - Local Synapse workflow server for scout and flux actions.
+- `cortex` - Syslog and homelab log aggregation MCP server.
+- `axon` - RAG, crawl, scrape, extract, and semantic search project.
+- `lab` - Homelab control plane and Labby gateway project.
+- `lumen` - Local semantic code search MCP server.
+- `nugs` - Project/package management helper for local agent workflows.
+- `agentcast` - Agent transcript and activity publishing project.
+- `soma` - RMCP scaffold/runtime template for new provider-backed servers.
+
+## Documentation
+
+- `CLAUDE.md` is the curated local operating guide for contributors and agents.
+- `docs/INVENTORY.md` is the curated/generated inventory for actions, CLI
+  commands, env vars, HTTP endpoints, and dependencies.
+- `docs/stack/ARCH.md` is the curated architecture guide.
+- `docs/SETUP.md` is curated plugin/setup guidance.
+- `docs/OAUTH.md` is curated OAuth setup guidance.
+- `plugins/unraid/skills/unraid/SKILL.md` is the agent usage guide.
+- `src/` is the source of truth for current GraphQL queries, config defaults,
+  auth behavior, and CLI parsing.
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
