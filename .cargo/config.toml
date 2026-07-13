@@ -15,7 +15,3 @@
 # See: https://github.com/matklad/cargo-xtask
 xtask = "run --package xtask --"
 
-[build]
-# Keep completed Cargo binary artifacts in ./bin without committing them.
-rustc-wrapper = "scripts/cargo-rustc-wrapper"
-

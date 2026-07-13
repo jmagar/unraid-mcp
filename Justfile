@@ -164,6 +164,9 @@ build-plugin: release
     install -m 755 "$target_dir/release/runraid" bin/runraid
     install -m 755 "$target_dir/release/runraid" plugins/unraid/bin/runraid
 
+# Explicit binary artifact sync. This replaces hidden Cargo rustc-wrapper side effects.
+sync-bin: build-plugin
+
 # Publish: bump version, tag, push (triggers crates.io + Docker publish)
 publish bump="patch":
     #!/usr/bin/env bash
