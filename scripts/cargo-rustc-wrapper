@@ -1,136 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+export CARGO_BIN_ARTIFACT_REPO="$repo"
+
+helper="${CARGO_BIN_ARTIFACT_WRAPPER_HELPER:-}"
+if [ -z "$helper" ]; then
+  if command -v cargo-bin-artifact-wrapper >/dev/null 2>&1; then
+    helper="$(command -v cargo-bin-artifact-wrapper)"
+  elif [ -x /home/jmagar/.local/bin/cargo-bin-artifact-wrapper ]; then
+    helper=/home/jmagar/.local/bin/cargo-bin-artifact-wrapper
+  fi
+fi
+
+if [ -n "$helper" ]; then
+  exec "$helper" "$@"
+fi
+
 if [ "$#" -lt 1 ]; then
   echo "usage: cargo-rustc-wrapper <rustc> [rustc-args...]" >&2
   exit 2
 fi
 
-repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 rustc="$1"
 shift
-if [ "$rustc" = "rustc" ] && command -v rustup >/dev/null 2>&1; then
-  rustc="$(cd "$repo" && rustup which rustc 2>/dev/null || printf '%s' "$rustc")"
-fi
-
-crate_name=""
-crate_type=""
-out=""
-out_dir=""
-extra_filename=""
-is_test=0
-args=("$@")
-
-i=0
-while [ "$i" -lt "${#args[@]}" ]; do
-  arg="${args[$i]}"
-  case "$arg" in
-    --crate-name)
-      i=$((i + 1))
-      crate_name="${args[$i]:-}"
-      ;;
-    --crate-name=*)
-      crate_name="${arg#--crate-name=}"
-      ;;
-    --crate-type)
-      i=$((i + 1))
-      crate_type="${args[$i]:-}"
-      ;;
-    --crate-type=*)
-      crate_type="${arg#--crate-type=}"
-      ;;
-    -o)
-      i=$((i + 1))
-      out="${args[$i]:-}"
-      ;;
-    --out-dir)
-      i=$((i + 1))
-      out_dir="${args[$i]:-}"
-      ;;
-    -C)
-      i=$((i + 1))
-      codegen_opt="${args[$i]:-}"
-      case "$codegen_opt" in
-        extra-filename=*) extra_filename="${codegen_opt#extra-filename=}" ;;
-      esac
-      ;;
-    -Cextra-filename=*)
-      extra_filename="${arg#-Cextra-filename=}"
-      ;;
-    --test)
-      is_test=1
-      ;;
-  esac
-  i=$((i + 1))
-done
 
 if [ -n "${CARGO_BIN_ARTIFACT_WRAPPER_DELEGATE:-}" ]; then
-  delegate=("$CARGO_BIN_ARTIFACT_WRAPPER_DELEGATE" "$rustc")
-elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] \
-  && command -v sccache-wrapper >/dev/null 2>&1 \
-  && sccache-wrapper "$rustc" -vV >/dev/null 2>&1; then
-  delegate=(sccache-wrapper "$rustc")
-elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] \
-  && command -v sccache >/dev/null 2>&1 \
-  && sccache --version >/dev/null 2>&1; then
-  delegate=(sccache "$rustc")
+  exec "$CARGO_BIN_ARTIFACT_WRAPPER_DELEGATE" "$rustc" "$@"
+elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] && command -v sccache-wrapper >/dev/null 2>&1; then
+  exec sccache-wrapper "$rustc" "$@"
+elif [ "${CARGO_BIN_ARTIFACT_WRAPPER_NO_SCCACHE:-0}" != "1" ] && command -v sccache >/dev/null 2>&1; then
+  exec sccache "$rustc" "$@"
 else
-  delegate=("$rustc")
+  exec "$rustc" "$@"
 fi
-
-"${delegate[@]}" "${args[@]}"
-
-if [ -z "$out" ] && [ -n "$out_dir" ] && [ -n "$extra_filename" ]; then
-  out="$out_dir/$crate_name$extra_filename"
-fi
-
-if [ "$crate_type" != "bin" ] || [ "$is_test" -eq 1 ] || [ -z "$out" ] || [ ! -x "$out" ]; then
-  exit 0
-fi
-
-case "$out" in
-  */deps/"$crate_name"*|*/deps/"${crate_name//-/_}"*) ;;
-  *) exit 0 ;;
-esac
-
-after_target="${out##*target/}"
-profile="unknown"
-target_triple=""
-IFS=/ read -r first second third _rest <<<"$after_target"
-if [ "${second:-}" = "deps" ]; then
-  profile="$first"
-elif [ "${third:-}" = "deps" ]; then
-  target_triple="$first"
-  profile="$second"
-else
-  cache_suffix="${out##*.cache/cargo/}"
-  IFS=/ read -r first second third _rest <<<"$cache_suffix"
-  if [ "${second:-}" = "deps" ]; then
-    profile="$first"
-  elif [ "${third:-}" = "deps" ]; then
-    target_triple="$first"
-    profile="$second"
-  fi
-fi
-
-case "$profile" in
-  release-fast) variant="fast-release" ;;
-  *) variant="$profile" ;;
-esac
-
-ext=""
-case "$out" in
-  *.exe) ext=".exe" ;;
-esac
-
-artifact_base="${crate_name//_/-}"
-if [ -n "$target_triple" ]; then
-  artifact_name="${artifact_base}-${target_triple}-${variant}${ext}"
-else
-  artifact_name="${artifact_base}-${variant}${ext}"
-fi
-
-bin_dir="${CARGO_BIN_ARTIFACT_DIR:-$repo/bin}"
-mkdir -p "$bin_dir"
-install -m 755 "$out" "$bin_dir/$artifact_name"
-install -m 755 "$out" "$bin_dir/${artifact_base}${ext}"
