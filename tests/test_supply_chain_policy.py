@@ -61,6 +61,7 @@ def test_release_executables_and_tools_are_pinned_and_verified() -> None:
     assert "/releases/download/v1.8.0/" in release
     assert "1370446bbe74d562608e8005a6ccce02d146a661fbd78674e11cc70b9618d6cf" in release
     assert "sha256sum --check --strict" in release
+    assert "./mcp-publisher --version 2>&1" in release
 
 
 def test_release_sensitive_uv_is_pinned_and_cacheless() -> None:
@@ -87,6 +88,17 @@ def test_artifact_channels_are_independent_and_reconciled() -> None:
     assert "actions/attest-build-provenance@" in workflow
     assert "skip-existing: true" in workflow
     assert "Release Reconciliation" in workflow
+
+
+def test_manual_release_reconciliation_targets_requested_release_tag() -> None:
+    workflow = _workflows()["publish-pypi.yml"]
+    assert "workflow_dispatch:\n    inputs:\n      release_tag:" in workflow
+    assert "required: true" in workflow
+    assert 'default: ""' in workflow
+    assert "RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}" in workflow
+    assert "group: release-${{ github.event.release.tag_name || inputs.release_tag }}" in workflow
+    assert workflow.count("ref: ${{ env.RELEASE_TAG }}") == 2
+    assert "GITHUB_REF_NAME" not in workflow
 
 
 def test_pypi_partial_release_can_resume_without_masking_checksum_mismatch() -> None:
