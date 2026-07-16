@@ -238,6 +238,87 @@ def test_run_plugin_hook_omits_absent_tls_config(tmp_path, capsys):
     assert report["advisory_failures"] == []
 
 
+def test_run_plugin_hook_clears_stale_tls_when_option_blanked(tmp_path, capsys):
+    """Clearing a TLS option (present but empty) removes its stale .env line so the
+    package default is restored — not left disabled. Regression for the codex P2
+    on #172."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+    creds_dir.mkdir(parents=True)
+    # A prior run wrote an insecure config; the user is now clearing it.
+    creds_file.write_text(
+        "UNRAID_API_URL=https://old.local/graphql\n"
+        "UNRAID_API_KEY=old\n"
+        "UNRAID_VERIFY_SSL=false\n"
+        "UNRAID_ALLOW_INSECURE_TLS=true\n"
+    )
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "https://tower.local/graphql",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+                # Present but blanked — the plugin form was cleared back to default.
+                "CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL": "",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS": "",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    content = creds_file.read_text()
+    # Stale insecure assignments are gone -> package defaults (verify on) apply.
+    assert "UNRAID_VERIFY_SSL=false" not in content
+    assert "UNRAID_ALLOW_INSECURE_TLS=true" not in content
+    # Credentials were still updated.
+    assert "UNRAID_API_URL=https://tower.local/graphql" in content
+
+
+def test_run_plugin_hook_leaves_unmanaged_tls_line_untouched(tmp_path, capsys):
+    """When the plugin does NOT export a TLS option at all (e.g. a hand-edited
+    .env on a non-plugin runtime path), the hook must not delete the user's line."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+    creds_dir.mkdir(parents=True)
+    creds_file.write_text(
+        "UNRAID_API_URL=https://old.local/graphql\n"
+        "UNRAID_API_KEY=old\n"
+        "UNRAID_VERIFY_SSL=/etc/ssl/certs/unraid-ca.pem\n"
+    )
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "https://tower.local/graphql",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        # The TLS option var is entirely absent -> unmanaged, must be preserved.
+        os.environ.pop("CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL", None)
+        os.environ.pop("CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS", None)
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    content = creds_file.read_text()
+    assert "UNRAID_VERIFY_SSL=/etc/ssl/certs/unraid-ca.pem" in content
+
+
 def test_run_plugin_hook_idempotent_rewrite(tmp_path, capsys):
     """Running the hook twice with identical input yields one entry per key, byte-identical."""
     from unraid_mcp.core import setup as setup_mod

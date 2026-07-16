@@ -102,9 +102,24 @@ def run_plugin_hook() -> int:
     # credential pair. Absent keys are simply not written.
     extra = {k: v for k, v in resolved.items() if k in CONFIG_OPTIONS}
 
+    # Reconcile optional config the plugin form manages but that is now blank: if
+    # the CLAUDE_PLUGIN_OPTION_* var is present in the environment (Claude exports
+    # every configured option, including cleared ones set back to their default)
+    # yet resolved to empty/unsafe, remove any stale managed line so the package
+    # default is restored. Without this, clearing UNRAID_VERIFY_SSL after once
+    # setting it to "false" would leave verification disabled — the opposite of
+    # the advertised "blank = verify" default. Options whose var is *absent*
+    # entirely (non-plugin runtime, or a var the form doesn't manage) are left
+    # untouched so a hand-edited ~/.unraid-mcp/.env is preserved.
+    resets = {
+        canonical
+        for option, canonical in PLUGIN_OPTION_MAP.items()
+        if canonical in CONFIG_OPTIONS and canonical not in resolved and option in os.environ
+    }
+
     if api_url and api_key:
         try:
-            _write_env(api_url, api_key, extra)
+            _write_env(api_url, api_key, extra, resets)
             report["ran_repair"] = True
             logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
         except OSError as e:
@@ -170,7 +185,12 @@ def _dotenv_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _write_env(api_url: str, api_key: str, extra: dict[str, str] | None = None) -> None:
+def _write_env(
+    api_url: str,
+    api_key: str,
+    extra: dict[str, str] | None = None,
+    remove: set[str] | None = None,
+) -> None:
     """Write or update credentials (and optional config) in CREDENTIALS_ENV_PATH.
 
     Creates CREDENTIALS_DIR (mode 700) if needed. On first run, seeds from
@@ -180,6 +200,12 @@ def _write_env(api_url: str, api_key: str, extra: dict[str, str] | None = None) 
     plugin config form) written the same way — replaced in place when the key
     already exists in the template, appended otherwise. The credential pair is
     always written first so its ordering is stable across runs.
+
+    ``remove`` names optional-config vars whose active assignment should be
+    dropped (an active ``KEY=...`` line is deleted; commented ``# KEY=`` lines in
+    the seeded example are left intact) so the package default is restored when a
+    plugin option is cleared. A key appearing in both ``extra`` and ``remove`` is
+    written, not removed.
     """
     # Ensure directory exists with restricted permissions (chmod after to bypass umask)
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
@@ -197,12 +223,17 @@ def _write_env(api_url: str, api_key: str, extra: dict[str, str] | None = None) 
         "UNRAID_API_KEY": api_key,
         **(extra or {}),
     }
+    # A written key always wins over a removal request.
+    to_remove = (remove or set()) - values.keys()
 
     # Replace each managed var in-place; track which were found in the template.
     written: set[str] = set()
     new_lines: list[str] = []
     for line in template_lines:
         stripped = line.strip()
+        # Drop active assignments for reset keys (skip commented "# KEY=" lines).
+        if any(stripped.startswith(f"{key}=") for key in to_remove):
+            continue
         for key, value in values.items():
             if stripped.startswith(f"{key}="):
                 new_lines.append(f"{key}={_dotenv_value(value)}")
