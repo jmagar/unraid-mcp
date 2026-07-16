@@ -208,6 +208,36 @@ class TestGetSummary:
         assert summary["total_configured"] == len(mgr.subscription_configs)
 
 
+class TestSubscriptionDataGeneration:
+    async def test_valid_data_recovers_transient_error_state(self) -> None:
+        mgr = SubscriptionManager()
+        mgr.connection_states["cpu"] = "error"
+        mgr.last_error["cpu"] = "transient subscription error"
+
+        await mgr._store_subscription_data(
+            "cpu",
+            {"systemMetricsCpu": {"percentTotal": 42.0}},
+            generation=mgr.states["cpu"].generation,
+        )
+
+        assert mgr.connection_states["cpu"] == "subscribed"
+        assert mgr.states["cpu"].last_error is None
+        assert mgr.resource_data["cpu"].data["systemMetricsCpu"]["percentTotal"] == 42.0
+
+    async def test_superseded_generation_still_cannot_replace_cache(self) -> None:
+        mgr = SubscriptionManager()
+        mgr.connection_states["cpu"] = "subscribed"
+        mgr.states["cpu"].generation = 2
+
+        await mgr._store_subscription_data(
+            "cpu",
+            {"systemMetricsCpu": {"percentTotal": 99.0}},
+            generation=1,
+        )
+
+        assert "cpu" not in mgr.resource_data
+
+
 class TestStateAwareResourceSnapshot:
     async def test_terminal_state_never_returns_cached_payload(self) -> None:
         mgr = SubscriptionManager()

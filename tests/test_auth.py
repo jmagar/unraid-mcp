@@ -642,6 +642,67 @@ class TestReadinessMiddleware:
         assert b"upstream" not in body
         assert not called
 
+    async def test_non_loopback_request_falls_through_without_probe(self):
+        inner, called = _app_called_flag()
+        probe_calls = 0
+
+        async def probe() -> tuple[bool, str]:
+            nonlocal probe_calls
+            probe_calls += 1
+            return True, "ready"
+
+        mw = ReadinessMiddleware(inner, probe=probe)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/ready",
+            "headers": [],
+            "client": ("198.51.100.10", 9999),
+        }
+        received: list[dict] = []
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: dict):
+            received.append(message)
+
+        await mw(scope, receive, send)
+
+        assert called["value"]
+        assert probe_calls == 0
+        assert received[0]["status"] == 200
+        assert received[1]["body"] == b"ok"
+
+    async def test_loopback_probe_result_is_cached(self):
+        inner, _called = _app_called_flag()
+        probe_calls = 0
+
+        async def probe() -> tuple[bool, str]:
+            nonlocal probe_calls
+            probe_calls += 1
+            return True, "ready"
+
+        mw = ReadinessMiddleware(inner, probe=probe, cache_ttl_seconds=60)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/ready",
+            "headers": [],
+            "client": ("127.0.0.1", 9999),
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(_message: dict):
+            return None
+
+        await mw(scope, receive, send)
+        await mw(scope, receive, send)
+
+        assert probe_calls == 1
+
 
 # ---------------------------------------------------------------------------
 # WellKnownMiddleware — RFC 9728 OAuth Protected Resource Metadata

@@ -293,16 +293,17 @@ class SubscriptionManager:
         new_entry = SubscriptionData(data=capped_data, last_updated=datetime.now(UTC))
         async with self._data_lock:
             state = self.states.get(subscription_name)
-            if generation is not None and (
-                state is None
-                or state.generation != generation
-                or state.connection_state != "subscribed"
-            ):
+            if generation is not None and (state is None or state.generation != generation):
                 logger.debug(
                     "[RESOURCE:%s] Discarded payload from superseded generation",
                     subscription_name,
                 )
                 return
+            if state is not None:
+                # A standalone ErrorEvent is recoverable: a later valid payload on
+                # the same generation proves the stream is healthy again.
+                state.connection_state = "subscribed"
+                state.last_error = None
             self.resource_data[subscription_name] = new_entry
         logger.debug(
             "[RESOURCE:%s] Resource data updated successfully",

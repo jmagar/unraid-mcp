@@ -110,8 +110,10 @@ builds use `edge` plus `sha-<commit>`; `latest` moves only on a semver tag.
 Multi-arch: `linux/amd64` and `linux/arm64`.
 
 `/health` is process liveness. `/ready` validates configuration and a bounded upstream
-probe and is the routing/container-health signal. It is valid for liveness to remain green
-while readiness reports a safe, non-secret degraded reason.
+probe and is the routing/container-health signal. The unauthenticated readiness endpoint is
+limited to loopback callers and caches its upstream result for 30 seconds; non-loopback
+requests continue through the configured bearer/OAuth authentication stack. It is valid for
+liveness to remain green while readiness reports a safe, non-secret degraded reason.
 
 The Compose log bound protects the Docker host; the application's 10 MiB file cap is a
 secondary guard. Export structured logs when longer searchable retention is required.

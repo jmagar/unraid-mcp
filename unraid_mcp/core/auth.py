@@ -21,7 +21,9 @@ Also exports:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
+import ipaddress
 import json
 import posixpath
 import re
@@ -377,7 +379,12 @@ class WellKnownMiddleware:
 
 
 class ReadinessMiddleware:
-    """Serve a bounded unauthenticated readiness probe at GET/HEAD ``/ready``."""
+    """Serve a cached readiness probe to loopback callers at GET/HEAD ``/ready``.
+
+    Non-loopback requests fall through to the normal authentication stack. Probe
+    results are cached to keep a local reverse proxy or aggressive health checker
+    from consuming the upstream Unraid API rate-limit budget.
+    """
 
     _READY = b'{"status":"ready"}'
     _NOT_READY = b'{"status":"not_ready"}'
@@ -387,20 +394,53 @@ class ReadinessMiddleware:
         app: ASGIApp,
         *,
         probe: Callable[[], Awaitable[tuple[bool, str]]],
+        cache_ttl_seconds: float = 30.0,
     ) -> None:
         self.app = app
         self._probe = probe
+        self._cache_ttl_seconds = max(0.0, cache_ttl_seconds)
+        self._cached_ready: bool | None = None
+        self._cached_until = 0.0
+        self._probe_lock = asyncio.Lock()
+
+    @staticmethod
+    def _is_loopback(scope: Scope) -> bool:
+        client = scope.get("client")
+        if not client:
+            return False
+        try:
+            address = ipaddress.ip_address(client[0])
+        except ValueError:
+            return False
+        if address.is_loopback:
+            return True
+        mapped = getattr(address, "ipv4_mapped", None)
+        return bool(mapped is not None and mapped.is_loopback)
+
+    async def _ready(self) -> bool:
+        now = time.monotonic()
+        if self._cached_ready is not None and now < self._cached_until:
+            return self._cached_ready
+        async with self._probe_lock:
+            now = time.monotonic()
+            if self._cached_ready is not None and now < self._cached_until:
+                return self._cached_ready
+            try:
+                ready, _reason = await self._probe()
+            except Exception:
+                ready = False
+            self._cached_ready = ready
+            self._cached_until = time.monotonic() + self._cache_ttl_seconds
+            return ready
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if (
             scope["type"] == "http"
             and scope.get("method") in ("GET", "HEAD")
             and posixpath.normpath(scope.get("path", "")) == "/ready"
+            and self._is_loopback(scope)
         ):
-            try:
-                ready, _reason = await self._probe()
-            except Exception:
-                ready = False
+            ready = await self._ready()
             body = self._READY if ready else self._NOT_READY
             response_body = b"" if scope.get("method") == "HEAD" else body
             headers = [
