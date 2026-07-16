@@ -347,10 +347,27 @@ class Settings(BaseSettings):
             return frozenset(str(item) for item in value)
         raise ValueError("must be a comma/space-separated string or collection of names")
 
+    @field_validator("unraid_allow_insecure_tls", mode="before")
+    @classmethod
+    def _blank_insecure_tls_is_false(cls, value: object) -> object:
+        # Plugin manifests substitute an unset userConfig option as an empty
+        # string (e.g. UNRAID_ALLOW_INSECURE_TLS=""); pydantic would reject "" as
+        # a bool. Treat blank as the default (disabled) so an omitted option is a
+        # no-op rather than a startup crash.
+        if isinstance(value, str) and value.strip() == "":
+            return False
+        return value
+
     @field_validator("raw_verify_ssl", mode="before")
     @classmethod
     def _lower_verify_ssl(cls, value: object) -> str:
-        return str(value).lower()
+        # A blank value (unset plugin option substituted as "") must fall back to
+        # the "true" default; otherwise it would be treated as a (bogus, empty)
+        # CA-bundle path downstream and silently break TLS verification.
+        text = str(value).strip()
+        if text == "":
+            return "true"
+        return text.lower()
 
     @field_validator("log_level_str", mode="before")
     @classmethod

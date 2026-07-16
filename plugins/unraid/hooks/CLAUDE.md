@@ -1,9 +1,13 @@
 # `hooks/`
 
 This directory holds the plugin's hook configuration. `hooks.json` is the
-**single source of truth** — the Claude plugin manifest
-(`../.claude-plugin/plugin.json`) references it via `"hooks": "./hooks/hooks.json"`
-rather than inlining hook commands.
+**single source of truth**. Claude Code loads the standard `hooks/hooks.json`
+path **automatically**, so the Claude plugin manifest
+(`../.claude-plugin/plugin.json`) must **not** declare a `"hooks"` entry for it.
+Adding `"hooks": "./hooks/hooks.json"` makes Claude Code load the same file
+twice and fails hook loading with a "Duplicate hooks file detected" error
+(the plugin's hooks then never run). `manifest.hooks` should only ever list
+*additional* hook files that live outside the standard path.
 
 Current wiring (both run the same idempotent credential-setup script):
 
@@ -25,4 +29,5 @@ error warns to stderr (greppable `plugin-setup.sh:` prefix) and continues.
 `ConfigChange` uses a `user_settings` matcher so it re-runs only when plugin settings
 change, propagating updated credentials without a restart.
 
-When changing hook wiring, edit `hooks.json` only; the manifest picks it up.
+When changing hook wiring, edit `hooks.json` only; Claude Code auto-loads it.
+Do not re-add a `"hooks"` reference to the manifest for this file.
