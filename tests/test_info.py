@@ -303,7 +303,7 @@ class TestUnraidInfoTool:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Failed to execute system/online"):
+        with pytest.raises(ToolError, match="Internal error executing system/online"):
             await tool_fn(action="system", subaction="online")
 
     async def test_metrics(self, _mock_graphql: AsyncMock) -> None:

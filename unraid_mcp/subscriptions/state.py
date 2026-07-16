@@ -65,6 +65,22 @@ class SubscriptionState:
     # Deduplicated GraphQL error tracking (was _last_graphql_error / _graphql_error_count).
     graphql_error_msg: str | None = None
     graphql_error_count: int = 0
+    # Monotonic lifecycle token. Every start/stop invalidates older loop cleanup.
+    generation: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSnapshot:
+    """One state-aware cache read returned as an immutable value object."""
+
+    data: dict[str, Any] | None
+    fetched_at: str | None
+    connection_state: str
+    last_error: str | None
+    active: bool
+    fresh: bool
+    age_seconds: float | None = None
+    stale: bool = False
 
 
 class _StateFieldView[V](MutableMapping[str, V]):

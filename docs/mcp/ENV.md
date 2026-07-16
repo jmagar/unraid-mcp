@@ -60,9 +60,17 @@ Setting both client id and secret delegates HTTP auth to Google OAuth (FastMCP `
 
 | Variable | Required | Default | Sensitive | Description |
 |----------|----------|---------|-----------|-------------|
-| `UNRAID_AUTO_START_SUBSCRIPTIONS` | no | `true` | no | Auto-start WebSocket subscriptions on boot |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | no | `true` | no | Lazily initialize enabled subscriptions on first resource/diagnostic access; first read may return `connecting` |
 | `UNRAID_MAX_RECONNECT_ATTEMPTS` | no | `10` | no | Max WebSocket reconnection attempts |
 | `UNRAID_AUTOSTART_LOG_PATH` | no | auto-detect | no | Log file path for log tail subscription |
+| `UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE` | no | `false` | no | Debug-only raw upstream frame in `subscriptions/test_query`; response-data-sensitive and unsafe on shared deployments |
+| `UNRAID_SUBSCRIPTION_MAX_CONNECTIONS` | no | `3` | no | Concurrent startup handshakes per process (1..32) |
+| `UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS` | no | `0.05` | no | Startup launch delay in seconds (0..10) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS` | no | `100` | no | Streaming event ceiling (1..10000; `limit` may lower it) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES` | no | `1048576` | no | Streaming byte ceiling; response budget may lower it |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` | no | `30` | no | Maximum `collect_for`; configurable up to 300 seconds |
+| `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` | no | `300` | no | Maximum usable cache age; configurable up to 86400 seconds |
+| `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` | no | `60` | no | Maximum per-call WebSocket timeout; configurable up to 300 seconds |
 
 ## Credentials Directory
 

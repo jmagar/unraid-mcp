@@ -11,6 +11,7 @@ from ..config.logging import logger
 from ..core import client as _client
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.guards import gate_destructive_action
+from ..core.pagination import cap_list
 from ..core.utils import validate_subaction
 
 
@@ -42,7 +43,7 @@ _VM_MUTATION_FIELDS: dict[str, str] = {"force_stop": "forceStop"}
 
 
 async def _handle_vm(
-    subaction: str, vm_id: str | None, ctx: Context | None, confirm: bool
+    subaction: str, vm_id: str | None, ctx: Context | None, confirm: bool, limit: int = 20
 ) -> dict[str, Any]:
     validate_subaction(subaction, _VM_SUBACTIONS, "vm")
     if subaction != "list" and not vm_id:
@@ -68,8 +69,10 @@ async def _handle_vm(
                 vms = data["vms"].get("domains") or data["vms"].get("domain") or []
                 if isinstance(vms, dict):
                     vms = [vms]
-                return {"vms": vms}
-            return {"vms": []}
+                capped, page = cap_list(vms, limit)
+                return {"vms": capped, "page": page}
+            capped, page = cap_list([], limit)
+            return {"vms": capped, "page": page}
 
         if subaction == "details":
             # VmDomain has no richer fields than list — reuse the same query, filter client-side.

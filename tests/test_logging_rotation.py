@@ -7,6 +7,7 @@ overwritten (not grown unbounded), and a reset marker is emitted.
 
 import logging
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -143,10 +144,10 @@ def test_failed_rotation_writes_no_marker_and_keeps_old_stream(
         logging.FileHandler, "emit", lambda self, rec: written.append(rec.getMessage())
     )
 
-    def _boom() -> object:
+    def _boom(*args: object, **kwargs: object) -> object:
         raise OSError("disk full")
 
-    monkeypatch.setattr(handler, "_open", _boom)  # both reopen attempts fail
+    monkeypatch.setattr("unraid_mcp.config.logging.tempfile.NamedTemporaryFile", _boom)
 
     handler._bytes_written = handler.max_bytes  # force a rotation attempt
     rotated = handler._rotate_if_needed()
@@ -154,4 +155,13 @@ def test_failed_rotation_writes_no_marker_and_keeps_old_stream(
     assert rotated is False  # reopen failed → no rotation
     assert handler.stream is old_stream  # stream not swapped
     assert not any("LOG FILE RESET" in m for m in written)  # marker NOT emitted
+    handler.close()
+
+
+def test_record_is_formatted_only_once_per_emit(tmp_path: Path) -> None:
+    handler = _make_handler(tmp_path / "once.log", max_bytes=10_000)
+    formatter = MagicMock(wraps=logging.Formatter("%(message)s"))
+    handler.setFormatter(formatter)
+    handler.emit(_record("one pass"))
+    assert formatter.format.call_count == 1
     handler.close()

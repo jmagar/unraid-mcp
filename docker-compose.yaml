@@ -24,6 +24,7 @@ services:
     networks:
       - jakenet
     deploy:
+      replicas: 1
       resources:
         limits:
           memory: 1024M
@@ -35,11 +36,16 @@ services:
           if [ "${UNRAID_MCP_TRANSPORT:-streamable-http}" = "stdio" ]; then
             exit 0
           fi
-          python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/health', timeout=5).status==200 else 1)"
+          python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/ready', timeout=5).status==200 else 1)"
       interval: 30s
       timeout: 5s
       start_period: 30s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   unraid-mcp-credentials:

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from conftest import make_tool_fn
+from pydantic import ValidationError
 
 from unraid_mcp.config import settings as settings_module
 from unraid_mcp.config.settings import Settings
@@ -269,16 +270,76 @@ class TestPortGuard:
     """Direct coverage for the Settings._parse_port pydantic field validator."""
 
     @pytest.mark.parametrize("bad_port", ["abc", "0", "65536"])
-    def test_bad_port_exits(self, bad_port: str) -> None:
-        # Non-integer or out-of-range (1-65535) ports are a fatal startup error.
-        with pytest.raises(SystemExit) as excinfo:
+    def test_bad_port_is_declarative_validation_error(self, bad_port: str) -> None:
+        with pytest.raises(ValidationError):
             Settings(UNRAID_MCP_PORT=bad_port)
-        assert excinfo.value.code == 1
 
     def test_valid_port_parsed_to_int(self) -> None:
         settings = Settings(UNRAID_MCP_PORT="8080")
         assert settings.unraid_mcp_port == 8080
         assert isinstance(settings.unraid_mcp_port, int)
+
+
+class TestDeclarativeRuntimeSettings:
+    @pytest.mark.parametrize("transport", ["bogus", "http", "STREAM"])
+    def test_unsupported_transport_rejected(self, transport: str) -> None:
+        with pytest.raises(ValidationError):
+            Settings(UNRAID_MCP_TRANSPORT=transport)
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("UNRAID_MCP_MAX_RESPONSE_BYTES", 0),
+            ("UNRAID_MAX_RECONNECT_ATTEMPTS", -1),
+            ("UNRAID_SUBSCRIPTION_MAX_CONNECTIONS", 0),
+            ("UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS", -0.01),
+            ("UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS", 0),
+            ("UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES", 0),
+            ("UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS", 0),
+            ("UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS", 0),
+            ("UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS", 0),
+        ],
+    )
+    def test_invalid_numeric_runtime_setting_rejected(self, name: str, value: int) -> None:
+        with pytest.raises(ValidationError):
+            Settings(**{name: value})
+
+    def test_subscription_settings_are_typed_and_parsed(self) -> None:
+        settings = Settings(
+            UNRAID_AUTO_START_SUBSCRIPTIONS="false",
+            UNRAID_MAX_RECONNECT_ATTEMPTS="7",
+            UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE="true",
+            UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS="cpu, memory display",
+            UNRAID_SUBSCRIPTION_MAX_CONNECTIONS="2",
+            UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS="0.25",
+            UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS="12",
+            UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES="2048",
+            UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS="15",
+            UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS="120",
+            UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS="45",
+        )
+
+        assert settings.unraid_auto_start_subscriptions is False
+        assert settings.unraid_max_reconnect_attempts == 7
+        assert settings.unraid_mcp_enable_raw_subscription_probe is True
+        assert settings.unraid_subscription_auto_start_actions == frozenset(
+            {"cpu", "memory", "display"}
+        )
+        assert settings.unraid_subscription_max_connections == 2
+        assert settings.unraid_subscription_startup_stagger_seconds == 0.25
+        assert settings.unraid_subscription_collect_max_events == 12
+        assert settings.unraid_subscription_collect_max_bytes == 2048
+        assert settings.unraid_subscription_collect_max_seconds == 15
+        assert settings.unraid_subscription_cache_max_age_seconds == 120
+        assert settings.unraid_subscription_timeout_max_seconds == 45
+
+    @pytest.mark.parametrize(
+        "name",
+        ["UNRAID_AUTO_START_SUBSCRIPTIONS", "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE"],
+    )
+    def test_invalid_subscription_boolean_rejected(self, name: str) -> None:
+        with pytest.raises(ValidationError):
+            Settings(**{name: "sometimes"})
 
 
 class TestGoogleOAuthSettings:

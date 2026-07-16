@@ -7,33 +7,38 @@ on:
     - cron: "0 8 * * *"
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  update:
+  generate:
+    name: Generate untrusted OpenWiki artifact
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: scripts/openwiki/package-lock.json
 
       - name: Connect Tailscale
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           ping: 100.120.242.29
 
-      - name: Install OpenWiki
-        run: npm install --global openwiki
+      - name: Install checksum-locked OpenWiki
+        run: npm ci --prefix scripts/openwiki --ignore-scripts
 
       - name: Preflight OpenWiki API
         env:
@@ -41,16 +46,6 @@ jobs:
           OPENAI_COMPATIBLE_BASE_URL: http://100.120.242.29:8317/v1
         run: |
           set -euo pipefail
-
-          for env_file in "$HOME/docs/.env" /home/jmagar/docs/.env; do
-            if [[ -f "$env_file" ]]; then
-              set -a
-              source "$env_file"
-              set +a
-              break
-            fi
-          done
-          export OPENAI_COMPATIBLE_BASE_URL="http://100.120.242.29:8317/v1"
 
           if [[ -z "${OPENAI_COMPATIBLE_API_KEY:-}" ]]; then
             echo "::error::OPENAI_COMPATIBLE_API_KEY is required for OpenWiki updates"
@@ -81,29 +76,49 @@ jobs:
         run: |
           set -euo pipefail
 
-          for env_file in "$HOME/docs/.env" /home/jmagar/docs/.env; do
-            if [[ -f "$env_file" ]]; then
-              set -a
-              source "$env_file"
-              set +a
-              break
-            fi
-          done
-          export OPENWIKI_PROVIDER="${OPENWIKI_PROVIDER:-openai-compatible}"
-          export OPENAI_COMPATIBLE_BASE_URL="http://100.120.242.29:8317/v1"
-          export OPENWIKI_MODEL_ID="${OPENWIKI_MODEL_ID:-gpt-5.3-codex-spark}"
-
           if [[ -z "${OPENAI_COMPATIBLE_API_KEY:-}" ]]; then
             echo "::error::OPENAI_COMPATIBLE_API_KEY is required for OpenWiki updates"
             exit 1
           fi
 
-          openwiki --update --print
-      - name: Create OpenWiki update pull request
-        uses: peter-evans/create-pull-request@v8
+          scripts/openwiki/node_modules/.bin/openwiki --update --print
+
+      - name: Upload generated documentation only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
+          name: openwiki-generated-${{ github.run_id }}
+          path: openwiki/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  propose:
+    name: Propose generated documentation
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out repository without persisted credentials
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download generated documentation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: openwiki-generated-${{ github.run_id }}
+          path: openwiki
+
+      - name: Create OpenWiki update pull request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ github.token }}
           add-paths: openwiki
           branch: openwiki/update
+          delete-branch: true
           commit-message: "docs: update OpenWiki"
           title: "docs: update OpenWiki"
           body: |

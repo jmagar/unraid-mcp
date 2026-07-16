@@ -6,6 +6,8 @@ to the Unraid API with proper timeout handling and error management.
 
 import asyncio
 import json
+import logging
+import random
 import re
 import time
 from typing import Any, Final
@@ -60,6 +62,16 @@ _SK_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^sk-[A-Za-z0-9_-]{16,}$")
 # High-entropy opaque token: a single long run of token-charset characters with no
 # whitespace. Requires a mix of letters and digits to avoid masking ordinary words.
 _TOKEN_CHARSET_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-./+=]+$")
+_EMBEDDED_SECRET_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?i)(?:authorization\s*:\s*bearer\s+|bearer\s+)?"
+    r"(?:sk-[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)"
+)
+_KEYED_SECRET_RE: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b(api[_-]?key|token|password|secret|authorization)\b\s*[:=]\s*([^\s,;]+)"
+)
+_MAX_REDACTION_DEPTH: Final[int] = 8
+_MAX_REDACTION_ITEMS: Final[int] = 100
+_MAX_REDACTION_STRING: Final[int] = 4096
 
 
 def _is_sensitive_key(key: str) -> bool:
@@ -92,7 +104,7 @@ def _is_sensitive_value(value: str) -> bool:
     )
 
 
-def redact_sensitive(obj: Any) -> Any:
+def redact_sensitive(obj: Any, *, _depth: int = 0) -> Any:
     """Recursively redact sensitive data from nested dicts/lists.
 
     Scans both *keys* and *values*: a value is masked when its key name looks
@@ -101,12 +113,29 @@ def redact_sensitive(obj: Any) -> Any:
     ``_is_sensitive_value``), so secrets are caught even under innocuous keys.
     Pure function — returns a redacted copy and never mutates ``obj``.
     """
+    if _depth >= _MAX_REDACTION_DEPTH:
+        return "<truncated: max depth>"
     if isinstance(obj, dict):
-        return {k: ("***" if _is_sensitive_key(k) else redact_sensitive(v)) for k, v in obj.items()}
+        result = {
+            k: ("***" if _is_sensitive_key(str(k)) else redact_sensitive(v, _depth=_depth + 1))
+            for k, v in list(obj.items())[:_MAX_REDACTION_ITEMS]
+        }
+        if len(obj) > _MAX_REDACTION_ITEMS:
+            result["<truncated>"] = f"{len(obj) - _MAX_REDACTION_ITEMS} items omitted"
+        return result
     if isinstance(obj, list):
-        return [redact_sensitive(item) for item in obj]
-    if isinstance(obj, str) and _is_sensitive_value(obj):
-        return "***"
+        result = [redact_sensitive(item, _depth=_depth + 1) for item in obj[:_MAX_REDACTION_ITEMS]]
+        if len(obj) > _MAX_REDACTION_ITEMS:
+            result.append(f"<truncated: {len(obj) - _MAX_REDACTION_ITEMS} items omitted>")
+        return result
+    if isinstance(obj, str):
+        if _is_sensitive_value(obj):
+            return "***"
+        redacted = _EMBEDDED_SECRET_RE.sub("***", obj)
+        redacted = _KEYED_SECRET_RE.sub(lambda match: f"{match.group(1)}=***", redacted)
+        if len(redacted) > _MAX_REDACTION_STRING:
+            return redacted[:_MAX_REDACTION_STRING] + "<truncated>"
+        return redacted
     return obj
 
 
@@ -309,13 +338,29 @@ async def _post_with_429_retry(
     Raises:
         ToolError: If 429 persists after 3 retries
     """
-    for attempt in range(3):
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        # Every retry is a physical upstream request and consumes its own token.
+        await _rate_limiter.acquire()
         response = await client.post(url, **post_kwargs)
         if response.status_code != 429:
             return response
-        backoff = 2**attempt
+        if attempt == max_attempts - 1:
+            break
+        retry_after = response.headers.get("Retry-After")
+        try:
+            requested_delay = float(retry_after) if retry_after is not None else 2**attempt
+        except (TypeError, ValueError):
+            requested_delay = 2**attempt
+        bounded_delay = min(max(requested_delay, 0.0), 10.0)
+        backoff = bounded_delay + random.uniform(  # noqa: S311 - scheduling jitter, not security
+            0.0, min(0.25, bounded_delay * 0.25)
+        )
         logger.warning(
-            f"Rate limited (429) by Unraid API, retrying in {backoff}s (attempt {attempt + 1}/3)"
+            "Rate limited (429) by Unraid API, retrying in %.3fs (attempt %d/%d)",
+            backoff,
+            attempt + 1,
+            max_attempts,
         )
         await asyncio.sleep(backoff)
 
@@ -351,7 +396,11 @@ def _synthesize_idempotent_success(
     if not is_idempotent_error(error_details, operation):
         return None
 
-    logger.warning(f"Idempotent operation '{operation}' - treating as success: {error_details}")
+    logger.warning(
+        "Idempotent operation '%s' - treating as success: %s",
+        operation,
+        redact_sensitive(error_details),
+    )
     # Return a success response with the current state information
     return {
         "idempotent_success": True,
@@ -399,15 +448,12 @@ async def make_graphql_request(
     if variables:
         payload["variables"] = variables
 
-    logger.debug(f"Making GraphQL request to {safe_display_url(_settings.UNRAID_API_URL)}:")
-    logger.debug(f"Query: {query[:200]}{'...' if len(query) > 200 else ''}")  # Log truncated query
-    if variables:
-        logger.debug(f"Variables: {redact_sensitive(variables)}")
+    logger.debug("Making GraphQL request to %s:", safe_display_url(_settings.UNRAID_API_URL))
+    logger.debug("Query: %s%s", query[:200], "..." if len(query) > 200 else "")
+    if variables and logger.isEnabledFor(logging.DEBUG):
+        logger.debug("Variables: %s", redact_sensitive(variables))
 
     try:
-        # Rate limit: consume a token before making the request
-        await _rate_limiter.acquire()
-
         # Get the shared HTTP client with connection pooling
         client = await get_http_client()
 
@@ -433,9 +479,11 @@ async def make_graphql_request(
             if idempotent_result is not None:
                 return idempotent_result
 
-            logger.error(f"GraphQL API returned errors: {response_data['errors']}")
+            safe_errors = redact_sensitive(response_data["errors"])
+            safe_details = str(redact_sensitive(error_details))
+            logger.error("GraphQL API returned errors: %s", safe_errors)
             # Use ToolError for GraphQL errors to provide better feedback to LLM
-            raise ToolError(f"GraphQL API error: {error_details}")
+            raise ToolError(f"GraphQL API error: {safe_details}")
 
         logger.debug("GraphQL request successful.")
         data = response_data.get("data", {})
@@ -443,15 +491,19 @@ async def make_graphql_request(
 
     except httpx.HTTPStatusError as e:
         # Log full details internally; only expose status code to MCP client
-        logger.error(f"HTTP error occurred: {e.response.status_code} - {e.response.text}")
+        logger.error(
+            "HTTP error occurred: %s - %s",
+            e.response.status_code,
+            redact_sensitive(e.response.text),
+        )
         raise ToolError(
             f"Unraid API returned HTTP {e.response.status_code}. Check server logs for details."
         ) from e
     except httpx.RequestError as e:
         # Log full error internally; give safe summary to MCP client
-        logger.error(f"Request error occurred: {e}")
+        logger.error("Request error occurred: %s", redact_sensitive(str(e)))
         raise ToolError(f"Network error connecting to Unraid API: {type(e).__name__}") from e
     except json.JSONDecodeError as e:
         # Log full decode error; give safe summary to MCP client
-        logger.error(f"Failed to decode JSON response: {e}")
+        logger.error("Failed to decode JSON response: %s", redact_sensitive(str(e)))
         raise ToolError("Unraid API returned an invalid response (not valid JSON)") from e

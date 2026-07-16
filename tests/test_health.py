@@ -212,7 +212,7 @@ class TestHealthActions:
                 "unraid_mcp.subscriptions.utils.analyze_subscription_status",
                 return_value=(0, []),
             ),
-            pytest.raises(ToolError, match="Failed to execute health/diagnose"),
+            pytest.raises(ToolError, match="Internal error executing health/diagnose"),
         ):
             await tool_fn(action="health", subaction="diagnose")
 

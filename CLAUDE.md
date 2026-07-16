@@ -54,8 +54,11 @@ Copy `.env.example` to `.env` and configure:
 - `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
 
 **Subscriptions:**
-- `UNRAID_AUTO_START_SUBSCRIPTIONS`: Auto-start live subscriptions on startup (default: true)
+- `UNRAID_AUTO_START_SUBSCRIPTIONS`: Lazily initialize enabled live subscriptions on first MCP resource/diagnostic access (default: true); the first read may return `connecting`
 - `UNRAID_MAX_RECONNECT_ATTEMPTS`: WebSocket reconnect limit (default: 10)
+- `UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE`: Debug-only, data-sensitive raw frame in `subscriptions/test_query` (default: false; never enable on shared deployments)
+- Collection safety: `UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS=100`, `UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES=1048576`, and `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS=30` bound retention while streaming; positive `limit` and the response-size budget may lower those ceilings
+- Cache/timeout safety: cached subscription payloads are usable for at most `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS=300`; per-call WebSocket timeout is capped by `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS=60`
 
 **Credentials override:**
 - `UNRAID_CREDENTIALS_DIR`: Override the `~/.unraid-mcp/` credentials directory path
@@ -81,11 +84,14 @@ Copy `.env.example` to `.env` and configure:
 - **List Capping**: List subactions bound output via `cap_list` (`core/pagination.py`) threaded
   from the `limit` tool param. Capped responses carry a `page` meta dict
   (`returned`/`total`/`truncated`, plus a `hint` when truncated). `limit<=0` returns everything;
-  omitting `limit` uses the tool default (20). Applies to `docker/list`, `disk/shares`,
-  `disk/disks`, `array/parity_history`, `system/network_interfaces`, `system/network_metrics`,
-  and the `live/log_tail` + `live/notification_feed` + `live/network_metrics` event/interface
-  lists. `docker/details` fetches a single container via `docker.container(id:)` rather than
-  over-fetching the full container list.
+  omitting `limit` uses the tool default (20). Every list-shaped subaction returns a capped
+  collection plus `page` metadata, including VM, disk/log, key/permission, OIDC, system,
+  Docker, array, notification, plugin, and live event/interface lists. Collect-mode live
+  calls retain bounded events/bytes/duration even when `limit<=0`. When a live runtime
+  safety cap fires, `page.truncated` remains true and `total_is_lower_bound` identifies the
+  observed minimum rather than claiming a complete window. `docker/details` fetches a
+  single container via `docker.container(id:)` rather than over-fetching the full container
+  list.
 - **Destructive Action Safety**: `DESTRUCTIVE_ACTIONS` sets require `confirm=True` for dangerous operations
 - **Modular Architecture**: Clean separation of concerns across focused modules
 - **Error Handling**: Uses ToolError for user-facing errors, detailed logging for debugging

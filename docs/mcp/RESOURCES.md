@@ -31,7 +31,9 @@ unraid://live/<subscription-name>
 |-----|-------------|---------------------|
 | `unraid://logs/stream` | Real-time log file stream | `logFileSubscription` |
 
-Returns log file content with path, total lines, start line, and content. Auto-starts on boot if `UNRAID_AUTOSTART_LOG_PATH` is set or `/var/log/syslog` exists.
+Returns log file content with path, total lines, start line, and content. It initializes
+lazily on the first resource/diagnostic access if `UNRAID_AUTOSTART_LOG_PATH` is set or
+`/var/log/syslog` exists.
 
 ### Live telemetry (snapshot subscriptions)
 
@@ -62,7 +64,7 @@ These subscriptions only emit when state changes. A timeout does not indicate an
 
 ## Response Format
 
-All resource responses return JSON:
+Fresh cached resource responses return JSON:
 
 ```json
 {
@@ -73,11 +75,28 @@ All resource responses return JSON:
       {"percentTotal": 15.0, "percentUser": 10.0, "percentSystem": 5.0, "percentIdle": 85.0}
     ]
   },
-  "_fetched_at": "2026-04-04T12:00:00.000000"
+  "_fetched_at": "2026-04-04T12:00:00.000000+00:00",
+  "_subscription": {
+    "state": "subscribed",
+    "active": true,
+    "fresh": true,
+    "stale": false,
+    "age_seconds": 1.25
+  }
 }
 ```
 
-The `_fetched_at` timestamp indicates when the data was last received from the WebSocket.
+`_fetched_at` is when the frame arrived. A cache is usable only while its owning task is
+active, its state is `subscribed`, and `age_seconds` is no greater than
+`UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` (300 seconds by default). The `live` tool's
+warm-cache response carries the same contract under `cache`, with fields `fetched_at`,
+`age_seconds`, `state`, `fresh`, and `stale`.
+
+Stale or terminal cache is never returned as successful live data. Stop, authentication
+failure, invalid configuration, retry exhaustion, completion, or age expiry invalidates
+the usable cache. A resource attempts a bounded on-demand fetch when appropriate; if that
+fails, it returns an explicit error without including the old payload. A successful
+reconnection and new frame creates a new fresh timestamp.
 
 ### Connecting state
 
@@ -101,17 +120,20 @@ When a subscription has permanently failed:
 }
 ```
 
-Terminal failure states: `failed`, `auth_failed`, `max_retries_exceeded`.
+Terminal failure states: `failed`, `auth_failed`, `max_retries_exceeded`. Explicit stop
+and upstream completion also invalidate the cache even when no terminal error message is
+present.
 
-## Auto-start Behavior
+## Lazy initialization behavior
 
 When `UNRAID_AUTO_START_SUBSCRIPTIONS=true` (default):
-- All snapshot subscriptions start automatically on server boot
-- The log file subscription starts if `UNRAID_AUTOSTART_LOG_PATH` is set or `/var/log/syslog` exists
+- Enabled snapshot subscriptions initialize on the first MCP resource or subscription-diagnostic access
+- The log file subscription initializes then if `UNRAID_AUTOSTART_LOG_PATH` is set or `/var/log/syslog` exists
+- The first read can return `connecting`; retry after the first WebSocket message arrives
 - Resources serve cached data immediately after the first WebSocket message arrives
 
 When `UNRAID_AUTO_START_SUBSCRIPTIONS=false`:
-- Subscriptions do not start on boot
+- Persistent subscriptions are not initialized
 - Resources fall back to `subscribe_once` -- a one-shot WebSocket query
 - This is useful for low-resource environments or when real-time data is not needed
 

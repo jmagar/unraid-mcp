@@ -8,6 +8,7 @@ import contextlib
 import logging
 from collections.abc import Iterator
 
+import httpx
 from fastmcp.exceptions import ToolError as FastMCPToolError
 
 
@@ -43,6 +44,10 @@ _LIKELY_BUG_EXCEPTIONS: tuple[type[Exception], ...] = (
     TypeError,
     IndexError,
     NameError,
+)
+_KNOWN_TRANSIENT_EXCEPTIONS: tuple[type[Exception], ...] = (
+    httpx.RequestError,
+    ConnectionError,
 )
 
 
@@ -83,26 +88,32 @@ def tool_error_handler(
         from ..config.settings import CREDENTIALS_ENV_PATH
 
         raise ToolError(
-            f"Credentials not configured. Run unraid_health action=setup, "
+            'Credentials not configured. Run unraid(action="health", subaction="setup"), '
             f"or create {CREDENTIALS_ENV_PATH} with UNRAID_API_URL and UNRAID_API_KEY "
             f"(cp .env.example {CREDENTIALS_ENV_PATH} to get started)."
         ) from e
     except TimeoutError as e:
         logger.exception(
-            f"Timeout in unraid_{tool_name} action={action}: request exceeded time limit"
+            "Timeout in unraid_%s action=%s: request exceeded time limit", tool_name, action
         )
         raise ToolError(
             f"Request timed out executing {tool_name}/{action}. The Unraid API did not respond in time."
         ) from e
     except _LIKELY_BUG_EXCEPTIONS as e:
-        logger.exception(f"Likely server bug in unraid_{tool_name} action={action}")
+        logger.exception("Likely server bug in unraid_%s action=%s", tool_name, action)
         raise ToolError(
             f"Internal error executing {tool_name}/{action} (likely a server bug). "
             f"Retrying is unlikely to help. Check server logs for details."
         ) from e
-    except Exception as e:
-        logger.exception(f"Error in unraid_{tool_name} action={action}")
+    except _KNOWN_TRANSIENT_EXCEPTIONS as e:
+        logger.exception("Transient upstream error in unraid_%s action=%s", tool_name, action)
         raise ToolError(
             f"Failed to execute {tool_name}/{action} (upstream/network error). "
             f"This may be transient — retrying may help. Check server logs for details."
+        ) from e
+    except Exception as e:
+        logger.exception("Internal error in unraid_%s action=%s", tool_name, action)
+        raise ToolError(
+            f"Internal error executing {tool_name}/{action}. Retrying is unlikely to help. "
+            "Check server logs for details."
         ) from e

@@ -1,70 +1,237 @@
-name: Publish to PyPI
+name: Release Artifacts
 
-# Triggered by the GitHub Release that release-please creates when a release PR
-# is merged. release-please owns version bumps, tagging, the CHANGELOG, and the
-# Release itself — this workflow only builds and publishes the artifacts.
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
-# Least-privilege default; the publish job elevates only what it needs.
 permissions:
   contents: read
 
-# Never cancel an in-flight release.
 concurrency:
-  group: publish-${{ github.ref }}
+  group: release-${{ github.event.release.tag_name || github.ref_name }}
   cancel-in-progress: false
 
+env:
+  ARTIFACT_NAME: python-dist-${{ github.run_id }}
+
 jobs:
-  publish:
+  build:
+    name: Build & Attest Release Artifact
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.9.25"
+          enable-cache: false
+      - name: Verify tag matches package version
+        run: |
+          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n1)"
+          test "$package_version" = "${GITHUB_REF_NAME#v}"
+      - name: Build package once from clean sources
+        run: uv build --no-sources
+      - name: Validate metadata, wheel contents, and installed stdio server
+        run: |
+          uv tool run --from twine==6.2.0 twine check dist/*
+          unzip -l dist/*.whl | tee wheel-contents.txt
+          grep -q 'unraid_mcp/server.py' wheel-contents.txt
+          grep -q 'licenses/LICENSE' wheel-contents.txt
+          uv venv --python 3.12 .release-venv
+          uv pip install --python .release-venv/bin/python dist/*.whl
+          bash scripts/smoke-stdio.sh .release-venv/bin/unraid-mcp-server
+      - name: Generate consumer-verifiable checksums
+        run: (cd dist && sha256sum -- * > SHA256SUMS)
+      - name: Upload immutable internal release artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Attest exact wheel and source distribution
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+
+  pypi:
+    name: Publish PyPI Channel
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: release
     permissions:
-      contents: write   # create GitHub release
-      id-token: write   # PyPI trusted publishing + attestations
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-
-      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
-
-      - name: Verify tag matches pyproject.toml version
-        run: |
-          PKG_VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "Version mismatch: pyproject.toml=$PKG_VERSION tag=$TAG_VERSION"
-            exit 1
-          fi
-
-      - name: Build package
-        run: uv build
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist
+      - name: Reconcile existing PyPI state
+        id: state
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if curl -fsS "https://pypi.org/pypi/unraid-mcp/${version}/json" > pypi-existing.json; then
+            published=true
+            while read -r checksum filename; do
+              remote_checksum="$(
+                jq -r --arg filename "$filename" \
+                  '[.urls[] | select(.filename == $filename) | .digests.sha256][0] // empty' \
+                  pypi-existing.json
+              )"
+              if [ -z "$remote_checksum" ]; then
+                published=false
+              elif [ "$remote_checksum" != "$checksum" ]; then
+                echo "::error::PyPI already contains $filename with a different checksum"
+                exit 1
+              fi
+            done < dist/SHA256SUMS
+            echo "published=$published" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Remove non-distribution checksum manifest from upload directory
+        if: steps.state.outputs.published != 'true'
+        run: rm dist/SHA256SUMS
+      - name: Publish exact artifact to PyPI idempotently
+        if: steps.state.outputs.published != 'true'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          packages-dir: dist/
           attestations: true
+          skip-existing: true
 
-      - name: Attach build artifacts to the release
+  github-release:
+    name: Publish GitHub Release Channel
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist
+      - name: Attach exact artifacts and checksums idempotently
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
 
-      - name: Install mcp-publisher
+  mcp-registry:
+    name: Publish MCP Registry Channel
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Reconcile existing MCP Registry state
+        id: state
         run: |
-          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
-
-      - name: Set version in server.json
+          version="${GITHUB_REF_NAME#v}"
+          url="https://registry.modelcontextprotocol.io/v0/servers/tv.tootie%2Funraid-mcp/versions/${version}"
+          if curl -fsS "$url" > registry-existing.json; then
+            jq -e --arg version "$version" '.server.version == $version' registry-existing.json
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download checksum-pinned MCP publisher v1.8.0
+        if: steps.state.outputs.published != 'true'
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          jq --arg v "$VERSION" '
-            .version = $v |
-            .packages = [.packages[] | if .registryType == "pypi" then .version = $v else . end]
-          ' server.json > server.tmp && mv server.tmp server.json
-
+          archive=mcp-publisher_linux_amd64.tar.gz
+          curl --fail --silent --show-error --location \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.0/${archive}" \
+            --output "$archive"
+          printf '%s  %s\n' \
+            1370446bbe74d562608e8005a6ccce02d146a661fbd78674e11cc70b9618d6cf \
+            "$archive" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" mcp-publisher
+          test "$(./mcp-publisher --version | grep -o '1\.8\.0' | head -n1)" = "1.8.0"
+      - name: Stamp immutable release version into registry manifest
+        if: steps.state.outputs.published != 'true'
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          jq --arg version "$version" '
+            .version = $version |
+            .packages = [.packages[] | if .registryType == "pypi" then .version = $version else . end]
+          ' server.json > server.release.json
+          mv server.release.json server.json
       - name: Authenticate to MCP Registry
-        run: ./mcp-publisher login dns --domain tootie.tv --private-key ${{ secrets.MCP_PRIVATE_KEY }}
-
-      - name: Publish to MCP Registry
+        if: steps.state.outputs.published != 'true'
+        env:
+          MCP_PRIVATE_KEY: ${{ secrets.MCP_PRIVATE_KEY }}
+        run: ./mcp-publisher login dns --domain tootie.tv --private-key "$MCP_PRIVATE_KEY"
+      - name: Publish MCP Registry channel
+        if: steps.state.outputs.published != 'true'
         run: ./mcp-publisher publish
+
+  reconcile:
+    name: Release Reconciliation
+    needs: [build, pypi, github-release, mcp-registry]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: dist
+      - name: Verify checksums and PyPI digests
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          version="${GITHUB_REF_NAME#v}"
+          curl -fsS "https://pypi.org/pypi/unraid-mcp/${version}/json" > pypi.json
+          while read -r checksum filename; do
+            jq -e --arg filename "$filename" --arg checksum "$checksum" \
+              '.urls[] | select(.filename == $filename and .digests.sha256 == $checksum)' pypi.json >/dev/null
+          done < dist/SHA256SUMS
+      - name: Verify GitHub Release artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir github-assets
+          gh release download "$GITHUB_REF_NAME" --dir github-assets --pattern 'unraid_mcp-*' --pattern SHA256SUMS
+          (cd github-assets && sha256sum --check SHA256SUMS)
+          diff -rq dist github-assets
+      - name: Verify MCP Registry version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          curl -fsS \
+            "https://registry.modelcontextprotocol.io/v0/servers/tv.tootie%2Funraid-mcp/versions/${version}" |
+            jq -e --arg version "$version" '.server.version == $version and .server.packages[0].version == $version'
+      - name: Wait for matching GHCR release and latest digests
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in {1..30}; do
+            version_digest="$(docker buildx imagetools inspect "ghcr.io/${GITHUB_REPOSITORY}:${version}" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"
+            latest_digest="$(docker buildx imagetools inspect "ghcr.io/${GITHUB_REPOSITORY}:latest" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"
+            if [[ -n "$version_digest" && "$version_digest" = "$latest_digest" ]]; then
+              echo "GHCR ${version} and latest reconcile to ${version_digest}."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::GHCR version and latest tags did not reconcile"
+          exit 1

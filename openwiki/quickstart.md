@@ -9,7 +9,7 @@ unraid-mcp is a GraphQL-backed MCP server that:
 - Exposes **19 action domains**: system, health, array, disk, docker, vm, notification, key, plugin, rclone, setting, connect, customization, oidc, onboarding, user, live, subscriptions, help
 - Supports **real-time data** via WebSocket subscriptions (CPU, memory, array state, logs, network metrics)
 - Gates **destructive operations** behind explicit `confirm=True` requirement
-- Runs on **multiple transports**: streamable-http (default), stdio, SSE (deprecated)
+- Runs on **multiple transports**: streamable-http (default), stdio, and legacy SSE (deprecated; removed in v3.0.0)
 - Integrates with **AI clients**: Claude Code, Codex, Gemini CLI, and direct HTTP
 
 The server is built with FastMCP and follows a modular architecture with separate packages for configuration, core functionality, subscriptions, and tools. See `/unraid_mcp/server.py` for the main server implementation.
@@ -218,6 +218,7 @@ The repository includes extensive documentation in the `/docs/` directory:
 
 ## Version
 
-Current version: **2.3.2** (automated by release-please)
+Use PyPI or GitHub Release metadata for the current release; this evergreen guide does
+not embed a version literal that can drift from release-please.
 
 Versioning is fully automated via Conventional Commits. See `/AGENTS.md` for the versioning workflow.

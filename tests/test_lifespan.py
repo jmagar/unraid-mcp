@@ -25,6 +25,15 @@ def test_lifespan_is_wired_into_the_mcp_instance() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_app_returns_independently_registered_server() -> None:
+    """Embedders can construct an app explicitly instead of reusing the discovery global."""
+    app = server.create_app()
+    assert app is not server.mcp
+    assert app._lifespan is server.lifespan
+    assert (await app.get_tool("unraid")).name == "unraid"
+
+
+@pytest.mark.asyncio
 async def test_lifespan_runs_cleanup_once_on_shutdown() -> None:
     """Entering then exiting the lifespan awaits BOTH cleanups exactly once."""
     stop_all = AsyncMock()

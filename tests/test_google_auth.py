@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -396,6 +397,63 @@ class TestAuthorizedGoogleTokenVerifier:
         )
         assert result is None
 
+    async def test_identity_lookup_is_cached_until_token_expiry(self):
+        wrapped = AsyncMock()
+        wrapped.verify_token.return_value = AccessToken(
+            token="tok", client_id="sub", scopes=[], expires_at=int(time.time()) + 300
+        )
+        verifier = _AuthorizedGoogleTokenVerifier(
+            wrapped,
+            allowed_emails={"owner@example.com"},
+            allowed_domains=set(),
+            allow_any_user=False,
+        )
+        verifier._fetch_google_identity = AsyncMock(
+            return_value={"email": "owner@example.com", "email_verified": True}
+        )
+        assert await verifier.verify_token("tok") is not None
+        assert await verifier.verify_token("tok") is not None
+        verifier._fetch_google_identity.assert_awaited_once()
+
+    async def test_failed_identity_lookup_is_not_cached(self):
+        wrapped = AsyncMock()
+        wrapped.verify_token.return_value = AccessToken(
+            token="tok", client_id="sub", scopes=[], expires_at=int(time.time()) + 300
+        )
+        verifier = _AuthorizedGoogleTokenVerifier(
+            wrapped,
+            allowed_emails={"owner@example.com"},
+            allowed_domains=set(),
+            allow_any_user=False,
+        )
+        verifier._fetch_google_identity = AsyncMock(
+            side_effect=[{}, {"email": "owner@example.com", "email_verified": True}]
+        )
+
+        assert await verifier.verify_token("tok") is None
+        assert await verifier.verify_token("tok") is not None
+        assert verifier._fetch_google_identity.await_count == 2
+
+    async def test_concurrent_identity_lookups_are_coalesced(self):
+        import asyncio
+
+        wrapped = AsyncMock()
+        wrapped.verify_token.return_value = AccessToken(
+            token="tok", client_id="sub", scopes=[], expires_at=int(time.time()) + 300
+        )
+        verifier = _AuthorizedGoogleTokenVerifier(
+            wrapped,
+            allowed_emails={"owner@example.com"},
+            allowed_domains=set(),
+            allow_any_user=False,
+        )
+        verifier._fetch_google_identity = AsyncMock(
+            return_value={"email": "owner@example.com", "email_verified": True}
+        )
+        results = await asyncio.gather(*(verifier.verify_token("tok") for _ in range(20)))
+        assert all(result is not None for result in results)
+        verifier._fetch_google_identity.assert_awaited_once()
+
 
 # ---------------------------------------------------------------------------
 # run_server() middleware selection
@@ -431,25 +489,27 @@ class TestRunServerMiddlewareSelection:
     def test_bearer_path_installs_three_middleware(self):
         middleware = self._capture_middleware(google_provider=None)
         assert middleware is not None
-        # Health + WellKnown + Bearer
-        assert len(middleware) == 3
+        # Health + readiness + WellKnown + Bearer
+        assert len(middleware) == 4
         import unraid_mcp.server as server
 
         assert middleware[0].cls is server.HealthMiddleware
-        assert middleware[1].cls is server.WellKnownMiddleware
-        assert middleware[2].cls is server.BearerAuthMiddleware
-        assert middleware[2].kwargs["token"] == "tok"
-        assert middleware[2].kwargs["disabled"] is False
+        assert middleware[1].cls is server.ReadinessMiddleware
+        assert middleware[2].cls is server.WellKnownMiddleware
+        assert middleware[3].cls is server.BearerAuthMiddleware
+        assert middleware[3].kwargs["token"] == "tok"
+        assert middleware[3].kwargs["disabled"] is False
 
     def test_oauth_path_installs_only_health(self):
         sentinel = object()  # stand-in for a built GoogleProvider
         middleware = self._capture_middleware(google_provider=sentinel)
         assert middleware is not None
-        # Only HealthMiddleware — bearer + well-known are omitted under OAuth.
-        assert len(middleware) == 1
+        # Health/readiness only — bearer + well-known are omitted under OAuth.
+        assert len(middleware) == 2
         import unraid_mcp.server as server
 
         assert middleware[0].cls is server.HealthMiddleware
+        assert middleware[1].cls is server.ReadinessMiddleware
 
     def test_oauth_skips_bearer_bootstrap_and_public_bind_guard(self):
         import unraid_mcp.server as server
@@ -480,7 +540,7 @@ class TestRunServerMiddlewareSelection:
             ):
                 server.run_server()
             ensure_token.assert_not_called()
-            assert len(captured["middleware"]) == 1
+            assert len(captured["middleware"]) == 2
             assert captured["middleware"][0].cls is server.HealthMiddleware
         finally:
             s.UNRAID_MCP_TRANSPORT = originals["transport"]

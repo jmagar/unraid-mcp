@@ -9,6 +9,21 @@ from fastmcp import FastMCP
 
 from unraid_mcp.subscriptions.queries import SNAPSHOT_ACTIONS
 from unraid_mcp.subscriptions.resources import register_subscription_resources
+from unraid_mcp.subscriptions.state import ResourceSnapshot
+
+
+def _snapshot(
+    data=None,
+    fetched_at=None,
+    *,
+    state="",
+    error=None,
+    active=False,
+    fresh=False,
+    age_seconds=None,
+    stale=False,
+):
+    return ResourceSnapshot(data, fetched_at, state, error, active, fresh, age_seconds, stale)
 
 
 def _make_resources():
@@ -46,13 +61,29 @@ class TestLiveResourcesUseManagerCache:
         cached = {"systemMetricsCpu": {"percentTotal": 12.5}}
         ts = "2026-04-04T12:00:00+00:00"
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=(cached, ts))
+            mock_mgr.get_resource_snapshot = AsyncMock(
+                return_value=_snapshot(
+                    cached,
+                    ts,
+                    state="subscribed",
+                    active=True,
+                    fresh=True,
+                    age_seconds=1.25,
+                )
+            )
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
             result = await resource.fn()
         parsed = json.loads(result)
         assert parsed["_fetched_at"] == ts
         assert parsed["systemMetricsCpu"] == cached["systemMetricsCpu"]
+        assert parsed["_subscription"] == {
+            "state": "subscribed",
+            "active": True,
+            "fresh": True,
+            "stale": False,
+            "age_seconds": 1.25,
+        }
 
     @pytest.mark.parametrize("action", list(SNAPSHOT_ACTIONS.keys()))
     @pytest.mark.usefixtures("_mock_ensure_started")
@@ -60,8 +91,7 @@ class TestLiveResourcesUseManagerCache:
         self, action: str
     ) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
@@ -73,9 +103,8 @@ class TestLiveResourcesUseManagerCache:
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_resource_returns_error_status_on_permanent_failure(self, action: str) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(
-                return_value=("WebSocket auth failed", "auth_failed")
+            mock_mgr.get_resource_snapshot = AsyncMock(
+                return_value=_snapshot(state="auth_failed", error="WebSocket auth failed")
             )
             mock_mgr.auto_start_enabled = True
             mcp = _make_resources()
@@ -95,10 +124,9 @@ class TestLiveResourcesUseManagerCache:
                 new=AsyncMock(return_value=fallback_data),
             ) as mock_once,
         ):
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mock_mgr.auto_start_enabled = True
-            mock_mgr.subscription_configs = {"network_metrics": {"auto_start": False}}
+            mock_mgr.is_auto_start_subscription.return_value = False
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://live/network_metrics")
             result = await resource.fn()
@@ -114,10 +142,9 @@ class TestLiveResourcesUseManagerCache:
                 new=AsyncMock(side_effect=Exception("Cannot query field systemMetricsNetwork")),
             ),
         ):
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mock_mgr.auto_start_enabled = True
-            mock_mgr.subscription_configs = {"network_metrics": {"auto_start": False}}
+            mock_mgr.is_auto_start_subscription.return_value = False
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://live/network_metrics")
             result = await resource.fn()
@@ -154,7 +181,7 @@ class TestLogsStreamResource:
     @pytest.mark.usefixtures("_mock_ensure_started")
     async def test_logs_stream_no_data(self) -> None:
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://logs/stream")
             result = await resource.fn()
@@ -166,7 +193,9 @@ class TestLogsStreamResource:
         """Empty dict cache hit must return data with _fetched_at timestamp."""
         ts = "2026-04-04T12:00:00+00:00"
         with patch("unraid_mcp.subscriptions.resources.subscription_manager") as mock_mgr:
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=({}, ts))
+            mock_mgr.get_resource_snapshot = AsyncMock(
+                return_value=_snapshot({}, ts, state="subscribed", active=True, fresh=True)
+            )
             mcp = _make_resources()
             resource = _get_resource(mcp, "unraid://logs/stream")
             result = await resource.fn()
@@ -188,8 +217,7 @@ class TestAutoStartDisabledFallback:
                 new=AsyncMock(return_value=fallback_data),
             ),
         ):
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")
@@ -207,8 +235,7 @@ class TestAutoStartDisabledFallback:
                 new=AsyncMock(side_effect=Exception("WebSocket failed")),
             ),
         ):
-            mock_mgr.get_resource_data_with_timestamp = AsyncMock(return_value=None)
-            mock_mgr.get_error_state = AsyncMock(return_value=(None, ""))
+            mock_mgr.get_resource_snapshot = AsyncMock(return_value=_snapshot())
             mock_mgr.auto_start_enabled = False
             mcp = _make_resources()
             resource = _get_resource(mcp, f"unraid://live/{action}")

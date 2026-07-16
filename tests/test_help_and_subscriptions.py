@@ -37,11 +37,10 @@ class TestHelpAction:
         assert "subscriptions" in result
         assert "test_query" in result
 
-    async def test_help_ignores_subaction(self) -> None:
+    async def test_help_rejects_subaction(self) -> None:
         tool_fn = _make_tool()
-        # An incidental subaction must not break `help`.
-        result = await tool_fn(action="help", subaction="anything")
-        assert result == _HELP_TEXT
+        with pytest.raises(ToolError, match="help does not accept a subaction"):
+            await tool_fn(action="help", subaction="anything")
 
 
 class TestSubscriptionsAction:
@@ -206,7 +205,10 @@ class TestTestSubscriptionQueryHandler:
         """
         from unraid_mcp.subscriptions.diagnostics import test_subscription_query
 
-        monkeypatch.setenv("UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE", "true")
+        monkeypatch.setattr(
+            "unraid_mcp.subscriptions.diagnostics._settings.UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE",
+            True,
+        )
         ws = self._mock_ws()
 
         with (
@@ -235,7 +237,10 @@ class TestTestSubscriptionQueryHandler:
         """SEC-M1: by default the probe must NOT echo the raw upstream frame."""
         from unraid_mcp.subscriptions.diagnostics import test_subscription_query
 
-        monkeypatch.delenv("UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE", raising=False)
+        monkeypatch.setattr(
+            "unraid_mcp.subscriptions.diagnostics._settings.UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE",
+            False,
+        )
         ws = self._mock_ws()
 
         with (

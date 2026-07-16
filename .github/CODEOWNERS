@@ -1,0 +1,9 @@
+/.github/workflows/ @jmagar
+/.github/CODEOWNERS @jmagar
+/Dockerfile @jmagar
+/docker-compose.yaml @jmagar
+/entrypoint.sh @jmagar
+/scripts/ @jmagar
+/release-please-config.json @jmagar
+/.release-please-manifest.json @jmagar
+/server.json @jmagar

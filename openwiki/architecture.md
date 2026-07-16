@@ -134,7 +134,7 @@ Real-time WebSocket data streaming:
 - **`diagnostics.py`** - WebSocket subscription diagnostics (`diagnose`, `test_query` actions)
 
 Subscription flow:
-1. Auto-start on server boot (controlled by `UNRAID_AUTO_START_SUBSCRIPTIONS`, default: true)
+1. Lazily initialize on first MCP resource/diagnostic access (controlled by `UNRAID_AUTO_START_SUBSCRIPTIONS`, default: true)
 2. Connect via `graphql-transport-ws` protocol to `wss://<unraid-host>/graphql`
 3. Send `connection_init` with API key payload
 4. Subscribe to GraphQL queries for live telemetry
@@ -206,7 +206,7 @@ Application startup and configuration:
 
 ### WebSocket Subscription
 
-1. Server starts → SubscriptionManager initialized (if `UNRAID_AUTO_START_SUBSCRIPTIONS=true`)
+1. First resource/diagnostic access → enabled subscriptions initialize lazily (if `UNRAID_AUTO_START_SUBSCRIPTIONS=true`)
 2. WebSocket connects to `wss://<unraid-host>/graphql` via `graphql-transport-ws`
 3. Send `connection_init` with API key payload
 4. Receive `connection_ack`

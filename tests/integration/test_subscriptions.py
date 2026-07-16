@@ -102,18 +102,20 @@ class TestSubscriptionManagerInit:
         mgr = SubscriptionManager()
         assert mgr.auto_start_enabled is True
 
-    @patch.dict("os.environ", {"UNRAID_AUTO_START_SUBSCRIPTIONS": "false"})
-    def test_auto_start_disabled_via_env(self) -> None:
-        mgr = SubscriptionManager()
+    def test_auto_start_disabled_via_injected_settings(self) -> None:
+        from unraid_mcp.config.settings import Settings
+
+        mgr = SubscriptionManager(Settings(UNRAID_AUTO_START_SUBSCRIPTIONS="false"))
         assert mgr.auto_start_enabled is False
 
     def test_default_max_reconnect_attempts(self) -> None:
         mgr = SubscriptionManager()
         assert mgr.max_reconnect_attempts == 10
 
-    @patch.dict("os.environ", {"UNRAID_MAX_RECONNECT_ATTEMPTS": "5"})
     def test_custom_max_reconnect_attempts(self) -> None:
-        mgr = SubscriptionManager()
+        from unraid_mcp.config.settings import Settings
+
+        mgr = SubscriptionManager(Settings(UNRAID_MAX_RECONNECT_ATTEMPTS="5"))
         assert mgr.max_reconnect_attempts == 5
 
     def test_subscription_configs_contain_log_file(self) -> None:
@@ -124,6 +126,21 @@ class TestSubscriptionManagerInit:
         mgr = SubscriptionManager()
         cfg = mgr.subscription_configs["logFileSubscription"]
         assert cfg.get("auto_start") is False
+
+    def test_configured_auto_start_action_set_is_exact(self) -> None:
+        from unraid_mcp.config.settings import Settings
+
+        mgr = SubscriptionManager(Settings(UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS="cpu,memory"))
+        enabled = {
+            name for name, config in mgr.subscription_configs.items() if config.get("auto_start")
+        }
+        assert enabled == {"cpu", "memory"}
+
+    def test_unknown_configured_auto_start_action_is_rejected(self) -> None:
+        from unraid_mcp.config.settings import Settings
+
+        with pytest.raises(ValueError, match=r"Unknown.*not_real"):
+            SubscriptionManager(Settings(UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS="cpu,not_real"))
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +384,9 @@ class TestDataReception:
         with p[0], p[1], p[2], p[3], p[4]:
             await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
 
-            assert "test_sub" in mgr.resource_data
-            assert mgr.resource_data["test_sub"].data == {"test": {"value": 42}}
+            # Data was accepted, then the terminal CompleteEvent invalidated it.
+            assert "test_sub" not in mgr.resource_data
+            assert mgr.connection_states["test_sub"] == "completed"
 
     async def test_data_message_for_legacy_protocol(self) -> None:
         mgr = SubscriptionManager()
@@ -386,8 +404,8 @@ class TestDataReception:
         with p[0], p[1], p[2], p[3], p[4]:
             await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
 
-            assert "test_sub" in mgr.resource_data
-            assert mgr.resource_data["test_sub"].data == {"legacy": True}
+            assert "test_sub" not in mgr.resource_data
+            assert mgr.connection_states["test_sub"] == "completed"
 
     async def test_graphql_errors_tracked_in_last_error(self) -> None:
         mgr = SubscriptionManager()
@@ -464,6 +482,7 @@ class TestDataReception:
 
             # complete message was processed (test finished, loop terminated)
             assert "test_sub" not in mgr.resource_data
+            assert mgr.connection_states["test_sub"] == "completed"
 
     async def test_mismatched_id_ignored(self) -> None:
         mgr = SubscriptionManager()
@@ -538,8 +557,8 @@ class TestDataReception:
             await mgr._subscription_loop("test_sub", SAMPLE_QUERY, {})
 
         # The valid frame after the malformed ones was still processed and stored.
-        assert "test_sub" in mgr.resource_data
-        assert mgr.resource_data["test_sub"].data == {"ok": 1}
+        assert "test_sub" not in mgr.resource_data
+        assert mgr.connection_states["test_sub"] == "completed"
 
     async def test_next_frame_missing_payload_is_not_stored(self) -> None:
         """A data frame whose 'payload' is absent must not crash or store data."""
@@ -611,7 +630,9 @@ class TestReconnection:
 
     async def test_backoff_capped_at_max(self) -> None:
         mgr = SubscriptionManager()
-        mgr.max_reconnect_attempts = 50
+        # 12 attempts is enough for 5 * 1.5^n to hit the 300s cap while keeping
+        # the exception-logging test fast under rich trace rendering.
+        mgr.max_reconnect_attempts = 12
 
         sleep_mock = AsyncMock()
 
@@ -795,6 +816,54 @@ class TestConcurrentStart:
 
             await mgr.stop_subscription("cpu")
             assert "cpu" not in mgr.active_subscriptions
+
+
+class TestBoundedConnectionStartup:
+    async def test_handshakes_never_exceed_configured_concurrency(self) -> None:
+        from unraid_mcp.config.settings import Settings
+
+        manager = SubscriptionManager(
+            Settings(
+                UNRAID_SUBSCRIPTION_MAX_CONNECTIONS=2,
+                UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS=0,
+            )
+        )
+        release = asyncio.Event()
+        two_entered = asyncio.Event()
+        current = 0
+        maximum = 0
+
+        class SlowAckWebSocket(_HangingWebSocket):
+            async def recv(self) -> str:
+                nonlocal current, maximum
+                current += 1
+                maximum = max(maximum, current)
+                if current == 2:
+                    two_entered.set()
+                await release.wait()
+                current -= 1
+                return json.dumps({"type": "connection_ack"})
+
+        def connect(*_args: Any, **_kwargs: Any) -> MagicMock:
+            return _ws_context(SlowAckWebSocket())
+
+        with (
+            patch(_WS_CONNECT, side_effect=connect),
+            patch(_API_URL, "https://test.local"),
+            patch(_API_KEY, "test-key"),
+            patch(_SSL_CTX, return_value=None),
+        ):
+            for name in ("one", "two", "three"):
+                await manager.start_subscription(name, SAMPLE_QUERY)
+
+            await asyncio.wait_for(two_entered.wait(), timeout=1)
+            await asyncio.sleep(0)
+            assert maximum == 2
+
+            release.set()
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            await manager.stop_all()
 
 
 # ---------------------------------------------------------------------------

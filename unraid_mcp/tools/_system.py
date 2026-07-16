@@ -427,9 +427,7 @@ async def _handle_system(subaction: str, device_id: str | None, limit: int = 20)
             # timezones returns 400+ unbounded IANA entries, and network_interfaces
             # can grow on VLAN-heavy hosts. Cap both and surface truncation meta so
             # callers can widen the window when needed.
-            if subaction in {"timezones", "network_interfaces"}:
-                capped, meta = cap_list(items, limit)
-                return {output_key: capped, "page": meta}
-            return {output_key: items}
+            capped, meta = cap_list(items, limit)
+            return {output_key: capped, "page": meta}
 
         raise ToolError(f"Unhandled system subaction '{subaction}' — this is a bug")

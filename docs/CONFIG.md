@@ -85,9 +85,17 @@ Log files are capped at 10 MB and overwritten to prevent disk space issues.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `UNRAID_AUTO_START_SUBSCRIPTIONS` | `true` | Auto-start WebSocket subscriptions on server boot |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | `true` | Lazily initialize enabled subscriptions on first MCP resource/diagnostic access; the first read may return `connecting` |
 | `UNRAID_MAX_RECONNECT_ATTEMPTS` | `10` | Maximum WebSocket reconnection attempts before giving up |
 | `UNRAID_AUTOSTART_LOG_PATH` | auto-detect | Log file path for the log tail subscription. Defaults to `/var/log/syslog` if available. |
+| `UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE` | `false` | Debug-only: include the data-sensitive raw upstream frame in `subscriptions/test_query`. Never enable on shared deployments. |
+| `UNRAID_SUBSCRIPTION_MAX_CONNECTIONS` | `3` | Concurrent subscription startup handshakes per process (1..32) |
+| `UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS` | `0.05` | Delay between startup launches in seconds (0..10) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS` | `100` | Events retained during collection (1..10000; positive `limit` may lower it) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES` | `1048576` | Serialized bytes retained during collection; response budget may lower it |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` | `30` | Maximum `collect_for`; configurable up to 300 seconds |
+| `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` | `300` | Maximum usable cache age in seconds; configurable up to 86400 |
+| `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` | `60` | Maximum per-call WebSocket timeout; configurable up to 300 seconds |
 
 ## Credentials directory
 

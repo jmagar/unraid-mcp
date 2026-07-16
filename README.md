@@ -110,7 +110,7 @@ just setup
 | --- | --- | --- | --- |
 | `UNRAID_API_URL` | Yes | — | GraphQL endpoint URL, e.g. `https://tower.local/graphql` |
 | `UNRAID_API_KEY` | Yes | — | Unraid API key (see below) |
-| `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or `sse` (deprecated) |
+| `UNRAID_MCP_TRANSPORT` | No | `streamable-http` | Transport: `streamable-http`, `stdio`, or legacy `sse` (deprecated; removed in v3.0.0) |
 | `UNRAID_MCP_HOST` | No | `127.0.0.1` bare metal; Docker sets `0.0.0.0` | Bind address for HTTP transports |
 | `UNRAID_MCP_PORT` | No | `6970` | Listen port for HTTP transports |
 | `UNRAID_MCP_MAX_RESPONSE_BYTES` | No | `40000` | Max serialized tool-response size; over-cap responses return a parseable truncation marker |
@@ -132,9 +132,17 @@ just setup
 | `UNRAID_ALLOW_INSECURE_TLS` | Conditional | `false` | Required second opt-in when `UNRAID_VERIFY_SSL=false` |
 | `UNRAID_MCP_LOG_LEVEL` | No | `INFO` | Log verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` |
 | `UNRAID_MCP_LOG_FILE` | No | `unraid-mcp.log` | Log filename under `logs/` or `/app/logs/` in Docker |
-| `UNRAID_AUTO_START_SUBSCRIPTIONS` | No | `true` | Auto-start live WebSocket subscriptions on boot |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | No | `true` | Lazily initialize enabled subscriptions on first resource/diagnostic access |
 | `UNRAID_MAX_RECONNECT_ATTEMPTS` | No | `10` | Max WebSocket reconnect attempts |
-| `UNRAID_AUTOSTART_LOG_PATH` | No | auto-detect | Log file path for the log-tail subscription |
+| `UNRAID_AUTOSTART_LOG_PATH` | No | auto-detect | Log file path for the lazily initialized log-tail subscription |
+| `UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE` | No | `false` | Debug-only raw upstream frame in `subscriptions/test_query`; data-sensitive, never for shared deployments |
+| `UNRAID_SUBSCRIPTION_MAX_CONNECTIONS` | No | `3` | Per-process concurrent subscription startup handshakes (1..32) |
+| `UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS` | No | `0.05` | Delay between startup launches (0..10 seconds) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS` | No | `100` | In-flight collection event ceiling (1..10000; `limit` may lower it) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES` | No | `1048576` | In-flight serialized collection byte ceiling; response budget may lower it |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` | No | `30` | Maximum `collect_for` duration; configurable up to 300 seconds |
+| `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` | No | `300` | Maximum usable cache age in seconds; configurable up to 86400 |
+| `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` | No | `60` | Maximum per-call WebSocket timeout; configurable up to 300 seconds |
 | `UNRAID_CREDENTIALS_DIR` | No | `~/.unraid-mcp` | Override credentials directory |
 | `DOCKER_NETWORK` | No | — | External Docker network to join; leave blank for default bridge |
 | `PGID` | No | `1000` | Container process GID |
@@ -180,7 +188,7 @@ entry (`UNRAID_MCP_GOOGLE_ALLOWED_EMAILS` or
 
 - `streamable-http` — default; exposes an HTTP endpoint, requires Bearer token unless auth is disabled
 - `stdio` — subprocess mode for Claude Code local plugin; no Bearer token needed
-- `sse` — legacy Server-Sent Events; deprecated but functional
+- `sse` — legacy Server-Sent Events; deprecated, emits a warning, and will be removed in v3.0.0. Migrate to streamable HTTP or place a compatibility proxy in front of it.
 
 Credential files are loaded in priority order: `~/.unraid-mcp/.env` first, then project `.env` as a fallback.
 
@@ -510,7 +518,10 @@ The `live` action group reads from active WebSocket subscriptions to the Unraid 
 Two delivery modes:
 
 - **Snapshot** (`SNAPSHOT_ACTIONS`): opens a subscription and returns the first message received within `timeout` seconds. For event-driven subactions (`parity_progress`, `ups_status`, `notifications_overview`, `notifications_warnings`, `owner`, `server_status`, `display`), a timeout means no recent state change — not an error.
-- **Collect** (`COLLECT_ACTIONS`): opens a subscription and accumulates all events for `collect_for` seconds, then returns the full event list. Used for streaming data like log lines and notification feeds.
+- **Collect** (`COLLECT_ACTIONS`): opens a subscription and retains events only until
+  `collect_for` expires, the stream completes, or the effective event/byte budget is
+  reached. The iterator closes immediately at a bound; retention is bounded while
+  streaming, not only when the response is shaped.
 
 | Subaction | Mode | Description | Required params |
 | --- | --- | --- | --- |
@@ -534,8 +545,17 @@ Two delivery modes:
 
 Optional parameters for `live`:
 
-- `collect_for` (float, default `5.0`) — collection window in seconds for collect-mode subactions
-- `timeout` (float, default `10.0`) — WebSocket receive timeout in seconds
+- `collect_for` (float, default `5.0`) — greater than 0 and at most
+  `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` (default 30 seconds)
+- `timeout` (float, default `10.0`) — greater than 0 and at most
+  `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` (default 60 seconds)
+
+Collection retains at most `min(positive limit, UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS)`
+events (default 100) and at most the smaller of
+`UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES` (default 1 MiB) and half the configured MCP
+response budget (20 KiB by default). Responses include `page.returned`, `page.total`,
+`page.truncated`, and a hint when response capping truncates results. These response fields
+are distinct from the earlier in-flight streaming limits.
 
 #### `subscriptions` — 2 subactions (WebSocket diagnostics)
 

@@ -204,3 +204,88 @@ class TestShippedDocCounts:
             "shipped docs still publish stale action/subaction totals; "
             f"expected {expected}. Stale files: {stale}"
         )
+
+
+class TestOperatorDocumentationContracts:
+    def test_release_docs_do_not_recommend_manual_version_or_upload_paths(self) -> None:
+        publishing = (REPO_ROOT / "docs/PUBLISHING.md").read_text()
+        canonical = (REPO_ROOT / "docs/mcp/PUBLISH.md").read_text()
+        combined = f"{publishing}\n{canonical}".lower()
+        assert "twine upload" not in combined
+        assert "edit the version" not in combined
+        assert "update the version in" not in combined
+        assert "do not edit version strings" in combined
+        assert "release-please" in combined
+        assert "reconciliation job" in canonical.lower()
+
+    def test_subscription_references_document_lazy_start_and_sensitive_probe(self) -> None:
+        for relpath in (
+            ".env.example",
+            "README.md",
+            "docs/CONFIG.md",
+            "docs/mcp/ENV.md",
+            "openwiki/configuration.md",
+        ):
+            text = (REPO_ROOT / relpath).read_text()
+            assert "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE" in text, relpath
+            assert "UNRAID_AUTO_START_SUBSCRIPTIONS" in text, relpath
+            assert "first" in text.lower() and "access" in text.lower(), relpath
+        generated = "\n".join(
+            (REPO_ROOT / relpath).read_text()
+            for relpath in (
+                "docs/mcp/RESOURCES.md",
+                "docs/plugin/SCHEDULES.md",
+                "openwiki/architecture.md",
+                "openwiki/configuration.md",
+            )
+        ).lower()
+        assert "auto-start on server boot" not in generated
+        assert "start automatically on server boot" not in generated
+
+    def test_collection_bounds_are_public_and_distinct_from_response_capping(self) -> None:
+        combined = "\n".join(
+            (REPO_ROOT / relpath).read_text()
+            for relpath in (
+                ".env.example",
+                "README.md",
+                "docs/CONFIG.md",
+                "docs/mcp/ENV.md",
+                "openwiki/configuration.md",
+                "openwiki/api-reference.md",
+            )
+        )
+        for setting in (
+            "UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS",
+            "UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES",
+            "UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS",
+            "UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS",
+            "UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS",
+        ):
+            assert setting in combined
+        assert "in-flight" in combined
+        assert "response" in combined
+
+    def test_resource_freshness_contract_names_live_metadata_fields(self) -> None:
+        resources = (REPO_ROOT / "docs/mcp/RESOURCES.md").read_text()
+        for field in (
+            "_fetched_at",
+            "_subscription",
+            "state",
+            "active",
+            "fresh",
+            "stale",
+            "age_seconds",
+        ):
+            assert field in resources
+        assert "300 seconds" in resources
+        assert "never returned as successful live data" in resources
+
+    def test_evergreen_docs_have_no_stale_current_version_literal(self) -> None:
+        quickstart = (REPO_ROOT / "openwiki/quickstart.md").read_text()
+        assert not re.search(r"Current version:\s*\*\*\d+\.\d+\.\d+", quickstart)
+        assert "release-please" in quickstart
+
+    def test_sse_has_a_removal_boundary(self) -> None:
+        for relpath in ("README.md", ".env.example", "docs/mcp/TRANSPORT.md"):
+            text = (REPO_ROOT / relpath).read_text()
+            assert "v3.0.0" in text, relpath

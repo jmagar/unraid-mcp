@@ -16,7 +16,7 @@ A single MCP tool is exposed:
 
 Discover the full surface with `unraid(action="help")`. WebSocket subscription diagnostics are available via `unraid(action="subscriptions", subaction="diagnose")` and `unraid(action="subscriptions", subaction="test_query", subscription_query=...)`.
 
-The server supports streamable-http (default), SSE (deprecated), and stdio transports. HTTP transports require RFC 6750 bearer authentication via `UNRAID_MCP_BEARER_TOKEN`.
+The server supports streamable-http (default), stdio, and legacy SSE (deprecated and removed in v3.0.0). HTTP transports require RFC 6750 bearer authentication via `UNRAID_MCP_BEARER_TOKEN`.
 
 ## What this repository ships
 

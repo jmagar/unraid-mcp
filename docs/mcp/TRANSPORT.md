@@ -8,7 +8,7 @@ unraid-mcp supports three transport methods for MCP communication:
 |-----------|---------|--------------|----------|
 | `streamable-http` | Yes | Yes (bearer token) | Production HTTP deployments, remote access |
 | `stdio` | No | No | Claude Desktop, local process-based clients |
-| `sse` | No (deprecated) | Yes (bearer token) | Legacy clients that do not support streamable-http |
+| `sse` | No (deprecated; removed in v3.0.0) | Yes (bearer token) | Temporary compatibility only |
 
 Set the transport via `UNRAID_MCP_TRANSPORT` in `.env`.
 
@@ -64,7 +64,7 @@ The `.claude-plugin/plugin.json` configures stdio transport:
 }
 ```
 
-## SSE (deprecated)
+## SSE (deprecated; removal in v3.0.0)
 
 Server-Sent Events transport. Supported but deprecated in favor of streamable-http.
 
@@ -73,6 +73,10 @@ UNRAID_MCP_TRANSPORT=sse
 ```
 
 A deprecation warning is logged at startup.
+
+Migrate clients to streamable HTTP before v3.0.0. If a legacy client cannot migrate,
+put a compatibility proxy in front of the streamable HTTP endpoint; do not build new
+deployments on SSE.
 
 ## Docker transport configuration
 
@@ -86,7 +90,7 @@ healthcheck:
       if [ "${UNRAID_MCP_TRANSPORT:-streamable-http}" = "stdio" ]; then
         exit 0
       fi
-      wget -qO- "http://localhost:${UNRAID_MCP_PORT:-6970}/health" > /dev/null
+      wget -qO- "http://localhost:${UNRAID_MCP_PORT:-6970}/ready" > /dev/null
 ```
 
 For stdio transport, the healthcheck always passes (the process itself is the health indicator).

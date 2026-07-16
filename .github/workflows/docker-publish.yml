@@ -1,140 +1,166 @@
-name: Build and Push Docker Image
+name: Container Artifact
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
+    branches: [main]
+    tags: ["v*"]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
-# Least-privilege default; the job elevates only what it needs.
 permissions:
   contents: read
 
 concurrency:
-  group: docker-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  TEST_IMAGE: local/unraid-mcp:${{ github.sha }}
 
 jobs:
-  build-and-push:
+  validate:
+    name: Container Artifact Smoke & Scan
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
-      security-events: write  # required to upload Trivy SARIF results
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-
-      # On a tag push, the published image tags come from docker/metadata-action's
-      # semver parsing of the git tag. Guard against tag<->source drift by asserting
-      # the tag matches pyproject.toml before publishing (mirrors publish-pypi.yml).
-      - name: Verify tag matches pyproject.toml version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          PKG_VERSION=$(grep -m1 '^version' pyproject.toml | sed 's/.*"\(.*\)".*/\1/')
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "Version mismatch: pyproject.toml=$PKG_VERSION tag=$TAG_VERSION"
-            exit 1
-          fi
-          echo "Tag and pyproject.toml versions match: $PKG_VERSION"
-
+        with:
+          persist-credentials: false
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - name: Build exact test image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.TEST_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Assert runtime image omits package managers and build tooling
+        run: |
+          docker run --rm --entrypoint sh "$TEST_IMAGE" -c '
+            ! command -v pip &&
+            ! command -v pip3 &&
+            python -c "import importlib.util; assert importlib.util.find_spec(\"pip\") is None; assert importlib.util.find_spec(\"setuptools\") is None; assert importlib.util.find_spec(\"wheel\") is None"
+          '
+      - name: Start deterministic readiness mock upstream
+        run: |
+          python3 scripts/readiness_mock.py 9002 >mock.log 2>&1 &
+          echo $! > mock.pid
+          for _ in {1..20}; do
+            curl -fsS http://127.0.0.1:9002/health >/dev/null && exit 0
+            sleep 1
+          done
+          cat mock.log
+          exit 1
+      - name: Start built image and smoke HTTP, readiness, and MCP
+        env:
+          TOKEN: ci-artifact-token
+        run: |
+          docker run --detach --name unraid-mcp-artifact --network host \
+            --env UNRAID_API_URL=http://127.0.0.1:9002/graphql \
+            --env UNRAID_API_KEY=ci-fake-key \
+            --env UNRAID_MCP_BEARER_TOKEN="$TOKEN" \
+            "$TEST_IMAGE"
+          trap 'docker logs unraid-mcp-artifact || true; docker rm -f unraid-mcp-artifact || true; kill "$(cat mock.pid)" || true' EXIT
+          for _ in {1..30}; do
+            if curl -fsS http://127.0.0.1:6970/health >/dev/null && \
+               curl -fsS http://127.0.0.1:6970/ready >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:6970/health | jq -e '.status == "ok"'
+          curl -fsS http://127.0.0.1:6970/ready | jq -e '.status == "ready"'
+          bash tests/test_live.sh --mode http \
+            --url http://127.0.0.1:6970/mcp \
+            --token "$TOKEN" --skip-tools
+      - name: Scan exact test image for fixable High or Critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.TEST_IMAGE }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
+  publish:
+    name: Publish Attested Container
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Verify release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n1)"
+          test "$package_version" = "${GITHUB_REF_NAME#v}"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
+      - name: Derive release and edge tags
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            type=raw,value=edge,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha
-
-      # On a pull_request the image is NOT pushed; instead it is loaded into the local
-      # docker daemon (load:true) so the blocking Trivy scan below can read it. load
-      # requires a single platform, so PR builds are amd64-only (CVEs live in the base
-      # layers and are arch-independent for this gate); SBOM/provenance attestations
-      # are registry-only and unsupported by the local docker exporter, so they are
-      # disabled on the PR path. Tag/branch/tag-push builds stay multi-arch + pushed.
-      - name: Build and push Docker image
+      - name: Build and publish the attested multi-architecture image once
         id: build
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
           context: .
-          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
-          push: ${{ github.event_name != 'pull_request' }}
-          load: ${{ github.event_name == 'pull_request' }}
+          platforms: linux/amd64,linux/arm64
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          sbom: ${{ github.event_name != 'pull_request' }}
-          provenance: ${{ github.event_name == 'pull_request' && 'false' || 'mode=max' }}
-
-      # Pre-merge (pull_request) gate: the build above ran with load:true, so the image
-      # is in the local docker daemon. Scan it with a non-zero exit-code so CRITICAL/HIGH
-      # CVEs *block the merge* before they can ever reach the registry. ignore-unfixed
-      # avoids failing on CVEs with no available patch.
-      #
-      # Scope = library only (the application's Python dependencies — what a PR actually
-      # controls). Base-OS/kernel CVEs in the digest-pinned base are intentionally NOT a
-      # merge blocker here: a container ships no kernel, the base is bumped via Dependabot
-      # digest updates, and the full os+library picture is surfaced by the advisory SARIF
-      # scan below. Blocking on uncontrollable base CVEs would fail every PR until the next
-      # base bump.
-      - name: Scan image for vulnerabilities (blocking, pre-merge)
-        if: github.event_name == 'pull_request'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-          vuln-type: 'library'
-          ignore-unfixed: true
-
-      # Post-push (tag/branch) scan is intentionally ADVISORY (non-blocking): the image
-      # was already pushed above (push:true), so this can only report — not gate — and it
-      # only uploads SARIF to GitHub Security. This push-then-scan ordering is deliberate:
-      # it keeps releases fast (publish immediately, surface CVEs afterwards). The blocking
-      # gate that actually stops vulnerable images lives in the pull_request step above.
-      - name: Scan image for vulnerabilities (advisory, post-push)
-        if: github.event_name != 'pull_request'
+          sbom: true
+          provenance: mode=max
+      - name: Record immutable published digest
+        run: |
+          test -n "${{ steps.build.outputs.digest }}"
+          printf '%s@%s\n' \
+            "${REGISTRY}/${IMAGE_NAME}" \
+            "${{ steps.build.outputs.digest }}" | tee image-digest.txt
+      - name: Scan published digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
-
-      - name: Upload Trivy results to GitHub Security
-        if: github.event_name != 'pull_request'
+      - name: Upload advisory scan results
         uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4.36.3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy-results.sarif

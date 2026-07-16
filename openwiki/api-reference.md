@@ -30,8 +30,9 @@ unraid(
 | `key_id` | `str` | no | API key identifier |
 | `name` | `str` | no | Name for create/update operations |
 | `path` | `str` | no | Log file path (for `live/log_tail`) |
-| `collect_for` | `float` | no | WebSocket collection duration in seconds (default: 5.0) |
-| `limit` | `int` | no | Max items to return (default: 20; `<=0` = no limit) |
+| `collect_for` | `float` | no | Collection duration: greater than 0 and no more than the configured ceiling (default call 5.0; ceiling 30 seconds) |
+| `timeout` | `float` | no | WebSocket timeout: greater than 0 and no more than the configured ceiling (default call 10.0; ceiling 60 seconds) |
+| `limit` | `int` | no | Max items to return (default: 20; `<=0` = response-unbounded, but streaming safety ceilings still apply) |
 | `offset` | `int` | no | Pagination offset (default: 0) |
 
 ### Action Domains
@@ -374,7 +375,15 @@ Capped responses include a `page` meta dict:
 }
 ```
 
-Applies to: `docker/list`, `disk/shares`, `disk/disks`, `array/parity_history`, `system/network_interfaces`, `system/network_metrics`, and `live` action event/interface lists.
+All list-shaped subactions apply `limit` and return `page` metadata, including VM, disk,
+key/permission, OIDC, system, Docker, array, notification, plugin, and live event/interface
+lists. `limit<=0` disables response item capping, but collect-mode live calls still enforce
+the in-flight event, byte, and duration safety ceilings.
+
+Collect-mode retention stops while streaming when the effective event ceiling (default
+100, lowered by a positive `limit`), byte ceiling (the smaller of 1 MiB and half the MCP
+response budget), duration ceiling (30 seconds), or upstream completion is reached. The
+`page` object describes response shaping; those fields are distinct from in-flight bounds.
 
 ## MCP Resources
 
@@ -393,7 +402,11 @@ unraid://live/docker_container_stats
 unraid://live/temperature
 ```
 
-Resources serve cached data from active WebSocket subscriptions. If a subscription is connecting, the resource returns a "connecting" placeholder.
+Resources serve cache only while the owning task is active, state is `subscribed`, and age
+is no more than `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` (300 seconds by default).
+Fresh responses include `_fetched_at` plus `_subscription.state`, `active`, `fresh`,
+`stale`, and `age_seconds`. Connecting returns a placeholder; stale/terminal cache is not
+returned as successful live data and instead triggers an on-demand fetch or explicit error.
 
 See `/unraid_mcp/subscriptions/resources.py` for resource registration.
 

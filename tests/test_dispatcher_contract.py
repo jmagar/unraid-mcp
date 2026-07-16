@@ -85,7 +85,7 @@ async def test_domain_fallthrough_guard_fires(
     # fake from being gated.
     mock_graphql_request.return_value = {}
     tool_fn = _make_tool()
-    with pytest.raises(ToolError, match=rf"Unhandled {domain} subaction"):
+    with pytest.raises(ToolError, match=rf"Invalid subaction .* for {domain}"):
         await tool_fn(action=domain, subaction=fake, confirm=True)
 
 
@@ -105,7 +105,7 @@ async def test_live_fallthrough_guard_fires(
 
     mock_graphql_request.return_value = {}
     tool_fn = _make_tool()
-    with pytest.raises(ToolError, match=r"Unhandled live subaction"):
+    with pytest.raises(ToolError, match=r"Invalid subaction .* for live"):
         await tool_fn(action="live", subaction=fake)
 
 
@@ -129,5 +129,5 @@ async def test_health_fallthrough_guard_fires(
 
     mock_graphql_request.return_value = {}
     tool_fn = _make_tool()
-    with pytest.raises(ToolError, match=r"Unhandled health subaction"):
+    with pytest.raises(ToolError, match=r"Invalid subaction .* for health"):
         await tool_fn(action="health", subaction=fake)
