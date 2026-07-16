@@ -415,6 +415,25 @@ class TestAuthorizedGoogleTokenVerifier:
         assert await verifier.verify_token("tok") is not None
         verifier._fetch_google_identity.assert_awaited_once()
 
+    async def test_failed_identity_lookup_is_not_cached(self):
+        wrapped = AsyncMock()
+        wrapped.verify_token.return_value = AccessToken(
+            token="tok", client_id="sub", scopes=[], expires_at=int(time.time()) + 300
+        )
+        verifier = _AuthorizedGoogleTokenVerifier(
+            wrapped,
+            allowed_emails={"owner@example.com"},
+            allowed_domains=set(),
+            allow_any_user=False,
+        )
+        verifier._fetch_google_identity = AsyncMock(
+            side_effect=[{}, {"email": "owner@example.com", "email_verified": True}]
+        )
+
+        assert await verifier.verify_token("tok") is None
+        assert await verifier.verify_token("tok") is not None
+        assert verifier._fetch_google_identity.await_count == 2
+
     async def test_concurrent_identity_lookups_are_coalesced(self):
         import asyncio
 

@@ -240,7 +240,10 @@ class _AuthorizedGoogleTokenVerifier:
         expiry = now + _IDENTITY_CACHE_TTL_SECONDS
         if access_token_expires_at is not None:
             expiry = min(expiry, float(access_token_expires_at) - _IDENTITY_EXPIRY_SKEW_SECONDS)
-        if expiry > time.time():
+        cacheable = bool(str(identity.get("email") or "").strip()) and _google_bool(
+            identity.get("email_verified")
+        )
+        if cacheable and expiry > time.time():
             async with self._cache_lock:
                 self._identity_cache[token] = (expiry, dict(identity))
                 self._identity_cache.move_to_end(token)
