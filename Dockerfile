@@ -21,8 +21,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
 FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS runtime
 # Runtime Python must match the builder's Python 3.12 virtualenv layout.
+# The digest remains reproducible, while the explicit upgrade closes Debian security
+# fixes published after that immutable base was built. CI scans the resulting image.
 
-RUN groupadd --gid 1000 mcp && \
+RUN apt-get update && \
+    apt-get upgrade --yes && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd --gid 1000 mcp && \
     useradd --uid 1000 --gid mcp --create-home mcp
 
 WORKDIR /app
