@@ -116,7 +116,14 @@ def test_schema_agent_has_immutable_input_and_path_boundary() -> None:
     assert "sha256sum --check --strict" in implementer
     assert "persist-credentials: false" in implementer
     assert "git -c credential.helper='!gh auth git-credential' push" in implementer
-    assert implementer.count("validate-schema-agent-paths.sh") == 2
+    assert "bash scripts/validate-schema-agent-paths.sh" not in implementer
+    assert (
+        implementer.count(
+            'git show "${BASE_SHA}:scripts/validate-schema-agent-paths.sh" > "$validator"'
+        )
+        == 2
+    )
+    assert implementer.count('bash "$validator" "$BASE_SHA" "origin/${BRANCH_NAME}"') == 2
     assert "unraid_mcp/subscriptions/queries.py" in policy
     assert "unraid_mcp/subscriptions/diagnostics.py" in policy
     for denied in (".github/*", "pyproject.toml", "uv.lock", "unraid_mcp/core/auth.py"):
