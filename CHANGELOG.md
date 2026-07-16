@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0](https://github.com/jmagar/unraid-mcp/compare/v2.3.6...v2.4.0) (2026-07-16)
+
+
+### Features
+
+* plugin TLS config for self-signed certs and fix duplicate hooks manifest entry ([#179](https://github.com/jmagar/unraid-mcp/issues/179)) ([a0bf9ae](https://github.com/jmagar/unraid-mcp/commit/a0bf9aef1b57e7914a7db9d899457ff4dc7e12d9))
+
+
+### Bug Fixes
+
+* make release reconciliation resumable ([#180](https://github.com/jmagar/unraid-mcp/issues/180)) ([4b10711](https://github.com/jmagar/unraid-mcp/commit/4b10711757689f4e4680af75f13a9bb6d949c048))
+
+
+### Dependencies
+
+* **deps-dev:** bump hypothesis from 6.156.4 to 6.156.6 ([#169](https://github.com/jmagar/unraid-mcp/issues/169)) ([db641b1](https://github.com/jmagar/unraid-mcp/commit/db641b176d54714631c186deef37cbc58fa4995b))
+* **deps-dev:** bump ruff from 0.15.20 to 0.15.22 ([#170](https://github.com/jmagar/unraid-mcp/issues/170)) ([22ce13c](https://github.com/jmagar/unraid-mcp/commit/22ce13cc30d05c6f0900c456155e8cda372079da))
+* **deps-dev:** bump ty from 0.0.57 to 0.0.60 ([#167](https://github.com/jmagar/unraid-mcp/issues/167)) ([407e518](https://github.com/jmagar/unraid-mcp/commit/407e5180885ec12b4d9e5bd2c9b6df4e3d19e501))
+* **deps:** bump docker/build-push-action from 7.2.0 to 7.3.0 ([#165](https://github.com/jmagar/unraid-mcp/issues/165)) ([5e5d8b3](https://github.com/jmagar/unraid-mcp/commit/5e5d8b38f00cb916b6da012ab93d466a861e5f58))
+* **deps:** bump github/codeql-action/upload-sarif from 4.36.3 to 4.37.0 ([#166](https://github.com/jmagar/unraid-mcp/issues/166)) ([0ad3b55](https://github.com/jmagar/unraid-mcp/commit/0ad3b554786800a5df5c495a1e9d3f60a28fff72))
+* **deps:** bump websockets from 16.0 to 16.1 ([#168](https://github.com/jmagar/unraid-mcp/issues/168)) ([9a235db](https://github.com/jmagar/unraid-mcp/commit/9a235dbd9f4d32495bc92ee5ee2afb06868a9772))
+
+
+### Documentation
+
+* save session log ([#181](https://github.com/jmagar/unraid-mcp/issues/181)) ([45f9f62](https://github.com/jmagar/unraid-mcp/commit/45f9f62c0d9fddd833bc1083d62a9790ad1c7062))
+* update OpenWiki ([#171](https://github.com/jmagar/unraid-mcp/issues/171)) ([909017f](https://github.com/jmagar/unraid-mcp/commit/909017feb598c846eaca150249b696b77cb67055))
+
 ## [2.3.6](https://github.com/jmagar/unraid-mcp/compare/v2.3.5...v2.3.6) (2026-07-16)
 
 
