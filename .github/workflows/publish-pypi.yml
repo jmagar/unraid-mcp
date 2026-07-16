@@ -4,16 +4,23 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to reconcile (for example, v2.3.6)
+        required: true
+        default: ""
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event.release.tag_name || github.ref_name }}
+  group: release-${{ github.event.release.tag_name || inputs.release_tag }}
   cancel-in-progress: false
 
 env:
   ARTIFACT_NAME: python-dist-${{ github.run_id }}
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
 
 jobs:
   build:
@@ -28,6 +35,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          ref: refs/tags/${{ env.RELEASE_TAG }}
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           version: "0.9.25"
@@ -35,7 +43,7 @@ jobs:
       - name: Verify tag matches package version
         run: |
           package_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n1)"
-          test "$package_version" = "${GITHUB_REF_NAME#v}"
+          test "$package_version" = "${RELEASE_TAG#v}"
       - name: Build package once from clean sources
         run: uv build --no-sources
       - name: Validate metadata, wheel contents, and installed stdio server
@@ -81,7 +89,7 @@ jobs:
       - name: Reconcile existing PyPI state
         id: state
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           if curl -fsS "https://pypi.org/pypi/unraid-mcp/${version}/json" > pypi-existing.json; then
             published=true
             while read -r checksum filename; do
@@ -129,7 +137,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+        run: gh release upload "$RELEASE_TAG" dist/* --clobber
 
   mcp-registry:
     name: Publish MCP Registry Channel
@@ -143,10 +151,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          ref: refs/tags/${{ env.RELEASE_TAG }}
       - name: Reconcile existing MCP Registry state
         id: state
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           url="https://registry.modelcontextprotocol.io/v0/servers/tv.tootie%2Funraid-mcp/versions/${version}"
           if curl -fsS "$url" > registry-existing.json; then
             jq -e --arg version "$version" '.server.version == $version' registry-existing.json
@@ -165,11 +174,11 @@ jobs:
             1370446bbe74d562608e8005a6ccce02d146a661fbd78674e11cc70b9618d6cf \
             "$archive" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" mcp-publisher
-          test "$(./mcp-publisher --version | grep -o '1\.8\.0' | head -n1)" = "1.8.0"
+          test "$(./mcp-publisher --version 2>&1 | grep -o '1\.8\.0' | head -n1)" = "1.8.0"
       - name: Stamp immutable release version into registry manifest
         if: steps.state.outputs.published != 'true'
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           jq --arg version "$version" '
             .version = $version |
             .packages = [.packages[] | if .registryType == "pypi" then .version = $version else . end]
@@ -200,7 +209,7 @@ jobs:
       - name: Verify checksums and PyPI digests
         run: |
           (cd dist && sha256sum --check SHA256SUMS)
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           curl -fsS "https://pypi.org/pypi/unraid-mcp/${version}/json" > pypi.json
           while read -r checksum filename; do
             jq -e --arg filename "$filename" --arg checksum "$checksum" \
@@ -212,18 +221,18 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           mkdir github-assets
-          gh release download "$GITHUB_REF_NAME" --dir github-assets --pattern 'unraid_mcp-*' --pattern SHA256SUMS
+          gh release download "$RELEASE_TAG" --dir github-assets --pattern 'unraid_mcp-*' --pattern SHA256SUMS
           (cd github-assets && sha256sum --check SHA256SUMS)
           diff -rq dist github-assets
       - name: Verify MCP Registry version
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           curl -fsS \
             "https://registry.modelcontextprotocol.io/v0/servers/tv.tootie%2Funraid-mcp/versions/${version}" |
             jq -e --arg version "$version" '.server.version == $version and .server.packages[0].version == $version'
       - name: Wait for matching GHCR release and latest digests
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           for _ in {1..30}; do
             version_digest="$(docker buildx imagetools inspect "ghcr.io/${GITHUB_REPOSITORY}:${version}" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"
             latest_digest="$(docker buildx imagetools inspect "ghcr.io/${GITHUB_REPOSITORY}:latest" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty')"
