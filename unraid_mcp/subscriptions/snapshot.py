@@ -4,7 +4,8 @@
 first event's data, then disconnect.
 
 `subscribe_collect(query, variables, collect_for, timeout)` — connect,
-subscribe, collect all events for `collect_for` seconds, return the list.
+subscribe, collect all events for `collect_for` seconds, and return a list-like
+result carrying runtime-cap metadata.
 
 Neither function maintains a persistent connection — they open and close a
 WebSocket per call. This is intentional: MCP tools are request-response.
@@ -19,7 +20,7 @@ semantics.
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -39,6 +40,23 @@ from .utils import build_ws_ssl_context, build_ws_url
 
 
 _SUB_ID = "snapshot-1"
+
+
+class CollectedEvents(list[dict[str, Any]]):
+    """Backward-compatible event list carrying runtime-cap metadata."""
+
+    def __init__(
+        self,
+        events: Iterable[dict[str, Any]] = (),
+        *,
+        truncation_reason: str | None = None,
+    ) -> None:
+        super().__init__(events)
+        self.truncation_reason = truncation_reason
+
+    @property
+    def truncated(self) -> bool:
+        return self.truncation_reason is not None
 
 
 @asynccontextmanager
@@ -127,8 +145,8 @@ async def subscribe_collect(
     max_events: int | None = None,
     max_bytes: int | None = None,
     transform: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
-) -> list[dict[str, Any]]:
-    """Open a subscription, collect events for `collect_for` seconds, close, return list.
+) -> CollectedEvents:
+    """Open a subscription and return bounded events plus runtime-cap metadata.
 
     Returns an empty list if no events arrive within the window.
     Always closes the connection after the window expires.
@@ -170,7 +188,7 @@ async def subscribe_collect(
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
 
-    events: list[dict[str, Any]] = []
+    events = CollectedEvents()
     retained_bytes = 0
 
     async with _ws_handshake(query, variables, timeout) as session:
@@ -192,20 +210,24 @@ async def subscribe_collect(
                                 ).encode("utf-8")
                             )
                             if retained_bytes + event_bytes > max_bytes:
+                                events.truncation_reason = "max_bytes"
                                 logger.warning(
                                     "Subscription collection byte limit reached "
                                     "(%d bytes); stopping",
                                     max_bytes,
                                 )
                                 break
-                            events.append(retained)
-                            retained_bytes += event_bytes
                             if len(events) >= max_events:
+                                # Observe one event beyond the retained cap so callers
+                                # can distinguish an exact-size result from truncation.
+                                events.truncation_reason = "max_events"
                                 logger.debug(
                                     "Subscription collection event limit reached (%d); stopping",
                                     max_events,
                                 )
                                 break
+                            events.append(retained)
+                            retained_bytes += event_bytes
                     elif isinstance(event, ErrorEvent):
                         # Best-effort: do NOT abort the whole collection window on a
                         # standalone protocol 'error' frame. Log and keep collecting

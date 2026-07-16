@@ -248,6 +248,31 @@ async def test_notification_feed_limit_zero_returns_all(_mock_subscribe_collect)
 
 
 @pytest.mark.asyncio
+async def test_notification_feed_preserves_runtime_truncation(_mock_subscribe_collect):
+    from unraid_mcp.subscriptions.snapshot import CollectedEvents
+
+    _mock_subscribe_collect.return_value = CollectedEvents(
+        [
+            {"notificationAdded": {"id": "1"}},
+            {"notificationAdded": {"id": "2"}},
+        ],
+        truncation_reason="max_events",
+    )
+
+    result = await _make_tool()(
+        action="live", subaction="notification_feed", collect_for=2.0, limit=0
+    )
+
+    assert result["page"] == {
+        "returned": 2,
+        "total": 3,
+        "truncated": True,
+        "total_is_lower_bound": True,
+        "runtime_truncation_reason": "max_events",
+    }
+
+
+@pytest.mark.asyncio
 async def test_invalid_subaction_raises():
     from unraid_mcp.core.exceptions import ToolError
 

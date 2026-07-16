@@ -45,6 +45,23 @@ def _cache_metadata(snapshot: Any) -> dict[str, Any]:
     }
 
 
+def _preserve_collection_truncation(
+    events: list[dict[str, Any]], page: dict[str, Any]
+) -> dict[str, Any]:
+    """Merge the collector's pre-pagination cap into truthful page metadata."""
+    reason = getattr(events, "truncation_reason", None)
+    if reason is None:
+        return page
+    minimum_total = len(events) + 1  # the collector observed the dropped event
+    return {
+        **page,
+        "total": max(page["total"], minimum_total),
+        "truncated": True,
+        "total_is_lower_bound": True,
+        "runtime_truncation_reason": reason,
+    }
+
+
 def _cap_network_metrics(
     data: dict[str, Any], limit: int | None
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -225,6 +242,7 @@ async def _handle_live(
             # window can't flood the agent's context. The byte budget additionally
             # stops a few multi-KB log events from tripping the response backstop.
             capped, meta = cap_list(events, limit, byte_budget=_LIVE_EVENT_BYTE_BUDGET)
+            meta = _preserve_collection_truncation(events, meta)
             return {
                 "success": True,
                 "subaction": subaction,
@@ -255,6 +273,7 @@ async def _handle_live(
             # Hard-cap the number of collected events (see log_tail above), plus
             # the byte budget so large events can't nuke the whole response.
             capped, meta = cap_list(events, limit, byte_budget=_LIVE_EVENT_BYTE_BUDGET)
+            meta = _preserve_collection_truncation(events, meta)
             return {
                 "success": True,
                 "subaction": subaction,

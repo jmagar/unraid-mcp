@@ -157,6 +157,8 @@ async def test_subscribe_collect_stops_at_event_limit(mock_ws):
         result = await subscribe_collect("subscription { event { id } }", max_events=3)
 
     assert [item["event"]["id"] for item in result] == ["0", "1", "2"]
+    assert result.truncated is True
+    assert result.truncation_reason == "max_events"
 
 
 @pytest.mark.asyncio
@@ -188,6 +190,8 @@ async def test_subscribe_collect_stops_before_byte_budget_is_exceeded(mock_ws):
         )
 
     assert result == [first]
+    assert result.truncated is True
+    assert result.truncation_reason == "max_bytes"
 
 
 @pytest.mark.asyncio

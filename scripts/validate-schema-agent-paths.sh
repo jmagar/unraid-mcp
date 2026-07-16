@@ -16,7 +16,7 @@ while IFS= read -r path; do
   esac
 
   case "$path" in
-    docs/unraid/*|README.md|CLAUDE.md|openwiki/*|unraid_mcp/tools/*|unraid_mcp/devtools/*|tests/schema/*|tests/contract/*|tests/mock/*|tests/test_schema_diff_summary.py|tests/test_docs_match_code.py)
+    docs/unraid/*|README.md|CLAUDE.md|openwiki/*|unraid_mcp/tools/*|unraid_mcp/devtools/*|unraid_mcp/subscriptions/queries.py|unraid_mcp/subscriptions/diagnostics.py|tests/schema/*|tests/contract/*|tests/mock/*|tests/test_schema_diff_summary.py|tests/test_docs_match_code.py)
       ;;
     *)
       echo "::error file=${path}::schema agent path is outside the allowlist"

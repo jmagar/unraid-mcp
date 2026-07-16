@@ -87,9 +87,11 @@ Copy `.env.example` to `.env` and configure:
   omitting `limit` uses the tool default (20). Every list-shaped subaction returns a capped
   collection plus `page` metadata, including VM, disk/log, key/permission, OIDC, system,
   Docker, array, notification, plugin, and live event/interface lists. Collect-mode live
-  calls retain bounded events/bytes/duration even when `limit<=0`. `docker/details` fetches
-  a single container via `docker.container(id:)` rather than
-  over-fetching the full container list.
+  calls retain bounded events/bytes/duration even when `limit<=0`. When a live runtime
+  safety cap fires, `page.truncated` remains true and `total_is_lower_bound` identifies the
+  observed minimum rather than claiming a complete window. `docker/details` fetches a
+  single container via `docker.container(id:)` rather than over-fetching the full container
+  list.
 - **Destructive Action Safety**: `DESTRUCTIVE_ACTIONS` sets require `confirm=True` for dangerous operations
 - **Modular Architecture**: Clean separation of concerns across focused modules
 - **Error Handling**: Uses ToolError for user-facing errors, detailed logging for debugging
