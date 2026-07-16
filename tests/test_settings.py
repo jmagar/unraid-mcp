@@ -530,6 +530,26 @@ class TestVerifySslDotenvPrecedence:
         importlib.reload(settings_module)
         assert settings_module.UNRAID_VERIFY_SSL is False
 
+    def test_blank_verify_ssl_falls_back_to_verify_default(
+        self, _reload_settings_from_dotenv: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A blank UNRAID_VERIFY_SSL (an unset plugin option substitutes as "")
+        must default to verifying — never be treated as an empty CA-bundle path
+        that would silently break TLS. See issue #172.
+        """
+        monkeypatch.setenv("UNRAID_VERIFY_SSL", "")
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_VERIFY_SSL is True
+
+    def test_blank_allow_insecure_tls_is_disabled_not_error(
+        self, _reload_settings_from_dotenv: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A blank UNRAID_ALLOW_INSECURE_TLS must parse as False, not raise a
+        bool validation error at import (issue #172 plugin passthrough)."""
+        monkeypatch.setenv("UNRAID_ALLOW_INSECURE_TLS", "")
+        importlib.reload(settings_module)
+        assert settings_module.UNRAID_ALLOW_INSECURE_TLS is False
+
     def test_manifest_style_preset_env_shadows_dotenv_ca_path(
         self, _reload_settings_from_dotenv: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

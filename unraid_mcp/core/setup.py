@@ -29,7 +29,22 @@ from ..config.settings import (
 PLUGIN_OPTION_MAP: dict[str, str] = {
     "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "UNRAID_API_URL",
     "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "UNRAID_API_KEY",
+    "CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL": "UNRAID_VERIFY_SSL",
+    "CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS": "UNRAID_ALLOW_INSECURE_TLS",
 }
+
+# Credentials are a required pair: the server can't authenticate with only half,
+# so the hook refuses to write a partial .env and reports the missing half. These
+# are also the ONLY options wired through ``.mcp.json``'s ``env`` block — they have
+# no package default, so an empty substitution can't shadow a user's
+# ``~/.unraid-mcp/.env`` (unlike a var with a default; see issue #137).
+CREDENTIAL_OPTIONS: frozenset[str] = frozenset({"UNRAID_API_URL", "UNRAID_API_KEY"})
+
+# Optional config delivered ONLY through this hook (never ``.mcp.json`` env, to
+# avoid the #137 shadowing trap): the TLS knobs a plugin user needs against a
+# stock Unraid self-signed cert (see issue #172). Written to ``~/.unraid-mcp/.env``
+# when supplied; their absence is normal and never raises an advisory.
+CONFIG_OPTIONS: frozenset[str] = frozenset(PLUGIN_OPTION_MAP.values()) - CREDENTIAL_OPTIONS
 
 
 def _safe_env_value(value: str) -> str | None:
@@ -83,10 +98,13 @@ def run_plugin_hook() -> int:
 
     api_url = resolved.get("UNRAID_API_URL")
     api_key = resolved.get("UNRAID_API_KEY")
+    # Optional non-credential config (e.g. TLS settings) persisted alongside the
+    # credential pair. Absent keys are simply not written.
+    extra = {k: v for k, v in resolved.items() if k in CONFIG_OPTIONS}
 
     if api_url and api_key:
         try:
-            _write_env(api_url, api_key)
+            _write_env(api_url, api_key, extra)
             report["ran_repair"] = True
             logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
         except OSError as e:
@@ -108,6 +126,10 @@ def run_plugin_hook() -> int:
         # be surfaced so the operator knows why it was dropped.
         failures: list[str] = []
         for option, canonical in PLUGIN_OPTION_MAP.items():
+            # Only credentials are required; optional config (TLS knobs) is silent
+            # when omitted, so it never contributes an advisory.
+            if canonical not in CREDENTIAL_OPTIONS:
+                continue
             if canonical in resolved:
                 continue
             if option in os.environ:
@@ -148,11 +170,16 @@ def _dotenv_value(value: str) -> str:
     return f'"{escaped}"'
 
 
-def _write_env(api_url: str, api_key: str) -> None:
-    """Write or update credentials in CREDENTIALS_ENV_PATH.
+def _write_env(api_url: str, api_key: str, extra: dict[str, str] | None = None) -> None:
+    """Write or update credentials (and optional config) in CREDENTIALS_ENV_PATH.
 
     Creates CREDENTIALS_DIR (mode 700) if needed. On first run, seeds from
     .env.example to preserve comments and structure. Sets file mode to 600.
+
+    ``extra`` carries optional non-credential vars (e.g. TLS settings from the
+    plugin config form) written the same way — replaced in place when the key
+    already exists in the template, appended otherwise. The credential pair is
+    always written first so its ordering is stable across runs.
     """
     # Ensure directory exists with restricted permissions (chmod after to bypass umask)
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
@@ -164,26 +191,30 @@ def _write_env(api_url: str, api_key: str) -> None:
         example_path = PROJECT_ROOT / ".env.example"
         template_lines = example_path.read_text().splitlines() if example_path.exists() else []
 
-    # Replace credentials in-place; append at end if not found in template
-    url_written = False
-    key_written = False
+    # Ordered so credentials come first when appended; extra keys follow.
+    values: dict[str, str] = {
+        "UNRAID_API_URL": api_url,
+        "UNRAID_API_KEY": api_key,
+        **(extra or {}),
+    }
+
+    # Replace each managed var in-place; track which were found in the template.
+    written: set[str] = set()
     new_lines: list[str] = []
     for line in template_lines:
         stripped = line.strip()
-        if stripped.startswith("UNRAID_API_URL="):
-            new_lines.append(f"UNRAID_API_URL={_dotenv_value(api_url)}")
-            url_written = True
-        elif stripped.startswith("UNRAID_API_KEY="):
-            new_lines.append(f"UNRAID_API_KEY={_dotenv_value(api_key)}")
-            key_written = True
+        for key, value in values.items():
+            if stripped.startswith(f"{key}="):
+                new_lines.append(f"{key}={_dotenv_value(value)}")
+                written.add(key)
+                break
         else:
             new_lines.append(line)
 
-    # If not found in template (empty or missing keys), append at end
-    if not url_written:
-        new_lines.append(f"UNRAID_API_URL={_dotenv_value(api_url)}")
-    if not key_written:
-        new_lines.append(f"UNRAID_API_KEY={_dotenv_value(api_key)}")
+    # Append any managed var not present in the template (preserving values order).
+    for key, value in values.items():
+        if key not in written:
+            new_lines.append(f"{key}={_dotenv_value(value)}")
 
     # Atomic write: write to tmp file, set permissions, then rename into place.
     # os.replace is atomic on POSIX — prevents a crash from leaving a partial .env.

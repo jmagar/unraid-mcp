@@ -17,11 +17,11 @@ def test_plugin_option_map_matches_manifest_userconfig():
     Guards against a rename drifting the three apart and silently breaking
     credential delivery (the plugin would collect a value the server never reads).
     """
-    from unraid_mcp.core.setup import PLUGIN_OPTION_MAP
+    from unraid_mcp.core.setup import CREDENTIAL_OPTIONS, PLUGIN_OPTION_MAP
 
     plugin_dir = _REPO_ROOT / "plugins" / "unraid"
     manifest = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text())
-    user_keys = set(manifest["userConfig"])  # e.g. {"unraid_api_url", "unraid_api_key"}
+    user_keys = set(manifest["userConfig"])  # e.g. {"unraid_api_url", "unraid_api_key", ...}
 
     expected = {f"CLAUDE_PLUGIN_OPTION_{k.upper()}": k.upper() for k in user_keys}
     assert expected == PLUGIN_OPTION_MAP, (
@@ -29,13 +29,23 @@ def test_plugin_option_map_matches_manifest_userconfig():
         f"expected {expected}, got {PLUGIN_OPTION_MAP}"
     )
 
-    # .mcp.json must hand each canonical var the matching plugin option.
+    # Delivery split: credential options (no package default) are passed straight
+    # through .mcp.json's env; optional config options (which DO have package
+    # defaults) must NOT appear there — an empty substitution would shadow
+    # ~/.unraid-mcp/.env via load_dotenv(override=False) (issue #137). They reach
+    # the server through the setup hook (~/.unraid-mcp/.env) instead.
     mcp = json.loads((plugin_dir / ".mcp.json").read_text())
     env = mcp["mcpServers"]["unraid-mcp"]["env"]
     for option, canonical in PLUGIN_OPTION_MAP.items():
-        assert env.get(canonical) == f"${{{option}}}", (
-            f".mcp.json env[{canonical}] should be ${{{option}}}, got {env.get(canonical)!r}"
-        )
+        if canonical in CREDENTIAL_OPTIONS:
+            assert env.get(canonical) == f"${{{option}}}", (
+                f".mcp.json env[{canonical}] should be ${{{option}}}, got {env.get(canonical)!r}"
+            )
+        else:
+            assert canonical not in env, (
+                f".mcp.json must not pass {canonical} through env (issue #137 shadowing); "
+                "it is delivered via the setup hook to ~/.unraid-mcp/.env instead."
+            )
 
 
 # Both plugin-option env vars, so tests can clear them in one place. patch.dict
@@ -159,6 +169,73 @@ def test_run_plugin_hook_writes_env_when_both_present(tmp_path, capsys):
     assert stat.S_IMODE(creds_file.stat().st_mode) == 0o600
     report = json.loads(capsys.readouterr().out)
     assert report["ran_repair"] is True
+
+
+def test_run_plugin_hook_writes_tls_config_alongside_credentials(tmp_path, capsys):
+    """Optional TLS config (issue #172) is persisted to .env with the credential pair."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "https://192.168.1.10/graphql",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL": "false",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS": "true",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    content = creds_file.read_text()
+    assert "UNRAID_API_URL=https://192.168.1.10/graphql" in content
+    assert "UNRAID_VERIFY_SSL=false" in content
+    assert "UNRAID_ALLOW_INSECURE_TLS=true" in content
+    report = json.loads(capsys.readouterr().out)
+    assert report["ran_repair"] is True
+
+
+def test_run_plugin_hook_omits_absent_tls_config(tmp_path, capsys):
+    """Unset TLS options are simply not written and never raise an advisory."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "https://tower.local/graphql",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        os.environ.pop("CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL", None)
+        os.environ.pop("CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS", None)
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    content = creds_file.read_text()
+    # The example template carries a commented default; the hook must not inject
+    # an active UNRAID_VERIFY_SSL/UNRAID_ALLOW_INSECURE_TLS line of its own.
+    assert "UNRAID_VERIFY_SSL=false" not in content
+    report = json.loads(capsys.readouterr().out)
+    assert report["ran_repair"] is True
+    assert report["advisory_failures"] == []
 
 
 def test_run_plugin_hook_idempotent_rewrite(tmp_path, capsys):

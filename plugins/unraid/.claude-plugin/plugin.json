@@ -32,6 +32,18 @@
       "title": "Unraid API Key",
       "description": "API key for your Unraid server. Found in Settings → Management Access → API Keys.",
       "sensitive": true
+    },
+    "unraid_verify_ssl": {
+      "type": "string",
+      "title": "Verify TLS certificate",
+      "description": "Controls TLS verification of the Unraid API. Leave blank to verify (the default). Set to false to disable verification for a stock self-signed cert (you must also enable \"Allow insecure TLS\" below), or set to a path to a CA-bundle file to trust a self-signed cert without disabling verification.",
+      "default": ""
+    },
+    "unraid_allow_insecure_tls": {
+      "type": "boolean",
+      "title": "Allow insecure TLS",
+      "description": "Required second opt-in when \"Verify TLS certificate\" is set to false. Disabling verification sends your API key to an unverified peer over both HTTP and WebSocket connections, exposing it to man-in-the-middle interception. Only enable this on a trusted LAN.",
+      "default": false
     }
   }
 }
