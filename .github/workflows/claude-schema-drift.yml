@@ -104,7 +104,9 @@ jobs:
           git checkout -b "$branch_name"
           git commit --allow-empty -m "chore: start Claude schema drift automation"
           prepared_sha="$(git rev-parse HEAD)"
-          git push -u origin "$branch_name"
+          # Keep checkout credentials disabled for the agent steps. Authenticate only
+          # this bootstrap push through gh's credential helper and the step-scoped token.
+          git -c credential.helper='!gh auth git-credential' push -u origin "$branch_name"
 
           {
             echo "Draft automation PR for #${ISSUE_NUMBER}."
