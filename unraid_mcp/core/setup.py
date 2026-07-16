@@ -18,6 +18,7 @@ import os
 
 from ..config.logging import logger
 from ..config.settings import (
+    _BOOL_TRUE_TOKENS,
     CREDENTIALS_DIR,
     CREDENTIALS_ENV_PATH,
     PROJECT_ROOT,
@@ -46,11 +47,14 @@ CREDENTIAL_OPTIONS: frozenset[str] = frozenset({"UNRAID_API_URL", "UNRAID_API_KE
 # when supplied; their absence is normal and never raises an advisory.
 CONFIG_OPTIONS: frozenset[str] = frozenset(PLUGIN_OPTION_MAP.values()) - CREDENTIAL_OPTIONS
 
-# Value tokens (lowercased) for the TLS opt-out guard, mirroring the parsing in
-# ``config/settings.py``. Disabling verification requires the second explicit
-# opt-in; the hook refuses to persist the disabling half without it.
+# Value tokens (lowercased) for the TLS opt-out guard. These MUST match how
+# ``config/settings.py`` parses the same vars, or the hook and the server would
+# disagree about whether the opt-out is complete. The disabling set mirrors the
+# ``raw_verify_ssl in ["false", "0", "no"]`` check there; the truthy set reuses
+# settings' own ``_BOOL_TRUE_TOKENS`` (note: NOT pydantic's broader set — "on" is
+# deliberately excluded, since settings would parse UNRAID_ALLOW_INSECURE_TLS=on
+# as false and hit the fatal TLS guard).
 _VERIFY_DISABLING_VALUES: frozenset[str] = frozenset({"false", "0", "no"})
-_TRUTHY_VALUES: frozenset[str] = frozenset({"true", "1", "yes", "on"})
 
 
 def _safe_env_value(value: str) -> str | None:
@@ -133,7 +137,7 @@ def run_plugin_hook() -> int:
     advisories: list[str] = []
     verify_val = extra.get("UNRAID_VERIFY_SSL", "").strip().lower()
     insecure_val = extra.get("UNRAID_ALLOW_INSECURE_TLS", "").strip().lower()
-    if verify_val in _VERIFY_DISABLING_VALUES and insecure_val not in _TRUTHY_VALUES:
+    if verify_val in _VERIFY_DISABLING_VALUES and insecure_val not in _BOOL_TRUE_TOKENS:
         extra.pop("UNRAID_VERIFY_SSL", None)
         resets.add("UNRAID_VERIFY_SSL")
         advisories.append(

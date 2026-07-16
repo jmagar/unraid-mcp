@@ -319,6 +319,47 @@ def test_run_plugin_hook_refuses_incomplete_insecure_optout(tmp_path, capsys):
     assert any("Allow insecure TLS" in a for a in report["advisory_failures"])
 
 
+def test_incomplete_optout_guard_rejects_on_token(tmp_path, capsys):
+    """`on` is truthy to pydantic but NOT to settings' _coerce_bool, so the hook
+    must treat verify=false + insecure=on as an incomplete opt-out — otherwise it
+    would persist a value the server parses as false and FATALs on. Codex P2."""
+    from unraid_mcp.core import setup as setup_mod
+
+    creds_dir = tmp_path / "creds"
+    creds_file = creds_dir / ".env"
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_URL": "https://tower.local/graphql",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_API_KEY": "secret123",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_VERIFY_SSL": "false",
+                "CLAUDE_PLUGIN_OPTION_UNRAID_ALLOW_INSECURE_TLS": "on",
+            },
+            clear=False,
+        ),
+        patch.object(setup_mod, "CREDENTIALS_DIR", creds_dir),
+        patch.object(setup_mod, "CREDENTIALS_ENV_PATH", creds_file),
+        patch.object(setup_mod, "PROJECT_ROOT", tmp_path),
+    ):
+        rc = setup_mod.run_plugin_hook()
+
+    assert rc == 0
+    content = creds_file.read_text()
+    assert "UNRAID_VERIFY_SSL=false" not in content
+    report = json.loads(capsys.readouterr().out)
+    assert any("Allow insecure TLS" in a for a in report["advisory_failures"])
+
+
+def test_hook_truthy_tokens_match_settings():
+    """The hook's opt-in token set must stay identical to settings' bool parsing."""
+    from unraid_mcp.config import settings as settings_mod
+    from unraid_mcp.core import setup as setup_mod
+
+    assert setup_mod._BOOL_TRUE_TOKENS is settings_mod._BOOL_TRUE_TOKENS
+
+
 def test_run_plugin_hook_persists_complete_insecure_optout(tmp_path, capsys):
     """The full opt-out (verify_ssl=false AND allow_insecure_tls=true) is valid and
     written as-is, with no advisory."""
