@@ -46,6 +46,12 @@ CREDENTIAL_OPTIONS: frozenset[str] = frozenset({"UNRAID_API_URL", "UNRAID_API_KE
 # when supplied; their absence is normal and never raises an advisory.
 CONFIG_OPTIONS: frozenset[str] = frozenset(PLUGIN_OPTION_MAP.values()) - CREDENTIAL_OPTIONS
 
+# Value tokens (lowercased) for the TLS opt-out guard, mirroring the parsing in
+# ``config/settings.py``. Disabling verification requires the second explicit
+# opt-in; the hook refuses to persist the disabling half without it.
+_VERIFY_DISABLING_VALUES: frozenset[str] = frozenset({"false", "0", "no"})
+_TRUTHY_VALUES: frozenset[str] = frozenset({"true", "1", "yes", "on"})
+
 
 def _safe_env_value(value: str) -> str | None:
     """Return the value if safe to write to a .env file, else None.
@@ -117,17 +123,38 @@ def run_plugin_hook() -> int:
         if canonical in CONFIG_OPTIONS and canonical not in resolved and option in os.environ
     }
 
+    # Refuse to persist a verification-disabling UNRAID_VERIFY_SSL without the
+    # second opt-in (UNRAID_ALLOW_INSECURE_TLS=true). settings.py runs its fatal
+    # TLS guard at import — and this hook imports settings — so writing the
+    # invalid pair would make the very next hook run exit before it could repair
+    # the file, stranding the user at a FATAL that needs a manual .env edit. Drop
+    # the disabling half (and clear any stale line) so the safe default holds, and
+    # surface an advisory telling the user to enable both options together.
+    advisories: list[str] = []
+    verify_val = extra.get("UNRAID_VERIFY_SSL", "").strip().lower()
+    insecure_val = extra.get("UNRAID_ALLOW_INSECURE_TLS", "").strip().lower()
+    if verify_val in _VERIFY_DISABLING_VALUES and insecure_val not in _TRUTHY_VALUES:
+        extra.pop("UNRAID_VERIFY_SSL", None)
+        resets.add("UNRAID_VERIFY_SSL")
+        advisories.append(
+            "Refused to disable TLS verification: UNRAID_VERIFY_SSL=false also requires "
+            "enabling 'Allow insecure TLS' (UNRAID_ALLOW_INSECURE_TLS=true). Left "
+            "verification at its safe default — set both options together to disable it."
+        )
+
     if api_url and api_key:
         try:
             _write_env(api_url, api_key, extra, resets)
             report["ran_repair"] = True
+            report["advisory_failures"] = advisories
             logger.info("Plugin setup hook wrote credentials to %s", CREDENTIALS_ENV_PATH)
         except OSError as e:
             # Record the write failure in the advisory channel rather than letting it
             # escape — the documented contract is "always returns 0" so the hook never
             # blocks a session. The server still reports unconfigured at request time.
             report["advisory_failures"] = [
-                f"Failed to write {CREDENTIALS_ENV_PATH}: {type(e).__name__}: {e}"
+                *advisories,
+                f"Failed to write {CREDENTIALS_ENV_PATH}: {type(e).__name__}: {e}",
             ]
             logger.error(
                 "Plugin setup hook failed to write %s: %s",
@@ -160,10 +187,10 @@ def run_plugin_hook() -> int:
                     f"{canonical} not supplied via plugin userConfig — set it in the plugin "
                     f"config form or edit {CREDENTIALS_ENV_PATH} directly."
                 )
-        report["advisory_failures"] = failures
+        report["advisory_failures"] = advisories + failures
         logger.info(
             "Plugin setup hook: credentials not fully supplied; no .env written. %s",
-            " ".join(failures),
+            " ".join(advisories + failures),
         )
 
     print(json.dumps(report, indent=2))
