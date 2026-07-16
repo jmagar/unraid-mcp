@@ -323,11 +323,14 @@ async def _handle_docker(
                         }
                     )
             bindings.sort(key=lambda b: (b["host_port"], b.get("protocol") or ""))
-            return {"bindings": bindings, "count": len(bindings)}
+            capped, page = cap_list(bindings, limit)
+            return {"bindings": capped, "count": len(capped), "page": page}
 
         if subaction == "networks":
             data = await _client.make_graphql_request(_DOCKER_QUERIES["networks"])
-            return {"networks": safe_get(data, "docker", "networks", default=[])}
+            networks = safe_get(data, "docker", "networks", default=[])
+            capped, page = cap_list(networks, limit)
+            return {"networks": capped, "page": page}
 
         if subaction == "network_details":
             data = await _client.make_graphql_request(_DOCKER_QUERIES["network_details"])

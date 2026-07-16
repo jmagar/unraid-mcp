@@ -29,8 +29,12 @@ two keys is a configuration error — encrypted persistence needs both.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import ipaddress
+import time
+import weakref
+from collections import OrderedDict
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -54,6 +58,10 @@ _DEFAULT_SCOPES: tuple[str, ...] = (
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 )
+_IDENTITY_CACHE_MAX = 1024
+_IDENTITY_CACHE_TTL_SECONDS = 300.0
+_IDENTITY_EXPIRY_SKEW_SECONDS = 5.0
+_identity_verifiers: weakref.WeakSet[_AuthorizedGoogleTokenVerifier]
 
 
 class GoogleOAuthConfigError(RuntimeError):
@@ -176,12 +184,18 @@ class _AuthorizedGoogleTokenVerifier:
         allowed_domains: set[str],
         allow_any_user: bool,
         timeout_seconds: int = 10,
+        cache_max_entries: int = _IDENTITY_CACHE_MAX,
     ) -> None:
         self._wrapped = wrapped
         self._allowed_emails = allowed_emails
         self._allowed_domains = allowed_domains
         self._allow_any_user = allow_any_user
         self._timeout_seconds = timeout_seconds
+        self._cache_max_entries = cache_max_entries
+        self._identity_cache: OrderedDict[str, tuple[float, dict[str, object]]] = OrderedDict()
+        self._identity_inflight: dict[str, asyncio.Task[dict[str, object]]] = {}
+        self._cache_lock = asyncio.Lock()
+        self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
     async def verify_token(self, token: str) -> AccessToken | None:
         access_token = await self._wrapped.verify_token(token)
@@ -190,7 +204,7 @@ class _AuthorizedGoogleTokenVerifier:
         if self._allow_any_user:
             return access_token
 
-        user = await self._fetch_google_identity(token)
+        user = await self._get_google_identity(token, access_token.expires_at)
         email = str(user.get("email") or "").strip().lower()
         if not email or not _google_bool(user.get("email_verified")):
             logger.warning("Google OAuth rejected token without a verified email")
@@ -200,31 +214,96 @@ class _AuthorizedGoogleTokenVerifier:
             return None
         return access_token
 
+    async def _get_google_identity(
+        self, token: str, access_token_expires_at: int | None
+    ) -> dict[str, object]:
+        """Return a coalesced, bounded identity lookup cached no longer than the token."""
+        now = time.time()
+        async with self._cache_lock:
+            cached = self._identity_cache.get(token)
+            if cached is not None and cached[0] > now:
+                self._identity_cache.move_to_end(token)
+                return dict(cached[1])
+            self._identity_cache.pop(token, None)
+            task = self._identity_inflight.get(token)
+            if task is None:
+                task = asyncio.create_task(self._fetch_google_identity(token))
+                self._identity_inflight[token] = task
+
+        try:
+            identity = await task
+        finally:
+            async with self._cache_lock:
+                if self._identity_inflight.get(token) is task:
+                    self._identity_inflight.pop(token, None)
+
+        expiry = now + _IDENTITY_CACHE_TTL_SECONDS
+        if access_token_expires_at is not None:
+            expiry = min(expiry, float(access_token_expires_at) - _IDENTITY_EXPIRY_SKEW_SECONDS)
+        if expiry > time.time():
+            async with self._cache_lock:
+                self._identity_cache[token] = (expiry, dict(identity))
+                self._identity_cache.move_to_end(token)
+                while len(self._identity_cache) > self._cache_max_entries:
+                    self._identity_cache.popitem(last=False)
+        return identity
+
     async def _fetch_google_identity(self, token: str) -> dict[str, object]:
         """Fetch token identity data used for local authorization."""
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.get(
-                "https://oauth2.googleapis.com/tokeninfo",
-                params={"access_token": token},
-                headers={"User-Agent": "UnraidMCP-Google-OAuth"},
-            )
-            if response.status_code == 200:
-                return dict(response.json())
+        response = await self._client.get(
+            "https://oauth2.googleapis.com/tokeninfo",
+            params={"access_token": token},
+            headers={"User-Agent": "UnraidMCP-Google-OAuth"},
+        )
+        if response.status_code == 200:
+            return dict(response.json())
 
-            logger.debug("Google tokeninfo authorization lookup failed: %s", response.status_code)
-            userinfo = await client.get(
-                "https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "User-Agent": "UnraidMCP-Google-OAuth",
-                },
-            )
-            if userinfo.status_code == 200:
-                data = dict(userinfo.json())
-                if "verified_email" in data and "email_verified" not in data:
-                    data["email_verified"] = data["verified_email"]
-                return data
+        logger.debug("Google tokeninfo authorization lookup failed: %s", response.status_code)
+        userinfo = await self._client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "UnraidMCP-Google-OAuth",
+            },
+        )
+        if userinfo.status_code == 200:
+            data = dict(userinfo.json())
+            if "verified_email" in data and "email_verified" not in data:
+                data["email_verified"] = data["verified_email"]
+            return data
         return {}
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+
+_identity_verifiers = weakref.WeakSet()
+
+
+async def close_google_auth_clients() -> None:
+    """Close pooled Google identity clients during application shutdown."""
+    await asyncio.gather(*(verifier.aclose() for verifier in list(_identity_verifiers)))
+
+
+def _install_authorized_token_verifier(
+    provider: GoogleProvider, verifier: _AuthorizedGoogleTokenVerifier
+) -> None:
+    """Isolate FastMCP's verified private hook and fail closed on incompatibility."""
+    current = getattr(provider, "_token_validator", None)
+    if current is None or not callable(getattr(current, "verify_token", None)):
+        raise GoogleOAuthConfigError(
+            "Installed FastMCP is incompatible with Google identity authorization: "
+            "GoogleProvider._token_validator is unavailable. Refusing to start without "
+            "the configured email/domain allowlist."
+        )
+    try:
+        setattr(provider, "_token_validator", verifier)  # noqa: B010 - compatibility adapter
+    except (AttributeError, TypeError) as exc:
+        raise GoogleOAuthConfigError(
+            "Installed FastMCP rejected the Google identity authorization adapter. "
+            "Refusing to start without the configured email/domain allowlist."
+        ) from exc
+    _identity_verifiers.add(verifier)
 
 
 def _storage_dir() -> Path:
@@ -373,16 +452,13 @@ def build_google_provider() -> GoogleProvider | None:
         # repeated browser GETs can rotate its CSRF token before form submit.
         require_authorization_consent="external",
     )
-    setattr(  # noqa: B010 - private FastMCP hook; typed assignment is rejected by ty.
-        provider,
-        "_token_validator",
-        _AuthorizedGoogleTokenVerifier(
-            provider._token_validator,
-            allowed_emails=allowed_emails,
-            allowed_domains=allowed_domains,
-            allow_any_user=allow_any_user,
-        ),
+    verifier = _AuthorizedGoogleTokenVerifier(
+        provider._token_validator,
+        allowed_emails=allowed_emails,
+        allowed_domains=allowed_domains,
+        allow_any_user=allow_any_user,
     )
+    _install_authorized_token_verifier(provider, verifier)
 
     logger.info(
         "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s, authz=%s)",

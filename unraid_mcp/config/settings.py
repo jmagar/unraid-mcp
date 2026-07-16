@@ -17,9 +17,9 @@ retained as hand-written code that runs at import time:
   ``UNRAID_ALLOW_INSECURE_TLS`` (S-H1) interaction, which runs at module level
   *after* ``Settings()`` because it depends on cross-field state.
 
-The fatal-on-bad-input port guard, by contrast, *is* expressed inside the model
-as the pydantic field validator ``Settings._parse_port`` (it only needs the
-single ``UNRAID_MCP_PORT`` field), so it is not module-level hand-written code.
+Transport and numeric bounds are expressed declaratively on the model. Rendering
+validation failures and choosing a process exit code belongs to the composition
+root, not field validators.
 
 Every name this module historically exported is re-exported, unchanged, at the
 end of the file so existing imports (``from ..config.settings import X`` and
@@ -27,13 +27,14 @@ end of the file so existing imports (``from ..config.settings import X`` and
 """
 
 import os
+import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from ..version import VERSION as APP_VERSION
 
@@ -102,9 +103,6 @@ def _load_env_files() -> None:
         break
 
 
-_load_env_files()
-
-
 class Settings(BaseSettings):
     """Declarative model for the simple, type-coercible Unraid MCP env vars.
 
@@ -128,20 +126,71 @@ class Settings(BaseSettings):
     unraid_api_key: str | None = Field(default=None, alias="UNRAID_API_KEY")
 
     # Server Configuration
-    unraid_mcp_port: int = Field(default=6970, alias="UNRAID_MCP_PORT")
+    unraid_mcp_port: int = Field(default=6970, ge=1, le=65535, alias="UNRAID_MCP_PORT")
     # Default to loopback so a bare-metal HTTP run is not LAN-exposed unless the
     # operator explicitly opts in (S-H3 / SEC-M3). The Docker image sets
     # UNRAID_MCP_HOST=0.0.0.0 itself, since the container must bind all interfaces
     # for the (loopback-published) port to be reachable from the host.
     unraid_mcp_host: str = Field(default="127.0.0.1", alias="UNRAID_MCP_HOST")
-    unraid_mcp_transport: str = Field(default="streamable-http", alias="UNRAID_MCP_TRANSPORT")
+    unraid_mcp_transport: Literal["streamable-http", "stdio", "sse"] = Field(
+        default="streamable-http", alias="UNRAID_MCP_TRANSPORT"
+    )
 
     # Maximum serialized tool-response size in bytes. Responses larger than this are
     # replaced with a structured, still-parseable truncation marker (see
     # core/response_limit.py) rather than hard-cut mid-JSON. Default 40 KB (~10K
     # tokens) keeps a single response a small fraction of the client context window;
     # the per-list cap_list defaults do the primary bounding, this is the backstop.
-    unraid_mcp_max_response_bytes: int = Field(default=40000, alias="UNRAID_MCP_MAX_RESPONSE_BYTES")
+    unraid_mcp_max_response_bytes: int = Field(
+        default=40000, gt=0, alias="UNRAID_MCP_MAX_RESPONSE_BYTES"
+    )
+
+    # Subscription runtime. These settings were historically parsed ad hoc in
+    # manager/resources/diagnostics, which allowed invalid values to fail only
+    # after server startup and made tests depend on process-global os.environ.
+    unraid_auto_start_subscriptions: bool = Field(
+        default=True, alias="UNRAID_AUTO_START_SUBSCRIPTIONS"
+    )
+    unraid_max_reconnect_attempts: int = Field(
+        default=10, ge=0, le=100, alias="UNRAID_MAX_RECONNECT_ATTEMPTS"
+    )
+    unraid_autostart_log_path: str | None = Field(default=None, alias="UNRAID_AUTOSTART_LOG_PATH")
+    unraid_mcp_enable_raw_subscription_probe: bool = Field(
+        default=False, alias="UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE"
+    )
+    unraid_subscription_auto_start_actions: Annotated[frozenset[str] | None, NoDecode] = Field(
+        default=None, alias="UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS"
+    )
+    unraid_subscription_max_connections: int = Field(
+        default=3, ge=1, le=32, alias="UNRAID_SUBSCRIPTION_MAX_CONNECTIONS"
+    )
+    unraid_subscription_startup_stagger_seconds: float = Field(
+        default=0.05,
+        ge=0,
+        le=10,
+        alias="UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS",
+    )
+    unraid_subscription_collect_max_events: int = Field(
+        default=100, ge=1, le=10_000, alias="UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS"
+    )
+    unraid_subscription_collect_max_bytes: int = Field(
+        default=1_048_576, gt=0, alias="UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES"
+    )
+    unraid_subscription_collect_max_seconds: float = Field(
+        default=30.0, gt=0, le=300, alias="UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS"
+    )
+    unraid_subscription_cache_max_age_seconds: float = Field(
+        default=300.0,
+        gt=0,
+        le=86_400,
+        alias="UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS",
+    )
+    unraid_subscription_timeout_max_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=300,
+        alias="UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS",
+    )
 
     # HTTP Authentication
     # Bearer token for HTTP transport (streamable-http / sse).
@@ -231,6 +280,7 @@ class Settings(BaseSettings):
         "unraid_mcp_google_jwt_signing_key",
         "unraid_mcp_google_encryption_key",
         "unraid_mcp_google_storage_dir",
+        "unraid_autostart_log_path",
         mode="before",
     )
     @classmethod
@@ -245,64 +295,6 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
-
-    @field_validator("unraid_mcp_port", mode="before")
-    @classmethod
-    def _parse_port(cls, value: object) -> int:
-        """Parse + validate a port number, exiting fatally on bad input.
-
-        Mirrors the original ``_parse_port`` helper: a non-integer or
-        out-of-range value is a fatal startup error (``sys.exit(1)``), not a
-        silent fallback.
-        """
-        raw = str(value)
-        try:
-            port = int(raw)
-        except ValueError:
-            print(
-                f"FATAL: UNRAID_MCP_PORT={raw!r} is not a valid integer port number",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        if not (1 <= port <= 65535):
-            print(
-                f"FATAL: UNRAID_MCP_PORT={port} outside valid port range 1-65535",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return port
-
-    @field_validator("unraid_mcp_max_response_bytes", mode="before")
-    @classmethod
-    def _parse_positive_int(cls, value: object) -> int:
-        """Parse a positive integer, falling back to the default on error.
-
-        Mirrors the original ``_parse_positive_int`` helper: bad / non-positive
-        values emit a WARNING and fall back rather than aborting startup.
-        """
-        default = 40000
-        if value is None:
-            return default
-        raw = value if isinstance(value, int) else str(value)
-        if isinstance(raw, str) and raw.strip() == "":
-            return default
-        try:
-            parsed = int(raw)
-        except ValueError:
-            print(
-                f"WARNING: UNRAID_MCP_MAX_RESPONSE_BYTES={raw!r} is not a valid integer; "
-                f"using default {default}",
-                file=sys.stderr,
-            )
-            return default
-        if parsed <= 0:
-            print(
-                f"WARNING: UNRAID_MCP_MAX_RESPONSE_BYTES={parsed} must be positive; "
-                f"using default {default}",
-                file=sys.stderr,
-            )
-            return default
-        return parsed
 
     @field_validator(
         "unraid_mcp_disable_http_auth",
@@ -323,10 +315,37 @@ class Settings(BaseSettings):
             return value
         return str(value).lower() in _BOOL_TRUE_TOKENS
 
+    @field_validator(
+        "unraid_auto_start_subscriptions",
+        "unraid_mcp_enable_raw_subscription_probe",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_strict_subscription_bool(cls, value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        normalized = str(value).strip().lower()
+        if normalized in _BOOL_TRUE_TOKENS:
+            return True
+        if normalized in ("false", "0", "no"):
+            return False
+        raise ValueError("must be one of true/false, 1/0, or yes/no")
+
     @field_validator("unraid_mcp_transport", mode="before")
     @classmethod
     def _lower_transport(cls, value: object) -> str:
         return str(value).lower()
+
+    @field_validator("unraid_subscription_auto_start_actions", mode="before")
+    @classmethod
+    def _parse_auto_start_actions(cls, value: object) -> frozenset[str] | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, str):
+            return frozenset(part for part in re.split(r"[\s,]+", value.strip()) if part)
+        if isinstance(value, (list, tuple, set, frozenset)):
+            return frozenset(str(item) for item in value)
+        raise ValueError("must be a comma/space-separated string or collection of names")
 
     @field_validator("raw_verify_ssl", mode="before")
     @classmethod
@@ -339,7 +358,14 @@ class Settings(BaseSettings):
         return str(value).upper()
 
 
-_settings = Settings()
+def load_settings() -> Settings:
+    """Load the configured env source and return one validated settings snapshot."""
+    _load_env_files()
+    return Settings()
+
+
+_settings = load_settings()
+SETTINGS = _settings
 
 # Core API Configuration
 # Loaded once at startup from the .env hierarchy / process env. Consumers should
@@ -355,6 +381,20 @@ UNRAID_MCP_HOST = _settings.unraid_mcp_host
 UNRAID_MCP_TRANSPORT = _settings.unraid_mcp_transport
 
 UNRAID_MCP_MAX_RESPONSE_BYTES = _settings.unraid_mcp_max_response_bytes
+
+# Subscription runtime
+UNRAID_AUTO_START_SUBSCRIPTIONS = _settings.unraid_auto_start_subscriptions
+UNRAID_MAX_RECONNECT_ATTEMPTS = _settings.unraid_max_reconnect_attempts
+UNRAID_AUTOSTART_LOG_PATH = _settings.unraid_autostart_log_path
+UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE = _settings.unraid_mcp_enable_raw_subscription_probe
+UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS = _settings.unraid_subscription_auto_start_actions
+UNRAID_SUBSCRIPTION_MAX_CONNECTIONS = _settings.unraid_subscription_max_connections
+UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS = _settings.unraid_subscription_startup_stagger_seconds
+UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS = _settings.unraid_subscription_collect_max_events
+UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES = _settings.unraid_subscription_collect_max_bytes
+UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS = _settings.unraid_subscription_collect_max_seconds
+UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS = _settings.unraid_subscription_cache_max_age_seconds
+UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS = _settings.unraid_subscription_timeout_max_seconds
 
 # HTTP Authentication
 UNRAID_MCP_BEARER_TOKEN: str | None = _settings.unraid_mcp_bearer_token

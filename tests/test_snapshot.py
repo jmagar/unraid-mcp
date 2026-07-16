@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -132,6 +133,132 @@ async def test_subscribe_collect_returns_multiple_events(mock_ws):
 
     assert len(result) == 2
     assert result[0]["notificationAdded"]["id"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_stops_at_event_limit(mock_ws):
+    """A noisy stream is disconnected once the in-memory event cap is reached."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    messages = [_make_ws_message("snapshot-1", {"event": {"id": str(i)}}) for i in range(20)]
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter(messages)
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_collect("subscription { event { id } }", max_events=3)
+
+    assert [item["event"]["id"] for item in result] == ["0", "1", "2"]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_stops_before_byte_budget_is_exceeded(mock_ws):
+    """Serialized retained events never exceed the configured byte budget."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    first = {"event": {"value": "a" * 12}}
+    second = {"event": {"value": "b" * 12}}
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter(
+        [_make_ws_message("snapshot-1", first), _make_ws_message("snapshot-1", second)]
+    )
+    mock_ws.recv = AsyncMock(return_value=ack)
+    one_event_bytes = len(json.dumps(first, separators=(",", ":")).encode())
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_collect(
+            "subscription { event { value } }",
+            max_bytes=one_event_bytes,
+        )
+
+    assert result == [first]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_transforms_before_retaining(mock_ws):
+    """Log filtering/compaction can run before events consume the memory budget."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    raw = {"event": {"value": "x" * 20_000}}
+    compact = {"event": {"value": "kept"}}
+
+    async def aiter(items):
+        for item in items:
+            yield item
+
+    mock_ws.__aiter__ = lambda s: aiter([_make_ws_message("snapshot-1", raw)])
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        result = await subscribe_collect(
+            "subscription { event { value } }",
+            max_bytes=100,
+            transform=lambda _event: compact,
+        )
+
+    assert result == [compact]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_returns_promptly_on_complete(mock_ws):
+    """A CompleteEvent terminates collection instead of waiting out the window."""
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    ack = json.dumps({"type": "connection_ack"})
+    complete = json.dumps({"id": "snapshot-1", "type": "complete"})
+
+    async def aiter():
+        yield complete
+        await asyncio.Event().wait()
+
+    mock_ws.__aiter__ = lambda s: aiter()
+    mock_ws.recv = AsyncMock(return_value=ack)
+
+    with patch("unraid_mcp.subscriptions.protocol.websockets.connect") as mock_connect:
+        mock_connect.return_value.__aenter__ = AsyncMock(return_value=mock_ws)
+        mock_connect.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        started = time.monotonic()
+        result = await subscribe_collect(
+            "subscription { event { id } }",
+            collect_for=5.0,
+        )
+
+    assert result == []
+    assert time.monotonic() - started < 0.5
+
+
+@pytest.mark.asyncio
+async def test_subscribe_collect_rejects_unbounded_window_before_connect(mock_ws):
+    from unraid_mcp.config.settings import UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS
+    from unraid_mcp.core.exceptions import ToolError
+    from unraid_mcp.subscriptions.snapshot import subscribe_collect
+
+    with pytest.raises(ToolError, match="collect_for"):
+        await subscribe_collect(
+            "subscription { event { id } }",
+            collect_for=UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS + 1,
+        )
 
 
 def test_snapshot_actions_importable_from_subscriptions() -> None:

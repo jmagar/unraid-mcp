@@ -239,6 +239,25 @@ class TestRedactSensitive:
         jwt = "eyJ0eXAiOiJKV1QifQ.eyJpZCI6N30.AbCdEfGhIjKlMnOpQrStUvWxYz012345"
         assert redact_sensitive(jwt) == "***"
 
+    def test_embedded_secrets_are_masked_and_output_is_bounded(self) -> None:
+        fake_token = "".join(("sk-", "abcdefghijklmnop", "1234"))
+        embedded = f"request failed Authorization: Bearer {fake_token}"
+        value = redact_sensitive({"errors": [{"message": embedded}], "huge": "x" * 20_000})
+        rendered = json.dumps(value)
+        assert fake_token not in rendered
+        assert "Authorization: Bearer" not in rendered
+        assert len(rendered) < 10_000
+
+    def test_depth_and_collection_width_are_bounded(self) -> None:
+        deep: dict[str, object] = {}
+        cursor = deep
+        for index in range(30):
+            child: dict[str, object] = {}
+            cursor[str(index)] = child
+            cursor = child
+        wide = {str(index): index for index in range(1_000)}
+        assert "truncated" in json.dumps(redact_sensitive({"deep": deep, "wide": wide})).lower()
+
 
 # ---------------------------------------------------------------------------
 # tool_error_handler — error classification
@@ -287,13 +306,22 @@ class TestToolErrorHandler:
         assert "likely a server bug" not in msg
         logger.exception.assert_called_once()
 
-    def test_generic_runtime_error_maps_to_upstream_class(self) -> None:
+    def test_generic_runtime_error_maps_to_internal_class(self) -> None:
         logger = self._logger()
         with (
-            pytest.raises(ToolError, match="upstream/network error"),
+            pytest.raises(ToolError, match="Internal error"),
             tool_error_handler("array", "parity_status", logger),
         ):
             raise RuntimeError("unexpected upstream state")
+
+    def test_credentials_remediation_names_the_consolidated_tool(self) -> None:
+        with (
+            pytest.raises(ToolError) as exc_info,
+            tool_error_handler("system", "overview", self._logger()),
+        ):
+            raise CredentialsNotConfiguredError()
+        assert 'unraid(action="health", subaction="setup")' in str(exc_info.value)
+        assert "unraid_health" not in str(exc_info.value)
 
     def test_tool_error_passes_through_unchanged(self) -> None:
         logger = self._logger()
@@ -843,6 +871,47 @@ class TestRateLimitRetry:
             pytest.raises(ToolError, match="rate limiting"),
         ):
             await make_graphql_request("{ info }")
+
+    async def test_every_physical_post_acquires_a_limiter_token(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [
+            self._make_429_response(),
+            self._make_429_response(),
+            self._make_ok_response({"x": 1}),
+        ]
+        with (
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+            patch(
+                "unraid_mcp.core.client._rate_limiter.acquire", new_callable=AsyncMock
+            ) as acquire,
+        ):
+            await make_graphql_request("{ x }")
+        assert acquire.await_count == mock_client.post.await_count == 3
+
+    async def test_exhausted_retries_do_not_sleep_after_final_response(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [self._make_429_response() for _ in range(3)]
+        with (
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+            patch("unraid_mcp.core.client.asyncio.sleep", new_callable=AsyncMock) as sleep,
+            pytest.raises(ToolError, match="rate limiting"),
+        ):
+            await make_graphql_request("{ x }")
+        assert sleep.await_count == 2
+
+    async def test_retry_after_is_bounded_and_jittered(self) -> None:
+        first = self._make_429_response()
+        first.headers = {"Retry-After": "9999"}
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = [first, self._make_ok_response({"x": 1})]
+        with (
+            patch("unraid_mcp.core.client.get_http_client", return_value=mock_client),
+            patch("unraid_mcp.core.client.asyncio.sleep", new_callable=AsyncMock) as sleep,
+            patch("unraid_mcp.core.client.random.uniform", return_value=0.125),
+        ):
+            await make_graphql_request("{ x }")
+        delay = sleep.await_args.args[0]
+        assert 10.0 < delay <= 10.25
 
     async def test_rate_limit_error_message_advises_wait(self) -> None:
         """The ToolError message should tell the user to wait ~10 seconds."""

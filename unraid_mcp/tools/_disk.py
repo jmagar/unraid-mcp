@@ -233,7 +233,8 @@ async def _handle_disk(
                 "details": raw,
             }
         if subaction == "log_files":
-            return {"log_files": data.get("logFiles", [])}
+            capped, page = cap_list(data.get("logFiles", []), limit)
+            return {"log_files": capped, "page": page}
         if subaction == "logs":
             result = data.get("logFile")
             if not result:

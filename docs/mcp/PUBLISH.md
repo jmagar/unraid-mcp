@@ -45,27 +45,35 @@ minor, `feat!:` / `BREAKING CHANGE` → major.
 
 ### What happens after the release PR merges
 
-The new tag + Release trigger two workflows:
+The new tag + Release trigger two independently retryable workflows:
 
 **`publish-pypi.yml`** (on `release: published`):
-1. Verifies the tag version matches `pyproject.toml`
-2. Builds sdist and wheel with `uv build`
-3. Publishes to PyPI with trusted publisher attestations
-4. Attaches the dist artifacts to the release created by release-please
-5. Sets `server.json` version from the tag and publishes to the MCP Registry via `mcp-publisher`
+1. Builds the wheel and sdist once in an unprivileged job using uv `0.9.25` with caches disabled.
+2. Validates metadata and contents, installs only the built wheel in a clean environment,
+   and completes MCP stdio initialization and `tools/list`.
+3. Generates `SHA256SUMS`, stores one immutable internal artifact, and emits GitHub
+   build-provenance attestations for those exact files.
+4. Publishes PyPI, GitHub Release, and MCP Registry in separate retryable jobs with
+   channel-state checks; no credentialed job rebuilds the package.
+5. Downloads MCP publisher v1.8.0 from an immutable URL and verifies its upstream
+   SHA-256 before the job receives the registry private key.
+6. Reconciles checksums, versions, and the GHCR release digest across all channels.
 
-**`docker-publish.yml`** (on tag `v*`):
-1. Builds multi-arch Docker image (amd64, arm64)
-2. Tags with semver variants (`v1.2.3`, `v1.2`, `v1`, `latest`)
-3. Pushes to `ghcr.io/jmagar/unraid-mcp`
-4. Runs Trivy vulnerability scan
+**`docker-publish.yml`** (on pull request, `main`, and tag `v*`):
+1. Pull requests load and execute the built image against the mock upstream, validate
+   liveness/readiness and MCP discovery, assert runtime package managers are absent, and
+   run a blocking fixable High/Critical scan.
+2. `main` publishes only `edge` and SHA tags; it never moves `latest`.
+3. Semver tags publish the multi-architecture image (amd64, arm64) with semver, SHA,
+   and `latest` tags plus SBOM/provenance attestations.
 
 ## Distribution channels
 
 | Channel | Package | Install command |
 |---------|---------|----------------|
 | PyPI | `unraid-mcp` | `pip install unraid-mcp` or `uvx unraid-mcp` |
-| GHCR | `ghcr.io/jmagar/unraid-mcp` | `docker pull ghcr.io/jmagar/unraid-mcp:latest` |
+| GHCR release | `ghcr.io/jmagar/unraid-mcp` | `docker pull ghcr.io/jmagar/unraid-mcp:latest` |
+| GHCR prerelease | `ghcr.io/jmagar/unraid-mcp:edge` | `docker pull ghcr.io/jmagar/unraid-mcp:edge` |
 | MCP Registry | `tv.tootie/unraid-mcp` | MCP client auto-discovery |
 | Claude Plugin | `jmagar/unraid-mcp` | `/plugin install unraid-mcp` |
 | GitHub Release | Source + wheel | Download from releases page |
@@ -79,6 +87,31 @@ The `server.json` defines the registry entry:
 - Runtime hint: `uvx`
 - Transport: `stdio`
 - Required env vars: `UNRAID_API_URL`, `UNRAID_API_KEY`
+
+## Artifact verification
+
+```bash
+gh release download vX.Y.Z --repo jmagar/unraid-mcp
+sha256sum --check SHA256SUMS
+gh attestation verify unraid_mcp-X.Y.Z-py3-none-any.whl --repo jmagar/unraid-mcp
+docker buildx imagetools inspect ghcr.io/jmagar/unraid-mcp:X.Y.Z
+```
+
+Pin production containers to the reported digest when immutability is required.
+
+## Release automation liveness
+
+The daily `release-liveness.yml` monitor opens a `Release automation liveness failure`
+issue when releasable commits exist but no release PR has updated for 48 hours. Rotate
+`RELEASE_PLEASE_TOKEN` or replace the expiring PAT with a repository-scoped GitHub App
+credential, then rerun release-please.
+
+## Partial publication recovery
+
+Do not rebuild, retag another commit, or repeat a completed immutable upload. Rerun the
+failed channel job for the existing tag; its state check skips completed publication.
+The reconciliation job stays red until PyPI, GitHub Release, MCP Registry, and GHCR agree.
+See [../ROLLBACK.md](../ROLLBACK.md#partial-release-recovery).
 
 ## See Also
 

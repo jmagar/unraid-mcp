@@ -5,6 +5,9 @@ on:
     branches: ["main", "feat/**", "fix/**"]
   pull_request:
     branches: ["main"]
+  schedule:
+    # Weekly blocking live smoke on a tailnet-connected self-hosted runner.
+    - cron: "23 7 * * 1"
   workflow_dispatch:  # manual trigger for the live Unraid smoke test (mcp-integration)
 
 # Least-privilege default for GITHUB_TOKEN; jobs elevate only if they need to.
@@ -106,17 +109,16 @@ jobs:
 
   mcp-integration:
     name: MCP Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, tailscale]
     timeout-minutes: 15
     # Live smoke test against the REAL Unraid box (via repo secrets). The homelab
     # Unraid API lives on a private/Tailscale network that GitHub's cloud runners
     # cannot reach, so this can never pass on a hosted runner — it is therefore a
-    # MANUAL job (workflow_dispatch), not an automatic PR/push check. Run it from a
-    # tailnet-connected context (e.g. a self-hosted runner) when you want live
-    # coverage. The no-secrets `e2e` job is the real automatic integration gate.
-    continue-on-error: true
+    # Runs weekly and on demand on the tailnet-connected runner. This gate is
+    # deliberately blocking: protocol, discovery, representative non-destructive
+    # reads, subscriptions, Docker, and stdio must all work against the real API.
     needs: [lint, typecheck, test]
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     env:
       UNRAID_API_URL: ${{ secrets.UNRAID_API_URL }}
       UNRAID_API_KEY: ${{ secrets.UNRAID_API_KEY }}
@@ -127,8 +129,11 @@ jobs:
           version: "0.9.25"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: Run integration tests
-        if: env.UNRAID_API_URL != '' && env.UNRAID_API_KEY != ''
+      - name: Require live non-destructive credentials
+        run: |
+          test -n "$UNRAID_API_URL"
+          test -n "$UNRAID_API_KEY"
+      - name: Run blocking live transport and packaged-container smoke
         run: bash tests/test_live.sh
 
   audit:
@@ -142,10 +147,47 @@ jobs:
           version: "0.9.25"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: Install dependencies
-        run: uv sync --locked
-      - name: Dependency audit
-        run: uvx pip-audit
+      - name: Export locked application runtime graph
+        run: |
+          uv export --frozen --no-dev --no-emit-project \
+            --format requirements-txt --no-hashes \
+            --output-file audit-requirements.txt
+          for package in fastmcp httpx cryptography; do
+            grep -E "^${package}==" audit-requirements.txt
+          done
+      - name: Audit locked application runtime graph
+        run: uv tool run --from pip-audit==2.10.1 pip-audit --requirement audit-requirements.txt
+
+  package-artifact:
+    name: Package Artifact Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990  # v8.3.2
+        with:
+          version: "0.9.25"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Build clean source artifacts
+        run: uv build --no-sources
+      - name: Validate package metadata and contents
+        run: |
+          uv tool run --from twine==6.2.0 twine check dist/*
+          unzip -l dist/*.whl | tee wheel-contents.txt
+          grep -q 'unraid_mcp/server.py' wheel-contents.txt
+          grep -q 'licenses/LICENSE' wheel-contents.txt
+      - name: Install wheel in a clean environment
+        run: |
+          uv venv --python 3.12 .artifact-venv
+          uv pip install --python .artifact-venv/bin/python dist/*.whl
+          .artifact-venv/bin/python -c 'import importlib.metadata; assert importlib.metadata.version("unraid-mcp")'
+      - name: Smoke installed wheel over stdio
+        run: bash scripts/smoke-stdio.sh .artifact-venv/bin/unraid-mcp-server
 
   gitleaks:
     name: Secret Scan

@@ -19,12 +19,24 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          persist-credentials: false
 
-      - name: Fetch upstream SDL
+      - name: Resolve and fetch immutable upstream SDL
+        id: upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          upstream_commit="$(gh api repos/unraid/api/commits/main --jq .sha)"
+          if ! [[ "$upstream_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Invalid upstream commit: $upstream_commit"
+            exit 1
+          fi
           curl -fsSL \
-            https://raw.githubusercontent.com/unraid/api/main/api/generated-schema.graphql \
+            "https://raw.githubusercontent.com/unraid/api/${upstream_commit}/api/generated-schema.graphql" \
             -o upstream-schema.graphql
+          echo "commit=${upstream_commit}" >> "$GITHUB_OUTPUT"
+          echo "Resolved unraid/api@main to immutable commit ${upstream_commit}."
 
       - name: Diff vendored schema
         id: diff
@@ -41,6 +53,9 @@ jobs:
       - name: Set up uv
         if: steps.diff.outputs.drift == 'true'
         uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990
+        with:
+          version: "0.9.25"
+          enable-cache: false
 
       - name: Summarize structured schema changes
         if: steps.diff.outputs.drift == 'true'
@@ -78,6 +93,8 @@ jobs:
             echo
             echo "The vendored \`docs/unraid/UNRAID-SCHEMA.graphql\` no longer matches"
             echo "Unraid's published SDL at \`unraid/api@main\`."
+            echo "The compared blob was fetched from immutable commit"
+            echo "\`${{ steps.upstream.outputs.commit }}\`."
             echo
             echo "Re-vendor the schema, then run the schema and dispatch contract tests"
             echo "to surface which queries, mutations, and mock responses need updates."
@@ -89,6 +106,7 @@ jobs:
             echo "## Structured schema changes"
             echo
           } > issue-body.md
+          exec 3>>issue-body.md
 
           max_body_bytes=60000
           append_with_budget() {
@@ -102,21 +120,21 @@ jobs:
                 echo
                 echo "_${section_label} omitted to keep this issue body under ${max_body_bytes} bytes._"
                 echo "_See the workflow artifact for the complete content._"
-              } >> issue-body.md
+              } >&3
               return
             fi
 
             file_bytes="$(wc -c < "$file")"
             if [ "$file_bytes" -gt "$remaining_bytes" ]; then
-              head -c "$remaining_bytes" "$file" >> issue-body.md
+              head -c "$remaining_bytes" "$file" >&3
               {
                 echo
                 echo
                 echo "_${section_label} truncated to keep this issue body under ${max_body_bytes} bytes._"
                 echo "_See the workflow artifact for the complete content._"
-              } >> issue-body.md
+              } >&3
             else
-              cat "$file" >> issue-body.md
+              cat "$file" >&3
             fi
           }
 
@@ -133,7 +151,7 @@ jobs:
             echo "<details><summary>diff</summary>"
             echo
             echo "\`\`\`diff"
-          } >> issue-body.md
+          } >&3
 
           append_with_budget schema.diff "Schema diff" 300
 
@@ -142,7 +160,8 @@ jobs:
             echo "\`\`\`"
             echo
             echo "</details>"
-          } >> issue-body.md
+          } >&3
+          exec 3>&-
 
           existing="$(
             gh issue list \
@@ -168,14 +187,17 @@ jobs:
             issue_url="$(gh issue create --title "$title" --label "$label" --body-file issue-body.md)"
             issue_number="${issue_url##*/}"
           fi
-          echo "issue_number=${issue_number}" >> "$GITHUB_OUTPUT"
-          echo "schema_hash=${schema_hash}" >> "$GITHUB_OUTPUT"
+          exec 4>>"$GITHUB_OUTPUT"
+          echo "issue_number=${issue_number}" >&4
+          echo "schema_hash=${schema_hash}" >&4
+          echo "upstream_commit=${{ steps.upstream.outputs.commit }}" >&4
           if [ "$previous_hash" = "$schema_hash" ]; then
-            echo "dispatch_claude=false" >> "$GITHUB_OUTPUT"
+            echo "dispatch_claude=false" >&4
             echo "Schema hash ${schema_hash} already has a drift issue; skipping Claude dispatch."
           else
-            echo "dispatch_claude=true" >> "$GITHUB_OUTPUT"
+            echo "dispatch_claude=true" >&4
           fi
+          exec 4>&-
 
       - name: Dispatch Claude schema drift implementer
         if: steps.issue.outputs.dispatch_claude == 'true'
@@ -183,7 +205,8 @@ jobs:
           gh workflow run claude-schema-drift.yml \
             --ref main \
             -f issue_number="${{ steps.issue.outputs.issue_number }}" \
-            -f schema_hash="${{ steps.issue.outputs.schema_hash }}"
+            -f schema_hash="${{ steps.issue.outputs.schema_hash }}" \
+            -f upstream_commit="${{ steps.issue.outputs.upstream_commit }}"
 
       - name: Close resolved drift issue
         if: steps.diff.outputs.drift == 'false'

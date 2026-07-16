@@ -7,7 +7,6 @@ error handling, reconnection logic, and authentication.
 
 import asyncio
 import json
-import os
 import random
 import re
 import time
@@ -32,7 +31,7 @@ from .protocol import (
     ErrorEvent,
     iter_messages,
 )
-from .state import SubscriptionState, _StateFieldView
+from .state import ResourceSnapshot, SubscriptionState, _StateFieldView
 from .utils import build_connection_init, build_ws_ssl_context, build_ws_url
 
 
@@ -156,7 +155,7 @@ class SubscriptionManager:
     serialize *readers* against each other, not these single-writer pairs.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, runtime_settings: _settings.Settings | None = None) -> None:
         # Consolidated single source of truth: one SubscriptionState per name.
         self.states: dict[str, SubscriptionState] = {}
 
@@ -189,21 +188,40 @@ class SubscriptionManager:
         self._task_lock = asyncio.Lock()
         self._data_lock = asyncio.Lock()
 
-        # Configuration
-        self.auto_start_enabled = (
-            os.getenv("UNRAID_AUTO_START_SUBSCRIPTIONS", "true").lower() == "true"
+        # Typed, startup-validated configuration. Tests may inject a Settings
+        # instance without mutating process-global environment state.
+        self.runtime_settings = runtime_settings or _settings.SETTINGS
+        self.auto_start_enabled = self.runtime_settings.unraid_auto_start_subscriptions
+        self.max_reconnect_attempts = self.runtime_settings.unraid_max_reconnect_attempts
+        self._connection_semaphore = asyncio.Semaphore(
+            self.runtime_settings.unraid_subscription_max_connections
         )
-        self.max_reconnect_attempts = int(os.getenv("UNRAID_MAX_RECONNECT_ATTEMPTS", "10"))
+        self._startup_stagger_seconds = (
+            self.runtime_settings.unraid_subscription_startup_stagger_seconds
+        )
 
         # Define subscription configurations
         from .queries import SNAPSHOT_ACTIONS
 
+        configured_auto_start = self.runtime_settings.unraid_subscription_auto_start_actions
+        unknown_actions = (
+            configured_auto_start - SNAPSHOT_ACTIONS.keys() if configured_auto_start else set()
+        )
+        if unknown_actions:
+            raise ValueError(
+                "Unknown UNRAID_SUBSCRIPTION_AUTO_START_ACTIONS: "
+                + ", ".join(sorted(unknown_actions))
+            )
         self.subscription_configs: dict[str, dict] = {
             action: {
                 "query": query,
                 "resource": f"unraid://live/{action}",
                 "description": f"Real-time {action.replace('_', ' ')} data",
-                "auto_start": action != "network_metrics",
+                "auto_start": (
+                    action in configured_auto_start
+                    if configured_auto_start is not None
+                    else action != "network_metrics"
+                ),
             }
             for action, query in SNAPSHOT_ACTIONS.items()
         }
@@ -245,7 +263,13 @@ class SubscriptionManager:
         if error is not None:
             self.last_error[name] = error
 
-    async def _store_subscription_data(self, subscription_name: str, data: Any) -> None:
+    async def _store_subscription_data(
+        self,
+        subscription_name: str,
+        data: Any,
+        *,
+        generation: int | None = None,
+    ) -> None:
         """Cache a fresh subscription data payload.
 
         Clears any GraphQL-error burst (data means recovery), caps log content for
@@ -268,6 +292,17 @@ class SubscriptionManager:
         )
         new_entry = SubscriptionData(data=capped_data, last_updated=datetime.now(UTC))
         async with self._data_lock:
+            state = self.states.get(subscription_name)
+            if generation is not None and (
+                state is None
+                or state.generation != generation
+                or state.connection_state != "subscribed"
+            ):
+                logger.debug(
+                    "[RESOURCE:%s] Discarded payload from superseded generation",
+                    subscription_name,
+                )
+                return
             self.resource_data[subscription_name] = new_entry
         logger.debug(
             "[RESOURCE:%s] Resource data updated successfully",
@@ -351,14 +386,16 @@ class SubscriptionManager:
 
         started_names: list[str] = []
 
-        async def _tracked_start(name: str, config: dict[str, Any]) -> None:
+        async def _tracked_start(index: int, name: str, config: dict[str, Any]) -> None:
+            if self._startup_stagger_seconds > 0 and index > 0:
+                await asyncio.sleep(index * self._startup_stagger_seconds)
             await _start_one(name, config)
             started_names.append(name)
 
         try:
             async with asyncio.TaskGroup() as tg:
-                for name, config in auto_start_configs:
-                    tg.create_task(_tracked_start(name, config))
+                for index, (name, config) in enumerate(auto_start_configs):
+                    tg.create_task(_tracked_start(index, name, config))
         except asyncio.CancelledError:
             for name in started_names:
                 if name in self.active_subscriptions:
@@ -397,13 +434,21 @@ class SubscriptionManager:
 
             # Reset connection tracking inside the lock so state is consistent
             # with the task creation that follows immediately.
+            state = self.states.setdefault(subscription_name, SubscriptionState())
+            state.generation += 1
+            generation = state.generation
             self.reconnect_attempts[subscription_name] = 0
             self._set_connection_state(subscription_name, "starting")
             self._connection_start_times.pop(subscription_name, None)
 
             try:
                 task = asyncio.create_task(
-                    self._subscription_loop(subscription_name, query, variables or {})
+                    self._subscription_loop(
+                        subscription_name,
+                        query,
+                        variables or {},
+                        generation=generation,
+                    )
                 )
                 self.active_subscriptions[subscription_name] = task
                 logger.info(
@@ -432,8 +477,13 @@ class SubscriptionManager:
             if task is None:
                 logger.warning(f"[SUBSCRIPTION:{subscription_name}] No active subscription to stop")
                 return
+            state = self.states[subscription_name]
+            state.generation += 1
+            stop_generation = state.generation
             self._set_connection_state(subscription_name, "stopped")
             self._connection_start_times.pop(subscription_name, None)
+            async with self._data_lock:
+                self.resource_data.pop(subscription_name, None)
 
         # Await cancellation OUTSIDE the lock — _subscription_loop cleanup path
         # acquires _task_lock at loop exit; holding it here while waiting for the
@@ -443,8 +493,11 @@ class SubscriptionManager:
             await task
         except asyncio.CancelledError:
             logger.debug(f"[SUBSCRIPTION:{subscription_name}] Task cancelled successfully")
-        self._set_connection_state(subscription_name, "stopped")
-        self._clear_graphql_error_burst(subscription_name)
+        async with self._task_lock:
+            state = self.states.get(subscription_name)
+            if state is not None and state.generation == stop_generation:
+                self._set_connection_state(subscription_name, "stopped")
+                self._clear_graphql_error_burst(subscription_name)
         logger.info(f"[SUBSCRIPTION:{subscription_name}] Subscription stopped")
 
     async def stop_all(self) -> None:
@@ -483,9 +536,16 @@ class SubscriptionManager:
         return min(current_delay * 1.5, _MAX_RETRY_DELAY), False
 
     async def _subscription_loop(
-        self, subscription_name: str, query: str, variables: dict[str, Any] | None
+        self,
+        subscription_name: str,
+        query: str,
+        variables: dict[str, Any] | None,
+        *,
+        generation: int | None = None,
     ) -> None:
         """Main loop for maintaining a GraphQL subscription with comprehensive logging."""
+        if generation is None:
+            generation = self.states.setdefault(subscription_name, SubscriptionState()).generation
         retry_delay: float = _INITIAL_RETRY_DELAY
 
         while True:
@@ -503,6 +563,7 @@ class SubscriptionManager:
                 self._set_connection_state(subscription_name, "max_retries_exceeded")
                 break
 
+            handshake_slot_acquired = False
             try:
                 ws_url = build_ws_url()
                 logger.debug(f"[WEBSOCKET:{subscription_name}] Connecting to: {ws_url}")
@@ -518,6 +579,8 @@ class SubscriptionManager:
                     f"[WEBSOCKET:{subscription_name}] Connection timeout: {connect_timeout}s"
                 )
 
+                await self._connection_semaphore.acquire()
+                handshake_slot_acquired = True
                 async with websockets.connect(
                     ws_url,
                     subprotocols=[Subprotocol("graphql-transport-ws"), Subprotocol("graphql-ws")],
@@ -626,6 +689,8 @@ class SubscriptionManager:
                         f"[SUBSCRIPTION:{subscription_name}] Subscription started successfully"
                     )
                     self._set_connection_state(subscription_name, "subscribed")
+                    self._connection_semaphore.release()
+                    handshake_slot_acquired = False
 
                     # Listen for subscription data. The shared iter_messages()
                     # primitive normalizes the post-handshake stream: ping->pong,
@@ -645,12 +710,14 @@ class SubscriptionManager:
                         if isinstance(event, DataEvent):
                             payload = event.payload
                             if payload.get("data"):
-                                logger.info(
+                                logger.debug(
                                     "[DATA:%s] Received subscription data update",
                                     subscription_name,
                                 )
                                 await self._store_subscription_data(
-                                    subscription_name, payload["data"]
+                                    subscription_name,
+                                    payload["data"],
+                                    generation=generation,
                                 )
                             elif payload.get("errors"):
                                 self._track_graphql_error(subscription_name, payload["errors"])
@@ -682,6 +749,9 @@ class SubscriptionManager:
                             self._set_connection_state(subscription_name, "completed")
                             break
 
+                    if self.connection_states.get(subscription_name) == "completed":
+                        break
+
             except TimeoutError:
                 error_msg = "Connection or authentication timeout"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}")
@@ -709,6 +779,10 @@ class SubscriptionManager:
                 error_msg = f"Unexpected error: {e}"
                 logger.error(f"[WEBSOCKET:{subscription_name}] {error_msg}", exc_info=True)
                 self._set_connection_state(subscription_name, "error", error_msg)
+
+            finally:
+                if handshake_slot_acquired:
+                    self._connection_semaphore.release()
 
             # Decide retry behavior from how long the just-ended connection lasted.
             start_time = self._connection_start_times.pop(subscription_name, None)
@@ -741,7 +815,16 @@ class SubscriptionManager:
         # The while loop exited (via break or max_retries exceeded).
         # Remove from active_subscriptions so start_subscription() can restart it.
         async with self._task_lock:
-            self.active_subscriptions.pop(subscription_name, None)
+            state = self.states.get(subscription_name)
+            current_task = asyncio.current_task()
+            if (
+                state is not None
+                and state.generation == generation
+                and (state.task is current_task or state.task is None)
+            ):
+                self.active_subscriptions.pop(subscription_name, None)
+                async with self._data_lock:
+                    self.resource_data.pop(subscription_name, None)
         logger.info(
             f"[SUBSCRIPTION:{subscription_name}] Subscription loop ended — "
             f"removed from active_subscriptions. Final state: "
@@ -760,6 +843,42 @@ class SubscriptionManager:
                 return data.data
         logger.debug("[RESOURCE:%s] No data available", resource_name)
         return None
+
+    async def get_resource_snapshot(self, resource_name: str) -> ResourceSnapshot:
+        """Return cache data and lifecycle state from one state-aware read.
+
+        Cached payloads are usable only while their owning loop is active and in
+        the ``subscribed`` state. Reconnecting, stopped, completed, and terminal
+        failures therefore cannot leak a formerly valid payload.
+        """
+        async with self._task_lock:
+            state = self.states.get(resource_name)
+            connection_state = state.connection_state if state is not None else ""
+            last_error = state.last_error if state is not None else None
+            active = state is not None and state.task is not None and not state.task.done()
+            async with self._data_lock:
+                entry = state.data if state is not None else None
+
+        age_seconds = (
+            (datetime.now(UTC) - entry.last_updated).total_seconds() if entry is not None else None
+        )
+        fresh = bool(
+            active
+            and connection_state == "subscribed"
+            and entry is not None
+            and age_seconds is not None
+            and age_seconds <= self.runtime_settings.unraid_subscription_cache_max_age_seconds
+        )
+        return ResourceSnapshot(
+            data=entry.data if fresh and entry is not None else None,
+            fetched_at=entry.last_updated.isoformat() if fresh and entry is not None else None,
+            connection_state=connection_state,
+            last_error=last_error,
+            active=active,
+            fresh=fresh,
+            age_seconds=age_seconds,
+            stale=entry is not None and not fresh,
+        )
 
     async def get_resource_data_with_timestamp(
         self, resource_name: str
@@ -780,6 +899,20 @@ class SubscriptionManager:
             active = list(self.active_subscriptions.keys())
         logger.debug("[SUBSCRIPTION_MANAGER] Active subscriptions: %s", active)
         return active
+
+    async def has_active_subscriptions(self) -> bool:
+        """Return whether any lifecycle task is currently registered."""
+        async with self._task_lock:
+            return bool(self.active_subscriptions)
+
+    def is_auto_start_subscription(self, name: str) -> bool:
+        """Return the immutable configured auto-start decision for ``name``."""
+        return bool(self.subscription_configs.get(name, {}).get("auto_start", False))
+
+    def get_subscription_query(self, name: str) -> str | None:
+        """Return a configured query without exposing the mutable config mapping."""
+        config = self.subscription_configs.get(name)
+        return str(config["query"]) if config is not None else None
 
     async def get_error_state(self, name: str) -> tuple[str | None, str]:
         """Return (last_error, connection_state) for a subscription.

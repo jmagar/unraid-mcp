@@ -1,21 +1,18 @@
-"""Health domain constants and helpers for the Unraid MCP tool.
-
-The _handle_health function lives in unraid.py (not here) to avoid a circular
-import between the aggregator module and the _* domain helper modules. It reads
-settings/client symbols via local imports, so tests patch them at their source
-modules (unraid_mcp.config.settings, unraid_mcp.core.client).
-"""
+"""Health domain implementation for the consolidated Unraid MCP tool."""
 
 import datetime
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
+from fastmcp import Context
 
 from ..config.logging import logger
 from ..core import client as _client
-from ..core.exceptions import CredentialsNotConfiguredError
-from ..core.utils import safe_get
+from ..core.exceptions import CredentialsNotConfiguredError, ToolError, tool_error_handler
+from ..core.utils import safe_get, validate_subaction
+from ._system import _SYSTEM_QUERIES
 
 
 # Import system online query to avoid duplication — used by setup and test_connection
@@ -174,3 +171,98 @@ async def _comprehensive_health_check() -> dict[str, Any]:
                 "error": str(cause),
             }
         raise
+
+
+async def _handle_health(
+    subaction: str,
+    ctx: Context | None,
+    *,
+    error_stats_provider: Callable[[], dict[str, Any]] | None = None,
+) -> dict[str, Any] | str:
+    """Handle health operations with diagnostics supplied by app composition."""
+    del ctx
+    validate_subaction(subaction, _HEALTH_SUBACTIONS, "health")
+
+    from ..config.settings import CREDENTIALS_ENV_PATH, UNRAID_API_URL, is_configured
+    from ..core.utils import safe_display_url
+
+    if subaction == "setup":
+        if is_configured():
+            try:
+                await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
+                status = "and the connection test succeeded"
+            except Exception as exc:
+                logger.debug(
+                    "health/setup connection probe failed: %s: %s",
+                    type(exc).__name__,
+                    exc,
+                )
+                status = (
+                    f"but the connection test failed ({type(exc).__name__}) — "
+                    "this may be a transient outage or a misconfiguration"
+                )
+            return (
+                f"✅ Credentials are configured ({status}).\n"
+                f"URL: `{safe_display_url(UNRAID_API_URL)}`\n"
+                f"File: `{CREDENTIALS_ENV_PATH}`\n\n"
+                "To change them, update the plugin's userConfig form "
+                "(Unraid GraphQL API URL / Unraid API Key) or edit that file, "
+                "then restart the server."
+            )
+        if CREDENTIALS_ENV_PATH.exists():
+            return (
+                f"⚠️ A credentials file exists (`{CREDENTIALS_ENV_PATH}`) but is not loaded "
+                "in this session — credentials are read once at startup.\n\n"
+                "Restart the server (or your MCP client), then run "
+                '`unraid(action="health", subaction="test_connection")` to verify. '
+                "If it still fails, check that the file contains non-empty "
+                "`UNRAID_API_URL` and `UNRAID_API_KEY` values."
+            )
+        return (
+            "⚠️ Credentials are not configured.\n\n"
+            "**Claude Code plugin:** set *Unraid GraphQL API URL* and *Unraid API Key* "
+            "in the plugin's configuration form — they are applied automatically on the "
+            "next session and persisted to disk.\n\n"
+            f"**Manual / Docker:** create `{CREDENTIALS_ENV_PATH}` with:\n"
+            "```\nUNRAID_API_URL=https://your-unraid-server:port\n"
+            "UNRAID_API_KEY=your-api-key\n```\n\n"
+            "Then restart the server and run "
+            '`unraid(action="health", subaction="test_connection")` to verify.'
+        )
+
+    with tool_error_handler("health", subaction, logger):
+        logger.info("Executing unraid action=health subaction=%s", subaction)
+        if subaction == "test_connection":
+            start = time.time()
+            data = await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
+            latency = round((time.time() - start) * 1000, 2)
+            return {"status": "connected", "online": data.get("online"), "latency_ms": latency}
+        if subaction == "check":
+            return await _comprehensive_health_check()
+        if subaction == "diagnose":
+            from ..subscriptions.manager import subscription_manager
+            from ..subscriptions.resources import ensure_subscriptions_started
+            from ..subscriptions.utils import analyze_subscription_status
+
+            await ensure_subscriptions_started()
+            status = await subscription_manager.get_subscription_status()
+            error_count, connection_issues = analyze_subscription_status(status)
+            return {
+                "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+                "environment": {
+                    "auto_start_enabled": subscription_manager.auto_start_enabled,
+                    "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
+                    "api_url_configured": bool(UNRAID_API_URL),
+                },
+                "subscriptions": status,
+                "summary": {
+                    "total_configured": len(subscription_manager.subscription_configs),
+                    "active_count": len(subscription_manager.active_subscriptions),
+                    "with_data": len(subscription_manager.resource_data),
+                    "in_error_state": error_count,
+                    "connection_issues": connection_issues,
+                },
+                "cache": {"note": "caching disabled — tool mixes reads and mutations"},
+                "errors": error_stats_provider() if error_stats_provider is not None else {},
+            }
+        raise ToolError(f"Unhandled health subaction '{subaction}' — this is a bug")

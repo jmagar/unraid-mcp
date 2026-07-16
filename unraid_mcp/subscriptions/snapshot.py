@@ -18,14 +18,18 @@ semantics.
 """
 
 import asyncio
+import json
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
 
+from ..config import settings as _settings
 from ..config.logging import logger
 from ..core.exceptions import ToolError
 from .protocol import (
     _WS_PING_INTERVAL,
     _WS_PING_TIMEOUT,
+    CompleteEvent,
     DataEvent,
     ErrorEvent,
     ProtocolError,
@@ -90,6 +94,12 @@ async def subscribe_once(
 
     Raises ToolError on auth failure, GraphQL errors, or timeout.
     """
+    if not 0 < timeout <= _settings.UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:
+        raise ToolError(
+            "timeout must be greater than 0 and no more than "
+            f"{_settings.UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:g} seconds"
+        )
+
     async with _ws_handshake(query, variables, timeout) as session:
         try:
             async with asyncio.timeout(timeout):
@@ -113,6 +123,10 @@ async def subscribe_collect(
     variables: dict[str, Any] | None = None,
     collect_for: float = 5.0,
     timeout: float = 10.0,  # noqa: ASYNC109
+    *,
+    max_events: int | None = None,
+    max_bytes: int | None = None,
+    transform: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
 ) -> list[dict[str, Any]]:
     """Open a subscription, collect events for `collect_for` seconds, close, return list.
 
@@ -129,7 +143,35 @@ async def subscribe_collect(
     hold useful events. GraphQL errors carried *inside* a data payload still
     raise via :func:`_raise_on_errors` here, matching ``subscribe_once``.
     """
+    if not 0 < collect_for <= _settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS:
+        raise ToolError(
+            "collect_for must be greater than 0 and no more than "
+            f"{_settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS:g} seconds"
+        )
+    if not 0 < timeout <= _settings.UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:
+        raise ToolError(
+            "timeout must be greater than 0 and no more than "
+            f"{_settings.UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:g} seconds"
+        )
+    if max_events is not None and max_events <= 0:
+        raise ValueError("max_events must be positive")
+    if max_bytes is not None and max_bytes <= 0:
+        raise ValueError("max_bytes must be positive")
+    max_events = min(
+        max_events if max_events is not None else _settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS,
+        _settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS,
+    )
+    max_bytes = min(
+        max_bytes if max_bytes is not None else _settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES,
+        _settings.UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES,
+    )
+    if max_events <= 0:
+        raise ValueError("max_events must be positive")
+    if max_bytes <= 0:
+        raise ValueError("max_bytes must be positive")
+
     events: list[dict[str, Any]] = []
+    retained_bytes = 0
 
     async with _ws_handshake(query, variables, timeout) as session:
         try:
@@ -138,7 +180,32 @@ async def subscribe_collect(
                     if isinstance(event, DataEvent):
                         _raise_on_errors(event.payload)
                         if data := event.payload.get("data"):
-                            events.append(data)
+                            retained = transform(data) if transform is not None else data
+                            if retained is None:
+                                continue
+                            event_bytes = len(
+                                json.dumps(
+                                    retained,
+                                    separators=(",", ":"),
+                                    ensure_ascii=False,
+                                    default=str,
+                                ).encode("utf-8")
+                            )
+                            if retained_bytes + event_bytes > max_bytes:
+                                logger.warning(
+                                    "Subscription collection byte limit reached "
+                                    "(%d bytes); stopping",
+                                    max_bytes,
+                                )
+                                break
+                            events.append(retained)
+                            retained_bytes += event_bytes
+                            if len(events) >= max_events:
+                                logger.debug(
+                                    "Subscription collection event limit reached (%d); stopping",
+                                    max_events,
+                                )
+                                break
                     elif isinstance(event, ErrorEvent):
                         # Best-effort: do NOT abort the whole collection window on a
                         # standalone protocol 'error' frame. Log and keep collecting
@@ -148,10 +215,8 @@ async def subscribe_collect(
                             "Subscription error frame during collect (continuing): %s",
                             event.payload,
                         )
-                    # CompleteEvent is ignored: the historical loop kept collecting
-                    # until the window expired or the socket closed, never breaking
-                    # early on a server 'complete'. The ws close that follows ends
-                    # the async-for and returns the collected events.
+                    elif isinstance(event, CompleteEvent):
+                        break
         except TimeoutError:
             pass  # Collection window expired — return whatever was collected
 

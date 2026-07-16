@@ -76,15 +76,18 @@ async def _handle_key(
 
         if subaction == "possible_roles":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_roles"])
-            return {"roles": coerce_list(data.get("apiKeyPossibleRoles"))}
+            capped, page = cap_list(coerce_list(data.get("apiKeyPossibleRoles")), limit)
+            return {"roles": capped, "page": page}
 
         if subaction == "possible_permissions":
             data = await _client.make_graphql_request(_KEY_QUERIES["possible_permissions"])
-            return {"permissions": coerce_list(data.get("apiKeyPossiblePermissions"))}
+            capped, page = cap_list(coerce_list(data.get("apiKeyPossiblePermissions")), limit)
+            return {"permissions": capped, "page": page}
 
         if subaction == "auth_actions":
             data = await _client.make_graphql_request(_KEY_QUERIES["auth_actions"])
-            return {"actions": coerce_list(data.get("getAvailableAuthActions"))}
+            capped, page = cap_list(coerce_list(data.get("getAvailableAuthActions")), limit)
+            return {"actions": capped, "page": page}
 
         if subaction == "creation_form_schema":
             data = await _client.make_graphql_request(_KEY_QUERIES["creation_form_schema"])
@@ -98,7 +101,8 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_QUERIES["permissions_for_roles"], {"roles": roles}
             )
-            return {"permissions": coerce_list(data.get("getPermissionsForRoles"))}
+            capped, page = cap_list(coerce_list(data.get("getPermissionsForRoles")), limit)
+            return {"permissions": capped, "page": page}
 
         if subaction == "preview_permissions":
             if not roles and not permissions_input:
@@ -117,7 +121,8 @@ async def _handle_key(
             data = await _client.make_graphql_request(
                 _KEY_QUERIES["preview_permissions"], variables
             )
-            return {"permissions": coerce_list(data.get("previewEffectivePermissions"))}
+            capped, page = cap_list(coerce_list(data.get("previewEffectivePermissions")), limit)
+            return {"permissions": capped, "page": page}
 
         if subaction == "get":
             if not key_id:

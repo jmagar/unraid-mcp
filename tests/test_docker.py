@@ -171,7 +171,7 @@ class TestDockerActions:
     async def test_generic_exception_wraps_in_tool_error(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("unexpected failure")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Failed to execute docker/list"):
+        with pytest.raises(ToolError, match="Internal error executing docker/list"):
             await tool_fn(action="docker", subaction="list")
 
     async def test_short_id_prefix_ambiguous_rejected(self, _mock_graphql: AsyncMock) -> None:
@@ -500,7 +500,11 @@ class TestDockerPortsAggregator:
         _mock_graphql.return_value = {"docker": {"containers": []}}
         tool_fn = _make_tool()
         result = await tool_fn(action="docker", subaction="ports")
-        assert result == {"bindings": [], "count": 0}
+        assert result == {
+            "bindings": [],
+            "count": 0,
+            "page": {"returned": 0, "total": 0, "truncated": False},
+        }
 
     async def test_ports_handles_unnamed_container(self, _mock_graphql: AsyncMock) -> None:
         """Container with empty names list falls back to '<unnamed>'."""

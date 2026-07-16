@@ -67,7 +67,8 @@ async def _handle_oidc(
         if subaction == "configuration":
             return dict(data.get("oidcConfiguration") or {})
         if subaction == "public_providers":
-            return {"providers": data.get("publicOidcProviders", [])}
+            capped, page = cap_list(data.get("publicOidcProviders", []), limit)
+            return {"providers": capped, "page": page}
         if subaction == "validate_session":
             result = data.get("validateOidcSession")
             if result is None:

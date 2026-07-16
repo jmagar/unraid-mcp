@@ -11,7 +11,6 @@ tool routes ``action="subscriptions"`` to (subactions ``diagnose`` and
 
 import asyncio
 import json
-import os
 from datetime import UTC, datetime
 from typing import Any
 
@@ -89,7 +88,7 @@ _MAX_SUBSCRIPTION_QUERY_CHARS = 4096
 
 def _raw_subscription_probe_enabled() -> bool:
     """Whether test_query may echo the raw upstream frame (debug only)."""
-    return os.getenv(_RAW_PROBE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+    return _settings.UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE
 
 
 def _validate_subscription_query(query: str) -> str:

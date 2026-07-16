@@ -15,17 +15,29 @@ Covers:
 import asyncio
 import os
 import time
+from collections import OrderedDict
 from unittest.mock import patch
 
 import pytest
 
 from unraid_mcp.core.auth import (
+    _MAX_IP_TRACKING,
     _RATE_MAX_FAILURES,
     _RATE_WINDOW_SECS,
     BearerAuthMiddleware,
     HealthMiddleware,
+    ReadinessMiddleware,
     WellKnownMiddleware,
 )
+
+
+def test_auth_failure_tracker_uses_ordered_bounded_eviction() -> None:
+    middleware = BearerAuthMiddleware(lambda *_: None, token="secret")  # type: ignore[arg-type]
+    assert isinstance(middleware._ip_failures, OrderedDict)
+    for index in range(_MAX_IP_TRACKING + 5):
+        middleware._record_failure(f"10.0.{index // 255}.{index % 255}")
+    assert len(middleware._ip_failures) == _MAX_IP_TRACKING
+    assert "10.0.0.0" not in middleware._ip_failures
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +597,49 @@ class TestHealthMiddleware:
         """Other methods are not health probes — they hit the auth layer (401)."""
         status, _, _, called = self._run("POST")
         assert status == 401
+        assert not called
+
+
+async def _run_readiness(ready: bool, reason: str = "ready"):
+    inner, called = _app_called_flag()
+
+    async def probe() -> tuple[bool, str]:
+        return ready, reason
+
+    mw = ReadinessMiddleware(inner, probe=probe)
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/ready",
+        "headers": [],
+        "client": ("127.0.0.1", 9999),
+    }
+    received: list[dict] = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(msg: dict):
+        received.append(msg)
+
+    await mw(scope, receive, send)
+    start = next(m for m in received if m["type"] == "http.response.start")
+    body = next(m for m in received if m["type"] == "http.response.body")["body"]
+    return start["status"], body, called["value"]
+
+
+class TestReadinessMiddleware:
+    def test_ready_response_is_200_json(self):
+        status, body, called = asyncio.run(_run_readiness(True))
+        assert status == 200
+        assert body == b'{"status":"ready"}'
+        assert not called
+
+    def test_not_ready_response_is_503_without_internal_details(self):
+        status, body, called = asyncio.run(_run_readiness(False, "upstream unavailable"))
+        assert status == 503
+        assert body == b'{"status":"not_ready"}'
+        assert b"upstream" not in body
         assert not called
 
 

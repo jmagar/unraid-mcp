@@ -118,7 +118,7 @@ MCP Client (Claude Code / Codex / Gemini / HTTP)
 
 ### Consolidated tool pattern
 
-One `unraid` tool with 19 actions (170 subactions) instead of many separate tools. This:
+One `unraid` tool with 19 actions (178 subactions) instead of many separate tools. This:
 - Reduces MCP context window usage (one tool description covers all operations)
 - Simplifies client tool selection
 - Enables shared parameters across domains

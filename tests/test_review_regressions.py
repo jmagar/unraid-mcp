@@ -67,14 +67,16 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
         assert env_block.get("UNRAID_MCP_TRANSPORT") == "stdio"
 
 
-def test_ci_gates_live_integration_job_on_unraid_secrets() -> None:
+def test_ci_runs_blocking_live_integration_on_tailnet_runner() -> None:
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    # Secrets are mapped to env vars at job level; step if-condition checks env vars
-    # (GitHub Actions forbids secrets.* in if conditions — security policy)
     assert "secrets.UNRAID_API_URL" in workflow
     assert "secrets.UNRAID_API_KEY" in workflow
-    assert "env.UNRAID_API_URL != ''" in workflow
-    assert "env.UNRAID_API_KEY != ''" in workflow
+    assert "runs-on: [self-hosted, linux, tailscale]" in workflow
+    assert "github.event_name == 'schedule'" in workflow
+    integration_job = workflow.split("  mcp-integration:", 1)[1].split("\n  audit:", 1)[0]
+    assert "continue-on-error: true" not in integration_job
+    assert 'test -n "$UNRAID_API_URL"' in integration_job
+    assert 'test -n "$UNRAID_API_KEY"' in integration_job
 
 
 def test_container_configs_use_runtime_port_variable() -> None:
@@ -129,8 +131,10 @@ def test_dockerfile_does_not_hardcode_env_configurable_defaults() -> None:
 def test_docker_runtime_python_matches_builder_minor_version() -> None:
     dockerfile = (PROJECT_ROOT / "Dockerfile").read_text()
     assert "uv:python3.12-bookworm-slim" in dockerfile
-    assert "FROM python:3.12-slim-bookworm AS runtime" in dockerfile
-    assert "FROM python@sha256:" not in dockerfile
+    assert "FROM python:3.12.11-slim-bookworm@sha256:" in dockerfile
+    assert "rm -rf" in dockerfile
+    for package_manager in ("pip*", "setuptools*", "wheel*"):
+        assert package_manager in dockerfile
 
 
 def test_test_live_script_uses_safe_counters_and_resource_failures() -> None:

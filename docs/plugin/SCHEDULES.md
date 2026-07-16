@@ -6,7 +6,10 @@ unraid-mcp does not currently define scheduled tasks. The server runs continuous
 
 ## Built-in auto-start
 
-While not a scheduled task in the plugin sense, the server auto-starts WebSocket subscriptions on boot when `UNRAID_AUTO_START_SUBSCRIPTIONS=true` (default). This provides always-on live data without explicit scheduling.
+While not a scheduled task in the plugin sense, the server lazily initializes enabled
+WebSocket subscriptions on the first MCP resource or subscription-diagnostic access when
+`UNRAID_AUTO_START_SUBSCRIPTIONS=true` (default). The first read can return `connecting`;
+retry after the cache warms.
 
 ## Future considerations
 

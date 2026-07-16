@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -38,14 +39,26 @@ def _cold_cache():
 
     saved_enabled = subscription_manager.auto_start_enabled
     saved_data = dict(subscription_manager.resource_data)
+    saved_tasks = dict(subscription_manager.active_subscriptions)
+    saved_states = dict(subscription_manager.connection_states)
+    saved_errors = dict(subscription_manager.last_error)
     subscription_manager.auto_start_enabled = False
     subscription_manager.resource_data.clear()
+    subscription_manager.active_subscriptions.clear()
+    subscription_manager.connection_states.clear()
+    subscription_manager.last_error.clear()
     try:
         yield subscription_manager
     finally:
         subscription_manager.auto_start_enabled = saved_enabled
         subscription_manager.resource_data.clear()
         subscription_manager.resource_data.update(saved_data)
+        subscription_manager.active_subscriptions.clear()
+        subscription_manager.active_subscriptions.update(saved_tasks)
+        subscription_manager.connection_states.clear()
+        subscription_manager.connection_states.update(saved_states)
+        subscription_manager.last_error.clear()
+        subscription_manager.last_error.update(saved_errors)
 
 
 @pytest.fixture
@@ -61,14 +74,26 @@ def _warm_cache():
 
     saved_enabled = subscription_manager.auto_start_enabled
     saved_data = dict(subscription_manager.resource_data)
+    saved_tasks = dict(subscription_manager.active_subscriptions)
+    saved_states = dict(subscription_manager.connection_states)
+    saved_errors = dict(subscription_manager.last_error)
     subscription_manager.auto_start_enabled = True
     subscription_manager.resource_data.clear()
+    subscription_manager.active_subscriptions.clear()
+    subscription_manager.connection_states.clear()
+    subscription_manager.last_error.clear()
     try:
         yield subscription_manager
     finally:
         subscription_manager.auto_start_enabled = saved_enabled
         subscription_manager.resource_data.clear()
         subscription_manager.resource_data.update(saved_data)
+        subscription_manager.active_subscriptions.clear()
+        subscription_manager.active_subscriptions.update(saved_tasks)
+        subscription_manager.connection_states.clear()
+        subscription_manager.connection_states.update(saved_states)
+        subscription_manager.last_error.clear()
+        subscription_manager.last_error.update(saved_errors)
 
 
 def _seed_warm(manager, subaction: str, data: dict) -> None:
@@ -78,6 +103,8 @@ def _seed_warm(manager, subaction: str, data: dict) -> None:
     from unraid_mcp.core.types import SubscriptionData
 
     manager.resource_data[subaction] = SubscriptionData(data=data, last_updated=datetime.now(UTC))
+    manager.active_subscriptions[subaction] = asyncio.current_task()
+    manager.connection_states[subaction] = "subscribed"
 
 
 @pytest.mark.asyncio
@@ -127,6 +154,36 @@ async def test_notification_feed_collects_events(_mock_subscribe_collect):
     ]
     result = await _make_tool()(action="live", subaction="notification_feed", collect_for=2.0)
     assert result["event_count"] == 2
+    assert _mock_subscribe_collect.call_args.kwargs["max_events"] > 0
+    assert _mock_subscribe_collect.call_args.kwargs["max_bytes"] > 0
+
+
+@pytest.mark.asyncio
+async def test_collect_window_rejects_duration_above_runtime_cap(_mock_subscribe_collect):
+    from unraid_mcp.config.settings import UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS
+    from unraid_mcp.core.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="collect_for"):
+        await _make_tool()(
+            action="live",
+            subaction="notification_feed",
+            collect_for=UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS + 1,
+        )
+    _mock_subscribe_collect.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_live_rejects_timeout_above_runtime_cap(_mock_subscribe_collect):
+    from unraid_mcp.config.settings import UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS
+    from unraid_mcp.core.exceptions import ToolError
+
+    with pytest.raises(ToolError, match="timeout"):
+        await _make_tool()(
+            action="live",
+            subaction="notification_feed",
+            timeout=UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS + 1,
+        )
+    _mock_subscribe_collect.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -296,6 +353,10 @@ async def test_log_tail_level_filters_events(_mock_subscribe_collect):
     assert log_file["matchedLines"] == 1
     # 3 real lines returned (match + 2 context), no "---" separator
     assert log_file["returnedLines"] == 3
+    transform = _mock_subscribe_collect.call_args.kwargs["transform"]
+    assert transform is not None
+    transformed = transform(_mock_subscribe_collect.return_value[0])
+    assert transformed["logFile"]["content"] == "a info\nb [ERROR] boom\nc info"
     assert log_file["matchedLines"] < log_file["returnedLines"]
     # original fields preserved
     assert log_file["path"] == "/var/log/syslog"
@@ -495,6 +556,44 @@ async def test_cold_cache_falls_back_to_fresh_ws(_warm_cache, _mock_subscribe_on
     assert result["source"] == "live"
     assert result["data"]["systemMetricsCpu"]["percentTotal"] == 7.0
     _mock_subscribe_once.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_terminal_subscription_never_serves_stale_warm_cache(
+    _warm_cache, _mock_subscribe_once
+):
+    """A cached payload from a failed persistent loop is not treated as fresh."""
+    _seed_warm(_warm_cache, "cpu", {"systemMetricsCpu": {"percentTotal": 99.0, "cpus": []}})
+    _warm_cache.connection_states["cpu"] = "auth_failed"
+    _warm_cache.last_error["cpu"] = "bad token"
+    _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": 4.0, "cpus": []}}
+
+    result = await _make_tool()(action="live", subaction="cpu")
+
+    assert result["source"] == "live"
+    assert result["data"]["systemMetricsCpu"]["percentTotal"] == 4.0
+    _mock_subscribe_once.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_expired_subscription_cache_falls_back_to_fresh_ws(_warm_cache, _mock_subscribe_once):
+    from datetime import UTC, datetime, timedelta
+
+    from unraid_mcp.config.settings import UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS
+    from unraid_mcp.core.types import SubscriptionData
+
+    _seed_warm(_warm_cache, "cpu", {"systemMetricsCpu": {"percentTotal": 99.0, "cpus": []}})
+    _warm_cache.resource_data["cpu"] = SubscriptionData(
+        data={"systemMetricsCpu": {"percentTotal": 99.0, "cpus": []}},
+        last_updated=datetime.now(UTC)
+        - timedelta(seconds=UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS + 1),
+    )
+    _mock_subscribe_once.return_value = {"systemMetricsCpu": {"percentTotal": 5.0, "cpus": []}}
+
+    result = await _make_tool()(action="live", subaction="cpu")
+
+    assert result["source"] == "live"
+    assert result["data"]["systemMetricsCpu"]["percentTotal"] == 5.0
 
 
 @pytest.mark.asyncio

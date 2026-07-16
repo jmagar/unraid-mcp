@@ -4,14 +4,16 @@ This is the main server implementation using the modular architecture with
 separate modules for configuration, core functionality, subscriptions, and tools.
 """
 
+import asyncio
 import ipaddress
 import os
 import secrets
 import sys
+import warnings
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from dotenv import set_key
 from fastmcp import FastMCP
@@ -34,10 +36,18 @@ from .config.settings import (
     apply_bearer_token,
     validate_required_config,
 )
-from .core import middleware_refs as _middleware_refs
-from .core.auth import BearerAuthMiddleware, HealthMiddleware, WellKnownMiddleware
-from .core.client import close_http_client
-from .core.google_auth import GoogleOAuthConfigError, build_google_provider
+from .core.auth import (
+    BearerAuthMiddleware,
+    HealthMiddleware,
+    ReadinessMiddleware,
+    WellKnownMiddleware,
+)
+from .core.client import close_http_client, make_graphql_request
+from .core.google_auth import (
+    GoogleOAuthConfigError,
+    build_google_provider,
+    close_google_auth_clients,
+)
 from .core.response_limit import StructuredResponseLimitingMiddleware
 from .subscriptions.manager import subscription_manager
 from .subscriptions.resources import register_subscription_resources
@@ -45,6 +55,7 @@ from .tools.unraid import register_unraid_tool
 
 
 _LOOPBACK_HOSTNAMES = frozenset({"localhost"})
+_SSE_REMOVAL_VERSION = "3.0.0"
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -81,6 +92,18 @@ def _chmod_safe(path: Path, mode: int, *, strict: bool = False) -> None:
         logger.debug("Could not chmod %s (volume mount?) — skipping", path)
 
 
+async def _readiness_probe() -> tuple[bool, str]:
+    """Bounded readiness check: configured and able to reach the Unraid API."""
+    if not _settings.is_configured():
+        return False, "credentials_not_configured"
+    try:
+        async with asyncio.timeout(5.0):
+            data = await make_graphql_request("query Readiness { online }")
+    except Exception:
+        return False, "upstream_unavailable"
+    return data.get("online") is True, "ready" if data.get("online") is True else "offline"
+
+
 # Middleware chain order matters — each layer wraps everything inside it:
 #   logging → error_handling → rate_limiter → response_limiter → tool
 
@@ -97,11 +120,6 @@ _error_middleware = ErrorHandlingMiddleware(
     logger=logger,
     include_traceback=LOG_LEVEL_STR == "DEBUG",
 )
-# Expose via neutral module to break the circular import between server.py
-# (which imports tools/unraid.py) and health/diagnose (which needs error stats).
-# tools/unraid.py imports middleware_refs, not server, avoiding the cycle.
-_middleware_refs.error_middleware = _error_middleware
-
 # 3. Inbound-abuse / DoS guard: 540 requests per 60-second sliding window.
 #    This is NOT the authoritative upstream rate limiter. SlidingWindowRateLimitingMiddleware
 #    only supports window_minutes (int) granularity, so it cannot bound the upstream
@@ -157,6 +175,10 @@ async def lifespan(_server: "FastMCP") -> AsyncIterator[None]:
             await close_http_client()
         except Exception:
             logger.error("Error closing HTTP client during shutdown", exc_info=True)
+        try:
+            await close_google_auth_clients()
+        except Exception:
+            logger.error("Error closing Google identity clients during shutdown", exc_info=True)
 
 
 # Optional Google OAuth provider. Returns None (the default) unless
@@ -173,43 +195,18 @@ if _settings.UNRAID_MCP_TRANSPORT in ("streamable-http", "sse"):
 else:
     _google_auth_provider = None
 
-# Initialize FastMCP instance — ASGI-level bearer auth added at run time via
-# mcp.run(middleware=[...]) so it fires before any MCP protocol processing. When
-# Google OAuth is active, `auth=` carries the provider and the bearer/well-known
-# ASGI middleware is omitted in run_server() (the provider handles both).
-mcp = FastMCP(
-    name="Unraid MCP Server",
-    instructions="Provides tools to interact with an Unraid server's GraphQL API.",
-    version=VERSION,
-    lifespan=lifespan,
-    auth=_google_auth_provider,
-    middleware=[
-        _logging_middleware,
-        _error_middleware,
-        _rate_limiter,
-        _response_limiter,
-    ],
-)
 
-# Note: SubscriptionManager singleton is defined in subscriptions/manager.py
-# and imported by resources.py - no duplicate instance needed here
-
-# Register all modules at import time so `fastmcp run server.py --reload` can
-# discover the fully-configured `mcp` object without going through run_server().
-# run_server() no longer calls this — tools are registered exactly once here.
-
-
-def register_all_modules() -> None:
-    """Register all tools and resources with the MCP instance."""
+def register_all_modules(app: FastMCP) -> None:
+    """Register every tool and resource on *app*."""
     try:
         # Register subscription resources (live data caches). The subscription
         # diagnostics are exposed through the consolidated `unraid` tool's
         # `subscriptions` action, not as standalone tools.
-        register_subscription_resources(mcp)
+        register_subscription_resources(app)
         logger.info("Subscription resources registered")
 
         # Register the consolidated unraid tool
-        register_unraid_tool(mcp)
+        register_unraid_tool(app, error_stats_provider=_error_middleware.get_error_stats)
         logger.info("unraid tool registered successfully - Server ready!")
 
     except Exception as e:
@@ -217,7 +214,28 @@ def register_all_modules() -> None:
         raise
 
 
-register_all_modules()
+def create_app(*, auth_provider: Any | None = None) -> FastMCP:
+    """Construct a fully registered server without relying on a prebuilt app global."""
+    app = FastMCP(
+        name="Unraid MCP Server",
+        instructions="Provides tools to interact with an Unraid server's GraphQL API.",
+        version=VERSION,
+        lifespan=lifespan,
+        auth=auth_provider,
+        middleware=[
+            _logging_middleware,
+            _error_middleware,
+            _rate_limiter,
+            _response_limiter,
+        ],
+    )
+    register_all_modules(app)
+    return app
+
+
+# Thin discovery singleton for `fastmcp run server.py --reload`; tests and embedders
+# can call create_app() directly to obtain an independently registered app.
+mcp = create_app(auth_provider=_google_auth_provider)
 
 
 def ensure_token_exists() -> None:
@@ -368,8 +386,16 @@ def run_server() -> None:
 
         if is_http:
             if _settings.UNRAID_MCP_TRANSPORT == "sse":
+                warnings.warn(
+                    f"SSE transport is deprecated and will be removed in "
+                    f"unraid-mcp {_SSE_REMOVAL_VERSION}; migrate to streamable-http.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
                 logger.warning(
-                    "SSE transport is deprecated. Consider switching to 'streamable-http'."
+                    "SSE transport is deprecated and will be removed in %s. "
+                    "Switch to 'streamable-http'.",
+                    _SSE_REMOVAL_VERSION,
                 )
             # ASGI-level bearer auth wraps the entire HTTP stack — fires before any
             # MCP protocol processing and before the MCP-level middleware chain.
@@ -384,7 +410,10 @@ def run_server() -> None:
                 # omitted (they would shadow the provider's endpoints and 401 the
                 # OAuth callback). HealthMiddleware stays outermost so Docker's
                 # unauthenticated /health probe keeps working.
-                http_middleware = [ASGIMiddleware(HealthMiddleware)]
+                http_middleware = [
+                    ASGIMiddleware(HealthMiddleware),
+                    ASGIMiddleware(ReadinessMiddleware, probe=_readiness_probe),
+                ]
             else:
                 # Middleware order (outermost → innermost):
                 # 1. HealthMiddleware   — GET /health → 200, no auth.
@@ -394,6 +423,7 @@ def run_server() -> None:
                 # 3. BearerAuthMiddleware — all other HTTP requests require a valid token.
                 http_middleware = [
                     ASGIMiddleware(HealthMiddleware),
+                    ASGIMiddleware(ReadinessMiddleware, probe=_readiness_probe),
                     ASGIMiddleware(WellKnownMiddleware),
                     ASGIMiddleware(
                         BearerAuthMiddleware,

@@ -19,6 +19,11 @@ The server reads credentials from `~/.unraid-mcp/.env`. Create this file from `.
 
 ## Docker Compose (recommended for production)
 
+> **Run exactly one replica.** The upstream token bucket, subscription manager/cache,
+> and local OAuth state are process-local. Horizontal scaling multiplies Unraid API and
+> WebSocket load and can return inconsistent observations. A shared distributed limiter,
+> subscription leader/fan-out, cache, and OAuth store are required before scaling out.
+
 ### Quick start
 
 ```bash
@@ -39,7 +44,8 @@ The `docker-compose.yaml` provides:
 - **Non-root user**: Runs as `mcp:1000`
 - **Resource limits**: 1024 MB memory, 1.0 CPU
 - **Named volume**: `unraid-mcp-credentials` for `~/.unraid-mcp/`
-- **Health check**: HTTP `GET /health` every 30s (auto-skips for stdio transport)
+- **Readiness check**: HTTP `GET /ready` every 30s (auto-skips for stdio transport)
+- **Bounded console logs**: Docker `json-file`, three files of at most 10 MiB each
 - **External network**: Optional `DOCKER_NETWORK` for service mesh integration
 
 ### Environment
@@ -98,9 +104,17 @@ uvx unraid-mcp
 docker pull ghcr.io/jmagar/unraid-mcp:latest
 ```
 
-Available tags: `latest`, `main`, `v1.2.3`, `v1.2`, `v1`, `sha-<commit>`.
+Release tags: `latest`, `1.2.3`, `1.2`, `1`, and `sha-<commit>`. Unreleased `main`
+builds use `edge` plus `sha-<commit>`; `latest` moves only on a semver tag.
 
 Multi-arch: `linux/amd64` and `linux/arm64`.
+
+`/health` is process liveness. `/ready` validates configuration and a bounded upstream
+probe and is the routing/container-health signal. It is valid for liveness to remain green
+while readiness reports a safe, non-secret degraded reason.
+
+The Compose log bound protects the Docker host; the application's 10 MiB file cap is a
+secondary guard. Export structured logs when longer searchable retention is required.
 
 ## Entrypoint validation
 

@@ -9,7 +9,13 @@ plugin_install_updates (17 subactions).
 from typing import Any
 
 from ..config.logging import logger
-from ..config.settings import UNRAID_MCP_MAX_RESPONSE_BYTES
+from ..config.settings import (
+    UNRAID_MCP_MAX_RESPONSE_BYTES,
+    UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES,
+    UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS,
+    UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS,
+    UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS,
+)
 from ..core.exceptions import ToolError, tool_error_handler
 from ..core.pagination import cap_list
 from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
@@ -27,6 +33,16 @@ from ._disk import _ALLOWED_LOG_PREFIXES, _validate_path
 # wrapper fields (success/subaction/path/page/...) plus JSON escaping comfortably
 # fit under the hard cap with margin to spare.
 _LIVE_EVENT_BYTE_BUDGET: int = max(1, UNRAID_MCP_MAX_RESPONSE_BYTES // 2)
+
+
+def _cache_metadata(snapshot: Any) -> dict[str, Any]:
+    return {
+        "fetched_at": snapshot.fetched_at,
+        "age_seconds": snapshot.age_seconds,
+        "state": snapshot.connection_state,
+        "fresh": snapshot.fresh,
+        "stale": snapshot.stale,
+    }
 
 
 def _cap_network_metrics(
@@ -60,6 +76,8 @@ def _filter_log_event(event: dict[str, Any], level: str, context: int) -> dict[s
 
     log_file = event.get("logFile")
     if not isinstance(log_file, dict):
+        return event
+    if "matchedLines" in log_file and "returnedLines" in log_file:
         return event
     content = log_file.get("content")
     if not isinstance(content, str):
@@ -96,6 +114,27 @@ async def _handle_live(
     all_live = set(SNAPSHOT_ACTIONS) | set(COLLECT_ACTIONS)
     validate_subaction(subaction, all_live, "live")
 
+    if not 0 < timeout <= UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:
+        raise ToolError(
+            "timeout must be greater than 0 and no more than "
+            f"{UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS:g} seconds"
+        )
+
+    if subaction in COLLECT_ACTIONS and not (
+        0 < collect_for <= UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS
+    ):
+        raise ToolError(
+            "collect_for must be greater than 0 and no more than "
+            f"{UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS:g} seconds"
+        )
+
+    collection_max_events = (
+        min(limit, UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS)
+        if limit is not None and limit > 0
+        else UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS
+    )
+    collection_max_bytes = min(UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES, _LIVE_EVENT_BYTE_BUDGET)
+
     if subaction == "log_tail":
         if not path:
             raise ToolError("path is required for live/log_tail")
@@ -114,8 +153,9 @@ async def _handle_live(
             # handshake. Falls through to the live path below when the cache is cold
             # (None) or auto-start is disabled.
             if subscription_manager.auto_start_enabled:
-                cached = await subscription_manager.get_resource_data(subaction)
-                if cached is not None:
+                snapshot = await subscription_manager.get_resource_snapshot(subaction)
+                if snapshot.data is not None:
+                    cached = snapshot.data
                     logger.debug(
                         "live/%s served from warm subscription cache (skipped fresh WS)",
                         subaction,
@@ -127,6 +167,7 @@ async def _handle_live(
                             "subaction": subaction,
                             "source": "cache",
                             "data": capped_data,
+                            "cache": _cache_metadata(snapshot),
                             "page": page,
                         }
                     return {
@@ -134,6 +175,7 @@ async def _handle_live(
                         "subaction": subaction,
                         "source": "cache",
                         "data": cached,
+                        "cache": _cache_metadata(snapshot),
                     }
 
             if subaction in EVENT_DRIVEN_ACTIONS:
@@ -167,8 +209,17 @@ async def _handle_live(
                 variables={"path": path},
                 collect_for=collect_for,
                 timeout=timeout,
+                max_events=collection_max_events,
+                max_bytes=collection_max_bytes,
+                transform=(
+                    (lambda event: _filter_log_event(event, level, context))
+                    if level is not None
+                    else None
+                ),
             )
             if level is not None:
+                # Defensive/idempotent fallback for alternate collectors and
+                # tests; the production collector applies this before retention.
                 events = [_filter_log_event(e, level, context) for e in events]
             # Hard-cap the number of collected events so a noisy log over the
             # window can't flood the agent's context. The byte budget additionally
@@ -198,6 +249,8 @@ async def _handle_live(
                 variables=variables,
                 collect_for=collect_for,
                 timeout=timeout,
+                max_events=collection_max_events,
+                max_bytes=collection_max_bytes,
             )
             # Hard-cap the number of collected events (see log_tail above), plus
             # the byte budget so large events can't nuke the whole response.

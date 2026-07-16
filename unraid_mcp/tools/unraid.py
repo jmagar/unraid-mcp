@@ -25,8 +25,6 @@ Actions:
   help         - Return the full Markdown action/subaction reference (no subaction)
 """
 
-import datetime
-import time
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal, get_args
 
@@ -34,8 +32,7 @@ from fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field
 
 from ..config.logging import logger
-from ..core import client as _client
-from ..core.exceptions import ToolError, tool_error_handler
+from ..core.exceptions import ToolError
 from ..core.utils import validate_subaction
 
 # Re-exports: domain modules' constants and helpers needed by tests
@@ -44,20 +41,29 @@ from ._array import (  # noqa: F401
     _ARRAY_DESTRUCTIVE,
     _ARRAY_MUTATIONS,
     _ARRAY_QUERIES,
+    _ARRAY_SUBACTIONS,
     _handle_array,
 )
 from ._connect import (  # noqa: F401
     _CONNECT_DESTRUCTIVE,
     _CONNECT_MUTATIONS,
     _CONNECT_QUERIES,
+    _CONNECT_SUBACTIONS,
     _handle_connect,
 )
 from ._customization import (  # noqa: F401
     _CUSTOMIZATION_MUTATIONS,
     _CUSTOMIZATION_QUERIES,
+    _CUSTOMIZATION_SUBACTIONS,
     _handle_customization,
 )
-from ._disk import _DISK_DESTRUCTIVE, _DISK_MUTATIONS, _DISK_QUERIES, _handle_disk  # noqa: F401
+from ._disk import (  # noqa: F401
+    _DISK_DESTRUCTIVE,
+    _DISK_MUTATIONS,
+    _DISK_QUERIES,
+    _DISK_SUBACTIONS,
+    _handle_disk,
+)
 from ._docker import (  # noqa: F401
     _DOCKER_BULK_MUTATIONS,
     _DOCKER_DESTRUCTIVE,
@@ -65,6 +71,7 @@ from ._docker import (  # noqa: F401
     _DOCKER_ORGANIZER,
     _DOCKER_QUERIES,
     _DOCKER_ROOT_MUTATIONS,
+    _DOCKER_SUBACTIONS,
     _handle_docker,
 )
 from ._health import (  # noqa: F401
@@ -72,151 +79,66 @@ from ._health import (  # noqa: F401
     _HEALTH_SUBACTIONS,
     _SEVERITY,
     _comprehensive_health_check,
+    _handle_health,
 )
-from ._key import _KEY_DESTRUCTIVE, _KEY_MUTATIONS, _KEY_QUERIES, _handle_key  # noqa: F401
+from ._key import (  # noqa: F401
+    _KEY_DESTRUCTIVE,
+    _KEY_MUTATIONS,
+    _KEY_QUERIES,
+    _KEY_SUBACTIONS,
+    _handle_key,
+)
 from ._live import _handle_live
 from ._notification import (  # noqa: F401
     _NOTIFICATION_DESTRUCTIVE,
     _NOTIFICATION_MUTATIONS,
     _NOTIFICATION_QUERIES,
+    _NOTIFICATION_SUBACTIONS,
     _handle_notification,
 )
-from ._oidc import _OIDC_QUERIES, _handle_oidc  # noqa: F401
+from ._oidc import _OIDC_QUERIES, _OIDC_SUBACTIONS, _handle_oidc  # noqa: F401
 from ._onboarding import (  # noqa: F401
     _ONBOARDING_DESTRUCTIVE,
     _ONBOARDING_INPUT_MUTATIONS,
     _ONBOARDING_QUERIES,
     _ONBOARDING_SIMPLE_MUTATIONS,
+    _ONBOARDING_SUBACTIONS,
     _handle_onboarding,
 )
 from ._plugin import (  # noqa: F401
     _PLUGIN_DESTRUCTIVE,
     _PLUGIN_MUTATIONS,
     _PLUGIN_QUERIES,
+    _PLUGIN_SUBACTIONS,
     _handle_plugin,
 )
 from ._rclone import (  # noqa: F401
     _RCLONE_DESTRUCTIVE,
     _RCLONE_MUTATIONS,
     _RCLONE_QUERIES,
+    _RCLONE_SUBACTIONS,
     _handle_rclone,
 )
-from ._setting import _SETTING_DESTRUCTIVE, _SETTING_MUTATIONS, _handle_setting  # noqa: F401
+from ._setting import (  # noqa: F401
+    _SETTING_DESTRUCTIVE,
+    _SETTING_MUTATIONS,
+    _SETTING_SUBACTIONS,
+    _handle_setting,
+)
 from ._system import (  # noqa: F401
     _SYSTEM_QUERIES,
+    _SYSTEM_SUBACTIONS,
     _analyze_disk_health,
     _handle_system,
 )
-from ._user import _USER_QUERIES, _handle_user  # noqa: F401
-from ._vm import _VM_DESTRUCTIVE, _VM_MUTATIONS, _VM_QUERIES, _handle_vm  # noqa: F401
-
-
-# ===========================================================================
-# HEALTH handler
-# ===========================================================================
-
-
-async def _handle_health(subaction: str, ctx: Context | None) -> dict[str, Any] | str:
-    validate_subaction(subaction, _HEALTH_SUBACTIONS, "health")
-
-    from ..config.settings import (
-        CREDENTIALS_ENV_PATH,
-        UNRAID_API_URL,
-        is_configured,
-    )
-    from ..core.utils import safe_display_url
-    from ..subscriptions.utils import analyze_subscription_status
-
-    if subaction == "setup":
-        if is_configured():
-            try:
-                await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
-                status = "and the connection test succeeded"
-            except Exception as e:
-                logger.debug("health/setup connection probe failed: %s: %s", type(e).__name__, e)
-                status = (
-                    f"but the connection test failed ({type(e).__name__}) — "
-                    "this may be a transient outage or a misconfiguration"
-                )
-            return (
-                f"✅ Credentials are configured ({status}).\n"
-                f"URL: `{safe_display_url(UNRAID_API_URL)}`\n"
-                f"File: `{CREDENTIALS_ENV_PATH}`\n\n"
-                "To change them, update the plugin's userConfig form "
-                "(Unraid GraphQL API URL / Unraid API Key) or edit that file, "
-                "then restart the server."
-            )
-        # Not loaded in this session. Credentials load once at startup, so a .env that
-        # exists on disk (e.g. just written by the ConfigChange hook) is not active until
-        # the next restart — report that distinctly from a genuinely-missing config.
-        if CREDENTIALS_ENV_PATH.exists():
-            return (
-                f"⚠️ A credentials file exists (`{CREDENTIALS_ENV_PATH}`) but is not loaded "
-                "in this session — credentials are read once at startup.\n\n"
-                "Restart the server (or your MCP client), then run "
-                '`unraid(action="health", subaction="test_connection")` to verify. '
-                "If it still fails, check that the file contains non-empty "
-                "`UNRAID_API_URL` and `UNRAID_API_KEY` values."
-            )
-        return (
-            "⚠️ Credentials are not configured.\n\n"
-            "**Claude Code plugin:** set *Unraid GraphQL API URL* and *Unraid API Key* "
-            "in the plugin's configuration form — they are applied automatically on the "
-            "next session and persisted to disk.\n\n"
-            f"**Manual / Docker:** create `{CREDENTIALS_ENV_PATH}` with:\n"
-            "```\nUNRAID_API_URL=https://your-unraid-server:port\n"
-            "UNRAID_API_KEY=your-api-key\n```\n\n"
-            "Then restart the server and run "
-            '`unraid(action="health", subaction="test_connection")` to verify.'
-        )
-
-    with tool_error_handler("health", subaction, logger):
-        logger.info(f"Executing unraid action=health subaction={subaction}")
-
-        if subaction == "test_connection":
-            start = time.time()
-            data = await _client.make_graphql_request(_SYSTEM_QUERIES["online"])
-            latency = round((time.time() - start) * 1000, 2)
-            return {"status": "connected", "online": data.get("online"), "latency_ms": latency}
-
-        if subaction == "check":
-            return await _comprehensive_health_check()
-
-        if subaction == "diagnose":
-            # Import from middleware_refs (not server) to avoid the circular
-            # dependency: server.py imports tools/unraid.py at module level.
-            from ..core.middleware_refs import error_middleware
-            from ..subscriptions.manager import subscription_manager
-            from ..subscriptions.resources import ensure_subscriptions_started
-
-            await ensure_subscriptions_started()
-            status = await subscription_manager.get_subscription_status()
-            error_count, connection_issues = analyze_subscription_status(status)
-            return {
-                "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
-                "environment": {
-                    "auto_start_enabled": subscription_manager.auto_start_enabled,
-                    "max_reconnect_attempts": subscription_manager.max_reconnect_attempts,
-                    "api_url_configured": bool(UNRAID_API_URL),
-                },
-                "subscriptions": status,
-                "summary": {
-                    "total_configured": len(subscription_manager.subscription_configs),
-                    "active_count": len(subscription_manager.active_subscriptions),
-                    "with_data": len(subscription_manager.resource_data),
-                    "in_error_state": error_count,
-                    "connection_issues": connection_issues,
-                },
-                # cache section removed: ResponseCachingMiddleware was removed because
-                # all caching was disabled (the consolidated `unraid` tool mixes reads
-                # and mutations, making safe per-subaction exclusion impossible).
-                "cache": {"note": "caching disabled — tool mixes reads and mutations"},
-                "errors": error_middleware.get_error_stats()
-                if error_middleware is not None
-                else {},
-            }
-
-        raise ToolError(f"Unhandled health subaction '{subaction}' — this is a bug")
+from ._user import _USER_QUERIES, _USER_SUBACTIONS, _handle_user  # noqa: F401
+from ._vm import (  # noqa: F401
+    _VM_DESTRUCTIVE,
+    _VM_MUTATIONS,
+    _VM_QUERIES,
+    _VM_SUBACTIONS,
+    _handle_vm,
+)
 
 
 _HELP_TEXT = """# Unraid MCP Server
@@ -617,7 +539,9 @@ async def _dispatch_docker(inp: UnraidInput, ctx: Context | None) -> dict[str, A
 
 
 async def _dispatch_vm(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
-    return await _handle_vm(inp.subaction, vm_id=inp.vm_id, ctx=ctx, confirm=inp.confirm)
+    return await _handle_vm(
+        inp.subaction, vm_id=inp.vm_id, ctx=ctx, confirm=inp.confirm, limit=inp.limit
+    )
 
 
 async def _dispatch_notification(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
@@ -764,9 +688,64 @@ _ACTION_DISPATCH: dict[str, _ActionHandler] = {
     "subscriptions": _dispatch_subscriptions,
 }
 
+_OPERATION_REGISTRY: dict[str, frozenset[str]] = {
+    "system": frozenset(_SYSTEM_SUBACTIONS),
+    "health": frozenset(_HEALTH_SUBACTIONS),
+    "array": frozenset(_ARRAY_SUBACTIONS),
+    "disk": frozenset(_DISK_SUBACTIONS),
+    "docker": frozenset(_DOCKER_SUBACTIONS),
+    "vm": frozenset(_VM_SUBACTIONS),
+    "notification": frozenset(_NOTIFICATION_SUBACTIONS),
+    "key": frozenset(_KEY_SUBACTIONS),
+    "plugin": frozenset(_PLUGIN_SUBACTIONS),
+    "rclone": frozenset(_RCLONE_SUBACTIONS),
+    "setting": frozenset(_SETTING_SUBACTIONS),
+    "connect": frozenset(_CONNECT_SUBACTIONS),
+    "onboarding": frozenset(_ONBOARDING_SUBACTIONS),
+    "customization": frozenset(_CUSTOMIZATION_SUBACTIONS),
+    "oidc": frozenset(_OIDC_SUBACTIONS),
+    "user": frozenset(_USER_SUBACTIONS),
+    "live": frozenset(
+        {
+            "cpu",
+            "memory",
+            "cpu_telemetry",
+            "array_state",
+            "parity_progress",
+            "ups_status",
+            "notifications_overview",
+            "notifications_warnings",
+            "notification_feed",
+            "log_tail",
+            "owner",
+            "server_status",
+            "display",
+            "docker_container_stats",
+            "temperature",
+            "network_metrics",
+            "plugin_install_updates",
+        }
+    ),
+    "subscriptions": frozenset({"diagnose", "test_query"}),
+    "help": frozenset(),
+}
 
-def register_unraid_tool(mcp: FastMCP) -> None:
+
+def register_unraid_tool(
+    mcp: FastMCP,
+    *,
+    error_stats_provider: Callable[[], dict[str, Any]] | None = None,
+) -> None:
     """Register the single `unraid` tool with the FastMCP instance."""
+
+    async def dispatch_health(inp: UnraidInput, ctx: Context | None) -> dict[str, Any] | str:
+        return await _handle_health(
+            inp.subaction,
+            ctx,
+            error_stats_provider=error_stats_provider,
+        )
+
+    dispatch = {**_ACTION_DISPATCH, "health": dispatch_health}
 
     @mcp.tool(timeout=120)
     async def unraid(
@@ -940,6 +919,8 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         # `help` is a pure string with no ctx/GraphQL dependency — handle it
         # before building the model so it stays a trivial fast path.
         if action == "help":
+            if subaction:
+                raise ToolError("help does not accept a subaction")
             return _HELP_TEXT
 
         # Pack the flat keyword args into the structured input model. The tool
@@ -952,9 +933,16 @@ def register_unraid_tool(mcp: FastMCP) -> None:
         # two field sets stay identical. (locals() is captured into a variable
         # first because a comprehension has its own scope.)
         _params = locals()
-        inp = UnraidInput(**{k: v for k, v in _params.items() if k != "ctx"})
+        inp = UnraidInput(**{k: v for k, v in _params.items() if k in UnraidInput.model_fields})
 
-        handler = _ACTION_DISPATCH.get(action)
+        allowed_subactions = _OPERATION_REGISTRY.get(action)
+        if allowed_subactions is None:
+            raise ToolError(
+                f"Invalid action '{action}'. Must be one of: {sorted(_OPERATION_REGISTRY)}"
+            )
+        validate_subaction(subaction, set(allowed_subactions), action)
+
+        handler = dispatch.get(action)
         if handler is None:
             raise ToolError(
                 f"Invalid action '{action}'. Must be one of: {sorted(get_args(UNRAID_ACTIONS))}"

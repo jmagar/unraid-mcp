@@ -23,7 +23,12 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
-from unraid_mcp.tools.unraid import _ACTION_DISPATCH, UNRAID_ACTIONS, UnraidInput
+from unraid_mcp.tools.unraid import (
+    _ACTION_DISPATCH,
+    _OPERATION_REGISTRY,
+    UNRAID_ACTIONS,
+    UnraidInput,
+)
 
 
 # Ensure tests/ is on sys.path so "from conftest import make_tool_fn" resolves.
@@ -67,6 +72,12 @@ def test_inline_actions_are_not_also_in_registry() -> None:
     """Inline-handled actions must not also live in the registry (no double-routing)."""
     overlap = set(_ACTION_DISPATCH) & _INLINE_ACTIONS
     assert not overlap, f"Inline actions also present in _ACTION_DISPATCH: {sorted(overlap)}"
+
+
+def test_operation_registry_covers_every_action_and_subactions_are_nonempty() -> None:
+    assert set(_OPERATION_REGISTRY) == set(_ACTION_DISPATCH) | {"help"}
+    assert _OPERATION_REGISTRY["help"] == frozenset()
+    assert all(_OPERATION_REGISTRY[action] for action in _ACTION_DISPATCH)
 
 
 # ---------------------------------------------------------------------------

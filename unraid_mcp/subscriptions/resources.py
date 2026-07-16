@@ -6,13 +6,13 @@ and the MCP protocol, providing fallback queries when subscription data is unava
 
 import asyncio
 import json
-import os
 from collections.abc import Callable, Coroutine
 from typing import Any, Final
 
 import anyio
 from fastmcp import FastMCP
 
+from ..config import settings as _settings
 from ..config.logging import logger
 from .manager import subscription_manager
 from .queries import SNAPSHOT_ACTIONS
@@ -28,6 +28,17 @@ _last_startup_error: str | None = None
 _startup_lock: Final[asyncio.Lock] = asyncio.Lock()
 
 _terminal_states = frozenset({"failed", "auth_failed", "max_retries_exceeded"})
+
+
+def _snapshot_metadata(snapshot: Any) -> dict[str, Any]:
+    """Stable cache-state metadata included with resource payloads."""
+    return {
+        "state": snapshot.connection_state,
+        "active": snapshot.active,
+        "fresh": snapshot.fresh,
+        "stale": snapshot.stale,
+        "age_seconds": snapshot.age_seconds,
+    }
 
 
 def get_last_startup_error() -> str | None:
@@ -72,7 +83,7 @@ async def ensure_subscriptions_started() -> None:
             # Latch only if loops were spawned (they self-heal via reconnect). If none
             # were spawned, leave the flag unset so a later call retries instead of
             # permanently surfacing the error for the process lifetime.
-            spawned = len(subscription_manager.active_subscriptions) > 0
+            spawned = await subscription_manager.has_active_subscriptions()
             _subscriptions_started = spawned
             logger.error(
                 "[STARTUP] Failed to start subscriptions (loops spawned=%s): %s",
@@ -99,7 +110,7 @@ async def autostart_subscriptions() -> None:
         raise  # Propagate so ensure_subscriptions_started doesn't mark as started
 
     # Optional log file subscription
-    log_path = os.getenv("UNRAID_AUTOSTART_LOG_PATH")
+    log_path = _settings.UNRAID_AUTOSTART_LOG_PATH
     if log_path is None:
         # Default to syslog if available
         default_path = "/var/log/syslog"
@@ -110,10 +121,10 @@ async def autostart_subscriptions() -> None:
     if log_path:
         try:
             logger.info(f"[AUTOSTART] Starting log file subscription for: {log_path}")
-            config = subscription_manager.subscription_configs.get("logFileSubscription")
-            if config:
+            query = subscription_manager.get_subscription_query("logFileSubscription")
+            if query:
                 await subscription_manager.start_subscription(
-                    "logFileSubscription", str(config["query"]), {"path": log_path}
+                    "logFileSubscription", query, {"path": log_path}
                 )
                 logger.info(f"[AUTOSTART] Log file subscription started for: {log_path}")
             else:
@@ -152,10 +163,16 @@ def register_subscription_resources(mcp: FastMCP) -> None:
     async def logs_stream_resource() -> str:
         """Real-time log stream data from subscription."""
         await ensure_subscriptions_started()
-        result = await subscription_manager.get_resource_data_with_timestamp("logFileSubscription")
-        if result is not None:
-            data, fetched_at = result
-            return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
+        snapshot = await subscription_manager.get_resource_snapshot("logFileSubscription")
+        if snapshot.data is not None:
+            return json.dumps(
+                {
+                    **snapshot.data,
+                    "_fetched_at": snapshot.fetched_at,
+                    "_subscription": _snapshot_metadata(snapshot),
+                },
+                indent=2,
+            )
         fallback: dict[str, Any] = {
             "status": "No subscription data yet",
             "message": "Subscriptions auto-start on server boot. If this persists, check server logs for WebSocket/auth issues.",
@@ -165,20 +182,25 @@ def register_subscription_resources(mcp: FastMCP) -> None:
     def _make_resource_fn(action: str) -> Callable[[], Coroutine[Any, Any, str]]:
         async def _live_resource() -> str:
             await ensure_subscriptions_started()
-            result = await subscription_manager.get_resource_data_with_timestamp(action)
-            if result is not None:
-                data, fetched_at = result
-                return json.dumps({**data, "_fetched_at": fetched_at}, indent=2)
+            snapshot = await subscription_manager.get_resource_snapshot(action)
+            if snapshot.data is not None:
+                return json.dumps(
+                    {
+                        **snapshot.data,
+                        "_fetched_at": snapshot.fetched_at,
+                        "_subscription": _snapshot_metadata(snapshot),
+                    },
+                    indent=2,
+                )
             # Surface permanent errors only when the connection is in a terminal failure
             # state — if the subscription has since reconnected, ignore the stale error.
             # Use the public get_error_state() accessor so we never touch private
             # lock attributes from outside the manager.
-            last_error, conn_state = await subscription_manager.get_error_state(action)
-            if last_error and conn_state in _terminal_states:
+            if snapshot.last_error and snapshot.connection_state in _terminal_states:
                 return json.dumps(
                     {
                         "status": "error",
-                        "message": f"Subscription '{action}' failed: {last_error}",
+                        "message": f"Subscription '{action}' failed: {snapshot.last_error}",
                     }
                 )
             # When auto-start is disabled, or an action is deliberately excluded
@@ -186,9 +208,10 @@ def register_subscription_resources(mcp: FastMCP) -> None:
             # real data or a real upstream error instead of a perpetual
             # "connecting" placeholder.
             query_info = SNAPSHOT_ACTIONS[action]
-            config = subscription_manager.subscription_configs.get(action, {})
             use_on_demand = (
-                not subscription_manager.auto_start_enabled or config.get("auto_start") is False
+                not subscription_manager.auto_start_enabled
+                or not subscription_manager.is_auto_start_subscription(action)
+                or snapshot.stale
             )
             if use_on_demand:
                 try:

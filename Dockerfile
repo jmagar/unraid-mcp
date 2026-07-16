@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.12.11-slim-bookworm@sha256:519591d6871b7bc437060736b9f7456b8731f1499a57e22e6c285135ae657bf7 AS runtime
 # Runtime Python must match the builder's Python 3.12 virtualenv layout.
 
 RUN groupadd --gid 1000 mcp && \
@@ -40,7 +40,18 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # /home/mcp/.unraid-mcp is pre-created so Docker named volume mounts inherit mcp ownership.
 RUN mkdir -p /app/logs /app/backups /home/mcp/.unraid-mcp && \
     chown -R mcp:mcp /app/logs /app/backups /home/mcp/.unraid-mcp && \
-    chmod 700 /home/mcp/.unraid-mcp
+    chmod 700 /home/mcp/.unraid-mcp && \
+    rm -rf \
+      /usr/local/bin/pip \
+      /usr/local/bin/pip3 \
+      /usr/local/bin/pip3.12 \
+      /usr/local/lib/python3.12/ensurepip \
+      /usr/local/lib/python3.12/site-packages/pip* \
+      /usr/local/lib/python3.12/site-packages/setuptools* \
+      /usr/local/lib/python3.12/site-packages/wheel* \
+      /app/.venv/lib/python3.12/site-packages/pip* \
+      /app/.venv/lib/python3.12/site-packages/setuptools* \
+      /app/.venv/lib/python3.12/site-packages/wheel*
 
 # UNRAID_MCP_HOST is the only var that genuinely needs a container-specific value
 # (the package default 127.0.0.1 would make the server unreachable from outside the
@@ -63,6 +74,6 @@ USER mcp
 
 # Shell-form CMD: /bin/sh expands ${UNRAID_MCP_PORT:-6970} before python runs.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/health', timeout=5).status==200 else 1)" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:${UNRAID_MCP_PORT:-6970}/ready', timeout=5).status==200 else 1)" || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]

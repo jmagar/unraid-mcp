@@ -38,8 +38,9 @@ unraid(
 | `key_id` | `str` | no | API key identifier |
 | `name` | `str` | no | Name for create/update operations |
 | `path` | `str` | no | Log file path (for `live/log_tail`) |
-| `collect_for` | `float` | no | WebSocket collection duration in seconds (default: 5.0) |
-| `limit` | `int` | no | Max items to return (default: 20) |
+| `collect_for` | `float` | no | Collection duration: `0 < value <= UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` (default call 5.0; ceiling 30 seconds) |
+| `timeout` | `float` | no | WebSocket timeout: `0 < value <= UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` (default call 10.0; ceiling 60 seconds) |
+| `limit` | `int` | no | Max items to return (default: 20); also lowers the in-flight collection event ceiling when positive |
 | `offset` | `int` | no | Pagination offset (default: 0) |
 
 ### Actions and Subactions

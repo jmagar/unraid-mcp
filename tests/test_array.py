@@ -93,7 +93,7 @@ class TestArrayActions:
     async def test_generic_exception_wraps(self, _mock_graphql: AsyncMock) -> None:
         _mock_graphql.side_effect = RuntimeError("disk error")
         tool_fn = _make_tool()
-        with pytest.raises(ToolError, match="Failed to execute array/parity_status"):
+        with pytest.raises(ToolError, match="Internal error executing array/parity_status"):
             await tool_fn(action="array", subaction="parity_status")
 
 

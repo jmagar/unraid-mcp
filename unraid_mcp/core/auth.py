@@ -26,11 +26,13 @@ import json
 import posixpath
 import re
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from starlette.types import ASGIApp, Receive, Scope, Send
 
 # Sanitize client IPs/hostnames before logging to prevent log injection
@@ -74,7 +76,7 @@ class BearerAuthMiddleware:
             b'{"error":"too_many_requests","error_description":"Too many failed auth attempts"}'
         )
         # Per-IP failure timestamps — deque for O(1) append/popleft
-        self._ip_failures: dict[str, deque[float]] = {}
+        self._ip_failures: OrderedDict[str, deque[float]] = OrderedDict()
         # Per-IP last-warning time for log throttling
         self._ip_last_warn: dict[str, float] = {}
 
@@ -195,17 +197,14 @@ class BearerAuthMiddleware:
     def _record_failure(self, ip: str) -> None:
         """Record one failed auth attempt for this IP."""
         self._prune_ip_state(ip)
-        # Evict oldest-activity IP when tracking dict is full
+        # OrderedDict keeps eviction O(1); touched IPs move to the recency end.
         if ip not in self._ip_failures and len(self._ip_failures) >= _MAX_IP_TRACKING:
-            oldest_ip = min(
-                self._ip_failures,
-                key=lambda k: self._ip_failures[k][0] if self._ip_failures[k] else 0,
-            )
-            del self._ip_failures[oldest_ip]
+            oldest_ip, _ = self._ip_failures.popitem(last=False)
             self._ip_last_warn.pop(oldest_ip, None)
         if ip not in self._ip_failures:
             self._ip_failures[ip] = deque()
         self._ip_failures[ip].append(time.monotonic())
+        self._ip_failures.move_to_end(ip)
 
     def _maybe_warn(self, ip: str, reason: str) -> None:
         """Emit a throttled WARNING log for this IP (at most once per 30 s)."""
@@ -375,3 +374,46 @@ class WellKnownMiddleware:
         ]
         await send({"type": "http.response.start", "status": 200, "headers": headers})
         await send({"type": "http.response.body", "body": body, "more_body": False})
+
+
+class ReadinessMiddleware:
+    """Serve a bounded unauthenticated readiness probe at GET/HEAD ``/ready``."""
+
+    _READY = b'{"status":"ready"}'
+    _NOT_READY = b'{"status":"not_ready"}'
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        probe: Callable[[], Awaitable[tuple[bool, str]]],
+    ) -> None:
+        self.app = app
+        self._probe = probe
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] == "http"
+            and scope.get("method") in ("GET", "HEAD")
+            and posixpath.normpath(scope.get("path", "")) == "/ready"
+        ):
+            try:
+                ready, _reason = await self._probe()
+            except Exception:
+                ready = False
+            body = self._READY if ready else self._NOT_READY
+            response_body = b"" if scope.get("method") == "HEAD" else body
+            headers = [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ]
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 200 if ready else 503,
+                    "headers": headers,
+                }
+            )
+            await send({"type": "http.response.body", "body": response_body, "more_body": False})
+            return
+        await self.app(scope, receive, send)

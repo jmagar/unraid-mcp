@@ -5,7 +5,10 @@ that cap at 10MB and start over (no rotation) for consistent use across all modu
 """
 
 import logging
+import sys
+import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 from fastmcp.utilities.logging import get_logger as get_fastmcp_logger
 from rich.console import Console
@@ -53,7 +56,7 @@ class OverwriteFileHandler(logging.FileHandler):
         except OSError:
             self._bytes_written = 0
 
-    def _rotate_if_needed(self) -> bool:
+    def _rotate_if_needed(self, projected_bytes: int = 0) -> bool:
         """Overwrite the log file if the accumulated byte count crossed the cap.
 
         Opens a fresh stream (deleting the old file first), atomically swaps it in,
@@ -65,82 +68,62 @@ class OverwriteFileHandler(logging.FileHandler):
         file — the record is written to the *new* file but was counted against the
         old one before the reset.
         """
-        if self._bytes_written < self.max_bytes:
+        if self._bytes_written + projected_bytes < self.max_bytes:
             return False
         if not (self.stream and hasattr(self.stream, "name")):
             return False
 
         base_path = Path(self.baseFilename)
-        # Open new file FIRST, then swap — self.stream is never None.
+        replacement = None
+        replacement_path: Path | None = None
         try:
-            base_path.unlink(missing_ok=True)
-            new_stream = self._open()
-        except OSError:
-            try:
-                new_stream = self._open()
-            except OSError:
-                import sys
-
-                print(
-                    "WARNING: Failed to reopen log file after rotation. "
-                    "File logging continues on old stream.",
-                    file=sys.stderr,
-                )
-                new_stream = None
-
-        rotated = new_stream is not None
-        if rotated:
+            replacement = tempfile.NamedTemporaryFile(  # noqa: SIM115 - stream remains active
+                mode="w",
+                encoding=self.encoding or "utf-8",
+                dir=base_path.parent,
+                prefix=f".{base_path.name}.",
+                delete=False,
+            )
+            replacement_path = Path(replacement.name)
+            # Atomic replacement keeps the old pathname valid until the fresh
+            # stream has been opened successfully.
+            replacement_path.replace(base_path)
             old_stream = self.stream
-            self.stream = new_stream  # atomic swap
+            self.stream = cast("Any", replacement)
             if old_stream is not None:
                 old_stream.close()
-            # Reset the byte counter now that we are writing to a fresh file.
             self._bytes_written = 0
-
-            # Write the reset marker ONLY on a successful overwrite — otherwise we'd
-            # stamp "LOG FILE RESET" onto the old, un-reset file (reopen failed).
-            if self.stream is not None:
-                reset_record = logging.LogRecord(
-                    name="UnraidMCPServer.Logging",
-                    level=logging.INFO,
-                    pathname="",
-                    lineno=0,
-                    msg="=== LOG FILE RESET (10MB limit reached) ===",
-                    args=(),
-                    exc_info=None,
-                )
-                super().emit(reset_record)
-                self._account_for(reset_record)
-
-        return rotated
-
-    def _account_for(self, record: logging.LogRecord) -> None:
-        """Add the byte size of a formatted record to the in-process counter."""
-        try:
-            enc = self.encoding or "utf-8"
-            self._bytes_written += len(self.format(record).encode(enc))
-            self._bytes_written += len(self.terminator.encode(enc))
-        except (LookupError, UnicodeError, TypeError, ValueError):
-            # Accounting must never break logging; a single missed measurement just
-            # delays the next size check slightly.
-            return
+            marker = "=== LOG FILE RESET (10MB limit reached) ===" + self.terminator
+            self.stream.write(marker)
+            self.flush()
+            self._bytes_written = len(marker.encode(self.encoding or "utf-8"))
+            return True
+        except OSError:
+            if replacement is not None:
+                replacement.close()
+            if replacement_path is not None:
+                replacement_path.unlink(missing_ok=True)
+            print(
+                "WARNING: Failed to safely replace log file during rotation. "
+                "File logging continues on old stream.",
+                file=sys.stderr,
+            )
+            return False
 
     def emit(self, record: logging.LogRecord) -> None:
         """Emit a record, checking accumulated size periodically and overwriting if needed."""
-        self._emit_count += 1
-        self._account_for(record)
-        rotated = False
-        if self._emit_count == 1 or self._emit_count % self._check_interval == 0:
-            rotated = self._rotate_if_needed()
-
-        # Emit the original record
-        super().emit(record)
-
-        if rotated:
-            # This record was counted against the pre-rotation file but is physically
-            # written to the fresh file above. Re-account it so the new file's counter
-            # reflects what it actually holds (fixes a one-record undercount per cycle).
-            self._account_for(record)
+        try:
+            self._emit_count += 1
+            message = self.format(record)
+            encoded_size = len((message + self.terminator).encode(self.encoding or "utf-8"))
+            self._rotate_if_needed(encoded_size)
+            if self.stream is None:
+                self.stream = self._open()
+            self.stream.write(message + self.terminator)
+            self.flush()
+            self._bytes_written += encoded_size
+        except Exception:
+            self.handleError(record)
 
 
 def _create_shared_file_handler() -> OverwriteFileHandler:
@@ -252,13 +235,13 @@ def log_configuration_status(logger: logging.Logger) -> None:
     """
     from .settings import get_config_summary
 
-    logger.info(f"Logging initialized (console and file: {LOG_FILE_PATH}).")
+    logger.info("Logging initialized (console and file: %s).", LOG_FILE_PATH)
 
     config = get_config_summary()
 
     # Log configuration status
     if config["api_url_configured"]:
-        logger.info(f"UNRAID_API_URL loaded: {config['api_url_preview']}")
+        logger.info("UNRAID_API_URL loaded: %s", config["api_url_preview"])
     else:
         logger.warning("UNRAID_API_URL not found in environment or .env file.")
 
@@ -267,13 +250,13 @@ def log_configuration_status(logger: logging.Logger) -> None:
     else:
         logger.warning("UNRAID_API_KEY not found in environment or .env file.")
 
-    logger.info(f"UNRAID_MCP_PORT set to: {config['server_port']}")
-    logger.info(f"UNRAID_MCP_HOST set to: {config['server_host']}")
-    logger.info(f"UNRAID_MCP_TRANSPORT set to: {config['transport']}")
-    logger.info(f"UNRAID_MCP_LOG_LEVEL set to: {config['log_level']}")
+    logger.info("UNRAID_MCP_PORT set to: %s", config["server_port"])
+    logger.info("UNRAID_MCP_HOST set to: %s", config["server_host"])
+    logger.info("UNRAID_MCP_TRANSPORT set to: %s", config["transport"])
+    logger.info("UNRAID_MCP_LOG_LEVEL set to: %s", config["log_level"])
 
     if not config["config_valid"]:
-        logger.error(f"Missing required configuration: {config['missing_config']}")
+        logger.error("Missing required configuration: %s", config["missing_config"])
 
 
 # Global logger instance - modules can import this directly

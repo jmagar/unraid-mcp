@@ -2,7 +2,7 @@
 # Build System Configuration
 # ============================================================================
 [build-system]
-requires = ["hatchling>=1.25.0"]
+requires = ["hatchling>=1.27.0,<2"]
 build-backend = "hatchling.build"
 
 # ============================================================================
@@ -13,7 +13,8 @@ name = "unraid-mcp"
 version = "2.3.5"
 description = "MCP Server for Unraid API - provides tools to interact with an Unraid server's GraphQL API"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [
     {name = "jmagar", email = "jmagar@users.noreply.github.com"}
@@ -41,9 +42,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
 
-    # License
-    "License :: OSI Approved :: MIT License",
-
     # Python Versions
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -51,7 +49,6 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 
     # Framework
-    "Framework :: FastAPI",
     "Framework :: Pydantic",
 
     # Topics
@@ -75,9 +72,13 @@ dependencies = [
     # shipped breaking changes across majors, and the WS layer is version-sensitive.
     # Caps prevent `uv lock` from silently jumping a major (uv.lock pins the exact
     # resolved version within the range).
-    "fastmcp>=3.0.0,<4.0.0",
+    # Private GoogleProvider compatibility adapter is verified against 3.4.x.
+    "fastmcp>=3.4.4,<3.5.0",
     "httpx>=0.28.1",
-    "fastapi>=0.115.0",
+    "anyio>=4.10.0,<5",
+    "starlette>=0.46.0,<2",
+    "pydantic-core>=2.33.0,<3",
+    "mcp>=1.26.0,<2",
     "uvicorn[standard]>=0.35.0",
     "websockets>=15.0.1,<17.0.0",
     "rich>=14.1.0",
@@ -142,6 +143,7 @@ exclude = [
     "/docs",
     "/dist",
     "/logs",
+    "/scripts/openwiki/node_modules",
     "*.pyc",
     "__pycache__",
 ]
@@ -175,6 +177,8 @@ select = [
     "B",
     # flake8-quotes
     "Q",
+    # flake8-logging-format (preserve lazy logging)
+    "G",
     # flake8-comprehensions
     "C4",
     # flake8-simplify
@@ -265,8 +269,8 @@ markers = [
 ]
 filterwarnings = [
     "error",
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
+    # Temporary compatibility boundary: remove with SSE in unraid-mcp 3.0.0.
+    "ignore:^SSE transport is deprecated and will be removed in unraid-mcp 3\\.0\\.0.*:DeprecationWarning:unraid_mcp\\.server",
 ]
 
 # ============================================================================

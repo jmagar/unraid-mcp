@@ -36,7 +36,7 @@ Generate an API key in Unraid:
 |----------|---------|-------------|
 | `UNRAID_MCP_HOST` | `127.0.0.1` (bare metal); Docker image sets `0.0.0.0` | Bind address for HTTP transport |
 | `UNRAID_MCP_PORT` | `6970` | Port for the MCP HTTP server. Must be 1-65535. |
-| `UNRAID_MCP_TRANSPORT` | `streamable-http` | Transport method: `streamable-http`, `stdio`, or `sse` (deprecated) |
+| `UNRAID_MCP_TRANSPORT` | `streamable-http` | `streamable-http`, `stdio`, or legacy `sse` (deprecated; removed in v3.0.0) |
 | `UNRAID_MCP_MAX_RESPONSE_BYTES` | `40000` | Max serialized tool-response size (~10K tokens). Over-cap responses are replaced with a parseable JSON truncation marker. |
 
 ### Transport Options
@@ -133,16 +133,24 @@ Log files are capped at 10 MB and overwritten to prevent disk space issues.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `UNRAID_AUTO_START_SUBSCRIPTIONS` | `true` | Auto-start WebSocket subscriptions on server boot |
+| `UNRAID_AUTO_START_SUBSCRIPTIONS` | `true` | Lazily initialize enabled subscriptions on first MCP resource/diagnostic access |
 | `UNRAID_MAX_RECONNECT_ATTEMPTS` | `10` | Maximum WebSocket reconnection attempts before giving up |
 | `UNRAID_AUTOSTART_LOG_PATH` | auto-detect | Log file path for the log tail subscription. Defaults to `/var/log/syslog` if available. |
+| `UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE` | `false` | Debug-only raw upstream frame in `subscriptions/test_query`; data-sensitive and unsafe on shared deployments |
+| `UNRAID_SUBSCRIPTION_MAX_CONNECTIONS` | `3` | Concurrent startup handshakes per process (1..32) |
+| `UNRAID_SUBSCRIPTION_STARTUP_STAGGER_SECONDS` | `0.05` | Startup launch delay in seconds (0..10) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS` | `100` | Streaming event ceiling (1..10000; positive `limit` may lower it) |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES` | `1048576` | Streaming byte ceiling; response budget may lower it |
+| `UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS` | `30` | Maximum `collect_for`; configurable up to 300 seconds |
+| `UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS` | `300` | Maximum usable cache age; configurable up to 86400 seconds |
+| `UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS` | `60` | Maximum per-call WebSocket timeout; configurable up to 300 seconds |
 
 ### Subscription Behavior
 
 When `UNRAID_AUTO_START_SUBSCRIPTIONS=true` (default):
-- WebSocket subscriptions start automatically on server boot
+- WebSocket subscriptions initialize on the first resource/diagnostic access
 - MCP resources (`unraid://live/{action}`) serve cached data
-- Resources return "connecting" placeholder while starting; callers retry
+- The first access may return a "connecting" placeholder; callers retry
 
 When `UNRAID_AUTO_START_SUBSCRIPTIONS=false`:
 - Resources fall back to on-demand `subscribe_once` calls
