@@ -97,7 +97,7 @@ def test_manual_release_reconciliation_targets_requested_release_tag() -> None:
     assert 'default: ""' in workflow
     assert "RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}" in workflow
     assert "group: release-${{ github.event.release.tag_name || inputs.release_tag }}" in workflow
-    assert workflow.count("ref: ${{ env.RELEASE_TAG }}") == 2
+    assert workflow.count("ref: refs/tags/${{ env.RELEASE_TAG }}") == 2
     assert "GITHUB_REF_NAME" not in workflow
 
 
