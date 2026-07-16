@@ -89,6 +89,16 @@ def test_artifact_channels_are_independent_and_reconciled() -> None:
     assert "Release Reconciliation" in workflow
 
 
+def test_pypi_partial_release_can_resume_without_masking_checksum_mismatch() -> None:
+    workflow = _workflows()["publish-pypi.yml"]
+    pypi_job = workflow.split("  pypi:", 1)[1].split("  github-release:", 1)[0]
+    assert 'if [ -z "$remote_checksum" ]' in pypi_job
+    assert "published=false" in pypi_job
+    assert 'elif [ "$remote_checksum" != "$checksum" ]' in pypi_job
+    assert "PyPI already contains $filename with a different checksum" in pypi_job
+    assert "skip-existing: true" in pypi_job
+
+
 def test_container_release_and_runtime_policies() -> None:
     workflow = _workflows()["docker-publish.yml"]
     dockerfile = (ROOT / "Dockerfile").read_text()

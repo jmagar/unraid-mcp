@@ -221,7 +221,7 @@ async def _handle_live(
             return {"success": True, "subaction": subaction, "source": "live", "data": data}
 
         if subaction == "log_tail":
-            events = await subscribe_collect(
+            collected_events = await subscribe_collect(
                 COLLECT_ACTIONS["log_tail"],
                 variables={"path": path},
                 collect_for=collect_for,
@@ -234,6 +234,7 @@ async def _handle_live(
                     else None
                 ),
             )
+            events: list[dict[str, Any]] = collected_events
             if level is not None:
                 # Defensive/idempotent fallback for alternate collectors and
                 # tests; the production collector applies this before retention.
@@ -242,7 +243,7 @@ async def _handle_live(
             # window can't flood the agent's context. The byte budget additionally
             # stops a few multi-KB log events from tripping the response backstop.
             capped, meta = cap_list(events, limit, byte_budget=_LIVE_EVENT_BYTE_BUDGET)
-            meta = _preserve_collection_truncation(events, meta)
+            meta = _preserve_collection_truncation(collected_events, meta)
             return {
                 "success": True,
                 "subaction": subaction,

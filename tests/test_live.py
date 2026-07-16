@@ -388,6 +388,29 @@ async def test_log_tail_level_filters_events(_mock_subscribe_collect):
 
 
 @pytest.mark.asyncio
+async def test_filtered_log_tail_preserves_runtime_truncation(_mock_subscribe_collect):
+    from unraid_mcp.subscriptions.snapshot import CollectedEvents
+
+    _mock_subscribe_collect.return_value = CollectedEvents(
+        [{"logFile": {"content": "[ERROR] boom"}}],
+        truncation_reason="max_bytes",
+    )
+
+    result = await _make_tool()(
+        action="live",
+        subaction="log_tail",
+        path="/var/log/syslog",
+        level="error",
+        context=0,
+    )
+
+    assert result["page"]["truncated"] is True
+    assert result["page"]["total"] == 2
+    assert result["page"]["total_is_lower_bound"] is True
+    assert result["page"]["runtime_truncation_reason"] == "max_bytes"
+
+
+@pytest.mark.asyncio
 async def test_log_tail_no_level_unchanged(_mock_subscribe_collect):
     _mock_subscribe_collect.return_value = [
         {"logFile": {"path": "/var/log/syslog", "content": "a info\nb [ERROR] boom"}}
