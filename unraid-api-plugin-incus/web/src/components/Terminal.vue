@@ -23,6 +23,7 @@ const OUTPUT_SUBSCRIPTION = `subscription($sessionId: String!) { jailExecOutput(
 const containerEl = ref<HTMLDivElement | null>(null);
 const error = ref<string | null>(null);
 const status = ref<"connecting" | "connected" | "disconnected">("connecting");
+let transportErrorShown = false;
 
 let term: GhosttyTerminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -115,12 +116,19 @@ async function start() {
   );
 
   onDataDisposable = term.onData((data) => {
-    if (sessionId) void gql(INPUT_MUTATION, { sessionId, data }).catch(() => {});
+    if (sessionId) void gql(INPUT_MUTATION, { sessionId, data }).catch(handleTransportError);
   });
 
   onResizeDisposable = term.onResize(({ cols, rows }) => {
-    if (sessionId) void gql(RESIZE_MUTATION, { sessionId, cols, rows }).catch(() => {});
+    if (sessionId) void gql(RESIZE_MUTATION, { sessionId, cols, rows }).catch(handleTransportError);
   });
+}
+
+function handleTransportError(value: unknown) {
+  if (transportErrorShown) return;
+  transportErrorShown = true;
+  error.value = value instanceof Error ? value.message : String(value);
+  status.value = "disconnected";
 }
 
 async function stop() {
@@ -130,7 +138,7 @@ async function stop() {
   unsubscribe?.();
   term?.dispose();
   if (sessionId) {
-    await gql(STOP_MUTATION, { sessionId }).catch(() => {});
+    await gql(STOP_MUTATION, { sessionId }).catch(handleTransportError);
   }
 }
 

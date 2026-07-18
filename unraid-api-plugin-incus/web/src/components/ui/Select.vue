@@ -7,6 +7,8 @@ import { cn } from "../../lib/utils";
 const props = defineProps<{
   modelValue?: string;
   class?: string;
+  id?: string;
+  disabled?: boolean;
 }>();
 
 const emits = defineEmits<{ (e: "update:modelValue", payload: string): void }>();
@@ -17,7 +19,9 @@ const modelValue = useVModel(props, "modelValue", emits, { passive: true });
 <template>
   <div :class="cn('relative inline-block', props.class)">
     <select
+      :id="id"
       v-model="modelValue"
+      :disabled="disabled"
       class="border-input bg-background ring-offset-background focus-visible:ring-ring h-10 w-full cursor-pointer appearance-none rounded-md border py-2 pr-8 pl-3 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
     >
       <slot />

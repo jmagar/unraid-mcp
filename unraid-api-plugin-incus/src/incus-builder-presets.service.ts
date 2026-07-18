@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { BuilderPreset, BuilderPresetInput } from "./config.entity.js";
+import { JsonArrayStore } from "./json-store.js";
 
 /**
  * Saveable distrobuilder presets (distro/release/packages), persisted as a
@@ -11,7 +11,10 @@ import { BuilderPreset, BuilderPresetInput } from "./config.entity.js";
  */
 @Injectable()
 export class IncusBuilderPresetsService {
-  constructor(private readonly config: ConfigService) {}
+  private readonly store: JsonArrayStore<BuilderPreset>;
+  constructor(private readonly config: ConfigService) {
+    this.store = new JsonArrayStore(() => this.filePath, isBuilderPreset);
+  }
 
   private get filePath(): string {
     const dir = this.config.get<string>("incus.stateDir", "/mnt/user/appdata/incus");
@@ -19,46 +22,36 @@ export class IncusBuilderPresetsService {
   }
 
   async list(): Promise<BuilderPreset[]> {
-    return this.readAll();
+    return this.store.read();
   }
 
   async save(input: BuilderPresetInput): Promise<BuilderPreset> {
-    const presets = await this.readAll();
     const preset: BuilderPreset = {
       name: input.name,
       distro: input.distro,
       release: input.release,
       packages: input.packages,
     };
-    const idx = presets.findIndex((p) => p.name === input.name);
-    if (idx >= 0) {
-      presets[idx] = preset;
-    } else {
-      presets.push(preset);
-    }
-    await this.writeAll(presets);
-    return preset;
+    return this.store.update((presets) => {
+      const idx = presets.findIndex((p) => p.name === input.name);
+      if (idx >= 0) presets[idx] = preset;
+      else presets.push(preset);
+      return preset;
+    });
   }
 
   async remove(name: string): Promise<boolean> {
-    const presets = await this.readAll();
-    const next = presets.filter((p) => p.name !== name);
-    if (next.length === presets.length) return false;
-    await this.writeAll(next);
-    return true;
+    return this.store.update((presets) => {
+      const idx = presets.findIndex((p) => p.name === name);
+      if (idx < 0) return false;
+      presets.splice(idx, 1);
+      return true;
+    });
   }
+}
 
-  private async readAll(): Promise<BuilderPreset[]> {
-    try {
-      const data = await readFile(this.filePath, "utf-8");
-      return JSON.parse(data);
-    } catch {
-      return [];
-    }
-  }
-
-  private async writeAll(presets: BuilderPreset[]): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await writeFile(this.filePath, JSON.stringify(presets, null, 2), "utf-8");
-  }
+function isBuilderPreset(value: unknown): value is BuilderPreset {
+  const item = value as Partial<BuilderPreset> | null;
+  return !!item && typeof item.name === "string" && typeof item.distro === "string" &&
+    typeof item.release === "string" && Array.isArray(item.packages) && item.packages.every((p) => typeof p === "string");
 }

@@ -12,12 +12,8 @@ on:
       - ".github/workflows/api-plugin-ci.yml"
   workflow_dispatch:
 
-# This covers the two fully-reproducible build steps of the plugin: the
-# NestJS/GraphQL backend and its Vue frontend. It does NOT cover the classic
-# .txz OS package (incusd/lxcfs/distrobuilder/debootstrap binaries) — that
-# repackaging isn't currently scripted anywhere (see CLAUDE.md's "Deploying"
-# section: builds are carried forward from the previous .txz's extracted
-# contents, not rebuilt from a documented recipe), so it's out of scope here.
+# This covers the NestJS/GraphQL backend and Vue frontend. Classic package
+# verification is handled by classic-plugin-ci.yml.
 
 jobs:
   backend:
@@ -27,9 +23,9 @@ jobs:
       run:
         working-directory: unraid-api-plugin-incus
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
@@ -45,18 +41,24 @@ jobs:
       - name: Install peer dependencies for typecheck (host-provided at real deploy time)
         run: |
           npm install --no-save --no-package-lock \
-            @nestjs/common@latest @nestjs/config@latest @nestjs/graphql@latest \
-            class-transformer@latest class-validator@latest \
+            @nestjs/common@11.1.28 @nestjs/config@4.0.4 @nestjs/graphql@13.4.2 \
+            class-transformer@0.5.1 class-validator@0.15.1 \
             @unraid/shared@file:.ci-stubs/unraid-shared
 
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Unit tests
+        run: npm test
+
+      - name: Enforce coverage floor
+        run: npm run test:coverage
+
       - name: Build
         run: npx tsc
 
       - name: Upload dist/
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: unraid-api-plugin-incus-dist
           path: unraid-api-plugin-incus/dist/
@@ -69,9 +71,9 @@ jobs:
       run:
         working-directory: unraid-api-plugin-incus/web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
@@ -82,18 +84,32 @@ jobs:
       - name: Typecheck
         run: npx vue-tsc --noEmit
 
+      - name: Unit tests
+        run: npm test
+
+      - name: Enforce coverage floor
+        run: npm run test:coverage
+
       - name: Build (both bundles — npm run build chains build:settings + build:dashboard)
         run: npm run build
 
+      - name: Verify deployed bundles match frontend source build
+        run: |
+          for asset in ../../unraid-api-plugin-incus/dist-web/*; do
+            cmp "$asset" "../../source/usr/local/emhttp/plugins/incus/web/$(basename "$asset")"
+          done
+          cmp ../../unraid-api-plugin-incus/dist-web-dashboard/incus-dashboard.js \
+            ../../source/usr/local/emhttp/plugins/incus/web/incus-dashboard.js
+
       - name: Upload incus-settings bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incus-settings-bundle
           path: unraid-api-plugin-incus/dist-web/
           retention-days: 14
 
       - name: Upload incus-dashboard bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: incus-dashboard-bundle
           path: unraid-api-plugin-incus/dist-web-dashboard/

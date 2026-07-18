@@ -44,6 +44,14 @@ JAIL_MEMORY="${JAIL_MEMORY:-4GiB}"
 JAIL_WORKSPACE_ROOT="${JAIL_WORKSPACE_ROOT:-/srv/agent-jails}"
 JAIL_AGENT_UID="${JAIL_AGENT_UID:-1000}"
 JAIL_AGENT_GID="${JAIL_AGENT_GID:-1000}"
+JAIL_BIND_MOUNTS="${JAIL_BIND_MOUNTS:-}"
+
+# The ACL rendered below currently covers IPv4 only. Fail closed instead of
+# accepting an IPv6 bridge address that bypasses the advertised containment.
+if [ "$JAIL_IPV6" != "none" ]; then
+  log "FATAL: JAIL_IPV6 must remain 'none' until an IPv6 containment ACL is configured"
+  exit 1
+fi
 
 # ---------- 0. subordinate uid/gid range for root (unprivileged containers) ----------
 # Real Debian/Ubuntu Incus packages populate /etc/subuid and /etc/subgid for
@@ -210,7 +218,7 @@ if [ ! -f "$TMPL" ]; then
   exit 1
 fi
 render() {
-  local out
+  local out bind_yaml
   out=$(sed -e "s|@PROFILE@|${JAIL_PROFILE}|g" \
             -e "s|@BRIDGE@|${JAIL_BRIDGE}|g" \
             -e "s|@NESTING@|${JAIL_NESTING}|g" \
@@ -228,7 +236,42 @@ render() {
   else
     out=$(echo "$out" | grep -v '@MEMORY@')
   fi
+  bind_yaml="$(render_bind_mounts)" || return 1
+  [ -z "$bind_yaml" ] || out="${out}
+${bind_yaml}"
   echo "$out"
+}
+
+# Convert comma-separated host:container[:ro] entries into profile disk
+# devices. Manual incus.cfg edits are validated here as well as in GraphQL so
+# malformed paths cannot become YAML or arbitrary host mounts.
+render_bind_mounts() {
+  local item host target mode extra index=0 old_ifs
+  [ -z "${JAIL_BIND_MOUNTS// /}" ] && return 0
+  old_ifs="$IFS"
+  IFS=,
+  for item in $JAIL_BIND_MOUNTS; do
+    IFS=: read -r host target mode extra <<<"$item"
+    IFS="$old_ifs"
+    [ -n "$host" ] && [ -n "$target" ] && [ -z "$extra" ] || {
+      log "FATAL: invalid JAIL_BIND_MOUNTS entry '$item' (expected host:container[:ro])" >&2
+      return 1
+    }
+    mode="${mode:-rw}"
+    case "$host" in /*) ;; *) log "FATAL: bind source must be absolute: $host" >&2; return 1 ;; esac
+    case "$target" in /*) ;; *) log "FATAL: bind target must be absolute: $target" >&2; return 1 ;; esac
+    case "$host:$target" in *[!A-Za-z0-9_./:-]*) log "FATAL: unsupported character in bind mount '$item'" >&2; return 1 ;; esac
+    [ -e "$host" ] || { log "FATAL: bind source does not exist: $host" >&2; return 1; }
+    [ "$mode" = "rw" ] || [ "$mode" = "ro" ] || {
+      log "FATAL: bind mode must be ro or rw: $item" >&2; return 1
+    }
+    printf '  config-bind-%s:\n' "$index"
+    printf '    type: disk\n    source: "%s"\n    path: "%s"\n    shift: "true"\n' "$host" "$target"
+    [ "$mode" = "ro" ] && printf '    readonly: "true"\n'
+    index=$((index + 1))
+    IFS=,
+  done
+  IFS="$old_ifs"
 }
 if ! "$INCUS" profile show "$JAIL_PROFILE" </dev/null >/dev/null 2>&1; then
   log "creating profile ${JAIL_PROFILE}"

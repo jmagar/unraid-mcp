@@ -1,10 +1,12 @@
 # incus-unraid — LAN-Banned Agent Dev Containers for Unraid
 
 Run coding agents and stdio MCP servers inside Incus system containers on
-Unraid. Each container gets a dedicated NAT bridge that is **firewalled off
-from your LAN** (egress deny-list) while keeping **Internet access** — so an
-agent, or a compromised dependency in its toolchain, can't reach your NAS,
-routers, or internal services.
+Unraid. Each container gets a dedicated IPv4 NAT bridge whose default egress
+ACL rejects RFC1918, link-local, and Tailscale CGNAT ranges while preserving
+public Internet access. IPv6 is deliberately disabled until equivalent IPv6
+policy exists. This is deny-list containment, not a general security boundary:
+operators must test their actual NAS/router/service addresses and any explicit
+allow-holes before placing untrusted workloads inside it.
 
 Modeled on the pattern from [weisser-zwerg.dev's Incus Codex Jail](https://weisser-zwerg.dev/posts/incus-codex-jail/), adapted for Unraid's plugin system and RAM-booted Slackware environment.
 
@@ -36,7 +38,7 @@ type, `JAIL_*` config keys, `launchJail`/`deleteJail` mutations) still say
 │                                                      │
 │  ┌─── agentbr0 (198.18.0.1/24) ───┐                 │
 │  │  agent1   agent2   agent3  ...  │                 │
-│  │  ✓ Internet  ✗ LAN  ✗ NAS      │                 │
+│  │  ✓ Internet  ✗ LAN/NAS/tailnet │                 │
 │  └─────────────────────────────────┘                │
 └──────────────────────────────────────────────────────┘
 ```
@@ -77,8 +79,8 @@ Single source of truth for both the shell init and the API plugin. Current defau
 | `STORAGE_SOURCE` | `nvme/incus` | Only used when `STORAGE_DRIVER=zfs`; ignored for `dir` |
 | `STORAGE_POOL_NAME` | `default` | Incus storage pool name |
 | `JAIL_BRIDGE` / `JAIL_SUBNET` | `agentbr0` / `198.18.0.1/24` | RFC 2544 benchmark range, won't collide with home LANs |
-| `JAIL_NAT` / `JAIL_IPV6` | `true` / `none` | |
-| `ACL_BLOCK` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16` | LAN ban (egress reject list). **Tailscale CGNAT `100.64.0.0/10` intentionally NOT blocked** |
+| `JAIL_NAT` / `JAIL_IPV6` | `true` / `none` | IPv6 must remain `none`; initialization fails closed otherwise |
+| `ACL_BLOCK` | `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,100.64.0.0/10` | LAN, link-local, and Tailscale CGNAT egress reject list |
 | `ACL_ALLOW` | *(empty)* | Allow-holes punched before the block rules (e.g. a local LLM / Axon) |
 | `ACL_DEFAULT_EGRESS` / `ACL_DEFAULT_INGRESS` | `allow` / `drop` | Deny-list model — Internet allowed by default, block rules still apply |
 | `JAIL_IMAGE` | `images:debian/trixie/cloud` | Must be a `/cloud` variant for cloud-init |
@@ -123,19 +125,50 @@ Single source of truth for both the shell init and the API plugin. Current defau
 - **Exec/terminal** — in-container shell access over GraphQL subscriptions
   (`graphql-ws` on the same `/graphql` endpoint as the rest of the API).
 
-## Install
+## Install and compatibility
 
-1. Install the `.plg` (Community Apps or direct plugin URL) — it lays down
+The classic `.plg` and the `unraid-api-plugin-incus` backend are separate host
+integration points. A release package may carry the matching API payload and
+install it transactionally; older/classic-only artifacts do not. Requirements:
+
+- x86_64 Unraid host with glibc 2.38 or newer and user namespaces;
+- a real persistent `INCUS_DIR` and workspace root;
+- Node.js 22-compatible `unraid-api` when using the settings/backend features;
+- release values matching `release-manifest.json`.
+
+1. Install the `.plg` (Community Apps or direct plugin URL after release assets
+   are publicly accessible) — it lays down
    the repackaged Incus runtime under `/usr/local/incus/` and a default
    `incus.cfg` (never overwriting an existing one).
-2. Edit `/boot/config/plugins/incus/incus.cfg` (or use the Config tab once
-   the API plugin is deployed): set `SERVICE=enabled`, adjust
+2. Check `/var/log/syslog` for either `API plugin installed and verified` or
+   the explicit `classic-only mode` message. In classic-only mode, the Incus
+   CLI/lifecycle works but the Settings tabs, builder registry, GraphQL launch,
+   dashboard widget, and browser terminal require deployment of the API plugin.
+3. For a development/manual API deployment, build `unraid-api-plugin-incus`,
+   stage its `dist/`, `package.json`, and locked production `node_modules` as
+   `/usr/local/emhttp/plugins/incus/api-plugin/`, then run:
+
+   ```bash
+   /usr/local/emhttp/plugins/incus/scripts/install-api-plugin.sh
+   grep IncusPluginModule /var/log/graphql-api.log
+   ```
+
+   The installer keeps `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus.rollback`
+   and restores it if reload verification fails.
+4. Edit `/boot/config/plugins/incus/incus.cfg` (or use the Config tab after
+   API verification): set `SERVICE=enabled`, adjust
    `JAIL_WORKSPACE_ROOT` to a real device mount, and `STORAGE_SOURCE` if
    using `zfs`.
-3. Start the array (or manually: `/etc/rc.d/rc.incus start &&
+5. Start the array (or manually: `/etc/rc.d/rc.incus start &&
    /usr/local/emhttp/plugins/incus/scripts/incus-init.sh`).
-4. Preflight gates the daemon — check `/var/log/incusd.log` if it refuses to
-   start.
+6. Preflight gates the daemon. Check `/var/log/incusd.log` and
+   `$INCUS_DIR/plugin-health`; failed startup rolls back partial daemon/lxcfs
+   state. Config Apply restores `incus.cfg.known-good` on reconciliation failure.
+
+To uninstall, use the Unraid plugin manager. It stops Incus, removes the API
+backend and reloads `unraid-api`, then removes the classic package while leaving
+`INCUS_DIR` and flash configuration for recovery. Back up those paths before
+manually deleting persistent data.
 
 ## Launch a Container
 
@@ -144,9 +177,12 @@ Single source of truth for both the shell init and the API plugin. Current defau
 /usr/local/incus/bin/incus launch images:debian/trixie/cloud agent1 \
   --profile default --profile agent-jail
 
-# Verify the LAN ban
+# Verify representative policy paths (also run tests/live-isolation.sh on a
+# disposable host and test your actual NAS/router/service addresses)
 incus exec agent1 -- nc -vz -w2 1.1.1.1 443        # ✓ Internet
 incus exec agent1 -- nc -vz -w2 192.168.1.1 22     # ✗ BLOCKED
+incus exec agent1 -- nc -vz -w2 100.64.0.1 443     # ✗ tailnet BLOCKED
+incus exec agent1 -- ip -6 route                    # no IPv6 default route
 ```
 
 Or via GraphQL once the API plugin is loaded (or from the settings page's
@@ -159,13 +195,25 @@ mutation { launchJail(name: "agent1") }
 
 - **No system-lib pollution** — Incus runs from `/usr/local/incus/` with a
   scoped `LD_LIBRARY_PATH`; nothing else on the box sees its libraries.
-- **Preflight gate** — Won't start if the host can't run it; changes nothing
-  on failure. `incusd` also needs `nft` and `unsquashfs` on `PATH` or the
+- **Transactional lifecycle** — Preflight runs before startup; later readiness
+  failure cleans up incusd/lxcfs/PID state. `incusd` also needs `nft` and `unsquashfs` on `PATH` or the
   ACL/build steps hang rather than error.
 - **RAM-boot escape hatch** — Reboot restores a pristine OS; only
   `INCUS_DIR` (on the array) persists.
 - **Container egress is deny-listed** via Incus network ACLs (nftables under
-  the hood).
+  the hood). Default blocked IPv4 ranges are listed above; explicit allow-holes
+  reduce containment and must be reviewed and tested.
+
+## Release, verification, and rollback
+
+`MANIFEST.md` documents the exact artifact hash, provenance limits, build
+procedure, and payload boundary. Maintainers must run backend tests/typechecks,
+frontend typecheck/build, `scripts/verify-classic-package.sh`, and the live
+isolation suite before release. The installer verifies SHA-256 before privileged
+installation and retains one previous `.txz`; API deployment retains one prior
+backend directory. The repository is currently private, so anonymous direct URL
+or Community Apps distribution remains unavailable until immutable release
+assets are published publicly.
 
 ## Repository Structure
 

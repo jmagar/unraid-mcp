@@ -12,17 +12,24 @@ const CFG_LOCK_MAX_RETRIES = 5; // ~1s total, for applyConfigUpdate's "wait a bi
 export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(IncusConfigSyncService.name);
   private cfgWatcher?: FSWatcher;
-  private jsonWatcher?: FSWatcher;
   private isSyncing = false;
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>();
+  private destroyed = false;
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly configService: ConfigService,
+    paths?: { cfgPath: string; jsonPath: string },
+  ) {
+    this.cfgPath = paths?.cfgPath ?? (existsSync("/boot/config/plugins/incus/incus.cfg")
+      ? "/boot/config/plugins/incus/incus.cfg" : join(process.cwd(), "incus.cfg"));
+    this.jsonPath = paths?.jsonPath ?? (process.env.PATHS_CONFIG_MODULES
+      ? join(process.env.PATHS_CONFIG_MODULES, "incus.json") : join(process.cwd(), "incus.json"));
+    this.cfgLockPath = `${this.cfgPath}.lock`;
+  }
 
   // Primary paths on Unraid, with fallbacks for development/testing
-  private readonly cfgPath = existsSync("/boot/config/plugins/incus/incus.cfg")
-    ? "/boot/config/plugins/incus/incus.cfg"
-    : join(process.cwd(), "incus.cfg");
-
-  private readonly cfgLockPath = `${this.cfgPath}.lock`;
+  private readonly cfgPath: string;
+  private readonly cfgLockPath: string;
 
   // The persisted JSON lives wherever @unraid/shared's ConfigFilePersister
   // puts it — PATHS_CONFIG_MODULES + "incus.json" (e.g.
@@ -30,15 +37,13 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   // this plugin's own /boot/config/plugins/incus/ directory. Hardcoding the
   // latter silently watched/wrote the wrong file (or a disconnected
   // dev-cwd fallback) on every real deployment.
-  private readonly jsonPath = process.env.PATHS_CONFIG_MODULES
-    ? join(process.env.PATHS_CONFIG_MODULES, "incus.json")
-    : join(process.cwd(), "incus.json");
+  private readonly jsonPath: string;
 
-  onModuleInit() {
+  async onModuleInit() {
     this.logger.log(`Initializing config sync (cfg: ${this.cfgPath}, json: ${this.jsonPath})`);
     
     // 1. Perform initial sync (shell incus.cfg is the ultimate system source of truth)
-    void this.syncCfgToJSON();
+    await this.syncCfgToJSON();
 
     // 2. Start watching both files
     this.setupWatchers();
@@ -46,7 +51,9 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.cfgWatcher?.close();
-    this.jsonWatcher?.close();
+    this.destroyed = true;
+    for (const timer of this.timers) clearTimeout(timer);
+    this.timers.clear();
   }
 
   /**
@@ -150,67 +157,12 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Reads incus.json, and updates incus.cfg line-by-line while preserving comments and other settings.
-   */
-  private async syncJSONToCfg(retriesLeft = 5) {
-    if (this.isSyncing) return;
-    if (!existsSync(this.jsonPath)) return;
-
-    // Unlike syncCfgToJSON (which just re-reads the same source of truth on
-    // the next fs event if it skips a cycle), the JSON change we're trying to
-    // sync right now has already happened — giving up permanently on lock
-    // contention could silently drop it forever if nothing touches
-    // incus.json again. Bounded retry instead of one attempt.
-    const lockToken = await this.acquireCfgLock(0);
-    if (!lockToken) {
-      if (retriesLeft > 0) {
-        this.logger.debug(`incus.cfg is locked; retrying json->cfg sync in ${CFG_LOCK_RETRY_MS}ms (${retriesLeft} left)`);
-        setTimeout(() => void this.syncJSONToCfg(retriesLeft - 1), CFG_LOCK_RETRY_MS);
-      } else {
-        this.logger.warn(`incus.cfg stayed locked after repeated retries; giving up on this json->cfg sync cycle`);
-      }
-      return;
-    }
-
-    try {
-      this.isSyncing = true;
-      const jsonContent = readFileSync(this.jsonPath, "utf-8");
-      const parsedJson: Partial<IncusConfig> = JSON.parse(jsonContent);
-
-      if (!existsSync(this.cfgPath)) {
-        this.logger.warn(`incus.cfg not found at ${this.cfgPath}, cannot sync from JSON`);
-        return;
-      }
-
-      const cfgContent = readFileSync(this.cfgPath, "utf-8");
-      const parsedCfg = this.parseShellConfig(cfgContent);
-      const mappedConfig = this.mapShellToTS(parsedCfg);
-
-      // Check if sync is actually needed to avoid redundant writes
-      if (this.isConfigDifferent(mappedConfig, parsedJson)) {
-        this.logger.log(`Syncing changes from incus.json to incus.cfg`);
-        const updatedCfgContent = this.updateShellConfig(cfgContent, parsedJson);
-        this.writeFileAtomic(this.cfgPath, updatedCfgContent);
-        this.configService.set("incus", { ...mappedConfig, ...parsedJson });
-      }
-    } catch (err) {
-      this.logger.error(`Error syncing incus.json to incus.cfg: ${(err as Error).message}`);
-    } finally {
-      this.isSyncing = false;
-      this.releaseCfgLock(lockToken);
-    }
-  }
-
-  /**
    * Set up watches on both files to propagate live edits.
    */
   private setupWatchers() {
     try {
       if (existsSync(this.cfgPath)) {
         this.cfgWatcher = this.watchResilient(this.cfgPath, () => void this.syncCfgToJSON(), (w) => (this.cfgWatcher = w));
-      }
-      if (existsSync(this.jsonPath)) {
-        this.jsonWatcher = this.watchResilient(this.jsonPath, () => void this.syncJSONToCfg(), (w) => (this.jsonWatcher = w));
       }
     } catch (err) {
       this.logger.warn(`Failed to set up config file watchers: ${(err as Error).message}`);
@@ -228,7 +180,8 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
     const watcher = watch(path, (event) => {
       if (event === "rename") {
         watcher.close();
-        setTimeout(() => {
+        this.schedule(() => {
+          if (this.destroyed) return;
           if (existsSync(path)) {
             setRef(this.watchResilient(path, onChange, setRef));
           } else {
@@ -239,9 +192,18 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       // Debounce slightly to allow writes to finish
-      setTimeout(onChange, 100);
+      this.schedule(onChange, 100);
     });
     return watcher;
+  }
+
+  private schedule(callback: () => void, delay: number): void {
+    if (this.destroyed) return;
+    const timer = setTimeout(() => {
+      this.timers.delete(timer);
+      if (!this.destroyed) callback();
+    }, delay);
+    this.timers.add(timer);
   }
 
   /**
@@ -298,8 +260,8 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       if (eqIdx > 0) {
         const key = trimmed.substring(0, eqIdx).trim();
         let val = trimmed.substring(eqIdx + 1).trim();
-        // Remove trailing comment if any (e.g. KEY="VAL" # comment)
-        const hashIdx = val.indexOf("#");
+        // Remove only an unquoted trailing comment; # is valid inside quoted values.
+        const hashIdx = this.findUnquotedHash(val);
         if (hashIdx >= 0) {
           val = val.substring(0, hashIdx).trim();
         }
@@ -311,6 +273,21 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return result;
+  }
+
+  private findUnquotedHash(value: string): number {
+    let quote: "'" | '"' | undefined;
+    let escaped = false;
+    for (let i = 0; i < value.length; i++) {
+      const char = value[i];
+      if (escaped) { escaped = false; continue; }
+      if (char === "\\" && quote === '"') { escaped = true; continue; }
+      if (char === "'" || char === '"') {
+        if (!quote) quote = char;
+        else if (quote === char) quote = undefined;
+      } else if (char === "#" && !quote) return i;
+    }
+    return -1;
   }
 
   /**
@@ -342,7 +319,10 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
     if (shell.JAIL_AGENT_UID !== undefined) config.jailAgentUid = shell.JAIL_AGENT_UID;
     if (shell.JAIL_AGENT_GID !== undefined) config.jailAgentGid = shell.JAIL_AGENT_GID;
     if (shell.JAIL_BIND_MOUNTS !== undefined) config.jailBindMounts = shell.JAIL_BIND_MOUNTS;
-    if (shell.TS_AUTHKEY !== undefined) config.tsAuthKey = shell.TS_AUTHKEY;
+    if (shell.TS_AUTHKEY !== undefined) {
+      config.tsAuthKey = shell.TS_AUTHKEY;
+      config.tsAuthKeyConfigured = shell.TS_AUTHKEY.length > 0;
+    }
     if (shell.DASHBOARD_WIDGET_ENABLE !== undefined) {
       config.dashboardWidgetEnable = shell.DASHBOARD_WIDGET_ENABLE === "true";
     }
@@ -429,7 +409,9 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
    */
   private writeFileAtomic(path: string, content: string): void {
     const tmpPath = `${path}.tmp-${process.pid}`;
-    const mode = existsSync(path) ? statSync(path).mode & 0o777 : 0o600;
+    // Both files can contain write-only credentials; never preserve a legacy
+    // world-readable mode.
+    const mode = 0o600;
     writeFileSync(tmpPath, content, { encoding: "utf-8", mode });
     renameSync(tmpPath, path);
   }
@@ -458,7 +440,7 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
    */
   updateShellConfig(content: string, updates: Partial<IncusConfig>): string {
     const lines = content.split(/\r?\n/);
-    const keyMap: Record<keyof IncusConfig, string> = {
+    const keyMap: Partial<Record<keyof IncusConfig, string>> = {
       enabled: "SERVICE",
       stateDir: "INCUS_DIR",
       storageDriver: "STORAGE_DRIVER",
@@ -506,7 +488,7 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
           const originalRightHand = trimmed.substring(eqIdx + 1).trim();
           // Retain comments if they were on the same line
-          const hashIdx = originalRightHand.indexOf("#");
+          const hashIdx = this.findUnquotedHash(originalRightHand);
           const comment = hashIdx >= 0 ? originalRightHand.substring(hashIdx) : "";
 
           // incus.cfg is sourced directly as a bash script (`. "$CFG"`) by

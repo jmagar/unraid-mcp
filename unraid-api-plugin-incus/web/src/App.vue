@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Button, Switch, Badge, Input, Select, Label, HelpText } from "./components/ui";
-import Terminal from "./components/Terminal.vue";
 import { gql } from "./graphql-client";
-import * as TOML from "smol-toml";
+import { startPolling, type PollController } from "./lib/polling";
+import { buildConfigUpdate } from "./lib/configPayload";
+import { useResourceMetrics } from "./composables/useResourceMetrics";
+import {
+  CONFIG_QUERY, STATUS_QUERY, UPDATE_CONFIG_MUTATION, SET_JAIL_STATE_MUTATION, DELETE_JAIL_MUTATION,
+  LAUNCH_JAIL_MUTATION, JAIL_DETAIL_QUERY, GRANT_JAIL_SUDO_MUTATION, START_PRIVILEGED_COMMAND_MUTATION,
+  PRIVILEGED_COMMAND_STATUS_QUERY, SET_JAIL_WORKSPACE_MUTATION, CLEAR_JAIL_WORKSPACE_MUTATION,
+  SET_JAIL_LIMITS_MUTATION, BUILD_JAIL_IMAGE_MUTATION, DELETE_JAIL_IMAGE_MUTATION,
+  SEARCH_ALL_PACKAGES_QUERY, BUILD_STATUS_QUERY, BUILDER_PRESETS_QUERY, SAVE_BUILDER_PRESET_MUTATION,
+  DELETE_BUILDER_PRESET_MUTATION, JAIL_IMAGES_QUERY, SET_MASTER_IMAGE_MUTATION,
+  PRUNE_STALE_IMAGE_RECORDS_MUTATION, DELETE_STOPPED_JAILS_MUTATION, MIGRATE_JAIL_WORKSPACE_MUTATION,
+  INSTALL_HOMEBREW_FORMULA_MUTATION, HOMEBREW_INSTALL_STATUS_QUERY,
+} from "./graphql/operations";
 import type {
   IncusConfig,
   Jail,
@@ -21,103 +32,7 @@ import type {
   PackageSearchError,
 } from "./types";
 
-const CONFIG_QUERY = `
-  query { incusConfig {
-    enabled stateDir storageDriver storageSource storagePoolName
-    jailBridge jailSubnet jailNat jailIpv6
-    aclName aclBlock aclAllow aclDefaultEgress aclDefaultIngress
-    jailProfile jailImage jailNesting jailCpu jailMemory
-    jailWorkspaceRoot jailAgentUid jailAgentGid jailBindMounts tsAuthKey
-    dashboardWidgetEnable
-  } }
-`;
-const STATUS_QUERY = `
-  query { incusHealthy jails { name status ipv4 cpuUsageNs memoryUsageBytes memoryTotalBytes } }
-`;
-const UPDATE_CONFIG_MUTATION = `
-  mutation($input: IncusConfigInput!) { updateIncusConfig(input: $input) { enabled } }
-`;
-const SET_JAIL_STATE_MUTATION = `
-  mutation($name: String!, $action: JailAction!) { setJailState(name: $name, action: $action) }
-`;
-const DELETE_JAIL_MUTATION = `mutation($name: String!) { deleteJail(name: $name) }`;
-const LAUNCH_JAIL_MUTATION = `
-  mutation($name: String!, $image: String, $allowSudo: Boolean) {
-    launchJail(name: $name, image: $image, allowSudo: $allowSudo)
-  }
-`;
-const JAIL_DETAIL_QUERY = `
-  query($name: String!) { jailDetail(name: $name) {
-    name profiles imageOs imageRelease imageDescription storagePool networkBridge
-    cpuLimit cpuLimitIsOverride memoryLimit memoryLimitIsOverride workspaceHostPath workspaceIsOverride
-    sudoEnabled
-  } }
-`;
-const GRANT_JAIL_SUDO_MUTATION = `mutation($name: String!) { grantJailSudo(name: $name) }`;
-const START_PRIVILEGED_COMMAND_MUTATION = `
-  mutation($name: String!, $command: String!) { startPrivilegedCommand(name: $name, command: $command) }
-`;
-const PRIVILEGED_COMMAND_STATUS_QUERY = `
-  query($id: String!) { privilegedCommandStatus(id: $id) { id command status exitCode stdout stderr message } }
-`;
-const SET_JAIL_WORKSPACE_MUTATION = `
-  mutation($name: String!, $hostPath: String!) { setJailWorkspace(name: $name, hostPath: $hostPath) }
-`;
-const CLEAR_JAIL_WORKSPACE_MUTATION = `mutation($name: String!) { clearJailWorkspace(name: $name) }`;
-const SET_JAIL_LIMITS_MUTATION = `
-  mutation($name: String!, $cpu: String, $memory: String) { setJailLimits(name: $name, cpu: $cpu, memory: $memory) }
-`;
-const BUILD_JAIL_IMAGE_MUTATION = `
-  mutation(
-    $distro: String!, $release: String!, $packages: [String!]!, $alias: String!,
-    $basedOn: String, $postInstallCommands: [String!]
-  ) {
-    buildJailImage(
-      distro: $distro, release: $release, packages: $packages, alias: $alias,
-      basedOn: $basedOn, postInstallCommands: $postInstallCommands
-    )
-  }
-`;
-const DELETE_JAIL_IMAGE_MUTATION = `mutation($alias: String!) { deleteJailImage(alias: $alias) }`;
-const SEARCH_ALL_PACKAGES_QUERY = `
-  query($query: String!, $distro: String, $release: String) {
-    searchAllPackages(query: $query, distro: $distro, release: $release) {
-      results { ecosystem name description version }
-      errors { ecosystem message }
-    }
-  }
-`;
-const BUILD_STATUS_QUERY = `
-  query($buildId: String!) {
-    jailImageBuildStatus(buildId: $buildId) {
-      id status alias distro release packages logTail error
-    }
-  }
-`;
-const BUILDER_PRESETS_QUERY = `
-  query { builderPresets { name distro release packages } }
-`;
-const SAVE_BUILDER_PRESET_MUTATION = `
-  mutation($input: BuilderPresetInput!) { saveBuilderPreset(input: $input) { name } }
-`;
-const DELETE_BUILDER_PRESET_MUTATION = `
-  mutation($name: String!) { deleteBuilderPreset(name: $name) }
-`;
-const JAIL_IMAGES_QUERY = `
-  query { jailImages { alias distro release packages isMaster basedOn createdAt } }
-`;
-const SET_MASTER_IMAGE_MUTATION = `
-  mutation($alias: String!, $isMaster: Boolean!) { setMasterImage(alias: $alias, isMaster: $isMaster) { alias isMaster } }
-`;
-const PRUNE_STALE_IMAGE_RECORDS_MUTATION = `mutation { pruneStaleImageRecords }`;
-const DELETE_STOPPED_JAILS_MUTATION = `mutation { deleteStoppedJails }`;
-const MIGRATE_JAIL_WORKSPACE_MUTATION = `mutation($name: String!) { migrateJailWorkspace(name: $name) }`;
-const INSTALL_HOMEBREW_FORMULA_MUTATION = `
-  mutation($name: String!, $formula: String!) { installHomebrewFormula(name: $name, formula: $formula) }
-`;
-const HOMEBREW_INSTALL_STATUS_QUERY = `
-  query($id: String!) { homebrewInstallStatus(id: $id) { id formula status message } }
-`;
+const Terminal = defineAsyncComponent(() => import("./components/Terminal.vue"));
 
 type Tab = "builder" | "jails" | "config";
 const activeTab = ref<Tab>("jails");
@@ -162,12 +77,20 @@ const config = reactive<IncusConfig>({
   jailAgentUid: "",
   jailAgentGid: "",
   jailBindMounts: "",
-  tsAuthKey: "",
+  tsAuthKeyConfigured: false,
   dashboardWidgetEnable: true,
 });
 
+const {
+  runningJails, stoppedJailsCount, totalMemoryUsageBytes, totalCpuUsageNs, fleetHistory,
+  formatDuration, formatBytes, formatMemory, memoryFillPct, updateCpuSamplesAndHistory,
+  cpuRateLabel, cpuRatePct, cpuRateSuffix, jailCpuHistory, totalCpuRateLabel, sparklinePoints,
+} = useResourceMetrics(jails, () => config.jailCpu);
+
 const isZfs = computed(() => config.storageDriver === "zfs");
 const showTsAuthKey = ref(false);
+const tsAuthKeyReplacement = ref("");
+const clearTsAuthKeyOnSave = ref(false);
 
 async function loadConfig() {
   const data = await gql<{ incusConfig: IncusConfig }>(CONFIG_QUERY);
@@ -212,8 +135,16 @@ async function applySettings() {
   saving.value = true;
   error.value = null;
   try {
-    const input = { ...config };
+    const input = buildConfigUpdate(config, {
+      replacement: tsAuthKeyReplacement.value,
+      clear: clearTsAuthKeyOnSave.value,
+    });
     await gql(UPDATE_CONFIG_MUTATION, { input });
+    if (clearTsAuthKeyOnSave.value || tsAuthKeyReplacement.value) {
+      config.tsAuthKeyConfigured = !clearTsAuthKeyOnSave.value;
+      tsAuthKeyReplacement.value = "";
+      clearTsAuthKeyOnSave.value = false;
+    }
     await refreshStatus();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -446,11 +377,11 @@ const installFormula = ref("");
 const installingFormula = ref(false);
 const installResult = ref("");
 const installError = ref("");
-let installPollHandle: ReturnType<typeof setInterval> | null = null;
+let installPollHandle: PollController | null = null;
 
 function stopInstallPolling() {
   if (installPollHandle !== null) {
-    clearInterval(installPollHandle);
+    installPollHandle.stop();
     installPollHandle = null;
   }
 }
@@ -467,7 +398,7 @@ async function installHomebrewFormula() {
       formula: installFormula.value.trim(),
     });
     const jobId = data.installHomebrewFormula;
-    installPollHandle = setInterval(async () => {
+    installPollHandle = startPolling(async () => {
       try {
         const poll = await gql<{ homebrewInstallStatus: HomebrewInstallStatus | null }>(
           HOMEBREW_INSTALL_STATUS_QUERY,
@@ -520,11 +451,11 @@ async function grantJailSudo() {
 const privilegedCommand = ref("");
 const runningPrivilegedCommand = ref(false);
 const privilegedCommandStatus = ref<PrivilegedCommandStatus | null>(null);
-let privilegedPollHandle: ReturnType<typeof setInterval> | null = null;
+let privilegedPollHandle: PollController | null = null;
 
 function stopPrivilegedPolling() {
   if (privilegedPollHandle !== null) {
-    clearInterval(privilegedPollHandle);
+    privilegedPollHandle.stop();
     privilegedPollHandle = null;
   }
 }
@@ -541,7 +472,7 @@ async function runPrivilegedCommand() {
       command: privilegedCommand.value.trim(),
     });
     const jobId = data.startPrivilegedCommand;
-    privilegedPollHandle = setInterval(async () => {
+    privilegedPollHandle = startPolling(async () => {
       try {
         const poll = await gql<{ privilegedCommandStatus: PrivilegedCommandStatus | null }>(
           PRIVILEGED_COMMAND_STATUS_QUERY,
@@ -569,202 +500,6 @@ function statusBadgeVariant(status: string): "green" | "gray" | "orange" {
   if (s === "running") return "green";
   if (s === "stopped") return "gray";
   return "orange";
-}
-
-// --- Resource usage formatting -------------------------------------------
-
-function formatDuration(ns: number | null | undefined): string {
-  if (ns === null || ns === undefined) return "—";
-  const totalSeconds = Math.floor(ns / 1e9);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  if (minutes > 0) return `${minutes}m ${seconds}s`;
-  return `${seconds}s`;
-}
-
-function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) return "—";
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  const exp = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** exp;
-  return `${value >= 10 || exp === 0 ? Math.round(value) : value.toFixed(1)} ${units[exp]}`;
-}
-
-function formatMemory(jail: Jail): string {
-  if (jail.memoryUsageBytes === null || jail.memoryUsageBytes === undefined) return "—";
-  const used = formatBytes(jail.memoryUsageBytes);
-  if (!jail.memoryTotalBytes) return used;
-  return `${used} / ${formatBytes(jail.memoryTotalBytes)}`;
-}
-
-function memoryFillPct(jail: Jail): number | null {
-  if (!jail.memoryTotalBytes || jail.memoryUsageBytes === null || jail.memoryUsageBytes === undefined) return null;
-  return Math.min(100, Math.round((jail.memoryUsageBytes / jail.memoryTotalBytes) * 100));
-}
-
-const runningJails = computed(() => jails.value.filter((j) => j.status.toLowerCase() === "running"));
-const stoppedJailsCount = computed(() => jails.value.length - runningJails.value.length);
-const totalMemoryUsageBytes = computed(() =>
-  runningJails.value.reduce((sum, j) => sum + (j.memoryUsageBytes ?? 0), 0)
-);
-const totalCpuUsageNs = computed(() => runningJails.value.reduce((sum, j) => sum + (j.cpuUsageNs ?? 0), 0));
-
-// --- Live dashboard: CPU-rate sampling, history, polling ------------------
-
-const POLL_INTERVAL_MS = 5000;
-const HISTORY_LENGTH = 30; // ~2.5 min window at the 5s poll interval
-
-interface CpuSample {
-  atMs: number;
-  cpuUsageNs: number;
-}
-
-interface HistoryPoint {
-  atMs: number;
-  cpuPct: number;
-  memPct: number | null;
-}
-
-// Previous poll's raw sample per jail, used to derive an instantaneous CPU rate.
-const cpuSamples = reactive(new Map<string, CpuSample>());
-// Rolling ring buffer of derived points per jail (last ~2-3 minutes).
-const jailHistory = reactive(new Map<string, HistoryPoint[]>());
-// Fleet-wide rolling history (sum of live rates across running jails).
-const fleetHistory = ref<HistoryPoint[]>([]);
-// Latest computed live CPU rate (% of one core) per jail; undefined = no data yet.
-const cpuRates = reactive(new Map<string, number>());
-
-let pollHandle: ReturnType<typeof setInterval> | null = null;
-
-function jailCoreLimit(): number | null {
-  const raw = config.jailCpu.trim();
-  if (!raw) return null;
-  if (!/^\d+$/.test(raw)) return null;
-  const n = Number(raw);
-  return n > 0 ? n : null;
-}
-
-function updateCpuSamplesAndHistory() {
-  const now = Date.now();
-  let fleetCpuPct = 0;
-  let fleetHasRate = false;
-  let fleetMemPctSum = 0;
-  let fleetMemPctCount = 0;
-
-  for (const jail of jails.value) {
-    const cpuNs = jail.cpuUsageNs;
-    if (cpuNs === null || cpuNs === undefined) {
-      cpuSamples.delete(jail.name);
-      cpuRates.delete(jail.name);
-      continue;
-    }
-
-    const previous = cpuSamples.get(jail.name);
-    if (previous) {
-      const deltaNs = cpuNs - previous.cpuUsageNs;
-      const deltaMs = now - previous.atMs;
-      if (deltaNs >= 0 && deltaMs > 0) {
-        const pctOfOneCore = (deltaNs / (deltaMs * 1e6)) * 100;
-        cpuRates.set(jail.name, pctOfOneCore);
-
-        const memPct = memoryFillPct(jail);
-        const history = jailHistory.get(jail.name) ?? [];
-        history.push({ atMs: now, cpuPct: pctOfOneCore, memPct });
-        if (history.length > HISTORY_LENGTH) history.shift();
-        jailHistory.set(jail.name, history);
-
-        if (jail.status.toLowerCase() === "running") {
-          fleetCpuPct += pctOfOneCore;
-          fleetHasRate = true;
-          if (memPct !== null) {
-            fleetMemPctSum += memPct;
-            fleetMemPctCount += 1;
-          }
-        }
-      } else {
-        // Counter reset (restart) or non-positive interval — no usable rate yet.
-        cpuRates.delete(jail.name);
-      }
-    } else {
-      cpuRates.delete(jail.name);
-    }
-
-    cpuSamples.set(jail.name, { atMs: now, cpuUsageNs: cpuNs });
-  }
-
-  // Drop history/samples for jails that disappeared (deleted).
-  const currentNames = new Set(jails.value.map((j) => j.name));
-  for (const name of Array.from(cpuSamples.keys())) {
-    if (!currentNames.has(name)) cpuSamples.delete(name);
-  }
-  for (const name of Array.from(jailHistory.keys())) {
-    if (!currentNames.has(name)) jailHistory.delete(name);
-  }
-  for (const name of Array.from(cpuRates.keys())) {
-    if (!currentNames.has(name)) cpuRates.delete(name);
-  }
-
-  if (fleetHasRate) {
-    // Average memory fill % across running jails that have a memory cap (honest — no single
-    // fleet-wide cap exists to divide total bytes by).
-    const fleetMemPct = fleetMemPctCount > 0 ? fleetMemPctSum / fleetMemPctCount : null;
-    fleetHistory.value.push({ atMs: now, cpuPct: fleetCpuPct, memPct: fleetMemPct });
-    if (fleetHistory.value.length > HISTORY_LENGTH) fleetHistory.value.shift();
-  }
-}
-
-function cpuRateLabel(jail: Jail): string {
-  const rate = cpuRates.get(jail.name);
-  if (rate === undefined) return "—";
-  return `${rate.toFixed(rate < 10 ? 1 : 0)}%`;
-}
-
-function cpuRatePct(jail: Jail): number | null {
-  const rate = cpuRates.get(jail.name);
-  if (rate === undefined) return null;
-  const coreLimit = jailCoreLimit();
-  const normalized = coreLimit ? rate / coreLimit : rate;
-  return Math.min(100, Math.max(0, Math.round(normalized)));
-}
-
-function cpuRateSuffix(): string {
-  const coreLimit = jailCoreLimit();
-  return coreLimit ? `of ${coreLimit} core${coreLimit === 1 ? "" : "s"}` : "of 1 core";
-}
-
-function sparklinePoints(history: HistoryPoint[], key: "cpuPct" | "memPct", width = 80, height = 24): string {
-  const values = history.map((h) => h[key]).filter((v): v is number => v !== null);
-  if (values.length < 2) return "";
-  const step = width / (history.length - 1 || 1);
-  // Use the same x-position for every point (including nulls) so cpu/mem lines stay time-aligned,
-  // but only emit a polyline across points where the value exists.
-  const pts: string[] = [];
-  history.forEach((h, i) => {
-    const v = h[key];
-    if (v === null) return;
-    const x = i * step;
-    const y = height - (Math.min(100, Math.max(0, v)) / 100) * height;
-    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
-  });
-  return pts.join(" ");
-}
-
-function jailCpuHistory(name: string): HistoryPoint[] {
-  return jailHistory.get(name) ?? [];
-}
-
-function totalCpuRatePct(): number | null {
-  if (fleetHistory.value.length === 0) return null;
-  return fleetHistory.value[fleetHistory.value.length - 1]?.cpuPct ?? null;
-}
-
-function totalCpuRateLabel(): string {
-  const pct = totalCpuRatePct();
-  if (pct === null) return "—";
-  return `${pct.toFixed(pct < 10 ? 1 : 0)}%`;
 }
 
 // --- Network / ACL status (from already-loaded config, no fabricated data) -
@@ -894,16 +629,17 @@ function jailOnBridgeSubnet(jail: Jail): boolean {
   return ipInCidr(jail.ipv4, config.jailSubnet);
 }
 
+const POLL_INTERVAL_MS = 5000;
+let pollHandle: PollController | null = null;
+
 function startStatusPolling() {
   stopStatusPolling();
-  pollHandle = setInterval(() => {
-    void refreshStatus();
-  }, POLL_INTERVAL_MS);
+  pollHandle = startPolling(refreshStatus, POLL_INTERVAL_MS);
 }
 
 function stopStatusPolling() {
   if (pollHandle !== null) {
-    clearInterval(pollHandle);
+    pollHandle.stop();
     pollHandle = null;
   }
 }
@@ -917,7 +653,7 @@ interface BuildRow {
   alias: string;
   status: ImageBuildStatus | null;
   error: string | null;
-  intervalId: ReturnType<typeof setInterval> | null;
+  intervalId: PollController | null;
 }
 
 // --- Curated distro/release catalog ---------------------------------------
@@ -1505,7 +1241,8 @@ function applyMiseToolPairs(pairs: MiseToolPair[]): string[] {
   return specs;
 }
 
-function importMiseToml(raw: string): { toolsAdded: string[] } {
+async function importMiseToml(raw: string): Promise<{ toolsAdded: string[] }> {
+  const TOML = await import("smol-toml");
   const doc = TOML.parse(raw);
   const pairs = parseMiseToolsTable(doc);
   if (pairs.length === 0) throw new Error("No [tools] entries found in this mise.toml.");
@@ -1529,9 +1266,9 @@ function handleMiseFile(event: Event, kind: "toml" | "tool-versions") {
   miseImportError.value = null;
   miseImportSummary.value = null;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      const result = kind === "toml" ? importMiseToml(String(reader.result)) : importToolVersions(String(reader.result));
+      const result = kind === "toml" ? await importMiseToml(String(reader.result)) : importToolVersions(String(reader.result));
       miseImportSummary.value = result.toolsAdded;
     } catch (e) {
       miseImportError.value = e instanceof Error ? e.message : String(e);
@@ -1723,13 +1460,13 @@ async function pruneStaleImageRecords() {
 
 function stopPolling(build: BuildRow) {
   if (build.intervalId !== null) {
-    clearInterval(build.intervalId);
+    build.intervalId.stop();
     build.intervalId = null;
   }
 }
 
 function pollBuildStatus(build: BuildRow) {
-  build.intervalId = setInterval(async () => {
+  build.intervalId = startPolling(async () => {
     try {
       const data = await gql<{ jailImageBuildStatus: ImageBuildStatus | null }>(BUILD_STATUS_QUERY, {
         buildId: build.buildId,
@@ -2040,13 +1777,13 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="border-t border-border pt-4">
-                <Label class="mb-1 block">Bootstrap dotfiles from a repo</Label>
+                <Label for="dotfiles-repo" class="mb-1 block">Bootstrap dotfiles from a repo</Label>
                 <p class="mb-2 text-xs text-muted-foreground">
                   Experimental — clones the repo and hands off to <span class="font-mono">mise bootstrap</span>, which only
                   applies dotfiles if that repo's own mise config declares them.
                 </p>
                 <div class="flex flex-wrap gap-2">
-                  <Input v-model="dotfilesRepoUrl" class="w-72 font-mono" placeholder="git@github.com:you/dotfiles.git" />
+                  <Input id="dotfiles-repo" v-model="dotfilesRepoUrl" class="w-72 font-mono" placeholder="git@github.com:you/dotfiles.git" />
                   <Input v-model="dotfilesRef" class="w-32 font-mono" placeholder="branch (optional)" />
                   <Button size="sm" variant="outline" :disabled="!dotfilesRepoUrl.trim()" @click="addDotfilesBootstrap">Add bootstrap</Button>
                   <Button
@@ -2080,9 +1817,9 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Distro</Label>
+            <Label for="builder-distro">Distro</Label>
             <div class="flex justify-self-end gap-2">
-              <Select v-model="builderDistroSelect" class="w-48">
+              <Select id="builder-distro" v-model="builderDistroSelect" class="w-48">
                 <option v-for="d in CURATED_DISTROS" :key="d.value" :value="d.value">{{ d.label }}</option>
                 <option :value="OTHER_DISTRO">Other… (custom)</option>
               </Select>
@@ -2098,9 +1835,9 @@ onBeforeUnmount(() => {
               anything else it supports; distrobuilder covers more than this list captures.
             </HelpText>
 
-            <Label>Release</Label>
+            <Label for="builder-release">Release</Label>
             <div class="flex justify-self-end gap-2">
-              <Select v-model="builderReleaseSelect" class="w-48">
+              <Select id="builder-release" v-model="builderReleaseSelect" class="w-48">
                 <option v-for="r in releaseOptions" :key="r.value" :value="r.value">{{ r.label }}</option>
                 <option :value="OTHER_RELEASE">Other… (custom)</option>
               </Select>
@@ -2113,8 +1850,8 @@ onBeforeUnmount(() => {
             </div>
             <HelpText class="col-span-2">Options change with the distro above — a custom distro always shows the free-text field here too.</HelpText>
 
-            <Label>Alias</Label>
-            <Input v-model="builderAlias" class="w-96 justify-self-end" placeholder="my-custom-image" />
+            <Label for="builder-alias">Alias</Label>
+            <Input id="builder-alias" v-model="builderAlias" class="w-96 justify-self-end" placeholder="my-custom-image" />
             <HelpText class="col-span-2">
               Becomes the image's name in Incus once the build succeeds — other containers (and "build variant")
               reference it by this alias, so it must be unique. Not required to match the container's own name.
@@ -2167,7 +1904,7 @@ onBeforeUnmount(() => {
             <p v-else-if="searchQuery.trim().length >= 2" class="mt-2 text-xs text-muted-foreground">No matches.</p>
 
             <div v-if="searchedAptPackages.size > 0" class="mt-3">
-              <Label class="mb-1.5 block text-xs">Added from apt search</Label>
+              <p class="mb-1.5 block text-xs font-medium">Added from apt search</p>
               <div class="flex flex-wrap gap-1.5">
                 <span
                   v-for="name in searchedAptPackages"
@@ -2181,7 +1918,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div v-if="postInstallCommands.size > 0" class="mt-3">
-              <Label class="mb-1.5 block text-xs">Extra setup commands (run after packages install)</Label>
+              <p class="mb-1.5 block text-xs font-medium">Extra setup commands (run after packages install)</p>
               <div class="flex flex-col gap-1">
                 <div
                   v-for="[key, cmd] in postInstallCommands"
@@ -2196,8 +1933,9 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="mt-4">
-            <Label class="mb-1.5 block text-xs text-muted-foreground">Anything else? (one per line, or comma-separated)</Label>
+            <Label for="builder-extra-packages" class="mb-1.5 block text-xs text-muted-foreground">Anything else? (one per line, or comma-separated)</Label>
             <textarea
+              id="builder-extra-packages"
               v-model="builderPackagesText"
               rows="2"
               class="border-input bg-background w-full rounded-md border px-3 py-2 text-sm font-mono"
@@ -2364,12 +2102,12 @@ onBeforeUnmount(() => {
           </p>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div class="flex-1">
-              <Label class="mb-2 block">Container name</Label>
-              <Input v-model="newJailName" placeholder="new-container-name" class="w-full font-mono" />
+              <Label for="new-container-name" class="mb-2 block">Container name</Label>
+              <Input id="new-container-name" v-model="newJailName" placeholder="new-container-name" class="w-full font-mono" />
             </div>
             <div class="flex-1">
-              <Label class="mb-2 block">Image</Label>
-              <Select v-model="launchImageSelect" class="w-full">
+              <Label for="launch-image" class="mb-2 block">Image</Label>
+              <Select id="launch-image" v-model="launchImageSelect" class="w-full">
                 <option value="">Default ({{ config.jailImage || "—" }})</option>
                 <option v-for="image in jailImages" :key="image.alias" :value="image.alias">
                   {{ image.alias }}{{ image.isMaster ? " (golden master)" : "" }} — {{ image.distro }}/{{ image.release }}
@@ -2380,10 +2118,10 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="newJailName && newJailNameError" class="mt-2 text-xs text-destructive">{{ newJailNameError }}</p>
           <div class="mt-3 flex items-center gap-2.5">
-            <Switch v-model="launchAllowSudo" />
-            <span class="cursor-pointer text-xs" @click="launchAllowSudo = !launchAllowSudo">
+            <Switch id="launch-allow-sudo" v-model="launchAllowSudo" />
+            <label for="launch-allow-sudo" class="cursor-pointer text-xs">
               Allow sudo (NOPASSWD) for the agent user
-            </span>
+            </label>
           </div>
           <HelpText>
             "Default" launches from Config → Container Defaults' image (the golden master, if one is set).
@@ -2421,7 +2159,7 @@ onBeforeUnmount(() => {
           <template v-else>
           <p class="mb-3 text-xs text-muted-foreground">
             Total: {{ runningJails.length }} container{{ runningJails.length === 1 ? "" : "s" }} running,
-            {{ formatBytes(totalMemoryUsageBytes) }} memory, CPU time {{ formatDuration(totalCpuUsageNs) }}
+            {{ formatBytes(totalMemoryUsageBytes) }} memory, CPU time {{ formatDuration(Number(totalCpuUsageNs)) }}
           </p>
           <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <div
@@ -2532,22 +2270,22 @@ onBeforeUnmount(() => {
                   <div class="mt-4 grid grid-cols-1 gap-3 border-t border-border pt-3 sm:grid-cols-2">
                     <div class="flex flex-wrap items-end gap-2">
                       <div>
-                        <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                        <Label for="detail-cpu-limit" class="mb-1 flex items-center gap-1.5 text-xs">
                           CPU limit
                           <Badge v-if="jailDetail.cpuLimitIsOverride" variant="orange">override</Badge>
                         </Label>
                         <div class="flex gap-1.5">
-                          <Input v-model="editCpuLimit" class="w-24 font-mono" placeholder="e.g. 2" />
+                          <Input id="detail-cpu-limit" v-model="editCpuLimit" class="w-24 font-mono" placeholder="e.g. 2" />
                           <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailCpuLimit">Apply</Button>
                         </div>
                       </div>
                       <div>
-                        <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                        <Label for="detail-memory-limit" class="mb-1 flex items-center gap-1.5 text-xs">
                           Memory limit
                           <Badge v-if="jailDetail.memoryLimitIsOverride" variant="orange">override</Badge>
                         </Label>
                         <div class="flex gap-1.5">
-                          <Input v-model="editMemoryLimit" class="w-24 font-mono" placeholder="e.g. 4GiB" />
+                          <Input id="detail-memory-limit" v-model="editMemoryLimit" class="w-24 font-mono" placeholder="e.g. 4GiB" />
                           <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailMemoryLimit">Apply</Button>
                         </div>
                       </div>
@@ -2561,12 +2299,12 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div>
-                      <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                      <Label for="detail-workspace" class="mb-1 flex items-center gap-1.5 text-xs">
                         Workspace host path (/workspace)
                         <Badge v-if="jailDetail.workspaceIsOverride" variant="orange">override</Badge>
                       </Label>
                       <div class="flex gap-2">
-                        <Input v-model="editWorkspacePath" class="flex-1 font-mono" />
+                        <Input id="detail-workspace" v-model="editWorkspacePath" class="flex-1 font-mono" />
                         <Button size="sm" variant="outline" :disabled="detailSaving" @click="saveJailWorkspace">Apply</Button>
                         <Button
                           v-if="jailDetail.workspaceIsOverride"
@@ -2609,10 +2347,10 @@ onBeforeUnmount(() => {
                   </HelpText>
 
                   <div class="mt-4 border-t border-border pt-3">
-                    <Label class="mb-1 flex items-center gap-1.5 text-xs">
+                    <p class="mb-1 flex items-center gap-1.5 text-xs font-medium">
                       Sudo (agent user)
                       <Badge :variant="jailDetail.sudoEnabled ? 'green' : 'gray'">{{ jailDetail.sudoEnabled ? "enabled" : "disabled" }}</Badge>
-                    </Label>
+                    </p>
                     <Button
                       v-if="!jailDetail.sudoEnabled"
                       size="sm"
@@ -2630,9 +2368,10 @@ onBeforeUnmount(() => {
                   </div>
 
                   <div class="mt-4 border-t border-border pt-3">
-                    <Label class="mb-1 block text-xs">Install a package (Homebrew)</Label>
+                    <Label for="homebrew-formula" class="mb-1 block text-xs">Install a package (Homebrew)</Label>
                     <div class="flex flex-wrap gap-2">
                       <Input
+                        id="homebrew-formula"
                         v-model="installFormula"
                         class="w-48 font-mono"
                         placeholder="e.g. wget"
@@ -2659,9 +2398,10 @@ onBeforeUnmount(() => {
                   </div>
 
                   <div class="mt-4 border-t border-border pt-3">
-                    <Label class="mb-1 block text-xs">Run a privileged command</Label>
+                    <Label for="privileged-command" class="mb-1 block text-xs">Run a privileged command</Label>
                     <div class="flex flex-wrap gap-2">
                       <Input
+                        id="privileged-command"
                         v-model="privilegedCommand"
                         class="flex-1 font-mono"
                         placeholder="e.g. apt-get install -y htop"
@@ -2708,21 +2448,21 @@ onBeforeUnmount(() => {
           <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Runtime</p>
           <h3 class="mb-4 text-base font-semibold">Service</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Enable Incus</Label>
-            <Switch v-model="config.enabled" />
+            <Label for="config-enabled">Enable Incus</Label>
+            <Switch id="config-enabled" v-model="config.enabled" />
             <HelpText class="col-span-2">
               Starts incusd on array start. Leaving this off keeps the daemon — and its private-prefixed
               binaries under <span class="font-mono">/usr/local/incus/</span> — installed but never running.
             </HelpText>
 
-            <Label>Show Dashboard widget</Label>
-            <Switch v-model="config.dashboardWidgetEnable" />
+            <Label for="config-dashboard-widget">Show Dashboard widget</Label>
+            <Switch id="config-dashboard-widget" v-model="config.dashboardWidgetEnable" />
             <HelpText class="col-span-2">
               Shows a jail-status box (running/stopped/other counts) on Unraid's Main/Dashboard tab.
             </HelpText>
 
-            <Label>Incus state directory</Label>
-            <Input v-model="config.stateDir" class="w-96 justify-self-end font-mono" />
+            <Label for="config-state-dir">Incus state directory</Label>
+            <Input id="config-state-dir" v-model="config.stateDir" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Where incusd keeps its database, storage pool, and container state. Must be real persistent
               storage on the array, not tmpfs — this is the one thing that survives a reboot or plugin update.
@@ -2732,8 +2472,8 @@ onBeforeUnmount(() => {
           <div class="mt-4 border-t border-border pt-4">
             <h4 class="mb-3 text-sm font-semibold">Storage pool</h4>
             <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-              <Label>Storage driver</Label>
-              <Select v-model="config.storageDriver" class="w-56 justify-self-end">
+              <Label for="config-storage-driver">Storage driver</Label>
+              <Select id="config-storage-driver" v-model="config.storageDriver" class="w-56 justify-self-end">
                 <option value="dir">dir (simple, no pool required)</option>
                 <option value="zfs">zfs (snapshots/speed, needs existing pool)</option>
               </Select>
@@ -2744,16 +2484,16 @@ onBeforeUnmount(() => {
               </HelpText>
 
               <template v-if="isZfs">
-                <Label>ZFS pool/dataset</Label>
-                <Input v-model="config.storageSource" class="w-96 justify-self-end font-mono" />
+                <Label for="config-storage-source">ZFS pool/dataset</Label>
+                <Input id="config-storage-source" v-model="config.storageSource" class="w-96 justify-self-end font-mono" />
                 <HelpText class="col-span-2">
                   An existing pool or dataset path, e.g. <span class="font-mono">nvme/incus</span>. A dataset
                   under this path is created if missing, but the pool itself must already exist.
                 </HelpText>
               </template>
 
-              <Label>Incus storage pool name</Label>
-              <Input v-model="config.storagePoolName" class="w-48 justify-self-end font-mono" />
+              <Label for="config-storage-pool">Incus storage pool name</Label>
+              <Input id="config-storage-pool" v-model="config.storagePoolName" class="w-48 justify-self-end font-mono" />
               <HelpText class="col-span-2">
                 The name Incus itself uses for this storage pool internally — cosmetic, doesn't need to match
                 anything else on the host.
@@ -2769,46 +2509,46 @@ onBeforeUnmount(() => {
             Controls the bridge/subnet containers attach to and the firewall rules governing what they can reach.
           </p>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Container bridge</Label>
-            <Input v-model="config.jailBridge" class="w-48 justify-self-end font-mono" />
+            <Label for="config-bridge">Container bridge</Label>
+            <Input id="config-bridge" v-model="config.jailBridge" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               A dedicated NAT bridge name for containers, kept separate from Unraid's own br0 so container
               traffic never touches host networking directly.
             </HelpText>
 
-            <Label>Container subnet</Label>
-            <Input v-model="config.jailSubnet" class="w-48 justify-self-end font-mono" />
+            <Label for="config-subnet">Container subnet</Label>
+            <Input id="config-subnet" v-model="config.jailSubnet" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               CIDR for the bridge. Defaults to an RFC 2544 benchmark range specifically because it won't
               collide with a typical home or office LAN.
             </HelpText>
 
-            <Label>NAT</Label>
-            <Switch v-model="config.jailNat" />
+            <Label for="config-nat">NAT</Label>
+            <Switch id="config-nat" v-model="config.jailNat" />
             <HelpText class="col-span-2">
               Routes container traffic to the Internet through the host. Turning this off isolates containers
               with no outbound access at all — no Internet, no LAN.
             </HelpText>
 
-            <Label>IPv6</Label>
-            <Input v-model="config.jailIpv6" class="w-48 justify-self-end font-mono" />
+            <Label for="config-ipv6">IPv6</Label>
+            <Input id="config-ipv6" v-model="config.jailIpv6" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">An IPv6 address for the bridge, or <span class="font-mono">none</span> to disable IPv6 for containers entirely.</HelpText>
 
-            <Label>ACL name</Label>
-            <Input v-model="config.aclName" class="w-48 justify-self-end font-mono" />
+            <Label for="config-acl-name">ACL name</Label>
+            <Input id="config-acl-name" v-model="config.aclName" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The name of the Incus network ACL that enforces the LAN ban — created and applied to the bridge
               by the array-start init script.
             </HelpText>
 
-            <Label>Default egress action</Label>
-            <Select v-model="config.aclDefaultEgress" class="w-32 justify-self-end">
+            <Label for="config-egress">Default egress action</Label>
+            <Select id="config-egress" v-model="config.aclDefaultEgress" class="w-32 justify-self-end">
               <option value="allow">allow</option>
               <option value="drop">drop</option>
             </Select>
 
-            <Label>Default ingress action</Label>
-            <Select v-model="config.aclDefaultIngress" class="w-32 justify-self-end">
+            <Label for="config-ingress">Default ingress action</Label>
+            <Select id="config-ingress" v-model="config.aclDefaultIngress" class="w-32 justify-self-end">
               <option value="allow">allow</option>
               <option value="drop">drop</option>
             </Select>
@@ -2821,7 +2561,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="mt-4 border-t border-border pt-4">
-            <Label class="mb-1.5 block">Blocked CIDRs (deny-list)</Label>
+            <Label for="new-blocked-cidr" class="mb-1.5 block">Blocked CIDRs (deny-list)</Label>
             <div v-if="blockedCidrList.length > 0" class="mb-2 flex flex-wrap gap-1.5">
               <span
                 v-for="cidr in blockedCidrList"
@@ -2834,6 +2574,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex gap-2">
               <Input
+                id="new-blocked-cidr"
                 v-model="newBlockedCidr"
                 class="w-full font-mono"
                 placeholder="e.g. 10.0.0.0/8"
@@ -2849,7 +2590,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="mt-4">
-            <Label class="mb-1.5 block">Allow-holes (punched before block rules)</Label>
+            <Label for="new-allow-cidr" class="mb-1.5 block">Allow-holes (punched before block rules)</Label>
             <div v-if="allowCidrList.length > 0" class="mb-2 flex flex-wrap gap-1.5">
               <span
                 v-for="cidr in allowCidrList"
@@ -2862,6 +2603,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="flex gap-2">
               <Input
+                id="new-allow-cidr"
                 v-model="newAllowCidr"
                 class="w-full font-mono"
                 placeholder="e.g. 100.64.0.0/10"
@@ -2882,20 +2624,28 @@ onBeforeUnmount(() => {
               Optional — when set, new containers automatically join your tailnet using this key.
             </p>
             <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-              <Label>Tailscale auth key</Label>
+              <Label for="tailscale-auth-key">Tailscale auth key</Label>
               <div class="flex justify-self-end gap-2">
                 <Input
-                  v-model="config.tsAuthKey"
+                  id="tailscale-auth-key"
+                  v-model="tsAuthKeyReplacement"
                   :type="showTsAuthKey ? 'text' : 'password'"
                   class="w-72 font-mono"
-                  placeholder="tskey-auth-…"
+                  :placeholder="config.tsAuthKeyConfigured ? 'Configured — enter a replacement' : 'tskey-auth-…'"
                 />
                 <Button size="sm" variant="outline" @click="showTsAuthKey = !showTsAuthKey">
                   {{ showTsAuthKey ? "Hide" : "Show" }}
                 </Button>
+                <Button
+                  v-if="config.tsAuthKeyConfigured"
+                  size="sm"
+                  variant="outline"
+                  @click="clearTsAuthKeyOnSave = !clearTsAuthKeyOnSave"
+                >{{ clearTsAuthKeyOnSave ? "Keep key" : "Clear on save" }}</Button>
               </div>
               <HelpText class="col-span-2">
-                A reusable or ephemeral key from your Tailscale admin console. Best-effort: if a container's
+                The stored key is write-only and is never returned to this page. A reusable or ephemeral key
+                from your Tailscale admin console. Best-effort: if a container's
                 image doesn't have Tailscale installed, joining is silently skipped rather than failing the
                 launch — it never blocks a container from starting.
               </HelpText>
@@ -2907,42 +2657,42 @@ onBeforeUnmount(() => {
           <p class="mb-1 text-[10px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Container Defaults</p>
           <h3 class="mb-4 text-base font-semibold">Defaults</h3>
           <div class="grid max-w-xl grid-cols-[1fr_auto] items-center gap-y-4">
-            <Label>Container profile</Label>
-            <Input v-model="config.jailProfile" class="w-48 justify-self-end font-mono" />
+            <Label for="config-profile">Container profile</Label>
+            <Input id="config-profile" v-model="config.jailProfile" class="w-48 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The Incus profile new containers launch with — sets resource limits, network, and mounts, defined
               in the array-start init script's profile template.
             </HelpText>
 
-            <Label>Default image</Label>
-            <Input v-model="config.jailImage" class="w-96 justify-self-end font-mono" />
+            <Label for="config-image">Default image</Label>
+            <Input id="config-image" v-model="config.jailImage" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Used when launching a container without picking a specific image — either a remote reference like
               <span class="font-mono">images:debian/trixie/cloud</span>, or a locally-built image's alias.
               Marking an image as the golden master in the Builder tab sets this automatically.
             </HelpText>
 
-            <Label>Allow nesting</Label>
-            <Switch v-model="config.jailNesting" />
+            <Label for="config-nesting">Allow nesting</Label>
+            <Switch id="config-nesting" v-model="config.jailNesting" />
             <HelpText class="col-span-2">
               Lets a container run Docker or Incus inside itself — needed for agents that spin up their own
               sandboxes, but widens what a compromised container could reach.
             </HelpText>
 
-            <Label>CPU limit</Label>
-            <Input v-model="config.jailCpu" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
+            <Label for="config-cpu">CPU limit</Label>
+            <Input id="config-cpu" v-model="config.jailCpu" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
             <p v-if="configCpuError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configCpuError }}</p>
 
-            <Label>Memory limit</Label>
-            <Input v-model="config.jailMemory" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
+            <Label for="config-memory">Memory limit</Label>
+            <Input id="config-memory" v-model="config.jailMemory" class="w-24 justify-self-end font-mono" placeholder="empty = no cap" />
             <p v-if="configMemoryError" class="col-span-2 -mt-2 text-xs text-destructive">{{ configMemoryError }}</p>
             <HelpText class="col-span-2">
               Hard resource ceiling applied via the container profile at launch — CPU as a core count (e.g.
               <span class="font-mono">2</span>), memory with a unit (e.g. <span class="font-mono">4GiB</span>). Leave either empty for no cap.
             </HelpText>
 
-            <Label>Workspace root</Label>
-            <Input v-model="config.jailWorkspaceRoot" class="w-96 justify-self-end font-mono" />
+            <Label for="config-workspace">Workspace root</Label>
+            <Input id="config-workspace" v-model="config.jailWorkspaceRoot" class="w-96 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               Host directory holding per-container workspaces, bind-mounted in with idmap shifting. Must be
               real persistent storage — the init script refuses to start if it's tmpfs, since that would
@@ -2951,11 +2701,11 @@ onBeforeUnmount(() => {
               Unraid's shfs FUSE union view generally doesn't support the idmapped-mount feature the shift needs.
             </HelpText>
 
-            <Label>Agent UID</Label>
-            <Input v-model="config.jailAgentUid" class="w-24 justify-self-end font-mono" />
+            <Label for="config-agent-uid">Agent UID</Label>
+            <Input id="config-agent-uid" v-model="config.jailAgentUid" class="w-24 justify-self-end font-mono" />
 
-            <Label>Agent GID</Label>
-            <Input v-model="config.jailAgentGid" class="w-24 justify-self-end font-mono" />
+            <Label for="config-agent-gid">Agent GID</Label>
+            <Input id="config-agent-gid" v-model="config.jailAgentGid" class="w-24 justify-self-end font-mono" />
             <HelpText class="col-span-2">
               The uid/gid inside each container mapped to your host user — match your own host user if you
               want files under the bind-mounted workspace to show correct ownership from outside the container.
@@ -2964,8 +2714,8 @@ onBeforeUnmount(() => {
 
           <div class="mt-4 border-t border-border pt-4">
             <h4 class="mb-3 text-sm font-semibold">Bind mounts</h4>
-            <Label class="mb-2 block">Host config bind-mounts</Label>
-            <Input v-model="config.jailBindMounts" class="w-full font-mono" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
+            <Label for="config-bind-mounts" class="mb-2 block">Host config bind-mounts</Label>
+            <Input id="config-bind-mounts" v-model="config.jailBindMounts" class="w-full font-mono" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
             <p class="mt-2 text-xs text-muted-foreground">
               Comma-separated host:container[:ro] triples, mounted into every dev container for agent auth/config reuse.
             </p>

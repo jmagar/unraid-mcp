@@ -22,7 +22,7 @@ export interface IncusConfig {
   jailAgentUid: string;
   jailAgentGid: string;
   jailBindMounts: string;
-  tsAuthKey: string;
+  tsAuthKeyConfigured: boolean;
   dashboardWidgetEnable: boolean;
 }
 
@@ -30,9 +30,9 @@ export interface Jail {
   name: string;
   status: string;
   ipv4?: string | null;
-  cpuUsageNs?: number | null;
-  memoryUsageBytes?: number | null;
-  memoryTotalBytes?: number | null;
+  cpuUsageNs?: string | null;
+  memoryUsageBytes?: string | null;
+  memoryTotalBytes?: string | null;
 }
 
 export type JailAction = "start" | "stop" | "restart" | "freeze" | "unfreeze";
@@ -73,7 +73,7 @@ export interface PrivilegedCommandStatus {
 
 export interface ImageBuildStatus {
   id: string;
-  status: string; // "queued" | "running" | "success" | "failed"
+  status: "queued" | "running" | "success" | "failed";
   alias: string;
   distro: string;
   release: string;

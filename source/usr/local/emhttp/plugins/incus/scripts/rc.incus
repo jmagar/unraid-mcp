@@ -12,10 +12,44 @@ EMHTTP="/usr/local/emhttp/plugins/incus"
 PIDFILE="/var/run/incusd.pid"
 LXCFS_PID="/var/run/incus-lxcfs.pid"
 LOG="/var/log/incusd.log"
+WATCHDOG_PID="/var/run/incus-watchdog.pid"
+HEALTH_FILE="${INCUS_DIR}/plugin-health"
+
+log() { logger -t incus "$*"; printf '%s incus: %s\n' "$(date -Is)" "$*" >>"$LOG"; }
+health() {
+  mkdir -p "$INCUS_DIR" 2>/dev/null || true
+  printf 'status=%s\ntime=%s\nbuild=%s\nmessage=%s\n' "$1" "$(date -Is)" "2026.07.18" "${2:-}" >"${HEALTH_FILE}.tmp" 2>/dev/null &&
+    mv -f "${HEALTH_FILE}.tmp" "$HEALTH_FILE" 2>/dev/null || true
+}
+rotate_log() {
+  [ -f "$LOG" ] || return 0
+  [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -lt 5242880 ] && return 0
+  rm -f "${LOG}.3"
+  [ ! -f "${LOG}.2" ] || mv -f "${LOG}.2" "${LOG}.3"
+  [ ! -f "${LOG}.1" ] || mv -f "${LOG}.1" "${LOG}.2"
+  mv -f "$LOG" "${LOG}.1"
+}
+pid_is_live() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+ensure_watchdog() {
+  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && ! pid_is_live "$WATCHDOG_PID"; then
+    setsid "${EMHTTP}/scripts/incus-watchdog.sh" >>"$LOG" 2>&1 &
+    echo $! >"$WATCHDOG_PID"
+  fi
+}
+cleanup_failed_start() {
+  log "startup failed; rolling back partial daemon/lxcfs resources"
+  pid_is_live "$PIDFILE" && kill "$(cat "$PIDFILE")" 2>/dev/null || true
+  pid_is_live "$LXCFS_PID" && kill "$(cat "$LXCFS_PID")" 2>/dev/null || true
+  fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null || true
+  rm -f "$PIDFILE" "$LXCFS_PID"
+  health failed "daemon readiness timeout; partial startup rolled back"
+}
 
 start() {
+  rotate_log
   if ! "${EMHTTP}/scripts/incus-preflight.sh" >>"$LOG" 2>&1; then
-    echo "incus: preflight FAILED — see $LOG"; exit 1
+    health failed "preflight failed; see $LOG"
+    echo "incus: preflight FAILED — see $LOG"; return 1
   fi
   mkdir -p "$INCUS_DIR"
 
@@ -27,6 +61,8 @@ start() {
   fi
 
   if [ -S "${INCUS_DIR}/unix.socket" ] && "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
+    health ready "daemon already running"
+    ensure_watchdog
     echo "incus: already running"; return 0
   fi
 
@@ -36,14 +72,24 @@ start() {
 
   # Wait for the API socket (up to ~15s).
   for _ in $(seq 1 30); do
-    "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1 && { echo "incus: ready"; return 0; }
+    if "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
+      health ready "daemon socket healthy"
+      ensure_watchdog
+      echo "incus: ready"; return 0
+    fi
     sleep 0.5
   done
-  echo "incus: socket did not come up — check $LOG"; exit 1
+  echo "incus: socket did not come up — check $LOG"
+  cleanup_failed_start
+  return 1
 }
 
 stop() {
   echo "incus: stopping"
+  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && pid_is_live "$WATCHDOG_PID"; then
+    kill "$(cat "$WATCHDOG_PID")" 2>/dev/null || true
+    rm -f "$WATCHDOG_PID"
+  fi
   # Graceful daemon shutdown (stops instances per their config first).
   if ! "${PREFIX}/bin/incus" admin shutdown </dev/null >/dev/null 2>&1; then
     # Graceful path needs INCUS_DIR to point at the socket the running
@@ -57,12 +103,19 @@ stop() {
   [ -f "$LXCFS_PID" ] && kill "$(cat "$LXCFS_PID")" 2>/dev/null
   fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null
   rm -f "$PIDFILE" "$LXCFS_PID"
+  if "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
+    health failed "daemon still responds after stop"
+    return 1
+  fi
+  health stopped "daemon and lxcfs stopped"
 }
 
 status() {
   if "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then
+    health ready "status check passed"
     echo "incus: RUNNING"; "${PREFIX}/bin/incus" list </dev/null 2>/dev/null
   else
+    health stopped "status check found no daemon"
     echo "incus: STOPPED"
   fi
 }
@@ -70,7 +123,7 @@ status() {
 case "$1" in
   start)   start ;;
   stop)    stop ;;
-  restart) stop; sleep 1; start ;;
+  restart) stop && sleep 1 && start ;;
   status)  status ;;
   preflight) "${EMHTTP}/scripts/incus-preflight.sh" ;;
   *) echo "usage: $0 {start|stop|restart|status|preflight}"; exit 1 ;;

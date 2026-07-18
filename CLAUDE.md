@@ -14,14 +14,18 @@ The repo has three pieces that must be understood together:
 
 `incus.cfg` is the single source of truth for both the shell init and the API plugin; the API plugin mirrors it into `incus.json` and keeps both in sync (`config-sync.service.ts`).
 
-## Build & typecheck
+## Build, test, and typecheck
 
-There is no automated test suite in this repo. Verification is: typecheck → build → deploy to a real Unraid box → verify live (see "Deploying" below). Do all of this before considering backend or frontend work done.
+The backend has a Vitest suite, and classic/package contract checks live under
+`tests/`. Verification is: automated tests → typecheck/build → package
+consistency → deploy to a disposable real Unraid box → live isolation/health
+verification. Do all applicable steps before considering a release done.
 
 **Backend** (`unraid-api-plugin-incus/`):
 ```bash
 cd unraid-api-plugin-incus
 npx tsc --noEmit   # typecheck
+npm test           # backend unit tests
 npx tsc            # build → dist/
 ```
 `node_modules` here is mostly symlinks into a sibling clone of the real `unraid-api` monorepo's pnpm store (`../upstream/unraid-api/node_modules/.pnpm/...`), which is how this package gets real `@nestjs/*`, `@unraid/shared`, `class-validator`, etc. to typecheck against without vendoring them. If a typecheck fails with a missing module, the fix is usually symlinking the missing package from that pnpm store, not `npm install`. If that sibling clone isn't available (e.g. CI, or a fresh machine), `npm install --no-save` the real published `@nestjs/common`/`@nestjs/config`/`@nestjs/graphql`/`class-transformer`/`class-validator` packages plus the local `@unraid/shared@file:.ci-stubs/unraid-shared` stub instead — see `.github/workflows/api-plugin-ci.yml`, which does exactly this. It's a best-effort proxy for whatever version the real host actually runs, not a guarantee of an identical typecheck.
@@ -38,15 +42,35 @@ This builds a single-file Vue 3 custom element (`<incus-settings-app>`) — no c
 
 ## CI
 
-`.github/workflows/api-plugin-ci.yml` typechecks and builds the `unraid-api-plugin-incus` backend and `web/` frontend on every push/PR touching that directory (peerDependencies are installed from real published npm packages for the typecheck, plus a local `.ci-stubs/unraid-shared` stand-in for `@unraid/shared` — the one peer with no public package, since it's Unraid's internal monorepo). It does **not** cover the classic `.txz` OS package — see below for why that one isn't currently scriptable.
+`.github/workflows/api-plugin-ci.yml` tests/typechecks/builds the backend and
+typechecks/builds both frontend bundles. Host-provided dependency proxies and
+GitHub Actions are pinned. `.github/workflows/classic-plugin-ci.yml` validates
+the plugin XML, shell sources, checksums, required archive inventory, source vs
+archive drift, shrinkage, and embedded manifest. The opt-in privileged live
+boundary suite remains a disposable-Unraid release gate rather than hosted CI.
 
 ## Deploying to a real box
 
-Both the classic `.plg`/shell layer and the `unraid-api-plugin-incus` backend/frontend are deployed independently and by hand — CI only typechecks/builds the backend and frontend (see above), it doesn't deploy anything, and the `.txz` OS package isn't built by CI at all:
+Release artifacts are coordinated by `release-manifest.json`. Use
+`scripts/build-classic-package.sh NEW_BUILD PREVIOUS_TXZ` only after backend and
+frontend builds: it carries forward the complete prior binary payload, overlays
+tracked source, refreshes the embedded manifest, and stages the matching API
+backend when `dist/` exists. Then update both checksum entities and run
+`scripts/verify-classic-package.sh`.
 
-- **Classic `.plg` / OS package**: the `packages/incus-unraid-*.txz` is a plain tar of everything under `source/`, laid down at `/usr/local/incus/` on the target (private-prefixed — nothing pollutes system paths). `upgradepkg --install-new` silently no-ops if the package name/version/build string is unchanged, so every content change requires bumping the build number in the txz filename and `incus.plg`'s `md5`/`txz` entities. When repackaging, always start from the *previous* build's extracted contents and overlay only what changed — rebuilding from `source/` alone drops the actual `incusd`/`lxcfs` binaries and bundled libs that live under `/usr/local/incus/{bin,lib,libexec}` in the already-deployed package, which is a destructive mistake (verify `tar -tJf` file counts match before installing).
-- **`unraid-api-plugin-incus` backend**: lives at `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus/` on the target, as just `dist/` + `package.json` (its own `ws`/`graphql-subscriptions` deps are already hoisted there from a prior deploy). Sync `dist/`, then `unraid-api restart` (pm2-managed) to reload — check `/var/log/graphql-api.log` for `IncusPluginModule` init and no errors.
+- **Classic `.plg` / OS package**: every content change requires a new package build number. Never build from `source/` alone; the build helper overlays it onto the prior complete archive. The installer verifies SHA-256 before `upgradepkg` and retains one prior archive.
+- **`unraid-api-plugin-incus` backend**: release packages stage `dist/`, metadata, and locked production dependencies under the classic plugin. `install-api-plugin.sh` atomically switches `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus`, reloads, checks `/var/log/graphql-api.log`, and rolls back on failure. `uninstall-api-plugin.sh` removes and reloads it during classic uninstall.
 - **Frontend**: the built `dist-web/incus-settings.{js,css}` get copied into `source/usr/local/emhttp/plugins/incus/web/` before repackaging the OS `.txz` — it ships as part of the classic plugin, not the API plugin.
+
+Canonical release gates:
+
+```bash
+cd unraid-api-plugin-incus && npm test && npx tsc --noEmit && npx tsc
+cd web && npx vue-tsc --noEmit && npm run build
+cd ../../ && ./scripts/verify-classic-package.sh && ./tests/classic-contract.sh
+# disposable Unraid only:
+INCUS_LIVE_TEST=1 ./tests/classic-contract.sh
+```
 
 ## Architecture notes that aren't obvious from reading one file
 
@@ -58,3 +82,50 @@ Both the classic `.plg`/shell layer and the `unraid-api-plugin-incus` backend/fr
 - **`incus-init.sh` and `rc.incus` must redirect stdin from `/dev/null`** on every bare `incus` CLI invocation — several subcommands (confirmed: `profile create`) hang forever waiting on stdin otherwise, even in a non-interactive script context.
 - **`incusd` needs `nft` and `unsquashfs` on `PATH`, bundled or the ACL/build steps hang** (not fail — hang indefinitely) rather than erroring. `incus-preflight.sh` checks for these; if it's green but something still hangs, suspect a missing bundled binary a preflight check doesn't yet cover.
 - **Terminology**: user-facing copy says "dev containers" / "container", not "jail" — but internal identifiers (GraphQL `Jail` type, `JailAction` enum, `jailBridge`/`JAIL_*` config keys, `launchJail`/`deleteJail` mutations) intentionally still say "jail" throughout the codebase. This is a deliberate scope decision — don't rename the internals to match the UI copy.
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

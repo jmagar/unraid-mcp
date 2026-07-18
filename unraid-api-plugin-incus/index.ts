@@ -9,6 +9,7 @@ import { IncusExecService } from "./src/incus-exec.service.js";
 import { IncusImageBuilderService } from "./src/incus-image-builder.service.js";
 import { IncusBuilderPresetsService } from "./src/incus-builder-presets.service.js";
 import { IncusPackageSearchService } from "./src/incus-package-search.service.js";
+import { IncusUnixClient } from "./src/incus-unix-client.service.js";
 
 /** Contract fields the unraid-api plugin loader validates against. */
 export const adapter = "nestjs";
@@ -18,6 +19,69 @@ export const graphqlSchemaExtension = async () => `
     name: String!
     status: String!
     ipv4: String
+    cpuUsageNs: String
+    memoryUsageBytes: String
+    memoryTotalBytes: String
+  }
+
+  enum JailAction { start stop restart freeze unfreeze }
+  enum JobStatus { running success failed }
+  enum ImageBuildState { queued running success failed }
+
+  type IncusConfig {
+    enabled: Boolean!
+    stateDir: String!
+    storageDriver: String!
+    storageSource: String!
+    storagePoolName: String!
+    jailBridge: String!
+    jailSubnet: String!
+    jailNat: Boolean!
+    jailIpv6: String!
+    aclName: String!
+    aclBlock: String!
+    aclAllow: String!
+    aclDefaultEgress: String!
+    aclDefaultIngress: String!
+    jailProfile: String!
+    jailImage: String!
+    jailNesting: Boolean!
+    jailCpu: String!
+    jailMemory: String!
+    jailWorkspaceRoot: String!
+    jailAgentUid: String!
+    jailAgentGid: String!
+    jailBindMounts: String!
+    tsAuthKeyConfigured: Boolean!
+    dashboardWidgetEnable: Boolean!
+  }
+
+  input IncusConfigInput {
+    enabled: Boolean
+    stateDir: String
+    storageDriver: String
+    storageSource: String
+    storagePoolName: String
+    jailBridge: String
+    jailSubnet: String
+    jailNat: Boolean
+    jailIpv6: String
+    aclName: String
+    aclBlock: String
+    aclAllow: String
+    aclDefaultEgress: String
+    aclDefaultIngress: String
+    jailProfile: String
+    jailImage: String
+    jailNesting: Boolean
+    jailCpu: String
+    jailMemory: String
+    jailWorkspaceRoot: String
+    jailAgentUid: String
+    jailAgentGid: String
+    jailBindMounts: String
+    tsAuthKey: String
+    dashboardWidgetEnable: Boolean
   }
 
   type JailDetail {
@@ -40,7 +104,7 @@ export const graphqlSchemaExtension = async () => `
   type PrivilegedCommandStatus {
     id: String!
     command: String!
-    status: String!
+    status: JobStatus!
     exitCode: Int
     stdout: String
     stderr: String
@@ -50,13 +114,13 @@ export const graphqlSchemaExtension = async () => `
   type HomebrewInstallStatus {
     id: String!
     formula: String!
-    status: String!
+    status: JobStatus!
     message: String!
   }
 
   type ImageBuildStatus {
     id: String!
-    status: String!
+    status: ImageBuildState!
     alias: String!
     distro: String!
     release: String!
@@ -110,6 +174,7 @@ export const graphqlSchemaExtension = async () => `
 
   extend type Query {
     incusHealthy: Boolean!
+    incusConfig: IncusConfig!
     jails: [Jail!]!
     jailDetail(name: String!): JailDetail!
     jailImageBuildStatus(buildId: String!): ImageBuildStatus
@@ -122,8 +187,9 @@ export const graphqlSchemaExtension = async () => `
   }
 
   extend type Mutation {
+    updateIncusConfig(input: IncusConfigInput!): IncusConfig!
     launchJail(name: String!, image: String, allowSudo: Boolean): Boolean!
-    setJailState(name: String!, action: String!): Boolean!
+    setJailState(name: String!, action: JailAction!): Boolean!
     setJailWorkspace(name: String!, hostPath: String!): Boolean!
     clearJailWorkspace(name: String!): Boolean!
     migrateJailWorkspace(name: String!): String!
@@ -139,6 +205,14 @@ export const graphqlSchemaExtension = async () => `
     setMasterImage(alias: String!, isMaster: Boolean!): ImageRecord!
     deleteJailImage(alias: String!): Boolean!
     pruneStaleImageRecords: [String!]!
+    startJailExec(name: String!, cols: Int, rows: Int): String!
+    sendJailExecInput(sessionId: String!, data: String!): Boolean!
+    resizeJailExec(sessionId: String!, cols: Int!, rows: Int!): Boolean!
+    stopJailExec(sessionId: String!): Boolean!
+  }
+
+  extend type Subscription {
+    jailExecOutput(sessionId: String!): String!
   }
 `;
 
@@ -162,6 +236,7 @@ class IncusConfigPersister extends ConfigFilePersister<IncusConfig> {
   imports: [ConfigModule.forFeature(configFeature)],
   providers: [
     IncusService,
+    IncusUnixClient,
     IncusExecService,
     IncusImageBuilderService,
     IncusBuilderPresetsService,
@@ -175,7 +250,7 @@ class IncusPluginModule {
   private readonly logger = new Logger(IncusPluginModule.name);
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {}
   onModuleInit() {
-    this.logger.log("incus plugin initialized (state: %s)", this.config.get("incus.stateDir"));
+    this.logger.log(`incus plugin initialized (state: ${this.config.get("incus.stateDir")})`);
   }
 }
 

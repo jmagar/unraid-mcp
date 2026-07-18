@@ -1,7 +1,6 @@
 import { Resolver, Query, Mutation, Subscription, Args, Int, registerEnumType } from "@nestjs/graphql";
-import { ForbiddenException, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { IncusService } from "./incus.service.js";
@@ -10,6 +9,7 @@ import { IncusConfigSyncService } from "./config-sync.service.js";
 import { IncusImageBuilderService } from "./incus-image-builder.service.js";
 import { IncusBuilderPresetsService } from "./incus-builder-presets.service.js";
 import { IncusPackageSearchService } from "./incus-package-search.service.js";
+import { AuthAction, Resource, UsePermissions } from "@unraid/shared/use-permissions.directive.js";
 import {
   Jail,
   JailDetail,
@@ -48,6 +48,27 @@ registerEnumType(PackageEcosystem, {
   description: "Package catalog to search — apt is Debian/Ubuntu only",
 });
 
+const READ_METHODS = new Set([
+  "incusHealthy", "incusConfig", "jails", "jailDetail", "privilegedCommandStatus",
+  "jailImageBuildStatus", "jailImages", "builderPresets", "homebrewInstallStatus",
+  "searchPackages", "searchAllPackages", "jailExecOutput",
+]);
+const DELETE_METHODS = new Set(["deleteJail", "deleteBuilderPreset", "deleteJailImage", "deleteStoppedJails", "pruneStaleImageRecords"]);
+
+/** Apply the host's opt-in authz metadata to every resolver method by default. */
+function IncusPermissions(): ClassDecorator {
+  return (target) => {
+    for (const name of Object.getOwnPropertyNames(target.prototype)) {
+      if (name === "constructor") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(target.prototype, name);
+      if (!descriptor || typeof descriptor.value !== "function") continue;
+      const action = READ_METHODS.has(name) ? AuthAction.READ_ANY : DELETE_METHODS.has(name) ? AuthAction.DELETE_ANY : AuthAction.UPDATE_ANY;
+      UsePermissions({ action, resource: Resource.VMS })(target.prototype, name, descriptor);
+    }
+  };
+}
+
+@IncusPermissions()
 @Resolver()
 export class IncusResolver {
   private readonly logger = new Logger(IncusResolver.name);
@@ -69,7 +90,8 @@ export class IncusResolver {
 
   @Query(() => IncusConfig, { description: "Current incus.cfg, as loaded by the API" })
   async incusConfig(): Promise<IncusConfig> {
-    return this.config.getOrThrow<IncusConfig>("incus");
+    const current = this.config.getOrThrow<IncusConfig>("incus");
+    return { ...current, tsAuthKey: "", tsAuthKeyConfigured: Boolean(current.tsAuthKey) };
   }
 
   @Mutation(() => IncusConfig, {
@@ -136,12 +158,7 @@ export class IncusResolver {
     // Must resolve (collapsing `..`) before comparing, and compare full path
     // segments (not a bare string prefix) so e.g. "/srv/agent-jails-evil" or
     // "/srv/agent-jails/../../etc" can't slip past a naive startsWith check.
-    const wsRoot = resolve(this.config.get<string>("incus.jailWorkspaceRoot", "/srv/agent-jails"));
-    const resolved = resolve(hostPath);
-    if (resolved !== wsRoot && !resolved.startsWith(wsRoot + sep)) {
-      throw new ForbiddenException(`hostPath must be under the workspace root (${wsRoot})`);
-    }
-    await this.incus.setWorkspace(name, resolved);
+    await this.incus.setWorkspace(name, hostPath);
     return true;
   }
 
@@ -261,7 +278,7 @@ export class IncusResolver {
     if (!build) return undefined;
     return {
       id: build.id,
-      status: build.status,
+      status: build.status as import("./config.entity.js").ImageBuildState,
       alias: build.alias,
       distro: build.distro,
       release: build.release,

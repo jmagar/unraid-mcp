@@ -1,7 +1,7 @@
 import { registerAs } from "@nestjs/config";
-import { Field, InputType, ObjectType } from "@nestjs/graphql";
+import { ArgsType, Field, InputType, Int, ObjectType, registerEnumType } from "@nestjs/graphql";
 import { Exclude, Expose } from "class-transformer";
-import { IsArray, IsBoolean, IsOptional, IsString, Matches } from "class-validator";
+import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
 
 /**
  * Whitelist patterns for IncusConfigInput's free-text fields. Not a
@@ -151,8 +151,11 @@ export class IncusConfig {
   jailBindMounts!: string;
 
   @Expose()
-  @Field(() => String, { description: "Tailscale auth key to auto-join new jails with (empty = disabled)" })
-  @IsString()
+  @Field(() => Boolean, { description: "Whether a write-only Tailscale auth key is configured" })
+  @IsBoolean()
+  tsAuthKeyConfigured!: boolean;
+
+  /** Internal only; never decorated/exposed in GraphQL output. */
   tsAuthKey!: string;
 
   @Expose()
@@ -172,7 +175,7 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
   jailNat: true,
   jailIpv6: "none",
   aclName: "agent-block-lan",
-  aclBlock: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16",
+  aclBlock: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,100.64.0.0/10",
   aclAllow: "",
   aclDefaultEgress: "allow",
   aclDefaultIngress: "drop",
@@ -186,6 +189,7 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
   jailAgentGid: "1000",
   jailBindMounts: "",
   tsAuthKey: "",
+  tsAuthKeyConfigured: false,
   dashboardWidgetEnable: true,
 }));
 
@@ -199,14 +203,14 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
 @InputType()
 export class IncusConfigInput {
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() enabled?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() stateDir?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageDriver?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.absolutePath) stateDir?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(/^(dir|zfs)$/) storageDriver?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageSource?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storagePoolName?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.ifname) jailBridge?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) jailSubnet?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNat?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailIpv6?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(/^none$/) jailIpv6?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) aclName?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclBlock?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclAllow?: string;
@@ -230,13 +234,15 @@ export class Jail {
   @Field(() => String) name!: string;
   @Field(() => String) status!: string;
   @Field(() => String, { nullable: true }) ipv4?: string;
-  @Field(() => Number, { nullable: true, description: "Cumulative CPU time consumed, in nanoseconds" })
-  cpuUsageNs?: number;
-  @Field(() => Number, { nullable: true, description: "Current memory usage, in bytes" })
-  memoryUsageBytes?: number;
-  @Field(() => Number, { nullable: true, description: "Memory limit, in bytes (0 = uncapped)" })
-  memoryTotalBytes?: number;
+  @Field(() => String, { nullable: true, description: "Cumulative CPU time consumed, in nanoseconds" }) cpuUsageNs?: string;
+  @Field(() => String, { nullable: true, description: "Current memory usage, in bytes" }) memoryUsageBytes?: string;
+  @Field(() => String, { nullable: true, description: "Memory limit, in bytes (0 = uncapped)" }) memoryTotalBytes?: string;
 }
+
+export enum JobStatus { running = "running", success = "success", failed = "failed" }
+export enum ImageBuildState { queued = "queued", running = "running", success = "success", failed = "failed" }
+registerEnumType(JobStatus, { name: "JobStatus" });
+registerEnumType(ImageBuildState, { name: "ImageBuildState" });
 
 @ObjectType()
 export class JailDetail {
@@ -268,8 +274,8 @@ export class JailDetail {
 export class PrivilegedCommandStatus {
   @Field(() => String) id!: string;
   @Field(() => String) command!: string;
-  @Field(() => String, { description: "running | success | failed" }) status!: string;
-  @Field(() => Number, { nullable: true }) exitCode?: number;
+  @Field(() => JobStatus) status!: JobStatus;
+  @Field(() => Int, { nullable: true }) exitCode?: number;
   @Field(() => String, { nullable: true }) stdout?: string;
   @Field(() => String, { nullable: true }) stderr?: string;
   @Field(() => String) message!: string;
@@ -279,7 +285,7 @@ export class PrivilegedCommandStatus {
 export class HomebrewInstallStatus {
   @Field(() => String) id!: string;
   @Field(() => String) formula!: string;
-  @Field(() => String, { description: "running | success | failed" }) status!: string;
+  @Field(() => JobStatus) status!: JobStatus;
   @Field(() => String) message!: string;
 }
 
@@ -293,16 +299,16 @@ export class BuilderPreset {
 
 @InputType()
 export class BuilderPresetInput {
-  @Field(() => String) @IsString() name!: string;
-  @Field(() => String) @IsString() distro!: string;
-  @Field(() => String) @IsString() release!: string;
+  @Field(() => String) @IsString() @Length(1, 100) name!: string;
+  @Field(() => String) @IsString() @Length(1, 64) distro!: string;
+  @Field(() => String) @IsString() @Length(1, 64) release!: string;
   @Field(() => [String]) @IsArray() @IsString({ each: true }) packages!: string[];
 }
 
 @ObjectType()
 export class ImageBuildStatus {
   @Field(() => String) id!: string;
-  @Field(() => String, { description: "queued|running|success|failed" }) status!: string;
+  @Field(() => ImageBuildState) status!: ImageBuildState;
   @Field(() => String, { description: "Alias the built image is/will be imported under" }) alias!: string;
   @Field(() => String) distro!: string;
   @Field(() => String) release!: string;
@@ -343,4 +349,15 @@ export class PackageSearchResponse {
   @Field(() => [PackageSearchResult]) results!: PackageSearchResult[];
   @Field(() => [PackageSearchError], { description: "Sources that failed — results from other sources still come back" })
   errors!: PackageSearchError[];
+}
+
+@ArgsType()
+export class JailNameArgs {
+  @Field(() => String) @IsString() @Length(1, 63) @Matches(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/) name!: string;
+}
+
+@ArgsType()
+export class TerminalStartArgs extends JailNameArgs {
+  @Field(() => Int, { nullable: true }) @IsOptional() @IsInt() @Min(20) @Max(500) cols?: number;
+  @Field(() => Int, { nullable: true }) @IsOptional() @IsInt() @Min(5) @Max(300) rows?: number;
 }

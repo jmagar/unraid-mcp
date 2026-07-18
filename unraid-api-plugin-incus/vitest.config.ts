@@ -18,11 +18,24 @@ export default defineConfig({
       "@nestjs/graphql": stub("@nestjs/graphql"),
       "class-transformer": stub("class-transformer"),
       "class-validator": stub("class-validator"),
+      "@unraid/shared/use-permissions.directive.js": fileURLToPath(
+        new URL("./test-stubs/@unraid/shared/use-permissions.directive.js", import.meta.url),
+      ),
     },
   },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
     globals: false,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      thresholds: {
+        statements: 35,
+        branches: 32,
+        functions: 16,
+        lines: 36,
+      },
+    },
   },
 });

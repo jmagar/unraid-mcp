@@ -4,6 +4,9 @@ unraid-api-plugin-incus/node_modules/
 unraid-api-plugin-incus/dist-web/
 unraid-api-plugin-incus/dist-web-dashboard/
 unraid-api-plugin-incus/web/node_modules/
+unraid-api-plugin-incus/coverage/
+unraid-api-plugin-incus/web/coverage/
+unraid-api-plugin-incus/.stryker-tmp/
 
 # OS/editor
 .DS_Store

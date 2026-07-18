@@ -25,12 +25,15 @@ export default defineConfig({
     lib: {
       entry: fileURLToPath(new URL("./src/main.ts", import.meta.url)),
       name: "IncusSettingsWeb",
-      formats: ["iife"],
+      // ES output permits Terminal.vue/ghostty-web to remain a true lazy
+      // chunk. The classic Unraid page already loads this entry as a module.
+      formats: ["es"],
       fileName: () => "incus-settings.js",
     },
     rollupOptions: {
       output: {
         assetFileNames: "incus-settings.[ext]",
+        chunkFileNames: "incus-settings-[name]-[hash].js",
       },
     },
   },

@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   IncusPackageSearchService,
   localMatchScore,
   mergeRanked,
   type PackageSearchResult,
 } from "./incus-package-search.service.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("localMatchScore", () => {
   it("ranks an exact name match above a prefix match", () => {
@@ -112,5 +114,27 @@ describe("IncusPackageSearchService short-query short-circuit", () => {
     const service = new IncusPackageSearchService();
     const response = await service.searchAll("  x ");
     expect(response).toEqual({ results: [], errors: [] });
+  });
+});
+
+describe("IncusPackageSearchService network behavior", () => {
+  it("deduplicates simultaneous cold npm requests", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      objects: [{ searchScore: 1, package: { name: "curl", version: "1.0.0" } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new IncusPackageSearchService();
+    const [first, second] = await Promise.all([service.search("npm", "curl"), service.search("npm", "curl")]);
+    expect(first).toEqual(second);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("negative-caches repeated upstream failures", async () => {
+    const fetchMock = vi.fn(async () => new Response("no", { status: 503, statusText: "Unavailable" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new IncusPackageSearchService();
+    await expect(service.search("npm", "broken")).rejects.toThrow("503");
+    await expect(service.search("npm", "broken")).rejects.toThrow("cached failure");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

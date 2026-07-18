@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { IncusConfigSyncService } from "./config-sync.service.js";
 import type { IncusConfig } from "./config.entity.js";
 import type { ConfigService } from "@nestjs/config";
+import { mkdtemp, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // A realistic incus.cfg fixture: comments, blank lines, quoted and
 // unquoted values, and an inline trailing comment — the exact shape
@@ -87,6 +90,11 @@ describe("parseShellConfig", () => {
     expect(parsed.ACL_ALLOW).toBe("");
     expect(parsed.JAIL_BIND_MOUNTS).toBe("");
     expect(parsed.TS_AUTHKEY).toBe("");
+  });
+
+  it("preserves # inside quoted values while removing a trailing comment", () => {
+    const parsed = service.parseShellConfig(`TS_AUTHKEY="abc#def" # actual comment\n`);
+    expect(parsed.TS_AUTHKEY).toBe("abc#def");
   });
 });
 
@@ -177,6 +185,11 @@ describe("updateShellConfig round trip", () => {
     expect(updated).toContain("JAIL_SUBNET='198.18.0.1/25' # keep in the RFC 5737-adjacent test range");
   });
 
+  it("does not mistake # inside an existing quoted value for a comment", () => {
+    const updated = service.updateShellConfig(`TS_AUTHKEY='old#value' # keep\n`, { tsAuthKey: "new" });
+    expect(updated).toBe(`TS_AUTHKEY='new' # keep\n`);
+  });
+
   it("always emits single-quoted output regardless of original quoting style", () => {
     // STORAGE_SOURCE was originally single-quoted; INCUS_DIR was double-quoted.
     const updated = service.updateShellConfig(FIXTURE_CFG, {
@@ -211,5 +224,20 @@ describe("updateShellConfig round trip", () => {
     const updated = service.updateShellConfig(FIXTURE_CFG, { tsAuthKey: malicious });
     // bash single-quote escaping: close quote, escaped quote, reopen quote
     expect(updated).toContain(`TS_AUTHKEY='x'\\''; rm -rf /; echo '\\'''`);
+  });
+});
+
+describe("config persistence integration", () => {
+  it("writes cfg and JSON atomically with secret-safe permissions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "incus-config-"));
+    const cfgPath = join(dir, "incus.cfg");
+    const jsonPath = join(dir, "incus.json");
+    await writeFile(cfgPath, FIXTURE_CFG, { mode: 0o644 });
+    const set = () => undefined;
+    const config = { get: () => undefined, set } as unknown as ConfigService;
+    const service = new IncusConfigSyncService(config, { cfgPath, jsonPath });
+    await service.applyConfigUpdate({ tsAuthKey: "tskey-test", jailCpu: "4" });
+    expect((await stat(cfgPath)).mode & 0o777).toBe(0o600);
+    expect((await stat(jsonPath)).mode & 0o777).toBe(0o600);
   });
 });
