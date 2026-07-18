@@ -7,8 +7,8 @@
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
   <!ENTITY txz       "&name;-unraid-7.0.0-46-x86_64-1.txz">
-  <!ENTITY md5       "c5b769049ffc77b7a365fd584d479f3d">
-  <!ENTITY sha256    "d4c1ea99452c88b9bbbd1394a746e27b9f4f0ab84daafc735c45ffd90030de90">
+  <!ENTITY md5       "79ba19df88c8f2b8280e584119cc8432">
+  <!ENTITY sha256    "2ed0c24da78249c85b46198fd5361522a8aa8ad9516280846f167ab032080328">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>

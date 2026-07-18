@@ -1,7 +1,7 @@
 {
   "release": "2026.07.18",
   "classicPackage": "incus-unraid-7.0.0-46-x86_64-1.txz",
-  "classicPackageSha256": "d4c1ea99452c88b9bbbd1394a746e27b9f4f0ab84daafc735c45ffd90030de90",
+  "classicPackageSha256": "2ed0c24da78249c85b46198fd5361522a8aa8ad9516280846f167ab032080328",
   "apiPackageVersion": "0.1.0",
   "supportedNodeMajor": 22,
   "supportedArchitecture": "x86_64",
