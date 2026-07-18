@@ -193,7 +193,10 @@ export class IncusExecService implements OnModuleDestroy {
       command,
       "wait-for-websocket": false,
       interactive: false,
-      "record-output": true,
+      // Incus retains recorded exec logs until they are explicitly deleted.
+      // Only request them when the caller will fetch and delete them below;
+      // high-frequency probes such as checkSudoEnabled need no output files.
+      "record-output": captureOutput,
     });
 
     // Same envelope shape as requestExec: the top-level `operation` is the

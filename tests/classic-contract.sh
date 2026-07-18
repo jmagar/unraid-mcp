@@ -7,6 +7,7 @@ INIT="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-init.sh"
 MIGRATE="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/migrate-config.sh"
 VALIDATE="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/config-validation.sh"
 APPLY="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/apply-settings.sh"
+PLG="$ROOT/incus.plg"
 
 grep -Eq 'ACL_BLOCK=.*100\.64\.0\.0/10' "$CFG"
 grep -Fq 'Block host bridge and peer containers' "$INIT"
@@ -19,6 +20,17 @@ grep -Fq 'mode="${mode:-ro}"' "$INIT"
 grep -Fq 'config bind mounts must be read-only' "$INIT"
 grep -Fq 'readonly: "true"' "$INIT"
 grep -Fq 'validate_containment_config' "$APPLY"
+# Fresh installs must create the persistent config before API activation. The
+# backend chooses its config path once in its constructor during that restart.
+config_bootstrap_line="$(grep -n 'cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg" || exit 1' "$PLG" | cut -d: -f1)"
+api_activation_line="$(grep -n 'if ! &emhttp;/scripts/install-api-plugin.sh' "$PLG" | cut -d: -f1)"
+[ -n "$config_bootstrap_line" ]
+[ -n "$api_activation_line" ]
+[ "$config_bootstrap_line" -lt "$api_activation_line" ]
+# Literal workflow contract, not a shell expression in this test.
+# shellcheck disable=SC2016
+grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.yml"
+grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
 for script in "$ROOT"/source/usr/local/emhttp/plugins/incus/scripts/*.sh "$ROOT"/source/usr/local/emhttp/plugins/incus/event/*; do
   bash -n "$script"
 done

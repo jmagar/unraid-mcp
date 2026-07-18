@@ -98,6 +98,9 @@ async function loadConfig() {
   const data = await gql<{ incusConfig: IncusConfig }>(CONFIG_QUERY);
   if (!componentActive) return;
   Object.assign(config, data.incusConfig);
+  // Legacy configs may predate fail-closed IPv6 enforcement. Never retain a
+  // hidden non-none value behind the disabled control or submit it on Apply.
+  config.jailIpv6 = "none";
 }
 
 let statusRequestId = 0;

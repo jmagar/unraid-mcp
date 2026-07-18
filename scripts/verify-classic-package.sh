@@ -25,13 +25,20 @@ find source/usr/local/emhttp/plugins/incus -type f \( -name '*.sh' -o -path '*/e
 shellcheck -x -e SC1090,SC1091,SC2001 source/usr/local/emhttp/plugins/incus/scripts/*.sh source/usr/local/emhttp/plugins/incus/event/*
 
 entries="$(wc -l <"$archive_list")"
-[ "$entries" -ge 196 ] || { echo "archive shrank below baseline: $entries < 196" >&2; exit 1; }
+expected_entries="$(sed -n 's/^- Entries: \([0-9][0-9]*\)$/\1/p' MANIFEST.md)"
+[ -n "$expected_entries" ] || { echo "MANIFEST.md has no numeric package entry count" >&2; exit 1; }
+[ "$entries" -eq "$expected_entries" ] || {
+  echo "archive entry count differs from release manifest: $entries != $expected_entries" >&2
+  exit 1
+}
 for path in \
   usr/local/incus/libexec/incus/incusd \
   usr/local/incus/bin/incus \
   usr/local/incus/bin/nft \
   usr/local/incus/bin/unsquashfs \
   usr/local/emhttp/plugins/incus/api-plugin/dist/index.js \
+  usr/local/emhttp/plugins/incus/api-plugin/node_modules/ws/package.json \
+  usr/local/emhttp/plugins/incus/api-plugin/node_modules/graphql-subscriptions/package.json \
   usr/local/emhttp/plugins/incus/scripts/rc.incus \
   usr/local/emhttp/plugins/incus/web/incus-settings.js \
   usr/local/emhttp/plugins/incus/web/incus-dashboard.js; do

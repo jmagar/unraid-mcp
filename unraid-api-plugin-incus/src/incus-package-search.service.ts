@@ -145,7 +145,14 @@ export class IncusPackageSearchService {
     // The large PyPI/Homebrew/apt catalogs are intentionally loaded one at a
     // time so their download/decode/worker heaps never peak simultaneously.
     const settled: Array<PromiseSettledResult<PackageSearchResult[]>> = [];
-    const npm = sources[0].run();
+    // Convert npm to a settled outcome immediately. Holding the raw promise
+    // while awaiting the large catalogs below leaves its rejection temporarily
+    // unobserved, which Node may report as an unhandled rejection before this
+    // method eventually reaches the later await/catch.
+    const npm: Promise<PromiseSettledResult<PackageSearchResult[]>> = sources[0].run().then(
+      (value): PromiseSettledResult<PackageSearchResult[]> => ({ status: "fulfilled", value }),
+      (reason): PromiseSettledResult<PackageSearchResult[]> => ({ status: "rejected", reason }),
+    );
     for (let index = 1; index < sources.length; index++) {
       try {
         settled[index] = { status: "fulfilled", value: await sources[index].run() };
@@ -153,11 +160,7 @@ export class IncusPackageSearchService {
         settled[index] = { status: "rejected", reason };
       }
     }
-    try {
-      settled[0] = { status: "fulfilled", value: await npm };
-    } catch (reason) {
-      settled[0] = { status: "rejected", reason };
-    }
+    settled[0] = await npm;
 
     const results: PackageSearchResult[] = [];
     const errors: PackageSearchError[] = [];

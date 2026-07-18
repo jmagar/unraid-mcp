@@ -7873,8 +7873,8 @@ function Kn(e, t, s = {}) {
   };
 }
 function Jf(e, t) {
-  const { tsAuthKeyConfigured: s, ...n } = e;
-  return t.clear ? { ...n, tsAuthKey: "" } : t.replacement ? { ...n, tsAuthKey: t.replacement } : n;
+  const { tsAuthKeyConfigured: s, ...n } = e, o = { ...n, jailIpv6: "none" };
+  return t.clear ? { ...o, tsAuthKey: "" } : t.replacement ? { ...o, tsAuthKey: t.replacement } : o;
 }
 function Yf(e, t) {
   const s = /* @__PURE__ */ Gt(/* @__PURE__ */ new Map()), n = /* @__PURE__ */ Gt(/* @__PURE__ */ new Map()), o = /* @__PURE__ */ N([]), l = /* @__PURE__ */ Gt(/* @__PURE__ */ new Map()), i = 30, a = ye(() => e.value.filter((q) => q.status.toLowerCase() === "running")), u = ye(() => e.value.length - a.value.length), h = ye(() => a.value.reduce((q, te) => q + Number(te.memoryUsageBytes ?? 0), 0)), g = ye(() => a.value.reduce((q, te) => q + BigInt(te.cpuUsageNs ?? "0"), 0n));
@@ -8189,7 +8189,7 @@ const wp = { class: "unapi w-full max-w-4xl text-foreground xl:max-w-6xl 2xl:max
 }, Gh = { class: "mt-4 border-t border-border pt-4" }, Jh = { class: "mb-8 flex justify-end" }, Yh = 5e3, Yo = "__other__", cs = "__other__", Qh = 400, Zh = /* @__PURE__ */ We({
   __name: "App",
   setup(e) {
-    const t = /* @__PURE__ */ ed(() => import("./incus-settings-Terminal-m4e_GAnK.js")), s = /* @__PURE__ */ N("jails"), n = /* @__PURE__ */ N(!0), o = /* @__PURE__ */ N(!1), l = /* @__PURE__ */ N(null), i = /* @__PURE__ */ N(!1), a = /* @__PURE__ */ N([]), u = /* @__PURE__ */ N(""), h = ye(() => ma(u.value)), g = ye(() => Mr(v.jailCpu)), x = ye(() => $r(v.jailMemory)), A = /* @__PURE__ */ N(""), k = /* @__PURE__ */ N(!1), O = /* @__PURE__ */ N(null), v = /* @__PURE__ */ Gt({
+    const t = /* @__PURE__ */ ed(() => import("./incus-settings-Terminal-DDk6hy6k.js")), s = /* @__PURE__ */ N("jails"), n = /* @__PURE__ */ N(!0), o = /* @__PURE__ */ N(!1), l = /* @__PURE__ */ N(null), i = /* @__PURE__ */ N(!1), a = /* @__PURE__ */ N([]), u = /* @__PURE__ */ N(""), h = ye(() => ma(u.value)), g = ye(() => Mr(v.jailCpu)), x = ye(() => $r(v.jailMemory)), A = /* @__PURE__ */ N(""), k = /* @__PURE__ */ N(!1), O = /* @__PURE__ */ N(null), v = /* @__PURE__ */ Gt({
       enabled: !1,
       stateDir: "",
       storageDriver: "dir",
@@ -8236,7 +8236,7 @@ const wp = { class: "unapi w-full max-w-4xl text-foreground xl:max-w-6xl 2xl:max
     let Me = !1;
     async function Le() {
       const c = await pe(Qf);
-      Me && Object.assign(v, c.incusConfig);
+      Me && (Object.assign(v, c.incusConfig), v.jailIpv6 = "none");
     }
     let tt = 0;
     async function mt() {

@@ -118,4 +118,26 @@ describe("App", () => {
     expect(wrapper.findAll("button").find((button) => button.text() === "Default")?.element).toBeTruthy();
     wrapper.unmount();
   });
+
+  it("submits none when the server loads a legacy IPv6 address", async () => {
+    gqlMock.mockImplementation((query: string) => {
+      if (query.includes("incusConfig")) return Promise.resolve({ incusConfig: {
+        enabled: true, jailCpu: "", jailMemory: "", jailIpv6: "fd42::1/64", tsAuthKeyConfigured: false,
+      } });
+      if (query.includes("incusHealthy")) return Promise.resolve({ incusHealthy: true, jails: [] });
+      if (query.includes("builderPresets")) return Promise.resolve({ builderPresets: [] });
+      if (query.includes("jailImages")) return Promise.resolve({ jailImages: [] });
+      if (query.includes("updateIncusConfig")) return Promise.resolve({ updateIncusConfig: { enabled: true } });
+      return Promise.resolve({});
+    });
+    const wrapper = mount(App);
+    await flushPromises();
+    await wrapper.get("#incus-tab-config").trigger("click");
+    await wrapper.findAll("button").find((button) => button.text() === "Apply")!.trigger("click");
+    await flushPromises();
+
+    const update = gqlMock.mock.calls.find(([query]) => String(query).includes("updateIncusConfig"));
+    expect((update?.[1].input as { jailIpv6: string }).jailIpv6).toBe("none");
+    wrapper.unmount();
+  });
 });

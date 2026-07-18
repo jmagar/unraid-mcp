@@ -57,6 +57,24 @@ jobs:
       - name: Build
         run: npx tsc
 
+      - name: Verify coordinated classic payload matches this backend build
+        run: |
+          plugin_name="$(sed -n 's/.*<!ENTITY name[[:space:]]*"\([^"]*\)".*/\1/p' ../incus.plg)"
+          txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' ../incus.plg)"
+          txz="${txz//&name;/$plugin_name}"
+          archive="../packages/$txz"
+          stage="$(mktemp -d)"
+          trap 'rm -rf "$stage"' EXIT
+          tar -xJf "$archive" -C "$stage" \
+            usr/local/emhttp/plugins/incus/api-plugin
+          payload="$stage/usr/local/emhttp/plugins/incus/api-plugin"
+          diff -qr dist "$payload/dist"
+          cmp package.json "$payload/package.json"
+          cmp package-lock.json "$payload/package-lock.json"
+          for dependency in ws graphql-subscriptions; do
+            test -f "$payload/node_modules/$dependency/package.json"
+          done
+
       - name: Upload dist/
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

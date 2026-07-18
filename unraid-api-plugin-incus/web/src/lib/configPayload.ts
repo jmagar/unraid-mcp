@@ -6,7 +6,8 @@ export function buildConfigUpdate(
   secret: { replacement: string; clear: boolean }
 ): Record<string, unknown> {
   const { tsAuthKeyConfigured: _configured, ...publicConfig } = config;
-  if (secret.clear) return { ...publicConfig, tsAuthKey: "" };
-  if (secret.replacement) return { ...publicConfig, tsAuthKey: secret.replacement };
-  return publicConfig;
+  const failClosedConfig = { ...publicConfig, jailIpv6: "none" };
+  if (secret.clear) return { ...failClosedConfig, tsAuthKey: "" };
+  if (secret.replacement) return { ...failClosedConfig, tsAuthKey: secret.replacement };
+  return failClosedConfig;
 }

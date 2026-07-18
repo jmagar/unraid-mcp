@@ -7,8 +7,8 @@
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
   <!ENTITY txz       "&name;-unraid-7.0.0-46-x86_64-1.txz">
-  <!ENTITY md5       "5c6540ff4da9d3fdbae8ebf5c5af494c">
-  <!ENTITY sha256    "bb81ae024216269d80e1d9fa841d59db749693e610227bcf405bf8ad70c91ee7">
+  <!ENTITY md5       "72cb385808a212abb9aa59246fe070c6">
+  <!ENTITY sha256    "44c03afe8130a3f718c05e34d38972b6e518682ac12503c70026461043923867">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -390,6 +390,16 @@ for candidate in $(ls -1t &plugin;/&name;-unraid-*.txz 2>/dev/null); do
   break
 done
 upgradepkg --install-new &plugin;/&txz; || exit 1
+
+# A fresh install has no persistent config yet. Bootstrap it before restarting
+# unraid-api so IncusConfigSyncService selects the real /boot path in its
+# constructor rather than permanently binding this process to its development
+# cwd fallback. The later setup block remains responsible for migrations and
+# the known-good copy after coordinated API activation succeeds.
+if [ ! -f "&plugin;/incus.cfg" ]; then
+  cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg" || exit 1
+fi
+chmod 600 "&plugin;/incus.cfg" || exit 1
 
 # The API payload lives inside the classic archive. Activate and verify it
 # before declaring the coordinated release successful. install-api-plugin.sh

@@ -72,3 +72,23 @@ describe("IncusExecService session admission", () => {
     expect(internals.pendingSessions).toBe(0);
   });
 });
+
+describe("IncusExecService recorded output", () => {
+  it("records output only when the caller will fetch and delete it", async () => {
+    const payloads: Array<Record<string, unknown>> = [];
+    const client = {
+      socketPath: "/tmp/incus.sock",
+      request: async (_method: string, _path: string, body: Record<string, unknown>) => {
+        payloads.push(body);
+        return { operation: "/1.0/operations/test" };
+      },
+      wait: async () => ({ metadata: { metadata: { return: 0 } } }),
+    };
+    const service = new IncusExecService({ get: () => undefined } as never, client as never);
+
+    await service.runOnce("agent", ["true"], 60, false);
+    await service.runOnce("agent", ["true"], 60, true);
+
+    expect(payloads.map((payload) => payload["record-output"])).toEqual([false, true]);
+  });
+});

@@ -118,6 +118,36 @@ describe("IncusPackageSearchService short-query short-circuit", () => {
 });
 
 describe("IncusPackageSearchService network behavior", () => {
+  it("observes an early npm rejection while sequential catalog searches are still pending", async () => {
+    const service = new IncusPackageSearchService();
+    let releasePypi!: () => void;
+    const pypiPending = new Promise<PackageSearchResult[]>((resolve) => { releasePypi = () => resolve([]); });
+    const internals = service as unknown as {
+      searchNpm: () => Promise<PackageSearchResult[]>;
+      searchPypi: () => Promise<PackageSearchResult[]>;
+      searchBrew: () => Promise<PackageSearchResult[]>;
+    };
+    internals.searchNpm = async () => { throw new Error("npm failed immediately"); };
+    internals.searchPypi = () => pypiPending;
+    internals.searchBrew = async () => [];
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      const search = service.searchAll("curl");
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+      releasePypi();
+      await expect(search).resolves.toMatchObject({
+        errors: [{ ecosystem: "npm", message: "npm failed immediately" }],
+      });
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      releasePypi();
+    }
+  });
+
   it("deduplicates simultaneous cold npm requests", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       objects: [{ searchScore: 1, package: { name: "curl", version: "1.0.0" } }],
