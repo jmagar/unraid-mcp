@@ -5,10 +5,18 @@ on:
     branches: [main]
     paths:
       - "unraid-api-plugin-incus/**"
+      - "packages/**"
+      - "incus.plg"
+      - "MANIFEST.md"
+      - "release-manifest.json"
       - ".github/workflows/api-plugin-ci.yml"
   pull_request:
     paths:
       - "unraid-api-plugin-incus/**"
+      - "packages/**"
+      - "incus.plg"
+      - "MANIFEST.md"
+      - "release-manifest.json"
       - ".github/workflows/api-plugin-ci.yml"
   workflow_dispatch:
 

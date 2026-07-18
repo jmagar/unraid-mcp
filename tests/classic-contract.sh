@@ -30,6 +30,8 @@ api_activation_line="$(grep -n 'if ! &emhttp;/scripts/install-api-plugin.sh' "$P
 # Literal workflow contract, not a shell expression in this test.
 # shellcheck disable=SC2016
 grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.yml"
+[ "$(grep -Fc '      - "packages/**"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
+[ "$(grep -Fc '      - "incus.plg"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
 grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
 for script in "$ROOT"/source/usr/local/emhttp/plugins/incus/scripts/*.sh "$ROOT"/source/usr/local/emhttp/plugins/incus/event/*; do
   bash -n "$script"
