@@ -4,10 +4,10 @@ Release metadata is machine-readable in `release-manifest.json`. The currently
 tracked classic artifact is:
 
 - File: `packages/incus-unraid-7.0.0-46-x86_64-1.txz`
-- Size: 35,982,392 bytes
-- Entries: 306
-- MD5 (legacy Unraid downloader field only): `4a6de0dc7b6038ce2d48913dd2f0a617`
-- SHA-256: `fec4335241e8dcbb1710e70b39f6c22d615eb39779fa914b17d86d59a14df4ee`
+- Size: 36,088,440 bytes
+- Entries: 309
+- MD5 (legacy Unraid downloader field only): `5c6540ff4da9d3fdbae8ebf5c5af494c`
+- SHA-256: `bb81ae024216269d80e1d9fa841d59db749693e610227bcf405bf8ad70c91ee7`
 - Target: x86_64, glibc 2.38 or newer
 
 The Incus 7.0 runtime was repackaged from Debian trixie packages and has been
@@ -64,8 +64,8 @@ tar -tvJf packages/incus-unraid-7.0.0-46-x86_64-1.txz
 - The default ACL blocks RFC1918, link-local, Tailscale CGNAT, and the Incus
   bridge subnet itself (with narrow TCP/UDP DNS exceptions to its gateway).
   IPv6 is rejected until an equivalent IPv6 containment policy exists.
-- Optional profile bind mounts default read-only and are confined to the
-  workspace root or the plugin's dedicated curated-config directory.
+- Optional profile bind mounts default read-only and are confined to `/srv`,
+  `/mnt`, or the plugin's dedicated curated-config directory.
 - `rc.incus` rolls back partial startup, rotates `/var/log/incusd.log`, records
   health in `$INCUS_DIR/plugin-health`, validates PIDs, and starts a bounded
   watchdog. Array shutdown aggregates instance and daemon stop failures.

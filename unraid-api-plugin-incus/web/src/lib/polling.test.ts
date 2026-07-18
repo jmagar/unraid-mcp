@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { startPolling } from "./polling";
+import { JOB_POLL_INTERVAL_MS, startPolling } from "./polling";
 
 describe("startPolling", () => {
+  it("keeps background job polling at a bounded two-second cadence", () => {
+    expect(JOB_POLL_INTERVAL_MS).toBe(2_000);
+  });
   it("does not overlap slow executions", async () => {
     vi.useFakeTimers();
     let resolveTask!: () => void;

@@ -3,6 +3,8 @@ export interface PollController {
   trigger(): Promise<void>;
 }
 
+export const JOB_POLL_INTERVAL_MS = 2_000;
+
 export interface PollContext {
   readonly signal: AbortSignal;
   isActive(): boolean;

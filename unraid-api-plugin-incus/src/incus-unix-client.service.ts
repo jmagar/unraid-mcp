@@ -17,6 +17,7 @@ const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 interface RawResponse {
   statusCode: number;
   text: string;
+  truncated: boolean;
 }
 
 @Injectable()
@@ -35,11 +36,25 @@ export class IncusUnixClient {
     timeoutMs = 30_000,
     maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
   ): Promise<string> {
-    const response = await this.requestRaw(method, path, body, timeoutMs, maxBytes);
+    const response = await this.requestRaw(method, path, body, timeoutMs, maxBytes, false);
     if (response.statusCode >= 400) {
       throw new Error(`Incus HTTP ${response.statusCode} on ${method} ${path}`);
     }
     return response.text;
+  }
+
+  async requestTextTruncated(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutMs = 30_000,
+    maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
+  ): Promise<{ text: string; truncated: boolean }> {
+    const response = await this.requestRaw(method, path, body, timeoutMs, maxBytes, true);
+    if (response.statusCode >= 400) {
+      throw new Error(`Incus HTTP ${response.statusCode} on ${method} ${path}`);
+    }
+    return { text: response.text, truncated: response.truncated };
   }
 
   private async requestRaw(
@@ -48,6 +63,7 @@ export class IncusUnixClient {
     body?: unknown,
     timeoutMs = 30_000,
     maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
+    truncate = false,
   ): Promise<RawResponse> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     return new Promise((resolve, reject) => {
@@ -63,10 +79,17 @@ export class IncusUnixClient {
       }, (res) => {
         const chunks: Buffer[] = [];
         let bytes = 0;
+        let truncated = false;
         res.on("data", (chunk: Buffer | string) => {
           const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          const remaining = Math.max(0, maxBytes - bytes);
           bytes += buffer.length;
-          if (bytes > maxBytes) {
+          if (buffer.length > remaining) {
+            if (truncate) {
+              if (remaining > 0) chunks.push(buffer.subarray(0, remaining));
+              truncated = true;
+              return;
+            }
             if (!failed) reject(new Error(`Incus response exceeded ${maxBytes} bytes for ${method} ${path}`));
             failed = true;
             res.destroy();
@@ -79,6 +102,7 @@ export class IncusUnixClient {
           resolve({
             statusCode: res.statusCode ?? 500,
             text: Buffer.concat(chunks).toString("utf-8"),
+            truncated,
           });
         });
       });
@@ -90,7 +114,7 @@ export class IncusUnixClient {
   }
 
   async request<T = unknown>(method: string, path: string, body?: unknown, timeoutMs = 30_000): Promise<IncusResponse<T>> {
-    const { statusCode, text } = await this.requestRaw(method, path, body, timeoutMs);
+    const { statusCode, text } = await this.requestRaw(method, path, body, timeoutMs, DEFAULT_MAX_RESPONSE_BYTES, false);
     let parsed: IncusResponse<T>;
     try {
       parsed = text ? JSON.parse(text) as IncusResponse<T> : {} as IncusResponse<T>;

@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync, renameSync, watch, FSWatcher } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, writeFileSync, statSync, unlinkSync, renameSync, watch, FSWatcher } from "node:fs";
 import { join } from "node:path";
 import { IncusConfig } from "./config.entity.js";
 
@@ -16,21 +16,32 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private destroyed = false;
 
-  constructor(
-    private readonly configService: ConfigService,
-    paths?: { cfgPath: string; jsonPath: string },
-    private readonly renameFile: (oldPath: string, newPath: string) => void = renameSync,
-  ) {
-    this.cfgPath = paths?.cfgPath ?? (existsSync("/boot/config/plugins/incus/incus.cfg")
-      ? "/boot/config/plugins/incus/incus.cfg" : join(process.cwd(), "incus.cfg"));
-    this.jsonPath = paths?.jsonPath ?? (process.env.PATHS_CONFIG_MODULES
-      ? join(process.env.PATHS_CONFIG_MODULES, "incus.json") : join(process.cwd(), "incus.json"));
+  constructor(private readonly configService: ConfigService) {
+    this.cfgPath = existsSync("/boot/config/plugins/incus/incus.cfg")
+      ? "/boot/config/plugins/incus/incus.cfg" : join(process.cwd(), "incus.cfg");
+    this.jsonPath = process.env.PATHS_CONFIG_MODULES
+      ? join(process.env.PATHS_CONFIG_MODULES, "incus.json") : join(process.cwd(), "incus.json");
     this.cfgLockPath = `${this.cfgPath}.lock`;
   }
 
+  /** Test-only construction seam that does not add non-provider tokens to Nest's injectable constructor. */
+  static forTesting(
+    configService: ConfigService,
+    paths: { cfgPath: string; jsonPath: string },
+    renameFile: (oldPath: string, newPath: string) => void = renameSync,
+  ): IncusConfigSyncService {
+    const service = new IncusConfigSyncService(configService);
+    service.cfgPath = paths.cfgPath;
+    service.jsonPath = paths.jsonPath;
+    service.cfgLockPath = `${paths.cfgPath}.lock`;
+    service.renameFile = renameFile;
+    return service;
+  }
+
   // Primary paths on Unraid, with fallbacks for development/testing
-  private readonly cfgPath: string;
-  private readonly cfgLockPath: string;
+  private cfgPath: string;
+  private cfgLockPath: string;
+  private renameFile: (oldPath: string, newPath: string) => void = renameSync;
 
   // The persisted JSON lives wherever @unraid/shared's ConfigFilePersister
   // puts it — PATHS_CONFIG_MODULES + "incus.json" (e.g.
@@ -38,7 +49,7 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   // this plugin's own /boot/config/plugins/incus/ directory. Hardcoding the
   // latter silently watched/wrote the wrong file (or a disconnected
   // dev-cwd fallback) on every real deployment.
-  private readonly jsonPath: string;
+  private jsonPath: string;
 
   async onModuleInit() {
     this.logger.log(`Initializing config sync (cfg: ${this.cfgPath}, json: ${this.jsonPath})`);
@@ -424,8 +435,9 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Replace the canonical shell and JSON files as one recoverable transaction.
-   * Both new files are staged before either old file moves. Existing files are
-   * then renamed to backups, the staged pair is installed, and any failure
+   * Both new files are staged before either canonical changes. Existing files
+   * are copied to backups while the canonical paths remain readable, the
+   * staged pair is installed by atomic replacement, and any failure
    * restores both originals before the error reaches the caller.
    */
   private writeConfigPair(cfgContent: string, jsonContent: string): void {
@@ -448,11 +460,11 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       writeFileSync(cfgStage, cfgContent, { encoding: "utf-8", mode: 0o600 });
       writeFileSync(jsonStage, jsonContent, { encoding: "utf-8", mode: 0o600 });
       if (cfgExisted) {
-        this.renameFile(this.cfgPath, cfgBackup);
+        copyFileSync(this.cfgPath, cfgBackup);
         cfgBackedUp = true;
       }
       if (jsonExisted) {
-        this.renameFile(this.jsonPath, jsonBackup);
+        copyFileSync(this.jsonPath, jsonBackup);
         jsonBackedUp = true;
       }
       this.renameFile(cfgStage, this.cfgPath);
@@ -464,10 +476,10 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       const attempt = (operation: () => void) => {
         try { operation(); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
       };
-      if (cfgInstalled) attempt(() => removeIfPresent(this.cfgPath));
-      if (jsonInstalled) attempt(() => removeIfPresent(this.jsonPath));
       if (cfgBackedUp) attempt(() => this.renameFile(cfgBackup, this.cfgPath));
+      else if (cfgInstalled) attempt(() => removeIfPresent(this.cfgPath));
       if (jsonBackedUp) attempt(() => this.renameFile(jsonBackup, this.jsonPath));
+      else if (jsonInstalled) attempt(() => removeIfPresent(this.jsonPath));
       attempt(() => removeIfPresent(cfgStage));
       attempt(() => removeIfPresent(jsonStage));
       if (rollbackErrors.length) {

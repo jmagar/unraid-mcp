@@ -31,6 +31,7 @@ const MAX_QUEUED_BUILDS = 8;
 const BUILD_RETENTION_MS = 24 * 60 * 60 * 1000;
 const BUILD_TIMEOUT_MS = 60 * 60 * 1000;
 const BUILD_KILL_GRACE_MS = 10_000;
+const BUILD_HARD_SETTLE_MS = 5_000;
 const MAX_BUILD_LOG_BYTES = 16 * 1024 * 1024;
 
 /** Private-prefixed runtime bundled by the plugin's .plg (see incus-env.sh) — matches incusd/lxcfs/nft. */
@@ -337,6 +338,9 @@ export class IncusImageBuilderService {
     // `ar` dependency) are bundled under the same private prefix as incusd/lxcfs.
     await new Promise<void>((resolvePromise) => {
       const child = spawn(`${INCUS_PREFIX}/bin/distrobuilder`, args, {
+        // A dedicated process group lets timeout cancellation terminate
+        // debootstrap/package-manager descendants as well as distrobuilder.
+        detached: true,
         env: {
           ...process.env,
           INCUS_SOCKET: this.socketPath,
@@ -370,16 +374,36 @@ export class IncusImageBuilderService {
       let settled = false;
       let forcedError: Error | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
+      let hardSettleTimer: ReturnType<typeof setTimeout> | undefined;
+      const signalBuildGroup = (signal: NodeJS.Signals) => {
+        try {
+          if (child.pid) process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            this.logger.warn(`Unable to signal build ${build.id} with ${signal}: ${(error as Error).message}`);
+          }
+        }
+      };
       const timeout = setTimeout(() => {
         forcedError = new Error("Image build exceeded the 60 minute limit");
-        child.kill("SIGTERM");
-        killTimer = setTimeout(() => child.kill("SIGKILL"), BUILD_KILL_GRACE_MS);
+        signalBuildGroup("SIGTERM");
+        killTimer = setTimeout(() => {
+          signalBuildGroup("SIGKILL");
+          // A broken child/process-wrapper can fail to emit close even after
+          // SIGKILL. Settle independently so the build queue cannot remain
+          // permanently occupied waiting for an event that never arrives.
+          hardSettleTimer = setTimeout(() => void finish(null, forcedError), BUILD_HARD_SETTLE_MS);
+        }, BUILD_KILL_GRACE_MS);
       }, BUILD_TIMEOUT_MS);
       const finish = async (code: number | null, error?: Error) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
         if (killTimer) clearTimeout(killTimer);
+        if (hardSettleTimer) clearTimeout(hardSettleTimer);
+        child.stdout.off("data", appendLog);
+        child.stderr.off("data", appendLog);
         log.end();
         const failure = error ?? forcedError;
         if (failure) {
@@ -400,6 +424,13 @@ export class IncusImageBuilderService {
         build.finishedAt = Date.now();
         resolvePromise();
       };
+      log.once("error", (error) => {
+        forcedError = new Error(`Unable to write image build log: ${error.message}`);
+        // Once the audit log is unavailable, continuing an unobserved build is
+        // unsafe. Kill the whole detached group and release the queue slot.
+        signalBuildGroup("SIGKILL");
+        void finish(null, forcedError);
+      });
       child.once("error", (error) => void finish(null, error));
       child.once("close", (code) => void finish(code));
     });

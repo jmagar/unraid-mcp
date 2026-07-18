@@ -55,6 +55,7 @@ const SESSION_MAX_LIFETIME_MS = 8 * 60 * 60 * 1000;
 export class IncusExecService implements OnModuleDestroy {
   private readonly logger = new Logger(IncusExecService.name);
   private readonly sessions = new Map<string, ExecSession>();
+  private pendingSessions = 0;
   private readonly homebrewJobs = new Map<string, HomebrewInstallJob>();
   private readonly privilegedJobs = new Map<string, PrivilegedCommandJob>();
   readonly pubsub = new PubSub();
@@ -72,40 +73,51 @@ export class IncusExecService implements OnModuleDestroy {
 
   async start(jailName: string, cols = 80, rows = 24): Promise<string> {
     if (cols < 20 || cols > 500 || rows < 5 || rows > 300) throw new Error("Terminal dimensions are out of range");
-    if (this.sessions.size >= MAX_SESSIONS) throw new Error("Too many active terminal sessions");
-    const { operationUrl, fds } = await this.requestExec(jailName, cols, rows);
-    if (!fds?.["0"] || !fds?.control) {
-      throw new Error("Incus exec response missing websocket fd secrets");
+    if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) throw new Error("Too many active terminal sessions");
+    this.pendingSessions++;
+    let ioSocket: WebSocket | undefined;
+    let controlSocket: WebSocket | undefined;
+    try {
+      const { operationUrl, fds } = await this.requestExec(jailName, cols, rows);
+      if (!fds?.["0"] || !fds?.control) {
+        throw new Error("Incus exec response missing websocket fd secrets");
+      }
+
+      const sessionId = randomUUID();
+      ioSocket = this.connectOperationSocket(operationUrl, fds["0"]);
+      controlSocket = this.connectOperationSocket(operationUrl, fds.control);
+
+      ioSocket.on("message", (data, isBinary) => {
+        this.touchSession(sessionId);
+        const text = isBinary ? Buffer.from(data as Buffer).toString("utf-8") : data.toString();
+        void this.pubsub.publish(OUTPUT_TOPIC_PREFIX + sessionId, { jailExecOutput: text });
+      });
+      ioSocket.on("close", () => this.cleanupSession(sessionId));
+      ioSocket.on("error", (err) => {
+        this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`);
+        this.cleanupSession(sessionId);
+      });
+      controlSocket.on("close", () => this.cleanupSession(sessionId));
+      controlSocket.on("error", (err) => {
+        this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`);
+        this.cleanupSession(sessionId);
+      });
+
+      this.sessions.set(sessionId, {
+        jailName,
+        ioSocket,
+        controlSocket,
+        idleTimer: this.createIdleTimer(sessionId),
+        lifetimeTimer: setTimeout(() => this.cleanupSession(sessionId), SESSION_MAX_LIFETIME_MS),
+      });
+      return sessionId;
+    } catch (error) {
+      if (ioSocket) this.closeSocket(ioSocket);
+      if (controlSocket) this.closeSocket(controlSocket);
+      throw error;
+    } finally {
+      this.pendingSessions--;
     }
-
-    const sessionId = randomUUID();
-    const ioSocket = this.connectOperationSocket(operationUrl, fds["0"]);
-    const controlSocket = this.connectOperationSocket(operationUrl, fds.control);
-
-    ioSocket.on("message", (data, isBinary) => {
-      this.touchSession(sessionId);
-      const text = isBinary ? Buffer.from(data as Buffer).toString("utf-8") : data.toString();
-      void this.pubsub.publish(OUTPUT_TOPIC_PREFIX + sessionId, { jailExecOutput: text });
-    });
-    ioSocket.on("close", () => this.cleanupSession(sessionId));
-    ioSocket.on("error", (err) => {
-      this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`);
-      this.cleanupSession(sessionId);
-    });
-    controlSocket.on("close", () => this.cleanupSession(sessionId));
-    controlSocket.on("error", (err) => {
-      this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`);
-      this.cleanupSession(sessionId);
-    });
-
-    this.sessions.set(sessionId, {
-      jailName,
-      ioSocket,
-      controlSocket,
-      idleTimer: this.createIdleTimer(sessionId),
-      lifetimeTimer: setTimeout(() => this.cleanupSession(sessionId), SESSION_MAX_LIFETIME_MS),
-    });
-    return sessionId;
   }
 
   sendInput(sessionId: string, data: string): boolean {
@@ -217,9 +229,14 @@ export class IncusExecService implements OnModuleDestroy {
 
   /** GET a log file's content by its absolute API path, then DELETE it so exec output doesn't pile up. */
   private async fetchAndDeleteLog(logPath: string): Promise<string> {
-    const content = await this.client.requestText("GET", logPath, undefined, 15_000, MAX_CAPTURE_BYTES);
-    await this.client.requestText("DELETE", logPath, undefined, 15_000, 16 * 1024).catch(() => undefined);
-    return content.length > MAX_CAPTURE_BYTES ? `${content.slice(0, MAX_CAPTURE_BYTES)}\n[truncated]` : content;
+    try {
+      const { text, truncated } = await this.client.requestTextTruncated(
+        "GET", logPath, undefined, 15_000, MAX_CAPTURE_BYTES,
+      );
+      return truncated ? `${text}\n[truncated]` : text;
+    } finally {
+      await this.client.requestText("DELETE", logPath, undefined, 15_000, 16 * 1024).catch(() => undefined);
+    }
   }
 
   private getSession(sessionId: string): ExecSession {

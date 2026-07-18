@@ -9,3 +9,5 @@ export const Length = noopDecorator;
 export const Matches = noopDecorator;
 export const Max = noopDecorator;
 export const Min = noopDecorator;
+export const Validate = noopDecorator;
+export const ValidatorConstraint = () => (target) => target;

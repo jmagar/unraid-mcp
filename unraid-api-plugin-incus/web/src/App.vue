@@ -3,7 +3,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, r
 import { Button, Switch, Badge, Input, Select, Label, HelpText } from "./components/ui";
 import TabNavigation from "./components/TabNavigation.vue";
 import { gql } from "./graphql-client";
-import { startPolling, type PollController } from "./lib/polling";
+import { JOB_POLL_INTERVAL_MS, startPolling, type PollController } from "./lib/polling";
 import { buildConfigUpdate } from "./lib/configPayload";
 import { useResourceMetrics } from "./composables/useResourceMetrics";
 import { useJailDetail } from "./composables/useJailDetail";
@@ -92,9 +92,11 @@ const isZfs = computed(() => config.storageDriver === "zfs");
 const showTsAuthKey = ref(false);
 const tsAuthKeyReplacement = ref("");
 const clearTsAuthKeyOnSave = ref(false);
+let componentActive = false;
 
 async function loadConfig() {
   const data = await gql<{ incusConfig: IncusConfig }>(CONFIG_QUERY);
+  if (!componentActive) return;
   Object.assign(config, data.incusConfig);
 }
 
@@ -115,16 +117,20 @@ async function refreshStatus() {
 }
 
 onMounted(async () => {
+  componentActive = true;
   try {
     await loadConfig();
+    if (!componentActive) return;
     await refreshStatus();
+    if (!componentActive) return;
     await Promise.all([loadBuilderPresets(), loadJailImages()]);
   } catch (e) {
+    if (!componentActive) return;
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
-    loading.value = false;
+    if (componentActive) loading.value = false;
   }
-  if (activeTab.value === "jails") startStatusPolling();
+  if (componentActive && activeTab.value === "jails") startStatusPolling();
 });
 
 watch(activeTab, (tab) => {
@@ -400,7 +406,7 @@ async function installHomebrewFormula() {
         installingFormula.value = false;
         installError.value = e instanceof Error ? e.message : String(e);
       }
-    }, 2000);
+    }, JOB_POLL_INTERVAL_MS);
   } catch (e) {
     installError.value = e instanceof Error ? e.message : String(e);
     installingFormula.value = false;
@@ -472,7 +478,7 @@ async function runPrivilegedCommand() {
         runningPrivilegedCommand.value = false;
         detailError.value = e instanceof Error ? e.message : String(e);
       }
-    }, 2000);
+    }, JOB_POLL_INTERVAL_MS);
   } catch (e) {
     detailError.value = e instanceof Error ? e.message : String(e);
     runningPrivilegedCommand.value = false;
@@ -1312,6 +1318,7 @@ const presetError = ref<string | null>(null);
 
 async function loadBuilderPresets() {
   const data = await gql<{ builderPresets: BuilderPreset[] }>(BUILDER_PRESETS_QUERY);
+  if (!componentActive) return;
   presets.value = data.builderPresets;
 }
 
@@ -1363,6 +1370,7 @@ const masterToggling = ref<string | null>(null);
 
 async function loadJailImages() {
   const data = await gql<{ jailImages: ImageRecord[] }>(JAIL_IMAGES_QUERY);
+  if (!componentActive) return;
   jailImages.value = data.jailImages;
 }
 
@@ -1373,15 +1381,15 @@ async function loadJailImages() {
  * something real, not just a label.
  */
 async function toggleMaster(image: ImageRecord) {
+  // A default can only be replaced, never cleared into a contradictory state
+  // where the registry has no master but config still launches its old alias.
+  if (image.isMaster) return;
   imagesError.value = null;
   masterToggling.value = image.alias;
-  const nextIsMaster = !image.isMaster;
   const previousMaster = jailImages.value.find((candidate) => candidate.isMaster)?.alias ?? null;
   try {
-    await gql(SET_MASTER_IMAGE_MUTATION, { alias: image.alias, isMaster: nextIsMaster });
-    if (nextIsMaster) {
-      await gql(UPDATE_CONFIG_MUTATION, { input: { jailImage: image.alias } });
-    }
+    await gql(SET_MASTER_IMAGE_MUTATION, { alias: image.alias, isMaster: true });
+    await gql(UPDATE_CONFIG_MUTATION, { input: { jailImage: image.alias } });
     await Promise.all([loadJailImages(), loadConfig()]);
   } catch (e) {
     // The registry and launch default are separate persistence stores. Revert
@@ -1481,7 +1489,7 @@ function pollBuildStatus(build: BuildRow) {
       build.error = e instanceof Error ? e.message : String(e);
       stopPolling(build);
     }
-  }, 2000);
+  }, JOB_POLL_INTERVAL_MS);
 }
 
 async function startBuild() {
@@ -1560,6 +1568,7 @@ function buildStatusBadgeVariant(status: string | undefined): "green" | "gray" |
 }
 
 onBeforeUnmount(() => {
+  componentActive = false;
   ++statusRequestId;
   ++searchRequestId;
   for (const build of builds.value) stopPolling(build);
@@ -1681,10 +1690,10 @@ onBeforeUnmount(() => {
                 <Button
                   size="sm"
                   variant="outline"
-                  :disabled="masterToggling === image.alias"
+                  :disabled="image.isMaster || masterToggling === image.alias"
                   @click="toggleMaster(image)"
-                  :title="image.isMaster ? 'Stop launching new containers from this image by default' : 'New containers launch from this image by default'"
-                >{{ image.isMaster ? "Unset default" : "Set as default" }}</Button>
+                  :title="image.isMaster ? 'Current launch default; choose another image to replace it' : 'New containers launch from this image by default'"
+                >{{ image.isMaster ? "Default" : "Set as default" }}</Button>
                 <Button size="sm" variant="secondary" @click="buildVariantFrom(image)">Build variant</Button>
                 <Button
                   size="sm"
@@ -2525,8 +2534,18 @@ onBeforeUnmount(() => {
             </HelpText>
 
             <Label for="config-ipv6">IPv6</Label>
-            <Input id="config-ipv6" v-model="config.jailIpv6" class="w-48 justify-self-end font-mono" />
-            <HelpText class="col-span-2">An IPv6 address for the bridge, or <span class="font-mono">none</span> to disable IPv6 for containers entirely.</HelpText>
+            <Input
+              id="config-ipv6"
+              model-value="none"
+              disabled
+              readonly
+              aria-describedby="config-ipv6-policy"
+              class="w-48 justify-self-end font-mono"
+            />
+            <HelpText id="config-ipv6-policy" class="col-span-2">
+              Fixed to <span class="font-mono">none</span>: IPv6 is deliberately fail-closed until the plugin can
+              enforce isolation equivalent to the IPv4 ACL policy. Containers cannot enable it from this page.
+            </HelpText>
 
             <Label for="config-acl-name">ACL name</Label>
             <Input id="config-acl-name" v-model="config.aclName" class="w-48 justify-self-end font-mono" />

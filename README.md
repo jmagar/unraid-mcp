@@ -88,7 +88,7 @@ Single source of truth for both the shell init and the API plugin. Current defau
 | `JAIL_CPU` / `JAIL_MEMORY` | `2` / `4GiB` | Empty = no cap |
 | `JAIL_WORKSPACE_ROOT` | `/srv/agent-jails` | Host dir holding per-container workspaces, bind-mounted with idmap shifting. It must resolve beneath `/srv` or `/mnt`, use real persistent storage rather than tmpfs, and ideally use a real device mount rather than `/mnt/user` (FUSE doesn't support idmapped mounts). |
 | `JAIL_AGENT_UID` / `JAIL_AGENT_GID` | `1000` / `1000` | In-container agent user uid/gid |
-| `JAIL_BIND_MOUNTS` | *(empty)* | Comma-separated `host:container[:ro|rw]` triples. Sources must resolve beneath `JAIL_WORKSPACE_ROOT` or `/boot/config/plugins/incus/bind-mounts`; mode defaults to `ro`, and only workspace-root sources may be `rw`. Copy curated agent config into the dedicated bind directory rather than exposing host home/system paths. |
+| `JAIL_BIND_MOUNTS` | *(empty)* | Comma-separated `host:container[:ro|rw]` triples. Sources must resolve beneath `/srv` or `/mnt`, or beneath `/boot/config/plugins/incus/bind-mounts`; mode defaults to `ro`, and sources in the plugin bind directory must remain `ro`. Copy curated agent config there rather than exposing host home/system paths. |
 | `TS_AUTHKEY` | *(empty)* | When set, newly launched containers run `tailscale up --authkey=...` on launch — best-effort, silently skipped if the image lacks `tailscale` |
 
 ## Features

@@ -45,4 +45,12 @@ describe("IncusUnixClient", () => {
     const client = await fixture((_req, res) => res.end("x".repeat(1024)));
     await expect(client.requestText("GET", "/large", undefined, 1_000, 32)).rejects.toThrow("exceeded");
   });
+
+  it("can drain oversized log responses while returning a bounded prefix", async () => {
+    const client = await fixture((_req, res) => res.end("x".repeat(1024)));
+    await expect(client.requestTextTruncated("GET", "/large", undefined, 1_000, 32)).resolves.toEqual({
+      text: "x".repeat(32),
+      truncated: true,
+    });
+  });
 });

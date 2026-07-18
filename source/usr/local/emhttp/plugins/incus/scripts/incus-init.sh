@@ -45,11 +45,16 @@ JAIL_WORKSPACE_ROOT="${JAIL_WORKSPACE_ROOT:-/srv/agent-jails}"
 JAIL_AGENT_UID="${JAIL_AGENT_UID:-1000}"
 JAIL_AGENT_GID="${JAIL_AGENT_GID:-1000}"
 JAIL_BIND_MOUNTS="${JAIL_BIND_MOUNTS:-}"
+. "${EMHTTP}/scripts/config-validation.sh"
 
 # The ACL rendered below currently covers IPv4 only. Fail closed instead of
 # accepting an IPv6 bridge address that bypasses the advertised containment.
 if [ "$JAIL_IPV6" != "none" ]; then
   log "FATAL: JAIL_IPV6 must remain 'none' until an IPv6 containment ACL is configured"
+  exit 1
+fi
+if ! validation_error="$(validate_containment_config 2>&1)"; then
+  log "FATAL: ${validation_error}"
   exit 1
 fi
 
@@ -289,12 +294,8 @@ ${bind_yaml}"
 # devices. Manual incus.cfg edits are validated here as well as in GraphQL so
 # malformed paths cannot become YAML or arbitrary host mounts.
 render_bind_mounts() {
-  local item host target mode extra index=0 old_ifs canonical_host canonical_workspace config_root
+  local item host target mode extra index=0 old_ifs canonical_host config_root
   [ -z "${JAIL_BIND_MOUNTS// /}" ] && return 0
-  canonical_workspace="$(readlink -f "$JAIL_WORKSPACE_ROOT")" || {
-    log "FATAL: cannot resolve workspace root ${JAIL_WORKSPACE_ROOT}" >&2
-    return 1
-  }
   config_root="/boot/config/plugins/incus/bind-mounts"
   mkdir -p "$config_root"
   config_root="$(readlink -f "$config_root")" || return 1
@@ -320,7 +321,7 @@ render_bind_mounts() {
       return 1
     }
     case "$canonical_host" in
-      "$canonical_workspace"|"$canonical_workspace"/*) ;;
+      /srv/*|/mnt/*) ;;
       "$config_root"|"$config_root"/*)
         if [ "$mode" != "ro" ]; then
           log "FATAL: config bind mounts must be read-only: $item" >&2
@@ -328,7 +329,7 @@ render_bind_mounts() {
         fi
         ;;
       *)
-        log "FATAL: bind source must be under ${canonical_workspace} or ${config_root}: $host" >&2
+        log "FATAL: bind source must resolve beneath /srv, /mnt, or ${config_root}: $host" >&2
         return 1
         ;;
     esac

@@ -12,6 +12,7 @@ ROLLBACK="${CFG}.known-good"
 HEALTH="/var/log/incus-apply.log"
 [ -f "$CFG" ] || exit 0
 . "$CFG"
+. /usr/local/emhttp/plugins/incus/scripts/config-validation.sh
 
 record() { printf '%s %s\n' "$(date -Is)" "$*" >>"$HEALTH"; logger -t incus-apply "$*"; }
 restore_known_good() {
@@ -32,6 +33,11 @@ restore_known_good() {
 case "${SERVICE:-disabled}" in enabled|disabled) ;; *) record "invalid SERVICE"; restore_known_good; exit 1 ;; esac
 case "${STORAGE_DRIVER:-dir}" in dir|zfs) ;; *) record "invalid STORAGE_DRIVER"; restore_known_good; exit 1 ;; esac
 case "${JAIL_IPV6:-none}" in none) ;; *) record "IPv6 rejected: containment policy is IPv4-only"; restore_known_good; exit 1 ;; esac
+if ! validation_error="$(validate_containment_config 2>&1)"; then
+  record "invalid containment config: ${validation_error}"
+  restore_known_good
+  exit 1
+fi
 
 if [ "${SERVICE:-disabled}" != "enabled" ]; then
   /etc/rc.d/rc.incus stop || { restore_known_good; exit 1; }

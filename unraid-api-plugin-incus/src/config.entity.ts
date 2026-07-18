@@ -1,7 +1,10 @@
 import { registerAs } from "@nestjs/config";
 import { Field, InputType, Int, ObjectType, registerEnumType } from "@nestjs/graphql";
 import { Exclude, Expose } from "class-transformer";
-import { IsArray, IsBoolean, IsOptional, IsString, Length, Matches } from "class-validator";
+import {
+  IsArray, IsBoolean, IsOptional, IsString, Length, Matches, Validate,
+  ValidatorConstraint, type ValidatorConstraintInterface,
+} from "class-validator";
 
 /**
  * Whitelist patterns for IncusConfigInput's free-text fields. Not a
@@ -25,6 +28,34 @@ const PATTERNS = {
   bindMounts: /^$|^[A-Za-z0-9:/_.,-]+$/,
   tsAuthKey: /^$|^[A-Za-z0-9_-]{1,255}$/,
 };
+
+const SAFE_PATH = /^\/[A-Za-z0-9_./-]+$/;
+const hasParentSegment = (value: string): boolean => value.split("/").includes("..");
+export const isSafeWorkspaceRootSyntax = (value: string): boolean =>
+  SAFE_PATH.test(value) && !hasParentSegment(value) && (value.startsWith("/srv/") || value.startsWith("/mnt/"));
+export const isSafeBindMountsSyntax = (value: string): boolean => {
+  if (value === "") return true;
+  return value.split(",").every((item) => {
+    const parts = item.split(":");
+    if (parts.length < 2 || parts.length > 3) return false;
+    const [source, target, explicitMode] = parts;
+    const mode = explicitMode || "ro";
+    if (!SAFE_PATH.test(source) || !SAFE_PATH.test(target) || hasParentSegment(source) || hasParentSegment(target)) return false;
+    if (mode !== "ro" && mode !== "rw") return false;
+    if (source.startsWith("/boot/config/plugins/incus/bind-mounts/")) return mode === "ro";
+    return source.startsWith("/srv/") || source.startsWith("/mnt/");
+  });
+};
+
+@ValidatorConstraint({ name: "safeWorkspaceRoot", async: false })
+class SafeWorkspaceRootConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean { return typeof value === "string" && isSafeWorkspaceRootSyntax(value); }
+}
+
+@ValidatorConstraint({ name: "safeBindMounts", async: false })
+class SafeBindMountsConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean { return typeof value === "string" && isSafeBindMountsSyntax(value); }
+}
 
 /**
  * Mirrors the shell `incus.cfg` so the daemon-side init and the API agree on
@@ -224,10 +255,16 @@ export class IncusConfigInput {
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNesting?: boolean;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cpuCap) jailCpu?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.memoryCap) jailMemory?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.absolutePath) jailWorkspaceRoot?: string;
+  @Field(() => String, { nullable: true, description: "Persistent workspace root beneath /srv or /mnt" })
+  @IsOptional()
+  @Validate(SafeWorkspaceRootConstraint, { message: "jailWorkspaceRoot must be beneath /srv or /mnt and cannot contain '..'" })
+  jailWorkspaceRoot?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentUid?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentGid?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.bindMounts) jailBindMounts?: string;
+  @Field(() => String, { nullable: true, description: "Safe storage bind triples; curated config binds are read-only" })
+  @IsOptional()
+  @Validate(SafeBindMountsConstraint, { message: "bind sources must be beneath /srv, /mnt, or the read-only plugin bind-mounts directory" })
+  jailBindMounts?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.tsAuthKey) tsAuthKey?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() dashboardWidgetEnable?: boolean;
 }
