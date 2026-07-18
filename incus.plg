@@ -2,12 +2,13 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.08a">
+  <!ENTITY version   "2026.07.18">
   <!ENTITY launch    "Settings/IncusSettings">
-  <!ENTITY gitURL    "https://github.com/&author;/unraid-&name;-plugin/raw/master">
+  <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-45-x86_64-1.txz">
-  <!ENTITY md5       "071cf19bacd5a019f3ee34e6e7e308d0">
+  <!ENTITY txz       "&name;-unraid-7.0.0-46-x86_64-1.txz">
+  <!ENTITY md5       "72cb385808a212abb9aa59246fe070c6">
+  <!ENTITY sha256    "44c03afe8130a3f718c05e34d38972b6e518682ac12503c70026461043923867">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -15,6 +16,26 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.18
+- Comprehensive security and reliability hardening: every GraphQL resolver is
+  permission-gated, reusable Tailscale credentials are write-only and stored
+  mode 0600, workspace mounts resolve symlinks safely, and config validation
+  fails closed.
+- Default network containment now blocks Tailscale CGNAT and rejects IPv6
+  until equivalent IPv6 policy exists. Configured bind mounts are reconciled
+  into the container profile with validation and read-only support.
+- Added bounded build/exec/session/cache resources, atomic serialized JSON
+  registries, a shared bounded Incus socket client, transactional config apply,
+  startup rollback, watchdog health, log rotation, and aggregated shutdown.
+- Reconciled the GraphQL SDL with resolver contracts; added backend, frontend,
+  schema, socket, persistence, config, classic-package, and isolation tests.
+- Split heavy frontend concerns into lazy chunks and composables, made query
+  polling non-overlapping, removed mutation replay, and completed label/theme
+  accessibility fixes.
+- Added coordinated API install/uninstall, strong package verification and
+  provenance metadata, reproducible carry-forward packaging, pinned CI actions,
+  classic-package gates, and corrected operational documentation.
+
 ###2026.07.08a
 - Fix: the packaged OS .txz never actually shipped incus-dashboard.js — every
   build since the Main/Dashboard widget feature was added was silently
@@ -27,20 +48,17 @@
   GraphQL schema lacked the new dashboardWidgetEnable field entirely. Every
   page load's very first query (Config tab's incusConfig fetch) failed with
   a GraphQL validation error surfaced as a raw "HTTP 400", leaving the
-  Network & ACL / Container Defaults cards blank until a manual mid-session
+  Network &amp; ACL / Container Defaults cards blank until a manual mid-session
   fix. Redeployed dist/ and restarted unraid-api; verified clean across
   repeated fresh page loads.
-- Hardening: the frontend GraphQL client now waits for window.csrf_token to
-  be set (a host-page timing dependency, not guaranteed by mount time) and
-  retries once on any non-GraphQL HTTP failure, so a future instance of this
-  same class of transient failure surfaces a working page instead of a
-  permanent error banner.
+- Hardening: the frontend GraphQL client waits for window.csrf_token to be set
+  and retries safe queries once; mutations are never automatically replayed.
 - UI/UX pass across all three tabs:
-  - Config tab: merged 6 cards down to 3 (Runtime / Network & Access /
+  - Config tab: merged 6 cards down to 3 (Runtime / Network &amp; Access /
     Container Defaults), each carrying subsections instead of duplicating
     the same group eyebrow label across separate cards (previously read
     like a rendering bug, not intentional grouping).
-  - Every raw browser-default <select> (Distro, Release, Launch image,
+  - Every raw browser-default &lt;select&gt; (Distro, Release, Launch image,
     Storage driver, Default egress/ingress action) replaced with a
     restyled dropdown matching Input/Button's border, focus ring, and
     chevron — no more browser-chrome dropdowns next to custom-styled
@@ -131,7 +149,7 @@
   off. Verified live: apt-installed htop into a running container with
   neither sudo nor a rebuild.
 - Fixed a real bug caught in that same testing: the sudo-grant script had
-  a `|| &&` adjacency from a bad array-join, which is invalid POSIX shell
+  a `|| &amp;&amp;` adjacency from a bad array-join, which is invalid POSIX shell
   and made every grant attempt fail outright on Debian's default /bin/sh.
 - Containers tab: replaced the dense table + expandable-row layout with a
   responsive card grid — each container's stats, quick actions, and full
@@ -170,7 +188,7 @@
   pairing (which left large blank gaps under short cards like Tailscale and
   Bind Mounts) with a real CSS masonry flow — all six cards balance across
   both columns by actual content height, regardless of which logical group
-  they belong to. Each card keeps a small group eyebrow (Runtime, Network &
+  they belong to. Each card keeps a small group eyebrow (Runtime, Network &amp;
   Access, Container Defaults) so the grouping context isn't lost.
 
 ###2026.07.07o
@@ -232,14 +250,14 @@
   screen size, leaving most of the window blank on anything wider than a
   laptop. Widened the page responsively (up to ~2200px on ultra-wide/4K) and
   paired related cards into a 2-column grid at 1280px+ (Config's Runtime /
-  Network & Access / Container Defaults groups, Builder's Starting
-  points/Build, Containers' Network & ACL/Launch) so wide screens show more
+  Network &amp; Access / Container Defaults groups, Builder's Starting
+  points/Build, Containers' Network &amp; ACL/Launch) so wide screens show more
   at once instead of one narrow stacked column. Mobile is unaffected — every
   new rule is gated behind a min-width breakpoint, nothing at the base/mobile
   layer changed.
 - Fix: discovered along the way — Unraid's own global stylesheet
   (dynamix.my.servers' standalone-apps bundle, loaded on every page) defines
-  `.unapi <utility-class>` rules that share our "unapi" convention class and
+  `.unapi &lt;utility-class&gt;` rules that share our "unapi" convention class and
   silently out-specificity our own compiled Tailwind utilities for any
   colliding class name, including basic ones. This was already capable of
   silently breaking any of our styling, not just the new grid work. Fixed by
@@ -354,17 +372,59 @@
   agent-jail environment, config-driven idempotent init on array start.
 </CHANGES>
 
-<!-- clean older txz payloads -->
-<FILE Run="/bin/bash">
-<INLINE>
-rm -f $(ls &plugin;/&name;*.txz 2>/dev/null | grep -v '&txz;')
-</INLINE>
-</FILE>
-
 <!-- the repackaged Incus runtime (private-prefixed, no system-lib pollution) -->
-<FILE Name="&plugin;/&txz;" Run="upgradepkg --install-new">
+<FILE Name="&plugin;/&txz;">
 <URL>&gitURL;/packages/&txz;</URL>
 <MD5>&md5;</MD5>
+</FILE>
+
+<!-- Strong verification before privileged install. MD5 remains only because
+     the Unraid plugin loader requires that legacy field for downloads. -->
+<FILE Run="/bin/bash">
+<INLINE>
+echo "&sha256;  &plugin;/&txz;" | sha256sum -c - || exit 1
+previous=""
+for candidate in $(ls -1t &plugin;/&name;-unraid-*.txz 2>/dev/null); do
+  [ "$candidate" = "&plugin;/&txz;" ] &amp;&amp; continue
+  previous="$candidate"
+  break
+done
+upgradepkg --install-new &plugin;/&txz; || exit 1
+
+# A fresh install has no persistent config yet. Bootstrap it before restarting
+# unraid-api so IncusConfigSyncService selects the real /boot path in its
+# constructor rather than permanently binding this process to its development
+# cwd fallback. The later setup block remains responsible for migrations and
+# the known-good copy after coordinated API activation succeeds.
+if [ ! -f "&plugin;/incus.cfg" ]; then
+  cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg" || exit 1
+fi
+chmod 600 "&plugin;/incus.cfg" || exit 1
+
+# The API payload lives inside the classic archive. Activate and verify it
+# before declaring the coordinated release successful. install-api-plugin.sh
+# restores the previous backend itself; if it fails, restore the previous
+# classic archive too so the shipped frontend/runtime cannot remain skewed
+# against the old API schema.
+if ! &emhttp;/scripts/install-api-plugin.sh; then
+  if [ -n "$previous" ] &amp;&amp; [ -f "$previous" ]; then
+    logger -t incus "API activation failed; rolling classic package back to $previous"
+    upgradepkg --install-new "$previous" || logger -t incus "ERROR: automatic classic rollback failed"
+  else
+    logger -t incus "API activation failed on a fresh install; removing the unpaired classic package"
+    removepkg incus-unraid 2>/dev/null || logger -t incus "ERROR: automatic fresh-install cleanup failed"
+  fi
+  exit 1
+fi
+
+# Retain the newest previous payload as a known-good rollback candidate.
+kept=0
+for old in $(ls -1t &plugin;/&name;-unraid-*.txz 2>/dev/null); do
+  [ "$old" = "&plugin;/&txz;" ] &amp;&amp; continue
+  kept=$((kept + 1))
+  [ "$kept" -le 1 ] || rm -f "$old"
+done
+</INLINE>
 </FILE>
 
 <!-- default config, only if not present (never clobber user edits) -->
@@ -373,6 +433,10 @@ rm -f $(ls &plugin;/&name;*.txz 2>/dev/null | grep -v '&txz;')
 if [ ! -f "&plugin;/incus.cfg" ]; then
   cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg"
 fi
+chmod 600 "&plugin;/incus.cfg"
+[ -f "&plugin;/incus.cfg.known-good" ] || cp -p "&plugin;/incus.cfg" "&plugin;/incus.cfg.known-good"
+chmod 600 "&plugin;/incus.cfg.known-good"
+&emhttp;/scripts/migrate-config.sh || exit 1
 # make scripts executable
 chmod +x &emhttp;/scripts/*.sh &emhttp;/event/* 2>/dev/null
 # symlink rc script into /etc/rc.d so it's callable as a service
@@ -387,11 +451,11 @@ getent group incus-admin >/dev/null 2>&amp;1 || groupadd -r incus-admin
 <INLINE>
 **Incus for Unraid — LAN-banned isolated dev containers**
 
-Runs the Incus system-container manager on Unraid, purpose-built for isolated
-dev containers for coding agents / stdio-MCP workspaces. Containers get a
-dedicated NAT bridge that is firewalled off from your LAN (egress deny-list)
-while keeping Internet access, so an agent (or a compromised dependency)
-can't reach your NAS, routers, or internal services. All network/storage
+Runs the Incus system-container manager on Unraid for coding-agent and
+stdio-MCP workspaces. The default IPv4 ACL blocks RFC1918, link-local, and
+Tailscale CGNAT ranges while allowing public Internet; IPv6 is disabled until
+equivalent policy exists. This is deny-list containment, so verify your actual
+NAS/router/service addresses and review every allow-hole. All network/storage
 policy is configured in `/boot/config/plugins/incus/incus.cfg`.
 
 Not affiliated with the LinuxContainers project.
@@ -419,6 +483,7 @@ echo "----------------------------------------------------"
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
 /etc/rc.d/rc.incus stop 2>/dev/null
+&emhttp;/scripts/uninstall-api-plugin.sh 2>/dev/null || true
 removepkg &name; 2>/dev/null
 rm -rf &emhttp;
 echo "Incus plugin removed. State in INCUS_DIR and /boot/config/plugins/incus was left intact."

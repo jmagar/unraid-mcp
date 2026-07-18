@@ -15,7 +15,9 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:mutation": "stryker run"
   },
   "peerDependencies": {
     "@nestjs/common": "*",
@@ -30,7 +32,10 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.4.0",
+    "@stryker-mutator/vitest-runner": "^9.4.0",
     "@types/ws": "^8.5.13",
+    "@vitest/coverage-v8": "^4.1.10",
     "typescript": "^5.6.0",
     "vitest": "^4.1.10"
   }

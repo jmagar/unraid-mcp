@@ -1,7 +1,10 @@
 import { registerAs } from "@nestjs/config";
-import { Field, InputType, ObjectType } from "@nestjs/graphql";
+import { Field, InputType, Int, ObjectType, registerEnumType } from "@nestjs/graphql";
 import { Exclude, Expose } from "class-transformer";
-import { IsArray, IsBoolean, IsOptional, IsString, Matches } from "class-validator";
+import {
+  IsArray, IsBoolean, IsOptional, IsString, Length, Matches, Validate,
+  ValidatorConstraint, type ValidatorConstraintInterface,
+} from "class-validator";
 
 /**
  * Whitelist patterns for IncusConfigInput's free-text fields. Not a
@@ -25,6 +28,34 @@ const PATTERNS = {
   bindMounts: /^$|^[A-Za-z0-9:/_.,-]+$/,
   tsAuthKey: /^$|^[A-Za-z0-9_-]{1,255}$/,
 };
+
+const SAFE_PATH = /^\/[A-Za-z0-9_./-]+$/;
+const hasParentSegment = (value: string): boolean => value.split("/").includes("..");
+export const isSafeWorkspaceRootSyntax = (value: string): boolean =>
+  SAFE_PATH.test(value) && !hasParentSegment(value) && (value.startsWith("/srv/") || value.startsWith("/mnt/"));
+export const isSafeBindMountsSyntax = (value: string): boolean => {
+  if (value === "") return true;
+  return value.split(",").every((item) => {
+    const parts = item.split(":");
+    if (parts.length < 2 || parts.length > 3) return false;
+    const [source, target, explicitMode] = parts;
+    const mode = explicitMode || "ro";
+    if (!SAFE_PATH.test(source) || !SAFE_PATH.test(target) || hasParentSegment(source) || hasParentSegment(target)) return false;
+    if (mode !== "ro" && mode !== "rw") return false;
+    if (source.startsWith("/boot/config/plugins/incus/bind-mounts/")) return mode === "ro";
+    return source.startsWith("/srv/") || source.startsWith("/mnt/");
+  });
+};
+
+@ValidatorConstraint({ name: "safeWorkspaceRoot", async: false })
+class SafeWorkspaceRootConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean { return typeof value === "string" && isSafeWorkspaceRootSyntax(value); }
+}
+
+@ValidatorConstraint({ name: "safeBindMounts", async: false })
+class SafeBindMountsConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean { return typeof value === "string" && isSafeBindMountsSyntax(value); }
+}
 
 /**
  * Mirrors the shell `incus.cfg` so the daemon-side init and the API agree on
@@ -76,7 +107,7 @@ export class IncusConfig {
   jailNat!: boolean;
 
   @Expose()
-  @Field(() => String, { description: "IPv6 address for the jail bridge, or 'none'" })
+  @Field(() => String, { description: "IPv6 is fail-closed; this value is always 'none'" })
   @IsString()
   jailIpv6!: string;
 
@@ -151,8 +182,11 @@ export class IncusConfig {
   jailBindMounts!: string;
 
   @Expose()
-  @Field(() => String, { description: "Tailscale auth key to auto-join new jails with (empty = disabled)" })
-  @IsString()
+  @Field(() => Boolean, { description: "Whether a write-only Tailscale auth key is configured" })
+  @IsBoolean()
+  tsAuthKeyConfigured!: boolean;
+
+  /** Internal only; never decorated/exposed in GraphQL output. */
   tsAuthKey!: string;
 
   @Expose()
@@ -172,7 +206,7 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
   jailNat: true,
   jailIpv6: "none",
   aclName: "agent-block-lan",
-  aclBlock: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16",
+  aclBlock: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,100.64.0.0/10",
   aclAllow: "",
   aclDefaultEgress: "allow",
   aclDefaultIngress: "drop",
@@ -186,6 +220,7 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
   jailAgentGid: "1000",
   jailBindMounts: "",
   tsAuthKey: "",
+  tsAuthKeyConfigured: false,
   dashboardWidgetEnable: true,
 }));
 
@@ -199,14 +234,17 @@ export const configFeature = registerAs<IncusConfig>("incus", () => ({
 @InputType()
 export class IncusConfigInput {
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() enabled?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() stateDir?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageDriver?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.absolutePath) stateDir?: string;
+  @Field(() => String, { nullable: true }) @IsOptional() @Matches(/^(dir|zfs)$/) storageDriver?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storageSource?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @IsString() storagePoolName?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.ifname) jailBridge?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) jailSubnet?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNat?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @IsString() jailIpv6?: string;
+  @Field(() => String, { nullable: true, description: "IPv6 is fail-closed; only 'none' is accepted" })
+  @IsOptional()
+  @Matches(/^none$/, { message: "jailIpv6 must be 'none' because container IPv6 is disabled fail-closed" })
+  jailIpv6?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) aclName?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclBlock?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclAllow?: string;
@@ -217,10 +255,16 @@ export class IncusConfigInput {
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNesting?: boolean;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cpuCap) jailCpu?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.memoryCap) jailMemory?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.absolutePath) jailWorkspaceRoot?: string;
+  @Field(() => String, { nullable: true, description: "Persistent workspace root beneath /srv or /mnt" })
+  @IsOptional()
+  @Validate(SafeWorkspaceRootConstraint, { message: "jailWorkspaceRoot must be beneath /srv or /mnt and cannot contain '..'" })
+  jailWorkspaceRoot?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentUid?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.uidGid) jailAgentGid?: string;
-  @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.bindMounts) jailBindMounts?: string;
+  @Field(() => String, { nullable: true, description: "Safe storage bind triples; curated config binds are read-only" })
+  @IsOptional()
+  @Validate(SafeBindMountsConstraint, { message: "bind sources must be beneath /srv, /mnt, or the read-only plugin bind-mounts directory" })
+  jailBindMounts?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.tsAuthKey) tsAuthKey?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() dashboardWidgetEnable?: boolean;
 }
@@ -230,13 +274,15 @@ export class Jail {
   @Field(() => String) name!: string;
   @Field(() => String) status!: string;
   @Field(() => String, { nullable: true }) ipv4?: string;
-  @Field(() => Number, { nullable: true, description: "Cumulative CPU time consumed, in nanoseconds" })
-  cpuUsageNs?: number;
-  @Field(() => Number, { nullable: true, description: "Current memory usage, in bytes" })
-  memoryUsageBytes?: number;
-  @Field(() => Number, { nullable: true, description: "Memory limit, in bytes (0 = uncapped)" })
-  memoryTotalBytes?: number;
+  @Field(() => String, { nullable: true, description: "Cumulative CPU time consumed, in nanoseconds" }) cpuUsageNs?: string;
+  @Field(() => String, { nullable: true, description: "Current memory usage, in bytes" }) memoryUsageBytes?: string;
+  @Field(() => String, { nullable: true, description: "Memory limit, in bytes (0 = uncapped)" }) memoryTotalBytes?: string;
 }
+
+export enum JobStatus { running = "running", success = "success", failed = "failed" }
+export enum ImageBuildState { queued = "queued", running = "running", success = "success", failed = "failed" }
+registerEnumType(JobStatus, { name: "JobStatus" });
+registerEnumType(ImageBuildState, { name: "ImageBuildState" });
 
 @ObjectType()
 export class JailDetail {
@@ -268,8 +314,8 @@ export class JailDetail {
 export class PrivilegedCommandStatus {
   @Field(() => String) id!: string;
   @Field(() => String) command!: string;
-  @Field(() => String, { description: "running | success | failed" }) status!: string;
-  @Field(() => Number, { nullable: true }) exitCode?: number;
+  @Field(() => JobStatus) status!: JobStatus;
+  @Field(() => Int, { nullable: true }) exitCode?: number;
   @Field(() => String, { nullable: true }) stdout?: string;
   @Field(() => String, { nullable: true }) stderr?: string;
   @Field(() => String) message!: string;
@@ -279,7 +325,7 @@ export class PrivilegedCommandStatus {
 export class HomebrewInstallStatus {
   @Field(() => String) id!: string;
   @Field(() => String) formula!: string;
-  @Field(() => String, { description: "running | success | failed" }) status!: string;
+  @Field(() => JobStatus) status!: JobStatus;
   @Field(() => String) message!: string;
 }
 
@@ -293,16 +339,16 @@ export class BuilderPreset {
 
 @InputType()
 export class BuilderPresetInput {
-  @Field(() => String) @IsString() name!: string;
-  @Field(() => String) @IsString() distro!: string;
-  @Field(() => String) @IsString() release!: string;
+  @Field(() => String) @IsString() @Length(1, 100) name!: string;
+  @Field(() => String) @IsString() @Length(1, 64) distro!: string;
+  @Field(() => String) @IsString() @Length(1, 64) release!: string;
   @Field(() => [String]) @IsArray() @IsString({ each: true }) packages!: string[];
 }
 
 @ObjectType()
 export class ImageBuildStatus {
   @Field(() => String) id!: string;
-  @Field(() => String, { description: "queued|running|success|failed" }) status!: string;
+  @Field(() => ImageBuildState) status!: ImageBuildState;
   @Field(() => String, { description: "Alias the built image is/will be imported under" }) alias!: string;
   @Field(() => String) distro!: string;
   @Field(() => String) release!: string;

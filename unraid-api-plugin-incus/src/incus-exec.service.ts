@@ -1,21 +1,24 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { request as httpRequest } from "node:http";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 import { PubSub } from "graphql-subscriptions";
+import { IncusUnixClient } from "./incus-unix-client.service.js";
+import { JobStatus } from "./config.entity.js";
 
 interface ExecSession {
   jailName: string;
   ioSocket: WebSocket;
   controlSocket: WebSocket;
+  idleTimer: ReturnType<typeof setTimeout>;
+  lifetimeTimer: ReturnType<typeof setTimeout>;
 }
 
 export interface HomebrewInstallJob {
   id: string;
   jailName: string;
   formula: string;
-  status: "running" | "success" | "failed";
+  status: JobStatus;
   message: string;
 }
 
@@ -23,7 +26,7 @@ export interface PrivilegedCommandJob {
   id: string;
   jailName: string;
   command: string;
-  status: "running" | "success" | "failed";
+  status: JobStatus;
   exitCode?: number;
   stdout?: string;
   stderr?: string;
@@ -31,6 +34,12 @@ export interface PrivilegedCommandJob {
 }
 
 const OUTPUT_TOPIC_PREFIX = "jailExecOutput:";
+const MAX_SESSIONS = 8;
+const MAX_JOBS = 100;
+const MAX_INPUT_BYTES = 64 * 1024;
+const MAX_CAPTURE_BYTES = 256 * 1024;
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const SESSION_MAX_LIFETIME_MS = 8 * 60 * 60 * 1000;
 
 /**
  * Bridges a browser-facing GraphQL subscription/mutations to Incus's own
@@ -46,15 +55,16 @@ const OUTPUT_TOPIC_PREFIX = "jailExecOutput:";
 export class IncusExecService implements OnModuleDestroy {
   private readonly logger = new Logger(IncusExecService.name);
   private readonly sessions = new Map<string, ExecSession>();
+  private pendingSessions = 0;
   private readonly homebrewJobs = new Map<string, HomebrewInstallJob>();
   private readonly privilegedJobs = new Map<string, PrivilegedCommandJob>();
   readonly pubsub = new PubSub();
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService, private readonly client: IncusUnixClient) {}
 
   private get socketPath(): string {
     const dir = this.config.get<string>("incus.stateDir", "/mnt/user/appdata/incus");
-    return `${dir}/unix.socket`;
+    return this.client.socketPath;
   }
 
   onModuleDestroy() {
@@ -62,32 +72,59 @@ export class IncusExecService implements OnModuleDestroy {
   }
 
   async start(jailName: string, cols = 80, rows = 24): Promise<string> {
-    const { operationUrl, fds } = await this.requestExec(jailName, cols, rows);
-    if (!fds?.["0"] || !fds?.control) {
-      throw new Error("Incus exec response missing websocket fd secrets");
+    if (cols < 20 || cols > 500 || rows < 5 || rows > 300) throw new Error("Terminal dimensions are out of range");
+    if (this.sessions.size + this.pendingSessions >= MAX_SESSIONS) throw new Error("Too many active terminal sessions");
+    this.pendingSessions++;
+    let ioSocket: WebSocket | undefined;
+    let controlSocket: WebSocket | undefined;
+    try {
+      const { operationUrl, fds } = await this.requestExec(jailName, cols, rows);
+      if (!fds?.["0"] || !fds?.control) {
+        throw new Error("Incus exec response missing websocket fd secrets");
+      }
+
+      const sessionId = randomUUID();
+      ioSocket = this.connectOperationSocket(operationUrl, fds["0"]);
+      controlSocket = this.connectOperationSocket(operationUrl, fds.control);
+
+      ioSocket.on("message", (data, isBinary) => {
+        this.touchSession(sessionId);
+        const text = isBinary ? Buffer.from(data as Buffer).toString("utf-8") : data.toString();
+        void this.pubsub.publish(OUTPUT_TOPIC_PREFIX + sessionId, { jailExecOutput: text });
+      });
+      ioSocket.on("close", () => this.cleanupSession(sessionId));
+      ioSocket.on("error", (err) => {
+        this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`);
+        this.cleanupSession(sessionId);
+      });
+      controlSocket.on("close", () => this.cleanupSession(sessionId));
+      controlSocket.on("error", (err) => {
+        this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`);
+        this.cleanupSession(sessionId);
+      });
+
+      this.sessions.set(sessionId, {
+        jailName,
+        ioSocket,
+        controlSocket,
+        idleTimer: this.createIdleTimer(sessionId),
+        lifetimeTimer: setTimeout(() => this.cleanupSession(sessionId), SESSION_MAX_LIFETIME_MS),
+      });
+      return sessionId;
+    } catch (error) {
+      if (ioSocket) this.closeSocket(ioSocket);
+      if (controlSocket) this.closeSocket(controlSocket);
+      throw error;
+    } finally {
+      this.pendingSessions--;
     }
-
-    const sessionId = randomUUID();
-    const ioSocket = this.connectOperationSocket(operationUrl, fds["0"]);
-    const controlSocket = this.connectOperationSocket(operationUrl, fds.control);
-
-    ioSocket.on("message", (data, isBinary) => {
-      const text = isBinary ? Buffer.from(data as Buffer).toString("utf-8") : data.toString();
-      void this.pubsub.publish(OUTPUT_TOPIC_PREFIX + sessionId, { jailExecOutput: text });
-    });
-    ioSocket.on("close", () => this.sessions.delete(sessionId));
-    ioSocket.on("error", (err) => this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`));
-    controlSocket.on("error", (err) =>
-      this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`)
-    );
-
-    this.sessions.set(sessionId, { jailName, ioSocket, controlSocket });
-    return sessionId;
   }
 
   sendInput(sessionId: string, data: string): boolean {
+    if (Buffer.byteLength(data) > MAX_INPUT_BYTES) throw new Error("Terminal input exceeds 64 KiB");
     const session = this.getSession(sessionId);
     if (session.ioSocket.readyState !== WebSocket.OPEN) return false;
+    this.touchSession(sessionId);
     // Incus's exec fd-0 channel expects binary frames for stdin — a plain
     // string send() here defaults to a text frame, which it silently drops.
     session.ioSocket.send(Buffer.from(data, "utf-8"));
@@ -95,8 +132,10 @@ export class IncusExecService implements OnModuleDestroy {
   }
 
   resize(sessionId: string, cols: number, rows: number): boolean {
+    if (cols < 20 || cols > 500 || rows < 5 || rows > 300) throw new Error("Terminal dimensions are out of range");
     const session = this.getSession(sessionId);
     if (session.controlSocket.readyState !== WebSocket.OPEN) return false;
+    this.touchSession(sessionId);
     session.controlSocket.send(
       JSON.stringify({ command: "window-resize", args: { width: String(cols), height: String(rows) } })
     );
@@ -104,12 +143,35 @@ export class IncusExecService implements OnModuleDestroy {
   }
 
   stop(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    session.ioSocket.close();
-    session.controlSocket.close();
-    this.sessions.delete(sessionId);
+    if (!this.sessions.has(sessionId)) return false;
+    this.cleanupSession(sessionId);
     return true;
+  }
+
+  private createIdleTimer(sessionId: string): ReturnType<typeof setTimeout> {
+    return setTimeout(() => this.cleanupSession(sessionId), SESSION_IDLE_MS);
+  }
+
+  private touchSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    clearTimeout(session.idleTimer);
+    session.idleTimer = this.createIdleTimer(sessionId);
+  }
+
+  private cleanupSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.sessions.delete(sessionId);
+    clearTimeout(session.idleTimer);
+    clearTimeout(session.lifetimeTimer);
+    this.closeSocket(session.ioSocket);
+    this.closeSocket(session.controlSocket);
+  }
+
+  private closeSocket(socket: WebSocket): void {
+    if (socket.readyState === WebSocket.CONNECTING) socket.terminate();
+    else if (socket.readyState === WebSocket.OPEN) socket.close();
   }
 
   /**
@@ -131,41 +193,16 @@ export class IncusExecService implements OnModuleDestroy {
       command,
       "wait-for-websocket": false,
       interactive: false,
-      "record-output": true,
+      // Incus retains recorded exec logs until they are explicitly deleted.
+      // Only request them when the caller will fetch and delete them below;
+      // high-frequency probes such as checkSudoEnabled need no output files.
+      "record-output": captureOutput,
     });
 
     // Same envelope shape as requestExec: the top-level `operation` is the
     // operation URL to poll, and the exec-specific fields (here, `return`)
     // are nested one level deeper, under `metadata.metadata`.
-    const response = await new Promise<{ operation?: string }>((resolve, reject) => {
-      const req = httpRequest(
-        {
-          socketPath: this.socketPath,
-          method: "POST",
-          path: `/1.0/instances/${encodeURIComponent(jailName)}/exec`,
-          timeout: 15_000,
-          headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => {
-            try {
-              resolve(JSON.parse(data));
-            } catch (e) {
-              reject(new Error(`Failed to parse exec response: ${(e as Error).message}`));
-            }
-          });
-        }
-      );
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Incus exec request timed out"));
-      });
-      req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
-      req.write(payload);
-      req.end();
-    });
+    const response = await this.client.request<{ operation?: string }>("POST", `/1.0/instances/${encodeURIComponent(jailName)}/exec`, JSON.parse(payload), 15_000);
 
     if (!response.operation) {
       throw new Error("Incus exec did not return an operation");
@@ -190,62 +227,19 @@ export class IncusExecService implements OnModuleDestroy {
   ): Promise<{
     metadata?: { metadata?: { return?: number; output?: Record<string, string> } };
   }> {
-    return new Promise((resolve, reject) => {
-      const req = httpRequest(
-        {
-          socketPath: this.socketPath,
-          method: "GET",
-          path: `${operationUrl}/wait?timeout=${timeoutSec}`,
-          timeout: (timeoutSec + 10) * 1000,
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => {
-            try {
-              resolve(JSON.parse(data));
-            } catch (e) {
-              reject(new Error(`Failed to parse operation wait response: ${(e as Error).message}`));
-            }
-          });
-        }
-      );
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Incus operation wait timed out"));
-      });
-      req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
-      req.end();
-    });
+    return this.client.wait(operationUrl, timeoutSec);
   }
 
   /** GET a log file's content by its absolute API path, then DELETE it so exec output doesn't pile up. */
   private async fetchAndDeleteLog(logPath: string): Promise<string> {
-    const content = await new Promise<string>((resolve, reject) => {
-      const req = httpRequest({ socketPath: this.socketPath, method: "GET", path: logPath, timeout: 15_000 }, (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => resolve(data));
-      });
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error("Incus log fetch timed out"));
-      });
-      req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
-      req.end();
-    });
-    await new Promise<void>((resolve) => {
-      const req = httpRequest({ socketPath: this.socketPath, method: "DELETE", path: logPath, timeout: 15_000 }, () =>
-        resolve()
+    try {
+      const { text, truncated } = await this.client.requestTextTruncated(
+        "GET", logPath, undefined, 15_000, MAX_CAPTURE_BYTES,
       );
-      req.on("timeout", () => {
-        req.destroy();
-        resolve();
-      });
-      req.on("error", () => resolve());
-      req.end();
-    });
-    return content;
+      return truncated ? `${text}\n[truncated]` : text;
+    } finally {
+      await this.client.requestText("DELETE", logPath, undefined, 15_000, 16 * 1024).catch(() => undefined);
+    }
   }
 
   private getSession(sessionId: string): ExecSession {
@@ -267,18 +261,19 @@ export class IncusExecService implements OnModuleDestroy {
    * distrobuilder image builds (startBuild/getStatus) rather than blocking a mutation.
    */
   startHomebrewInstall(jailName: string, formula: string): string {
+    this.pruneJobs(this.homebrewJobs);
     const id = randomUUID();
     if (!IncusExecService.HOMEBREW_FORMULA_PATTERN.test(formula)) {
       this.homebrewJobs.set(id, {
         id,
         jailName,
         formula,
-        status: "failed",
+        status: JobStatus.failed,
         message: `"${formula}" doesn't look like a valid Homebrew formula name.`,
       });
       return id;
     }
-    this.homebrewJobs.set(id, { id, jailName, formula, status: "running", message: "Installing…" });
+    this.homebrewJobs.set(id, { id, jailName, formula, status: JobStatus.running, message: "Installing…" });
     void this.runHomebrewInstall(id, jailName, formula);
     return id;
   }
@@ -304,7 +299,7 @@ export class IncusExecService implements OnModuleDestroy {
    * at all since it's a normal write inside a directory the user already owns.
    */
   private async runHomebrewInstall(jobId: string, jailName: string, formula: string): Promise<void> {
-    const fail = (message: string) => this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: "failed", message });
+    const fail = (message: string) => this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: JobStatus.failed, message });
     try {
       const brewPrefix = "/home/agent/.linuxbrew";
       const brewShellenv = `eval "$(${brewPrefix}/bin/brew shellenv)"`;
@@ -340,7 +335,7 @@ export class IncusExecService implements OnModuleDestroy {
         fail(`brew install ${formula} failed (exit ${result.exitCode}).`);
         return;
       }
-      this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: "success", message: `${formula} installed.` });
+      this.homebrewJobs.set(jobId, { id: jobId, jailName, formula, status: JobStatus.success, message: `${formula} installed.` });
     } catch (e) {
       fail(e instanceof Error ? e.message : String(e));
     }
@@ -363,38 +358,8 @@ export class IncusExecService implements OnModuleDestroy {
 
     // The top-level `metadata` is the operation object itself; the exec-specific
     // fd secrets are nested one level deeper, in *its* own `metadata` field.
-    const response = await new Promise<{
-      operation?: string;
-      metadata?: { metadata?: { fds?: Record<string, string> } };
-    }>((resolve, reject) => {
-        const req = httpRequest(
-          {
-            socketPath: this.socketPath,
-            method: "POST",
-            path: `/1.0/instances/${encodeURIComponent(jailName)}/exec`,
-            timeout: 15_000,
-            headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) },
-          },
-          (res) => {
-            let data = "";
-            res.on("data", (c) => (data += c));
-            res.on("end", () => {
-              try {
-                resolve(JSON.parse(data));
-              } catch (e) {
-                reject(new Error(`Failed to parse exec response: ${(e as Error).message}`));
-              }
-            });
-          }
-        );
-        req.on("timeout", () => {
-          req.destroy();
-          reject(new Error("Incus exec request timed out"));
-        });
-        req.on("error", (e) => reject(new Error(`Incus socket unreachable: ${e.message}`)));
-        req.write(payload);
-        req.end();
-      }
+    const response = await this.client.request<{ metadata?: { fds?: Record<string, string> } }>(
+      "POST", `/1.0/instances/${encodeURIComponent(jailName)}/exec`, JSON.parse(payload), 15_000,
     );
 
     const fds = response.metadata?.metadata?.fds;
@@ -463,8 +428,10 @@ export class IncusExecService implements OnModuleDestroy {
   // apt install ...`) can easily outlast a blocking request's timeout.
 
   startPrivilegedCommand(jailName: string, command: string): string {
+    if (command.length > 16_384) throw new Error("Command exceeds 16 KiB");
+    this.pruneJobs(this.privilegedJobs);
     const id = randomUUID();
-    this.privilegedJobs.set(id, { id, jailName, command, status: "running", message: "Running…" });
+    this.privilegedJobs.set(id, { id, jailName, command, status: JobStatus.running, message: "Running…" });
     void this.runPrivilegedCommand(id, jailName, command);
     return id;
   }
@@ -480,7 +447,7 @@ export class IncusExecService implements OnModuleDestroy {
         id: jobId,
         jailName,
         command,
-        status: result.exitCode === 0 ? "success" : "failed",
+        status: result.exitCode === 0 ? JobStatus.success : JobStatus.failed,
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
@@ -491,9 +458,13 @@ export class IncusExecService implements OnModuleDestroy {
         id: jobId,
         jailName,
         command,
-        status: "failed",
+        status: JobStatus.failed,
         message: e instanceof Error ? e.message : String(e),
       });
     }
+  }
+
+  private pruneJobs<T>(jobs: Map<string, T>): void {
+    while (jobs.size >= MAX_JOBS) jobs.delete(jobs.keys().next().value!);
   }
 }

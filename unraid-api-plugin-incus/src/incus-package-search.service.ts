@@ -1,5 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { gunzipSync } from "node:zlib";
+import { gunzip } from "node:zlib";
+import { promisify } from "node:util";
+import { Worker } from "node:worker_threads";
 
 export type PackageEcosystem = "apt" | "npm" | "pypi" | "brew";
 
@@ -36,6 +38,9 @@ const RESULTS_PER_SOURCE = 30;
 const MERGED_RESULTS_CAP = 40;
 const FETCH_TIMEOUT_MS = 10_000;
 const INDEX_FETCH_TIMEOUT_MS = 30_000; // the multi-MB catalog downloads (pypi/brew/apt) need more room
+const MAX_APT_CACHE_ENTRIES = 8;
+const MAX_FAILURE_ENTRIES = 100;
+const gunzipAsync = promisify(gunzip);
 
 /** Debian/Ubuntu mirror + suite, matching the same mirrors used for actual builds in incus-image-builder.service.ts. */
 const APT_MIRRORS: Record<string, string> = {
@@ -136,7 +141,26 @@ export class IncusPackageSearchService {
       sources.push({ ecosystem: "apt", run: () => this.searchApt(distro, release, q) });
     }
 
-    const settled = await Promise.allSettled(sources.map((s) => s.run()));
+    // npm is a small query response and may run alongside one catalog load.
+    // The large PyPI/Homebrew/apt catalogs are intentionally loaded one at a
+    // time so their download/decode/worker heaps never peak simultaneously.
+    const settled: Array<PromiseSettledResult<PackageSearchResult[]>> = [];
+    // Convert npm to a settled outcome immediately. Holding the raw promise
+    // while awaiting the large catalogs below leaves its rejection temporarily
+    // unobserved, which Node may report as an unhandled rejection before this
+    // method eventually reaches the later await/catch.
+    const npm: Promise<PromiseSettledResult<PackageSearchResult[]>> = sources[0].run().then(
+      (value): PromiseSettledResult<PackageSearchResult[]> => ({ status: "fulfilled", value }),
+      (reason): PromiseSettledResult<PackageSearchResult[]> => ({ status: "rejected", reason }),
+    );
+    for (let index = 1; index < sources.length; index++) {
+      try {
+        settled[index] = { status: "fulfilled", value: await sources[index].run() };
+      } catch (reason) {
+        settled[index] = { status: "rejected", reason };
+      }
+    }
+    settled[0] = await npm;
 
     const results: PackageSearchResult[] = [];
     const errors: PackageSearchError[] = [];
@@ -168,6 +192,7 @@ export class IncusPackageSearchService {
    * keystroke — but recovers within a minute once the remote is healthy again. */
   private checkRecentFailure(key: string): void {
     const failure = this.recentFailures.get(key);
+    if (failure && Date.now() - failure.failedAt >= FAILURE_TTL_MS) this.recentFailures.delete(key);
     if (failure && Date.now() - failure.failedAt < FAILURE_TTL_MS) {
       throw new Error(`${failure.message} (cached failure, retrying automatically in a moment)`);
     }
@@ -176,6 +201,7 @@ export class IncusPackageSearchService {
   private recordFailure(key: string, err: unknown): never {
     const message = err instanceof Error ? err.message : String(err);
     this.recentFailures.set(key, { message, failedAt: Date.now() });
+    while (this.recentFailures.size > MAX_FAILURE_ENTRIES) this.recentFailures.delete(this.recentFailures.keys().next().value!);
     throw err instanceof Error ? err : new Error(message);
   }
 
@@ -218,8 +244,7 @@ export class IncusPackageSearchService {
         const res = await this.fetchWithTimeout("https://pypi.org/simple/", INDEX_FETCH_TIMEOUT_MS, {
           headers: { Accept: "application/vnd.pypi.simple.v1+json" },
         });
-        const data = (await res.json()) as { projects: Array<{ name: string }> };
-        const names = data.projects.map((p) => p.name);
+        const names = await this.parseCatalog<string[]>("pypi", await res.arrayBuffer());
         this.pypiCache.set("all", { data: names, fetchedAt: Date.now() });
         this.logger.log(`PyPI index cached: ${names.length} package names`);
         return names;
@@ -252,13 +277,7 @@ export class IncusPackageSearchService {
       try {
         this.logger.log("Fetching Homebrew formula catalog (~30MB, cached 6h)…");
         const res = await this.fetchWithTimeout("https://formulae.brew.sh/api/formula.json", INDEX_FETCH_TIMEOUT_MS);
-        const data = (await res.json()) as Array<{ name: string; desc?: string; versions: { stable?: string } }>;
-        const formulae: PackageSearchResult[] = data.map((f) => ({
-          ecosystem: "brew",
-          name: f.name,
-          description: f.desc,
-          version: f.versions.stable,
-        }));
+        const formulae = await this.parseCatalog<PackageSearchResult[]>("brew", await res.arrayBuffer());
         this.brewCache.set("all", { data: formulae, fetchedAt: Date.now() });
         this.logger.log(`Homebrew catalog cached: ${formulae.length} formulae`);
         return formulae;
@@ -296,9 +315,11 @@ export class IncusPackageSearchService {
         this.logger.log(`Fetching apt Packages index for ${distro}:${release} (~15MB, cached 6h)…`);
         const res = await this.fetchWithTimeout(url, INDEX_FETCH_TIMEOUT_MS);
         const gz = Buffer.from(await res.arrayBuffer());
-        const text = gunzipSync(gz).toString("utf-8");
-        const packages = parseDebianPackagesIndex(text);
+        const inflated = await gunzipAsync(gz);
+        const bytes = Uint8Array.from(inflated).buffer;
+        const packages = await this.parseCatalog<PackageSearchResult[]>("apt", bytes);
         this.aptCache.set(cacheKey, { data: packages, fetchedAt: Date.now() });
+        while (this.aptCache.size > MAX_APT_CACHE_ENTRIES) this.aptCache.delete(this.aptCache.keys().next().value!);
         this.logger.log(`apt index cached for ${distro}:${release}: ${packages.length} packages`);
         return packages;
       } catch (err) {
@@ -319,43 +340,30 @@ export class IncusPackageSearchService {
     }
     return results;
   }
-}
 
-/**
- * Minimal RFC822-stanza parser for Debian's Packages index format: stanzas separated by
- * blank lines, fields as "Key: value" (continuation lines start with whitespace). Only
- * pulls the three fields the search UI needs — Package, Description, Version — and
- * ignores everything else (Depends, Maintainer, Tag, etc).
- */
-function parseDebianPackagesIndex(text: string): PackageSearchResult[] {
-  const results: PackageSearchResult[] = [];
-  let name: string | undefined;
-  let description: string | undefined;
-  let version: string | undefined;
-
-  const flush = () => {
-    if (name) results.push({ ecosystem: "apt", name, description, version });
-    name = undefined;
-    description = undefined;
-    version = undefined;
-  };
-
-  for (const line of text.split("\n")) {
-    if (line === "") {
-      flush();
-      continue;
-    }
-    if (line.startsWith(" ") || line.startsWith("\t")) continue; // continuation line, skip
-    const idx = line.indexOf(":");
-    if (idx < 0) continue;
-    const key = line.slice(0, idx);
-    const value = line.slice(idx + 1).trim();
-    if (key === "Package") name = value;
-    else if (key === "Description") description = value;
-    else if (key === "Version") version = value;
+  private parseCatalog<T>(kind: "pypi" | "brew" | "apt", bytes: ArrayBuffer): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(new URL("./package-catalog.worker.js", import.meta.url));
+      let settled = false;
+      const finish = (callback: () => void) => {
+        if (settled) return;
+        settled = true;
+        void worker.terminate();
+        callback();
+      };
+      worker.once("message", (message: { result?: T; error?: string }) => {
+        finish(() => {
+          if (message.error) reject(new Error(message.error));
+          else resolve(message.result as T);
+        });
+      });
+      worker.once("error", (error) => finish(() => reject(error)));
+      worker.once("exit", (code) => {
+        if (!settled) finish(() => reject(new Error(`Catalog parser worker exited before replying (code ${code})`)));
+      });
+      worker.postMessage({ kind, bytes }, [bytes]);
+    });
   }
-  flush();
-  return results;
 }
 
 /**

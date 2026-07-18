@@ -5,10 +5,6 @@ import App from "./App.vue";
 // encapsulation and it lets the compiled CSS ship as an ordinary stylesheet
 // the .page file links directly, rather than an inlined style string.
 import "./styles/index.css";
-// Aurora tokens are only consumed by Terminal.vue (real color values it reads
-// via getComputedStyle for canvas rendering); the --aurora-* namespace has no
-// overlap with the unraid-ui/shadcn tokens the rest of this page uses.
-import "./styles/aurora-tokens.css";
 
 const IncusSettingsApp = defineCustomElement(App, { shadowRoot: false });
 

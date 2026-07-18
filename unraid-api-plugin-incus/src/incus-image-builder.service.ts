@@ -2,10 +2,12 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, mkdtemp, writeFile, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { ImageRecord } from "./config.entity.js";
+import { JsonArrayStore } from "./json-store.js";
 
 export type ImageBuildStatusValue = "queued" | "running" | "success" | "failed";
 
@@ -24,6 +26,13 @@ export interface ImageBuild {
 }
 
 const LOG_TAIL_BYTES = 16_384;
+const MAX_CONCURRENT_BUILDS = 2;
+const MAX_QUEUED_BUILDS = 8;
+const BUILD_RETENTION_MS = 24 * 60 * 60 * 1000;
+const BUILD_TIMEOUT_MS = 60 * 60 * 1000;
+const BUILD_KILL_GRACE_MS = 10_000;
+const BUILD_HARD_SETTLE_MS = 5_000;
+const MAX_BUILD_LOG_BYTES = 16 * 1024 * 1024;
 
 /** Private-prefixed runtime bundled by the plugin's .plg (see incus-env.sh) — matches incusd/lxcfs/nft. */
 const INCUS_PREFIX = "/usr/local/incus";
@@ -120,8 +129,13 @@ const DISTRO_DEFINITIONS: Record<
 export class IncusImageBuilderService {
   private readonly logger = new Logger(IncusImageBuilderService.name);
   private readonly builds = new Map<string, ImageBuild>();
+  private readonly imageStore: JsonArrayStore<ImageRecord>;
+  private activeBuilds = 0;
+  private readonly queue: Array<() => void> = [];
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService) {
+    this.imageStore = new JsonArrayStore(() => this.imagesFilePath, isImageRecord);
+  }
 
   private get socketPath(): string {
     const dir = this.config.get<string>("incus.stateDir", "/mnt/user/appdata/incus");
@@ -147,6 +161,9 @@ export class IncusImageBuilderService {
     basedOn?: string,
     postInstallCommands?: string[]
   ): Promise<string> {
+    validateBuildInput(distro, release, packages, alias, postInstallCommands ?? []);
+    if (this.queue.length >= MAX_QUEUED_BUILDS) throw new Error("Image build queue is full; wait for a running build to finish");
+    await this.pruneBuildHistory();
     const id = randomUUID();
     await mkdir(this.buildRoot, { recursive: true });
     const workDir = await mkdtemp(join(tmpdir(), `distrobuilder-${id}-`));
@@ -175,13 +192,13 @@ export class IncusImageBuilderService {
     };
     this.builds.set(id, build);
 
-    void this.runBuild(build, definitionPath, outputDir);
+    void this.enqueue(() => this.runBuild(build, definitionPath, outputDir));
     return id;
   }
 
   /** Full persisted image registry (empty array if no builds have succeeded yet). */
   async listImages(): Promise<ImageRecord[]> {
-    return this.readImages();
+    return this.imageStore.read();
   }
 
   /** Flip a persisted image record's isMaster flag; throws if the alias isn't tracked. */
@@ -191,55 +208,36 @@ export class IncusImageBuilderService {
    * an arbitrary set of favorites.
    */
   async setMasterImage(alias: string, isMaster: boolean): Promise<ImageRecord> {
-    const images = await this.readImages();
-    const record = images.find((i) => i.alias === alias);
-    if (!record) {
-      throw new Error(`No tracked image with alias "${alias}"`);
-    }
-    if (isMaster) {
-      for (const image of images) image.isMaster = image.alias === alias;
-    } else {
-      record.isMaster = false;
-    }
-    await this.writeImages(images);
-    return record;
+    return this.imageStore.update((images) => {
+      const record = images.find((i) => i.alias === alias);
+      if (!record) throw new Error(`No tracked image with alias "${alias}"`);
+      if (isMaster) for (const image of images) image.isMaster = image.alias === alias;
+      else record.isMaster = false;
+      return record;
+    });
   }
 
   /** Remove a tracked image record by alias. Returns whether one was actually removed. */
   async untrackImage(alias: string): Promise<boolean> {
-    const images = await this.readImages();
-    const next = images.filter((i) => i.alias !== alias);
-    if (next.length === images.length) return false;
-    await this.writeImages(next);
-    return true;
-  }
-
-  private async readImages(): Promise<ImageRecord[]> {
-    try {
-      const data = await readFile(this.imagesFilePath, "utf-8");
-      return JSON.parse(data);
-    } catch {
-      return [];
-    }
-  }
-
-  private async writeImages(images: ImageRecord[]): Promise<void> {
-    await mkdir(dirname(this.imagesFilePath), { recursive: true });
-    await writeFile(this.imagesFilePath, JSON.stringify(images, null, 2), "utf-8");
+    return this.imageStore.update((images) => {
+      const idx = images.findIndex((i) => i.alias === alias);
+      if (idx < 0) return false;
+      images.splice(idx, 1);
+      return true;
+    });
   }
 
   private async recordImageBuilt(build: ImageBuild): Promise<void> {
-    const images = await this.readImages();
-    images.push({
-      alias: build.alias,
-      distro: build.distro,
-      release: build.release,
-      packages: build.packages,
-      isMaster: false,
-      basedOn: build.basedOn,
-      createdAt: new Date().toISOString(),
+    await this.imageStore.update((images) => {
+      const record = {
+        alias: build.alias, distro: build.distro, release: build.release,
+        packages: build.packages, isMaster: false, basedOn: build.basedOn,
+        createdAt: new Date().toISOString(),
+      };
+      const existing = images.findIndex((image) => image.alias === build.alias);
+      if (existing >= 0) images[existing] = record;
+      else images.push(record);
     });
-    await this.writeImages(images);
   }
 
   /** Current status of a build, including a tail of its log. */
@@ -260,7 +258,7 @@ export class IncusImageBuilderService {
    * `downloader: distro` placeholder the caller is expected to already know is wrong for
    * their custom distro, plus apt as the package manager guess).
    */
-  private renderDefinition(
+  renderDefinition(
     distro: string,
     release: string,
     packages: string[],
@@ -340,6 +338,9 @@ export class IncusImageBuilderService {
     // `ar` dependency) are bundled under the same private prefix as incusd/lxcfs.
     await new Promise<void>((resolvePromise) => {
       const child = spawn(`${INCUS_PREFIX}/bin/distrobuilder`, args, {
+        // A dedicated process group lets timeout cancellation terminate
+        // debootstrap/package-manager descendants as well as distrobuilder.
+        detached: true,
         env: {
           ...process.env,
           INCUS_SOCKET: this.socketPath,
@@ -349,34 +350,89 @@ export class IncusImageBuilderService {
         },
       });
 
+      const log = createWriteStream(build.logFile, { flags: "a", mode: 0o600 });
+      let logBytes = 0;
+      let logTruncated = false;
       const appendLog = (chunk: Buffer) => {
-        void writeFile(build.logFile, chunk, { flag: "a" }).catch((err) =>
-          this.logger.warn(`Failed to append build log for ${build.id}: ${(err as Error).message}`)
-        );
+        if (logBytes >= MAX_BUILD_LOG_BYTES) return;
+        const remaining = MAX_BUILD_LOG_BYTES - logBytes;
+        const output = chunk.subarray(0, remaining);
+        logBytes += output.length;
+        if (!log.write(output)) {
+          child.stdout.pause();
+          child.stderr.pause();
+        }
+        if (output.length < chunk.length && !logTruncated) {
+          logTruncated = true;
+          log.write("\n[build log truncated at 16 MiB]\n");
+        }
       };
+      log.on("drain", () => { child.stdout.resume(); child.stderr.resume(); });
       child.stdout.on("data", appendLog);
       child.stderr.on("data", appendLog);
 
-      child.on("error", (err) => {
-        build.status = "failed";
-        build.error = err.message;
-        build.finishedAt = Date.now();
-        resolvePromise();
-      });
-
-      child.on("close", (code) => {
-        if (code === 0) {
+      let settled = false;
+      let forcedError: Error | undefined;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      let hardSettleTimer: ReturnType<typeof setTimeout> | undefined;
+      const signalBuildGroup = (signal: NodeJS.Signals) => {
+        try {
+          if (child.pid) process.kill(-child.pid, signal);
+          else child.kill(signal);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            this.logger.warn(`Unable to signal build ${build.id} with ${signal}: ${(error as Error).message}`);
+          }
+        }
+      };
+      const timeout = setTimeout(() => {
+        forcedError = new Error("Image build exceeded the 60 minute limit");
+        signalBuildGroup("SIGTERM");
+        killTimer = setTimeout(() => {
+          signalBuildGroup("SIGKILL");
+          // A broken child/process-wrapper can fail to emit close even after
+          // SIGKILL. Settle independently so the build queue cannot remain
+          // permanently occupied waiting for an event that never arrives.
+          hardSettleTimer = setTimeout(() => void finish(null, forcedError), BUILD_HARD_SETTLE_MS);
+        }, BUILD_KILL_GRACE_MS);
+      }, BUILD_TIMEOUT_MS);
+      const finish = async (code: number | null, error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (killTimer) clearTimeout(killTimer);
+        if (hardSettleTimer) clearTimeout(hardSettleTimer);
+        child.stdout.off("data", appendLog);
+        child.stderr.off("data", appendLog);
+        log.end();
+        const failure = error ?? forcedError;
+        if (failure) {
+          build.status = "failed";
+          build.error = failure.message;
+        } else if (code === 0) {
           build.status = "success";
-          void this.recordImageBuilt(build).catch((err) =>
-            this.logger.warn(`Failed to record image build ${build.id} in registry: ${(err as Error).message}`)
-          );
+          try {
+            await this.recordImageBuilt(build);
+          } catch (registryError) {
+            build.status = "failed";
+            build.error = `Image imported but registry update failed: ${(registryError as Error).message}`;
+          }
         } else {
           build.status = "failed";
           build.error = `distrobuilder exited with code ${code}`;
         }
         build.finishedAt = Date.now();
         resolvePromise();
+      };
+      log.once("error", (error) => {
+        forcedError = new Error(`Unable to write image build log: ${error.message}`);
+        // Once the audit log is unavailable, continuing an unobserved build is
+        // unsafe. Kill the whole detached group and release the queue slot.
+        signalBuildGroup("SIGKILL");
+        void finish(null, forcedError);
       });
+      child.once("error", (error) => void finish(null, error));
+      child.once("close", (code) => void finish(code));
     });
 
     // Best-effort cleanup of the scratch definition/output dir; the log file
@@ -385,12 +441,60 @@ export class IncusImageBuilderService {
   }
 
   private async tailLog(logFile: string): Promise<string> {
+    let handle;
     try {
-      const data = await readFile(logFile);
-      if (data.length <= LOG_TAIL_BYTES) return data.toString("utf-8");
-      return data.subarray(data.length - LOG_TAIL_BYTES).toString("utf-8");
-    } catch {
+      handle = await open(logFile, "r");
+      const { size } = await handle.stat();
+      const length = Math.min(size, LOG_TAIL_BYTES);
+      const data = Buffer.alloc(length);
+      await handle.read(data, 0, length, Math.max(0, size - length));
+      return data.toString("utf-8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") this.logger.warn(`Unable to read build log: ${(error as Error).message}`);
       return "";
+    } finally {
+      await handle?.close();
     }
   }
+
+  private enqueue(task: () => Promise<void>): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const start = () => {
+        this.activeBuilds++;
+        void task().then(resolve, reject).finally(() => {
+          this.activeBuilds--;
+          this.queue.shift()?.();
+        });
+      };
+      if (this.activeBuilds < MAX_CONCURRENT_BUILDS) start();
+      else this.queue.push(start);
+    });
+  }
+
+  private async pruneBuildHistory(): Promise<void> {
+    const cutoff = Date.now() - BUILD_RETENTION_MS;
+    for (const [id, build] of this.builds) {
+      if (build.finishedAt && build.finishedAt < cutoff) {
+        this.builds.delete(id);
+        await rm(build.logFile, { force: true }).catch((error) =>
+          this.logger.warn(`Unable to remove expired build log ${build.logFile}: ${(error as Error).message}`)
+        );
+      }
+    }
+  }
+}
+
+function isImageRecord(value: unknown): value is ImageRecord {
+  const item = value as Partial<ImageRecord> | null;
+  return !!item && typeof item.alias === "string" && typeof item.distro === "string" &&
+    typeof item.release === "string" && typeof item.isMaster === "boolean" && typeof item.createdAt === "string" &&
+    Array.isArray(item.packages) && item.packages.every((p) => typeof p === "string");
+}
+
+function validateBuildInput(distro: string, release: string, packages: string[], alias: string, commands: string[]): void {
+  const token = /^[A-Za-z0-9][A-Za-z0-9._+@/-]{0,127}$/;
+  if (!token.test(distro) || !token.test(release) || !token.test(alias)) throw new Error("Invalid distro, release, or image alias");
+  if (packages.length > 200 || commands.length > 50) throw new Error("Build input exceeds package or command limits");
+  if (packages.some((value) => !token.test(value))) throw new Error("Invalid package name");
+  if (commands.some((value) => value.length > 4096 || value.includes("\0"))) throw new Error("Invalid post-install command");
 }

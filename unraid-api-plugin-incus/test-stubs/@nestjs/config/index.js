@@ -2,7 +2,6 @@
 export function registerAs(_token, factory) {
   return factory;
 }
-
 export class ConfigService {
   get() {
     return undefined;

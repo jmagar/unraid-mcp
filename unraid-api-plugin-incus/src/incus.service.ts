@@ -1,17 +1,44 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { request as httpRequest } from "node:http";
-import { mkdir } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { mkdir, realpath, stat } from "node:fs/promises";
+import { join, relative, resolve } from "node:path";
+import { IncusUnixClient, type IncusResponse } from "./incus-unix-client.service.js";
 
-interface IncusResponse<T = unknown> {
-  type: "sync" | "async" | "error";
+export interface JailSummary {
+  name: string;
   status: string;
-  status_code: number;
-  operation?: string;
-  metadata: T;
-  error?: string;
-  error_code?: number;
+  ipv4?: string;
+  cpuUsageNs?: string;
+  memoryUsageBytes?: string;
+  memoryTotalBytes?: string;
+}
+
+interface IncusNetworkAddress {
+  family?: string;
+  address?: string;
+}
+
+interface IncusDevice extends Record<string, string | undefined> {
+  type?: string;
+  source?: string;
+  path?: string;
+  pool?: string;
+  network?: string;
+}
+
+interface IncusInstance {
+  name: string;
+  status: string;
+  profiles?: string[];
+  state?: {
+    network?: Record<string, { addresses?: IncusNetworkAddress[] }>;
+    cpu?: { usage?: string | number };
+    memory?: { usage?: string | number; total?: string | number };
+  };
+  config?: Record<string, string>;
+  expanded_config?: Record<string, string>;
+  devices?: Record<string, IncusDevice>;
+  expanded_devices?: Record<string, IncusDevice>;
 }
 
 /**
@@ -22,13 +49,9 @@ interface IncusResponse<T = unknown> {
 @Injectable()
 export class IncusService {
   private readonly logger = new Logger(IncusService.name);
+  private jailSnapshot?: { expiresAt: number; value: Promise<JailSummary[]> };
 
-  constructor(private readonly config: ConfigService) {}
-
-  private get socketPath(): string {
-    const dir = this.config.get<string>("incus.stateDir", "/mnt/user/appdata/incus");
-    return `${dir}/unix.socket`;
-  }
+  constructor(private readonly config: ConfigService, private readonly client: IncusUnixClient) {}
 
   /** Raw request against the Incus REST API. */
   private call<T = unknown>(
@@ -37,46 +60,7 @@ export class IncusService {
     body?: unknown,
     timeoutMs = 30_000
   ): Promise<IncusResponse<T>> {
-    const payload = body ? JSON.stringify(body) : undefined;
-    return new Promise((resolve, reject) => {
-      const req = httpRequest(
-        {
-          socketPath: this.socketPath,
-          method,
-          path,
-          timeout: timeoutMs,
-          headers: {
-            "Content-Type": "application/json",
-            ...(payload ? { "Content-Length": Buffer.byteLength(payload) } : {}),
-          },
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (c) => (data += c));
-          res.on("end", () => {
-            try {
-              const parsed: IncusResponse<T> = data ? JSON.parse(data) : {};
-              if (parsed.type === "error") {
-                reject(new Error(`Incus API error on ${method} ${path}: ${parsed.error} (${parsed.error_code})`));
-                return;
-              }
-              resolve(parsed);
-            } catch (e) {
-              reject(new Error(`Incus API parse error on ${path}: ${(e as Error).message}`));
-            }
-          });
-        }
-      );
-      req.on("timeout", () => {
-        req.destroy();
-        reject(new Error(`Incus API request to ${path} timed out after ${Math.round(timeoutMs / 1000)}s`));
-      });
-      req.on("error", (e) =>
-        reject(new Error(`Incus socket ${this.socketPath} unreachable: ${e.message}`))
-      );
-      if (payload) req.write(payload);
-      req.end();
-    });
+    return this.client.request<T>(method, path, body, timeoutMs);
   }
 
   /** Wait for an async operation to complete. */
@@ -85,15 +69,7 @@ export class IncusService {
     // the wait we're asking Incus to perform, plus slack for network/socket
     // overhead — otherwise a still-healthy, still-running operation gets
     // reported as a timeout when the socket is cut before Incus responds.
-    const { metadata } = await this.call<{ status: string; err: string }>(
-      "GET",
-      `${operationUrl}/wait?timeout=${timeoutSec}`,
-      undefined,
-      (timeoutSec + 10) * 1000
-    );
-    if (metadata?.status === "Failure") {
-      throw new Error(`Incus operation failed: ${metadata.err}`);
-    }
+    await this.client.wait(operationUrl, timeoutSec);
   }
 
   /** Execute a call and wait if async. */
@@ -105,6 +81,9 @@ export class IncusService {
     const resp = await this.call<T>(method, path, body);
     if (resp.type === "async" && resp.operation) {
       await this.waitForOperation(resp.operation);
+    }
+    if (method !== "GET" && path.startsWith("/1.0/instances")) {
+      this.jailSnapshot = undefined;
     }
     return resp;
   }
@@ -120,27 +99,25 @@ export class IncusService {
   }
 
   /** List jails (instances) with state, expanded to name/status/ipv4/resource usage. */
-  async listJails(): Promise<
-    Array<{
-      name: string;
-      status: string;
-      ipv4?: string;
-      cpuUsageNs?: number;
-      memoryUsageBytes?: number;
-      memoryTotalBytes?: number;
-    }>
-  > {
-    const { metadata } = await this.call<Array<Record<string, any>>>(
+  async listJails(): Promise<JailSummary[]> {
+    if (this.jailSnapshot && this.jailSnapshot.expiresAt > Date.now()) return this.jailSnapshot.value;
+    const value = this.fetchJails();
+    this.jailSnapshot = { expiresAt: Date.now() + 1_000, value };
+    try { return await value; } catch (error) { this.jailSnapshot = undefined; throw error; }
+  }
+
+  private async fetchJails(): Promise<JailSummary[]> {
+    const { metadata } = await this.call<IncusInstance[]>(
       "GET",
       "/1.0/instances?recursion=2"
     );
     return (metadata ?? []).map((i) => ({
       name: i.name,
       status: i.status,
-      ipv4: i.state?.network?.eth0?.addresses?.find((a: any) => a.family === "inet")?.address,
-      cpuUsageNs: i.state?.cpu?.usage,
-      memoryUsageBytes: i.state?.memory?.usage,
-      memoryTotalBytes: i.state?.memory?.total,
+      ipv4: i.state?.network?.eth0?.addresses?.find((address) => address.family === "inet")?.address,
+      cpuUsageNs: i.state?.cpu?.usage === undefined ? undefined : String(i.state.cpu.usage),
+      memoryUsageBytes: i.state?.memory?.usage === undefined ? undefined : String(i.state.memory.usage),
+      memoryTotalBytes: i.state?.memory?.total === undefined ? undefined : String(i.state.memory.total),
     }));
   }
 
@@ -165,6 +142,7 @@ export class IncusService {
    * locally-built image was never published anywhere).
    */
   async launchJail(name: string, opts?: { image?: string; profile?: string }): Promise<void> {
+    this.assertJailName(name);
     const image = opts?.image ?? this.config.get<string>("incus.jailImage", "images:debian/trixie/cloud");
     const profile = opts?.profile ?? this.config.get<string>("incus.jailProfile", "agent-jail");
     const colonIdx = image.indexOf(":");
@@ -281,13 +259,14 @@ export class IncusService {
 
   /** Resolve + create `${jailWorkspaceRoot}/${name}`, guarding against the name escaping the root. */
   private async ensureInstanceWorkspaceDir(name: string): Promise<string> {
-    const workspaceRoot = resolve(this.config.get<string>("incus.jailWorkspaceRoot", "/srv/agent-jails"));
+    this.assertJailName(name);
+    const workspaceRoot = await this.canonicalWorkspaceRoot();
     const instanceWorkspace = resolve(join(workspaceRoot, name));
-    if (instanceWorkspace !== workspaceRoot && !instanceWorkspace.startsWith(workspaceRoot + sep)) {
+    if (!this.isContained(workspaceRoot, instanceWorkspace)) {
       throw new Error(`Container name "${name}" produces an invalid workspace path`);
     }
     await mkdir(instanceWorkspace, { recursive: true });
-    return instanceWorkspace;
+    return realpath(instanceWorkspace);
   }
 
   /**
@@ -305,18 +284,40 @@ export class IncusService {
 
   /** Repoint a jail's workspace disk device to a host directory (bring-your-cwd). */
   async setWorkspace(name: string, hostPath: string): Promise<void> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const workspaceRoot = await this.canonicalWorkspaceRoot();
+    const canonical = await realpath(hostPath);
+    if (!this.isContained(workspaceRoot, canonical)) throw new Error(`Workspace must be beneath ${workspaceRoot}`);
+    if (!(await stat(canonical)).isDirectory()) throw new Error("Workspace source must be a directory");
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
     const devices = { ...(inst.devices ?? {}) };
-    devices.workspace = { type: "disk", source: hostPath, path: "/workspace", shift: "true" };
+    // Re-resolve immediately before passing the path across the privilege boundary.
+    const verified = await realpath(canonical);
+    if (verified !== canonical || !this.isContained(workspaceRoot, verified)) throw new Error("Workspace path changed during validation");
+    devices.workspace = { type: "disk", source: verified, path: "/workspace", shift: "true" };
     await this.callAndWait("PATCH", `/1.0/instances/${encodeURIComponent(name)}`, { devices });
+  }
+
+  private async canonicalWorkspaceRoot(): Promise<string> {
+    const configured = resolve(this.config.get<string>("incus.jailWorkspaceRoot", "/srv/agent-jails"));
+    await mkdir(configured, { recursive: true });
+    return realpath(configured);
+  }
+
+  private isContained(root: string, candidate: string): boolean {
+    const rel = relative(root, candidate);
+    return rel === "" || (!rel.startsWith("..") && !rel.startsWith("/"));
+  }
+
+  private assertJailName(name: string): void {
+    if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(name)) throw new Error("Invalid container name");
   }
 
   /** Drop the instance-level workspace override so it falls back to the profile's own device. */
   async clearWorkspaceOverride(name: string): Promise<void> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
@@ -333,7 +334,7 @@ export class IncusService {
    * to the profile's value again — Incus's own config-unset semantics for a config key.
    */
   async setJailLimits(name: string, cpu?: string, memory?: string): Promise<void> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
@@ -363,7 +364,7 @@ export class IncusService {
     workspaceHostPath?: string;
     workspaceIsOverride: boolean;
   }> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );

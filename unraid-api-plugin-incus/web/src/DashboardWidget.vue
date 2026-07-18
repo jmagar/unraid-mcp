@@ -6,6 +6,7 @@
 // every user just to show a status count.
 import { ref, computed, onMounted, onUnmounted } from "vue";
 import { gql } from "./graphql-client.js";
+import { startPolling, type PollController } from "./lib/polling.js";
 
 interface Jail {
   name: string;
@@ -25,7 +26,7 @@ async function refresh() {
     jails.value = data.jails;
     error.value = null;
   } catch (e) {
-    error.value = (e as Error).message;
+    error.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -36,12 +37,11 @@ const stopped = computed(() => jails.value.filter((j) => j.status.toLowerCase() 
 // needs starting when it actually needs attention.
 const other = computed(() => jails.value.length - running.value - stopped.value);
 
-let timer: ReturnType<typeof setInterval> | undefined;
+let poller: PollController | undefined;
 onMounted(() => {
-  refresh();
-  timer = setInterval(refresh, 15_000);
+  poller = startPolling(refresh, 15_000, { immediate: true });
 });
-onUnmounted(() => clearInterval(timer));
+onUnmounted(() => poller?.stop());
 </script>
 
 <template>
@@ -70,18 +70,18 @@ onUnmounted(() => clearInterval(timer));
   margin-bottom: 4px;
 }
 .incus-tile-loading {
-  color: #888;
+  color: var(--text-muted, var(--secondary, #888));
 }
 .incus-tile-error {
-  color: #c0392b;
+  color: var(--error, var(--red-on, #c0392b));
 }
 .incus-tile-running {
-  color: #27ae60;
+  color: var(--success, var(--green-on, #27ae60));
 }
 .incus-tile-stopped {
-  color: #888;
+  color: var(--text-muted, var(--secondary, #888));
 }
 .incus-tile-other {
-  color: #c6a36b;
+  color: var(--warning, var(--orange-on, #c6a36b));
 }
 </style>

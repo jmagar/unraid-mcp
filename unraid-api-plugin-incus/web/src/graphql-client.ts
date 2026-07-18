@@ -68,6 +68,12 @@ async function gqlOnce<T>(query: string, variables?: Record<string, unknown>): P
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Only GraphQL queries are safe to replay after an ambiguous transport failure. */
+export function isRetrySafeOperation(document: string): boolean {
+  const normalized = document.replace(/^\s*(?:#[^\n]*\n\s*)*/, "");
+  return normalized.startsWith("query") || normalized.startsWith("{");
+}
+
 export async function gql<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   await waitForCsrfToken();
 
@@ -79,7 +85,7 @@ export async function gql<T>(query: string, variables?: Record<string, unknown>)
     // not ours to fix at the source) — a plain HTTP-layer failure (not a GraphQL
     // error the server actually returned data+errors for) is worth one silent
     // retry before surfacing anything to the user.
-    if (e instanceof GraphQLError) throw e;
+    if (e instanceof GraphQLError || !isRetrySafeOperation(query)) throw e;
     await sleep(300);
     return gqlOnce<T>(query, variables);
   }
