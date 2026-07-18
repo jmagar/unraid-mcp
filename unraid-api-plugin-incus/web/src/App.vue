@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Button, Switch, Badge, Input, Select, Label, HelpText } from "./components/ui";
+import TabNavigation from "./components/TabNavigation.vue";
 import { gql } from "./graphql-client";
 import { startPolling, type PollController } from "./lib/polling";
 import { buildConfigUpdate } from "./lib/configPayload";
 import { useResourceMetrics } from "./composables/useResourceMetrics";
+import { useJailDetail } from "./composables/useJailDetail";
 import {
   CONFIG_QUERY, STATUS_QUERY, UPDATE_CONFIG_MUTATION, SET_JAIL_STATE_MUTATION, DELETE_JAIL_MUTATION,
   LAUNCH_JAIL_MUTATION, JAIL_DETAIL_QUERY, GRANT_JAIL_SUDO_MUTATION, START_PRIVILEGED_COMMAND_MUTATION,
@@ -38,7 +40,6 @@ type Tab = "builder" | "jails" | "config";
 const activeTab = ref<Tab>("jails");
 // Internal tab id stays "jails" (matches the rest of the codebase/GraphQL
 // schema) — only the displayed label is reframed as "dev containers".
-const TAB_LABELS: Record<Tab, string> = { builder: "Builder", jails: "Containers", config: "Config" };
 
 const loading = ref(true);
 const saving = ref(false);
@@ -97,13 +98,17 @@ async function loadConfig() {
   Object.assign(config, data.incusConfig);
 }
 
+let statusRequestId = 0;
 async function refreshStatus() {
+  const requestId = ++statusRequestId;
   try {
     const data = await gql<{ incusHealthy: boolean; jails: Jail[] }>(STATUS_QUERY);
+    if (requestId !== statusRequestId) return;
     incusHealthy.value = data.incusHealthy;
     jails.value = data.jails;
     updateCpuSamplesAndHistory();
   } catch (e) {
+    if (requestId !== statusRequestId) return;
     // Status is best-effort — don't block the rest of the page on it.
     incusHealthy.value = false;
   }
@@ -213,49 +218,22 @@ async function launchJail() {
 
 // --- Container details panel: view/edit resolved per-jail config (limits, workspace) --
 
-const detailsJailName = ref<string | null>(null);
-const jailDetail = ref<JailDetail | null>(null);
-const detailLoading = ref(false);
-const detailError = ref("");
 const detailSaving = ref(false);
-const editCpuLimit = ref("");
-const editMemoryLimit = ref("");
-const editWorkspacePath = ref("");
-
-async function toggleJailDetails(name: string) {
+const {
+  detailsJailName, jailDetail, detailLoading, detailError,
+  editCpuLimit, editMemoryLimit, editWorkspacePath,
+  toggleJailDetails, loadJailDetail,
+} = useJailDetail(() => {
   stopInstallPolling();
   installingFormula.value = false;
   stopPrivilegedPolling();
   runningPrivilegedCommand.value = false;
-  if (detailsJailName.value === name) {
-    detailsJailName.value = null;
-    jailDetail.value = null;
-    return;
-  }
-  detailsJailName.value = name;
   installFormula.value = "";
   installResult.value = "";
   installError.value = "";
   privilegedCommand.value = "";
   privilegedCommandStatus.value = null;
-  await loadJailDetail(name);
-}
-
-async function loadJailDetail(name: string) {
-  detailLoading.value = true;
-  detailError.value = "";
-  try {
-    const data = await gql<{ jailDetail: JailDetail }>(JAIL_DETAIL_QUERY, { name });
-    jailDetail.value = data.jailDetail;
-    editCpuLimit.value = data.jailDetail.cpuLimit ?? "";
-    editMemoryLimit.value = data.jailDetail.memoryLimit ?? "";
-    editWorkspacePath.value = data.jailDetail.workspaceHostPath ?? "";
-  } catch (e) {
-    detailError.value = e instanceof Error ? e.message : String(e);
-  } finally {
-    detailLoading.value = false;
-  }
-}
+});
 
 // Each limit is applied independently (only the touched field is sent) so editing CPU
 // alone doesn't also stamp an instance-level override onto an untouched Memory value.
@@ -388,22 +366,24 @@ function stopInstallPolling() {
 
 async function installHomebrewFormula() {
   if (!detailsJailName.value || !installFormula.value.trim()) return;
+  const name = detailsJailName.value;
   stopInstallPolling();
   installingFormula.value = true;
   installResult.value = "";
   installError.value = "";
   try {
     const data = await gql<{ installHomebrewFormula: string }>(INSTALL_HOMEBREW_FORMULA_MUTATION, {
-      name: detailsJailName.value,
+      name,
       formula: installFormula.value.trim(),
     });
     const jobId = data.installHomebrewFormula;
-    installPollHandle = startPolling(async () => {
+    installPollHandle = startPolling(async (pollContext) => {
       try {
         const poll = await gql<{ homebrewInstallStatus: HomebrewInstallStatus | null }>(
           HOMEBREW_INSTALL_STATUS_QUERY,
           { id: jobId }
         );
+        if (!pollContext.isActive() || detailsJailName.value !== name) return;
         const job = poll.homebrewInstallStatus;
         if (!job || job.status === "running") return;
         stopInstallPolling();
@@ -415,6 +395,7 @@ async function installHomebrewFormula() {
           installError.value = job.message;
         }
       } catch (e) {
+        if (!pollContext.isActive() || detailsJailName.value !== name) return;
         stopInstallPolling();
         installingFormula.value = false;
         installError.value = e instanceof Error ? e.message : String(e);
@@ -472,18 +453,21 @@ async function runPrivilegedCommand() {
       command: privilegedCommand.value.trim(),
     });
     const jobId = data.startPrivilegedCommand;
-    privilegedPollHandle = startPolling(async () => {
+    const jailName = detailsJailName.value;
+    privilegedPollHandle = startPolling(async (pollContext) => {
       try {
         const poll = await gql<{ privilegedCommandStatus: PrivilegedCommandStatus | null }>(
           PRIVILEGED_COMMAND_STATUS_QUERY,
           { id: jobId }
         );
+        if (!pollContext.isActive() || detailsJailName.value !== jailName) return;
         const job = poll.privilegedCommandStatus;
         if (!job || job.status === "running") return;
         stopPrivilegedPolling();
         runningPrivilegedCommand.value = false;
         privilegedCommandStatus.value = job;
       } catch (e) {
+        if (!pollContext.isActive() || detailsJailName.value !== jailName) return;
         stopPrivilegedPolling();
         runningPrivilegedCommand.value = false;
         detailError.value = e instanceof Error ? e.message : String(e);
@@ -860,6 +844,8 @@ const ECOSYSTEM_LABELS: Record<PackageEcosystem, string> = { apt: "apt", npm: "n
  * there's exactly one place that can fire a request. */
 function scheduleSearch() {
   if (searchDebounceHandle) clearTimeout(searchDebounceHandle);
+  searchDebounceHandle = null;
+  ++searchRequestId;
   const q = searchQuery.value.trim();
   if (q.length < 2) {
     searchResults.value = [];
@@ -885,7 +871,7 @@ async function runSearch() {
   const q = searchQuery.value.trim();
   if (q.length < 2) return;
 
-  const requestId = ++searchRequestId;
+  const requestId = searchRequestId;
   searching.value = true;
   searchError.value = null;
   try {
@@ -1390,16 +1376,23 @@ async function toggleMaster(image: ImageRecord) {
   imagesError.value = null;
   masterToggling.value = image.alias;
   const nextIsMaster = !image.isMaster;
+  const previousMaster = jailImages.value.find((candidate) => candidate.isMaster)?.alias ?? null;
   try {
     await gql(SET_MASTER_IMAGE_MUTATION, { alias: image.alias, isMaster: nextIsMaster });
     if (nextIsMaster) {
-      for (const i of jailImages.value) i.isMaster = i.alias === image.alias;
       await gql(UPDATE_CONFIG_MUTATION, { input: { jailImage: image.alias } });
-      config.jailImage = image.alias;
-    } else {
-      image.isMaster = false;
     }
+    await Promise.all([loadJailImages(), loadConfig()]);
   } catch (e) {
+    // The registry and launch default are separate persistence stores. Revert
+    // the first mutation if the second fails, then reload canonical state so
+    // the UI can never advertise a master that new containers do not use.
+    await Promise.allSettled([
+      previousMaster
+        ? gql(SET_MASTER_IMAGE_MUTATION, { alias: previousMaster, isMaster: true })
+        : gql(SET_MASTER_IMAGE_MUTATION, { alias: image.alias, isMaster: false }),
+    ]);
+    await Promise.allSettled([loadJailImages(), loadConfig()]);
     imagesError.value = e instanceof Error ? e.message : String(e);
   } finally {
     masterToggling.value = null;
@@ -1466,19 +1459,25 @@ function stopPolling(build: BuildRow) {
 }
 
 function pollBuildStatus(build: BuildRow) {
-  build.intervalId = startPolling(async () => {
+  build.intervalId = startPolling(async (pollContext) => {
     try {
       const data = await gql<{ jailImageBuildStatus: ImageBuildStatus | null }>(BUILD_STATUS_QUERY, {
         buildId: build.buildId,
       });
+      if (!pollContext.isActive()) return;
       build.status = data.jailImageBuildStatus;
       if (build.status?.status === "success") {
         stopPolling(build);
-        void loadJailImages();
+        try {
+          await loadJailImages();
+        } catch (e) {
+          imagesError.value = e instanceof Error ? e.message : String(e);
+        }
       } else if (build.status?.status === "failed") {
         stopPolling(build);
       }
     } catch (e) {
+      if (!pollContext.isActive()) return;
       build.error = e instanceof Error ? e.message : String(e);
       stopPolling(build);
     }
@@ -1561,6 +1560,8 @@ function buildStatusBadgeVariant(status: string | undefined): "green" | "gray" |
 }
 
 onBeforeUnmount(() => {
+  ++statusRequestId;
+  ++searchRequestId;
   for (const build of builds.value) stopPolling(build);
   stopStatusPolling();
   stopInstallPolling();
@@ -1574,7 +1575,7 @@ onBeforeUnmount(() => {
     <div v-if="loading" class="py-8 text-muted-foreground">Loading incus configuration…</div>
 
     <template v-else>
-      <div v-if="error" class="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+      <div v-if="error" role="alert" class="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
         {{ error }}
       </div>
 
@@ -1595,25 +1596,10 @@ onBeforeUnmount(() => {
       </header>
 
       <!-- Tab switcher -->
-      <div class="mb-6 flex gap-1 border-b border-border">
-        <button
-          v-for="tab in (['builder', 'jails', 'config'] as Tab[])"
-          :key="tab"
-          type="button"
-          class="-mb-px border-b-[3px] px-4 py-2 text-xs font-semibold tracking-[0.08em] uppercase transition-colors cursor-pointer"
-          :class="
-            activeTab === tab
-              ? 'border-primary text-foreground'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          "
-          @click="activeTab = tab"
-        >
-          {{ TAB_LABELS[tab] }}
-        </button>
-      </div>
+      <TabNavigation v-model="activeTab" />
 
       <!-- Builder tab -->
-      <section v-if="activeTab === 'builder'">
+      <section v-if="activeTab === 'builder'" id="incus-panel-builder" role="tabpanel" aria-labelledby="incus-tab-builder" tabindex="0">
         <div class="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <div>
         <!-- Inputs: presets + saved images + config imports feed the form below -->
@@ -1645,7 +1631,8 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="flex gap-2">
-            <Input v-model="newPresetName" placeholder="Preset name" class="w-56" />
+            <Label for="new-preset-name" class="sr-only">Preset name</Label>
+            <Input id="new-preset-name" v-model="newPresetName" placeholder="Preset name" class="w-56" />
             <Button size="sm" variant="outline" :disabled="presetSaving || !newPresetName.trim()" @click="savePreset">
               {{ presetSaving ? "Saving…" : "Save as preset" }}
             </Button>
@@ -1721,6 +1708,8 @@ onBeforeUnmount(() => {
           <div class="mt-5 border-t border-border pt-4">
             <button
               type="button"
+              :aria-expanded="showImportPanel"
+              aria-controls="config-import-panel"
               class="flex w-full cursor-pointer items-center gap-1.5 text-left text-sm font-semibold"
               @click="showImportPanel = !showImportPanel"
             >
@@ -1729,7 +1718,7 @@ onBeforeUnmount(() => {
               <span class="font-normal text-xs text-muted-foreground">devcontainer.json, mise.toml, .tool-versions</span>
             </button>
 
-            <div v-if="showImportPanel" class="mt-3 flex flex-col gap-4">
+            <div v-if="showImportPanel" id="config-import-panel" class="mt-3 flex flex-col gap-4">
               <div>
                 <p class="mb-2 text-xs text-muted-foreground">
                   devcontainer.json — maps the base image and recognized features to real packages; anything that
@@ -1784,7 +1773,7 @@ onBeforeUnmount(() => {
                 </p>
                 <div class="flex flex-wrap gap-2">
                   <Input id="dotfiles-repo" v-model="dotfilesRepoUrl" class="w-72 font-mono" placeholder="git@github.com:you/dotfiles.git" />
-                  <Input v-model="dotfilesRef" class="w-32 font-mono" placeholder="branch (optional)" />
+                  <Input v-model="dotfilesRef" aria-label="Dotfiles branch or tag (optional)" class="w-32 font-mono" placeholder="branch (optional)" />
                   <Button size="sm" variant="outline" :disabled="!dotfilesRepoUrl.trim()" @click="addDotfilesBootstrap">Add bootstrap</Button>
                   <Button
                     v-if="postInstallCommands.has('mise:dotfiles-clone')"
@@ -1825,6 +1814,8 @@ onBeforeUnmount(() => {
               </Select>
               <Input
                 v-if="isCustomDistro"
+                id="builder-custom-distro"
+                aria-label="Custom distro"
                 v-model="builderDistroCustom"
                 class="w-40 font-mono"
                 placeholder="e.g. archlinux"
@@ -1843,6 +1834,8 @@ onBeforeUnmount(() => {
               </Select>
               <Input
                 v-if="isCustomRelease"
+                id="builder-custom-release"
+                aria-label="Custom release"
                 v-model="builderReleaseCustom"
                 class="w-40 font-mono"
                 placeholder="e.g. rolling"
@@ -1860,7 +1853,8 @@ onBeforeUnmount(() => {
 
           <div class="mt-5 border-t border-border pt-4">
             <p class="mb-2 text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground">Packages &amp; tools</p>
-            <Input v-model="searchQuery" class="w-full font-mono" placeholder="Search apt, npm, PyPI, Homebrew…" />
+            <Label for="package-search" class="sr-only">Search packages and tools</Label>
+            <Input id="package-search" v-model="searchQuery" class="w-full font-mono" placeholder="Search apt, npm, PyPI, Homebrew…" />
             <HelpText>
               apt only searches when Debian or Ubuntu is selected above. npm and PyPI results aren't OS packages
               — adding one adds a setup command that runs after packages install, and auto-adds the Node.js or
@@ -1912,7 +1906,7 @@ onBeforeUnmount(() => {
                   class="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-xs"
                 >
                   {{ name }}
-                  <button type="button" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeAptResult(name)">✕</button>
+                  <button type="button" :aria-label="`Remove apt package ${name}`" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeAptResult(name)">✕</button>
                 </span>
               </div>
             </div>
@@ -1926,7 +1920,7 @@ onBeforeUnmount(() => {
                   class="flex items-center gap-2 rounded-md border border-border px-2 py-1 font-mono text-xs"
                 >
                   <span class="flex-1">{{ cmd }}</span>
-                  <button type="button" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removePostInstallCommand(key)">✕</button>
+                  <button type="button" :aria-label="`Remove setup command ${key}`" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removePostInstallCommand(key)">✕</button>
                 </div>
               </div>
             </div>
@@ -2010,7 +2004,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Jails tab -->
-      <section v-else-if="activeTab === 'jails'">
+      <section v-else-if="activeTab === 'jails'" id="incus-panel-jails" role="tabpanel" aria-labelledby="incus-tab-jails" tabindex="0">
         <!-- Dashboard: live summary cards -->
         <p class="mb-2 text-xs font-semibold tracking-[0.08em] uppercase text-muted-foreground">Dashboard</p>
         <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -2438,7 +2432,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- Config tab -->
-      <section v-else-if="activeTab === 'config'">
+      <section v-else-if="activeTab === 'config'" id="incus-panel-config" role="tabpanel" aria-labelledby="incus-tab-config" tabindex="0">
         <!-- Three cards, one per group (Runtime / Network & Access / Container Defaults) — each
              group's related settings live in one card as sub-sections (h4 + divider), rather than
              splitting across multiple cards that each repeat the same eyebrow label. Cards flow
@@ -2555,8 +2549,8 @@ onBeforeUnmount(() => {
             <HelpText class="col-span-2">
               What happens to traffic not covered by a rule above. Egress defaults to allow (deny-list model —
               Internet stays reachable unless explicitly blocked); ingress defaults to drop (nothing reaches
-              a container unsolicited). Tailscale's CGNAT range (100.64.0.0/10) is intentionally excluded from
-              the block list by default so containers can reach your tailnet.
+              a container unsolicited). Tailscale's CGNAT range (100.64.0.0/10) is blocked by default; add only
+              the narrow allow-hole a container genuinely needs rather than exposing the whole tailnet.
             </HelpText>
           </div>
 
@@ -2569,7 +2563,7 @@ onBeforeUnmount(() => {
                 class="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-xs"
               >
                 {{ cidr }}
-                <button type="button" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeBlockedCidr(cidr)">✕</button>
+                <button type="button" :aria-label="`Remove blocked CIDR ${cidr}`" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeBlockedCidr(cidr)">✕</button>
               </span>
             </div>
             <div class="flex gap-2">
@@ -2598,7 +2592,7 @@ onBeforeUnmount(() => {
                 class="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-xs"
               >
                 {{ cidr }}
-                <button type="button" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeAllowCidr(cidr)">✕</button>
+                <button type="button" :aria-label="`Remove allowed CIDR ${cidr}`" class="cursor-pointer text-muted-foreground hover:text-destructive" @click="removeAllowCidr(cidr)">✕</button>
               </span>
             </div>
             <div class="flex gap-2">
@@ -2715,14 +2709,15 @@ onBeforeUnmount(() => {
           <div class="mt-4 border-t border-border pt-4">
             <h4 class="mb-3 text-sm font-semibold">Bind mounts</h4>
             <Label for="config-bind-mounts" class="mb-2 block">Host config bind-mounts</Label>
-            <Input id="config-bind-mounts" v-model="config.jailBindMounts" class="w-full font-mono" placeholder="/root/.claude:/home/agent/.claude,/root/.codex:/home/agent/.codex:ro" />
+            <Input id="config-bind-mounts" v-model="config.jailBindMounts" class="w-full font-mono" placeholder="/boot/config/plugins/incus/bind-mounts/claude:/home/agent/.claude:ro" />
             <p class="mt-2 text-xs text-muted-foreground">
-              Comma-separated host:container[:ro] triples, mounted into every dev container for agent auth/config reuse.
+              Comma-separated host:container[:ro|rw] triples from approved roots. Mounts default to read-only;
+              only sources beneath the workspace root may be writable.
             </p>
             <HelpText>
-              Mounted into every container at launch, not baked into any built image — so updating credentials or
-              config on the host applies to containers immediately, without rebuilding. Append <span class="font-mono">:ro</span>
-              to a triple to mount it read-only (e.g. for something you don't want an agent able to modify).
+              Copy curated agent config under <span class="font-mono">/boot/config/plugins/incus/bind-mounts</span>
+              rather than exposing host home or system paths. Sources must resolve beneath that directory or the
+              configured workspace root; config-root mounts are always read-only.
             </HelpText>
           </div>
         </section>

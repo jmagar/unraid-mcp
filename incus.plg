@@ -7,8 +7,8 @@
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
   <!ENTITY txz       "&name;-unraid-7.0.0-46-x86_64-1.txz">
-  <!ENTITY md5       "79ba19df88c8f2b8280e584119cc8432">
-  <!ENTITY sha256    "2ed0c24da78249c85b46198fd5361522a8aa8ad9516280846f167ab032080328">
+  <!ENTITY md5       "4a6de0dc7b6038ce2d48913dd2f0a617">
+  <!ENTITY sha256    "fec4335241e8dcbb1710e70b39f6c22d615eb39779fa914b17d86d59a14df4ee">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -383,7 +383,29 @@
 <FILE Run="/bin/bash">
 <INLINE>
 echo "&sha256;  &plugin;/&txz;" | sha256sum -c - || exit 1
+previous=""
+for candidate in $(ls -1t &plugin;/&name;-unraid-*.txz 2>/dev/null); do
+  [ "$candidate" = "&plugin;/&txz;" ] &amp;&amp; continue
+  previous="$candidate"
+  break
+done
 upgradepkg --install-new &plugin;/&txz; || exit 1
+
+# The API payload lives inside the classic archive. Activate and verify it
+# before declaring the coordinated release successful. install-api-plugin.sh
+# restores the previous backend itself; if it fails, restore the previous
+# classic archive too so the shipped frontend/runtime cannot remain skewed
+# against the old API schema.
+if ! &emhttp;/scripts/install-api-plugin.sh; then
+  if [ -n "$previous" ] &amp;&amp; [ -f "$previous" ]; then
+    logger -t incus "API activation failed; rolling classic package back to $previous"
+    upgradepkg --install-new "$previous" || logger -t incus "ERROR: automatic classic rollback failed"
+  else
+    logger -t incus "API activation failed on a fresh install; removing the unpaired classic package"
+    removepkg incus-unraid 2>/dev/null || logger -t incus "ERROR: automatic fresh-install cleanup failed"
+  fi
+  exit 1
+fi
 
 # Retain the newest previous payload as a known-good rollback candidate.
 kept=0
@@ -404,6 +426,7 @@ fi
 chmod 600 "&plugin;/incus.cfg"
 [ -f "&plugin;/incus.cfg.known-good" ] || cp -p "&plugin;/incus.cfg" "&plugin;/incus.cfg.known-good"
 chmod 600 "&plugin;/incus.cfg.known-good"
+&emhttp;/scripts/migrate-config.sh || exit 1
 # make scripts executable
 chmod +x &emhttp;/scripts/*.sh &emhttp;/event/* 2>/dev/null
 # symlink rc script into /etc/rc.d so it's callable as a service
@@ -411,7 +434,6 @@ ln -sf "&emhttp;/scripts/rc.incus" /etc/rc.d/rc.incus
 chmod +x /etc/rc.d/rc.incus
 # create incus-admin group if it doesn't exist (incusd --group references it)
 getent group incus-admin >/dev/null 2>&amp;1 || groupadd -r incus-admin
-&emhttp;/scripts/install-api-plugin.sh || exit 1
 </INLINE>
 </FILE>
 

@@ -4,10 +4,10 @@ Release metadata is machine-readable in `release-manifest.json`. The currently
 tracked classic artifact is:
 
 - File: `packages/incus-unraid-7.0.0-46-x86_64-1.txz`
-- Size: 35,998,336 bytes
-- Entries: 301
-- MD5 (legacy Unraid downloader field only): `79ba19df88c8f2b8280e584119cc8432`
-- SHA-256: `2ed0c24da78249c85b46198fd5361522a8aa8ad9516280846f167ab032080328`
+- Size: 35,982,392 bytes
+- Entries: 306
+- MD5 (legacy Unraid downloader field only): `4a6de0dc7b6038ce2d48913dd2f0a617`
+- SHA-256: `fec4335241e8dcbb1710e70b39f6c22d615eb39779fa914b17d86d59a14df4ee`
 - Target: x86_64, glibc 2.38 or newer
 
 The Incus 7.0 runtime was repackaged from Debian trixie packages and has been
@@ -61,15 +61,19 @@ tar -tvJf packages/incus-unraid-7.0.0-46-x86_64-1.txz
 
 - `LD_LIBRARY_PATH` is scoped by `incus-env.sh`; bundled libraries are not
   installed into the global loader configuration.
-- The default ACL blocks RFC1918, link-local, and Tailscale CGNAT IPv4 ranges.
+- The default ACL blocks RFC1918, link-local, Tailscale CGNAT, and the Incus
+  bridge subnet itself (with narrow TCP/UDP DNS exceptions to its gateway).
   IPv6 is rejected until an equivalent IPv6 containment policy exists.
+- Optional profile bind mounts default read-only and are confined to the
+  workspace root or the plugin's dedicated curated-config directory.
 - `rc.incus` rolls back partial startup, rotates `/var/log/incusd.log`, records
   health in `$INCUS_DIR/plugin-health`, validates PIDs, and starts a bounded
   watchdog. Array shutdown aggregates instance and daemon stop failures.
 - Config Apply uses `/boot/config/plugins/incus/incus.cfg.known-good` and
   restores it if reconciliation fails.
-- The installer verifies SHA-256 before `upgradepkg` and retains one previous
-  `.txz`; MD5 is not treated as a security boundary.
+- The installer verifies SHA-256 before `upgradepkg`, retains one previous
+  `.txz`, and restores the prior classic payload if coordinated API activation
+  fails; MD5 is not treated as a security boundary.
 
 ## Remaining provenance limitation
 

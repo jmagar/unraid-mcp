@@ -86,9 +86,9 @@ Single source of truth for both the shell init and the API plugin. Current defau
 | `JAIL_IMAGE` | `images:debian/trixie/cloud` | Must be a `/cloud` variant for cloud-init |
 | `JAIL_NESTING` | `false` | `true` = nested docker/incus inside the container |
 | `JAIL_CPU` / `JAIL_MEMORY` | `2` / `4GiB` | Empty = no cap |
-| `JAIL_WORKSPACE_ROOT` | `/srv/agent-jails` | Host dir holding per-container workspaces, bind-mounted with idmap shifting. Must be real persistent storage, not tmpfs, and ideally a real device mount rather than `/mnt/user` (FUSE doesn't support idmapped mounts) |
+| `JAIL_WORKSPACE_ROOT` | `/srv/agent-jails` | Host dir holding per-container workspaces, bind-mounted with idmap shifting. It must resolve beneath `/srv` or `/mnt`, use real persistent storage rather than tmpfs, and ideally use a real device mount rather than `/mnt/user` (FUSE doesn't support idmapped mounts). |
 | `JAIL_AGENT_UID` / `JAIL_AGENT_GID` | `1000` / `1000` | In-container agent user uid/gid |
-| `JAIL_BIND_MOUNTS` | *(empty)* | Comma-separated `host:container[:ro]` triples for reusing host agent auth/config (e.g. `~/.claude`, `~/.codex`) |
+| `JAIL_BIND_MOUNTS` | *(empty)* | Comma-separated `host:container[:ro|rw]` triples. Sources must resolve beneath `JAIL_WORKSPACE_ROOT` or `/boot/config/plugins/incus/bind-mounts`; mode defaults to `ro`, and only workspace-root sources may be `rw`. Copy curated agent config into the dedicated bind directory rather than exposing host home/system paths. |
 | `TS_AUTHKEY` | *(empty)* | When set, newly launched containers run `tailscale up --authkey=...` on launch — best-effort, silently skipped if the image lacks `tailscale` |
 
 ## Features
@@ -150,11 +150,12 @@ install it transactionally; older/classic-only artifacts do not. Requirements:
 
    ```bash
    /usr/local/emhttp/plugins/incus/scripts/install-api-plugin.sh
-   grep IncusPluginModule /var/log/graphql-api.log
+   tail -f /var/log/graphql-api.log
    ```
 
-   The installer keeps `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus.rollback`
-   and restores it if reload verification fails.
+   The installer verifies a fresh post-restart module-init log entry, keeps
+   `/usr/local/unraid-api/node_modules/unraid-api-plugin-incus.rollback`, and
+   restores it if reload verification fails.
 4. Edit `/boot/config/plugins/incus/incus.cfg` (or use the Config tab after
    API verification): set `SERVICE=enabled`, adjust
    `JAIL_WORKSPACE_ROOT` to a real device mount, and `STORAGE_SOURCE` if
@@ -211,7 +212,9 @@ procedure, and payload boundary. Maintainers must run backend tests/typechecks,
 frontend typecheck/build, `scripts/verify-classic-package.sh`, and the live
 isolation suite before release. The installer verifies SHA-256 before privileged
 installation and retains one previous `.txz`; API deployment retains one prior
-backend directory. The repository is currently private, so anonymous direct URL
+backend directory. A failed coordinated API activation automatically restores
+both layers (or removes a partial fresh install). The repository is currently
+private, so anonymous direct URL
 or Community Apps distribution remains unavailable until immutable release
 assets are published publicly.
 

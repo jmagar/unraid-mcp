@@ -3,20 +3,30 @@ export interface PollController {
   trigger(): Promise<void>;
 }
 
+export interface PollContext {
+  readonly signal: AbortSignal;
+  isActive(): boolean;
+}
+
 /**
  * Poll an async task without ever overlapping invocations. The next timer is
  * scheduled only after the current task settles, so a slow API cannot create
  * an ever-growing queue of stale requests.
  */
 export function startPolling(
-  task: () => Promise<void>,
+  task: (context: PollContext) => Promise<void>,
   intervalMs: number,
   options: { immediate?: boolean; onError?: (error: unknown) => void } = {}
 ): PollController {
   let stopped = false;
   let inFlight: Promise<void> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  const abortController = new AbortController();
   const visibilityTarget = typeof document === "undefined" ? null : document;
+  const context: PollContext = {
+    signal: abortController.signal,
+    isActive: () => !stopped && !abortController.signal.aborted,
+  };
 
   const schedule = () => {
     if (stopped) return;
@@ -30,7 +40,9 @@ export function startPolling(
       return;
     }
     if (inFlight) return inFlight;
-    inFlight = task().catch((error) => options.onError?.(error)).finally(() => {
+    inFlight = task(context).catch((error) => {
+      if (context.isActive()) options.onError?.(error);
+    }).finally(() => {
       inFlight = null;
       schedule();
     });
@@ -52,6 +64,7 @@ export function startPolling(
   return {
     stop() {
       stopped = true;
+      abortController.abort();
       if (timer) clearTimeout(timer);
       timer = null;
       visibilityTarget?.removeEventListener("visibilitychange", onVisibilityChange);

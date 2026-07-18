@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { IncusConfigSyncService } from "./config-sync.service.js";
 import type { IncusConfig } from "./config.entity.js";
 import type { ConfigService } from "@nestjs/config";
-import { mkdtemp, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { renameSync } from "node:fs";
 
 // A realistic incus.cfg fixture: comments, blank lines, quoted and
 // unquoted values, and an inline trailing comment — the exact shape
@@ -236,8 +237,50 @@ describe("config persistence integration", () => {
     const set = () => undefined;
     const config = { get: () => undefined, set } as unknown as ConfigService;
     const service = new IncusConfigSyncService(config, { cfgPath, jsonPath });
-    await service.applyConfigUpdate({ tsAuthKey: "tskey-test", jailCpu: "4" });
+    const returned = await service.applyConfigUpdate({ tsAuthKey: "tskey-test", jailCpu: "4" });
     expect((await stat(cfgPath)).mode & 0o777).toBe(0o600);
     expect((await stat(jsonPath)).mode & 0o777).toBe(0o600);
+    expect(returned.tsAuthKey).toBe("");
+    expect(returned.tsAuthKeyConfigured).toBe(true);
+    expect(JSON.parse(await readFile(jsonPath, "utf-8"))).toMatchObject({
+      tsAuthKey: "tskey-test",
+      tsAuthKeyConfigured: true,
+    });
+  });
+
+  it("recomputes the configured bit when a secret is cleared", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "incus-config-"));
+    const cfgPath = join(dir, "incus.cfg");
+    const jsonPath = join(dir, "incus.json");
+    await writeFile(cfgPath, FIXTURE_CFG.replace('TS_AUTHKEY=""', 'TS_AUTHKEY="tskey-old"'));
+    const config = { get: () => undefined, set: () => undefined } as unknown as ConfigService;
+    const service = new IncusConfigSyncService(config, { cfgPath, jsonPath });
+    const returned = await service.applyConfigUpdate({ tsAuthKey: "" });
+    expect(returned).toMatchObject({ tsAuthKey: "", tsAuthKeyConfigured: false });
+    expect(JSON.parse(await readFile(jsonPath, "utf-8"))).toMatchObject({
+      tsAuthKey: "",
+      tsAuthKeyConfigured: false,
+    });
+  });
+
+  it("rolls both files back if installing the staged JSON file fails", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "incus-config-"));
+    const cfgPath = join(dir, "incus.cfg");
+    const jsonPath = join(dir, "incus.json");
+    const originalJson = JSON.stringify({ jailCpu: "2", tsAuthKey: "old" });
+    await writeFile(cfgPath, FIXTURE_CFG);
+    await writeFile(jsonPath, originalJson);
+    const renameWithSecondInstallFailure = (oldPath: string, newPath: string) => {
+      if (basename(oldPath).includes(".stage-") && newPath === jsonPath) {
+        throw new Error("forced JSON install failure");
+      }
+      renameSync(oldPath, newPath);
+    };
+    const config = { get: () => undefined, set: () => undefined } as unknown as ConfigService;
+    const service = new IncusConfigSyncService(config, { cfgPath, jsonPath }, renameWithSecondInstallFailure);
+
+    await expect(service.applyConfigUpdate({ jailCpu: "8" })).rejects.toThrow("forced JSON install failure");
+    expect(await readFile(cfgPath, "utf-8")).toBe(FIXTURE_CFG);
+    expect(await readFile(jsonPath, "utf-8")).toBe(originalJson);
   });
 });

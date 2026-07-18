@@ -32,7 +32,7 @@ JAIL_SUBNET="${JAIL_SUBNET:-198.18.0.1/24}"
 JAIL_NAT="${JAIL_NAT:-true}"
 JAIL_IPV6="${JAIL_IPV6:-none}"
 ACL_NAME="${ACL_NAME:-agent-block-lan}"
-ACL_BLOCK="${ACL_BLOCK:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16}"
+ACL_BLOCK="${ACL_BLOCK:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,100.64.0.0/10}"
 ACL_ALLOW="${ACL_ALLOW:-}"
 ACL_DEFAULT_EGRESS="${ACL_DEFAULT_EGRESS:-allow}"
 ACL_DEFAULT_INGRESS="${ACL_DEFAULT_INGRESS:-drop}"
@@ -152,11 +152,34 @@ if [ -z "${ACL_BLOCK// /}" ]; then
   exit 1
 fi
 
-# Build egress rules: optional allow-holes FIRST, then the block list.
+# Build egress rules: mandatory bridge protections first, then optional
+# allow-holes and the configurable LAN block list.
 acl_yaml() {
+  local bridge_gateway
+  bridge_gateway="${JAIL_SUBNET%/*}"
   echo "name: ${ACL_NAME}"
   echo "description: \"Deny agent egress to LAN ranges; allow Internet.\""
   echo "egress:"
+  # Incus provides DNS on the bridge gateway. Permit only DNS there, then
+  # reject the entire bridge subnet so host services bound to agentbr0 cannot
+  # be reached from a compromised container. DHCP uses broadcast traffic and
+  # does not require a unicast gateway exception.
+  echo "  - action: allow"
+  echo "    state: enabled"
+  echo "    description: \"Bridge DNS (UDP)\""
+  echo "    protocol: udp"
+  echo "    destination: ${bridge_gateway}"
+  echo "    destination_port: \"53\""
+  echo "  - action: allow"
+  echo "    state: enabled"
+  echo "    description: \"Bridge DNS (TCP)\""
+  echo "    protocol: tcp"
+  echo "    destination: ${bridge_gateway}"
+  echo "    destination_port: \"53\""
+  echo "  - action: reject"
+  echo "    state: enabled"
+  echo "    description: \"Block host bridge and peer containers\""
+  echo "    destination: ${JAIL_SUBNET}"
   if [ -n "${ACL_ALLOW:-}" ]; then
     echo "  - action: allow"
     echo "    state: enabled"
@@ -201,6 +224,26 @@ fi
 "$INCUS" network set "$JAIL_BRIDGE" security.acls.default.ingress.action="$ACL_DEFAULT_INGRESS" </dev/null
 
 # ---------- 4. agent-jail profile (from template) ----------
+case "$JAIL_WORKSPACE_ROOT" in
+  /srv/*|/mnt/*) ;;
+  *)
+    log "FATAL: JAIL_WORKSPACE_ROOT must be beneath /srv or /mnt, not ${JAIL_WORKSPACE_ROOT}"
+    exit 1
+    ;;
+esac
+mkdir -p "$JAIL_WORKSPACE_ROOT"
+CANONICAL_WORKSPACE_ROOT="$(readlink -f "$JAIL_WORKSPACE_ROOT")" || {
+  log "FATAL: cannot resolve workspace root ${JAIL_WORKSPACE_ROOT}"
+  exit 1
+}
+case "$CANONICAL_WORKSPACE_ROOT" in
+  /srv/*|/mnt/*) ;;
+  *)
+    log "FATAL: workspace root resolves outside /srv or /mnt: ${CANONICAL_WORKSPACE_ROOT}"
+    exit 1
+    ;;
+esac
+JAIL_WORKSPACE_ROOT="$CANONICAL_WORKSPACE_ROOT"
 mkdir -p "${JAIL_WORKSPACE_ROOT}/default-workspace"
 # JAIL_WORKSPACE_ROOT gets bind-mounted with idmap shifting (shift: "true")
 # into every jail — it MUST be real persistent storage. tmpfs (Unraid's
@@ -242,22 +285,29 @@ ${bind_yaml}"
   echo "$out"
 }
 
-# Convert comma-separated host:container[:ro] entries into profile disk
+# Convert comma-separated host:container[:ro|rw] entries into profile disk
 # devices. Manual incus.cfg edits are validated here as well as in GraphQL so
 # malformed paths cannot become YAML or arbitrary host mounts.
 render_bind_mounts() {
-  local item host target mode extra index=0 old_ifs
+  local item host target mode extra index=0 old_ifs canonical_host canonical_workspace config_root
   [ -z "${JAIL_BIND_MOUNTS// /}" ] && return 0
+  canonical_workspace="$(readlink -f "$JAIL_WORKSPACE_ROOT")" || {
+    log "FATAL: cannot resolve workspace root ${JAIL_WORKSPACE_ROOT}" >&2
+    return 1
+  }
+  config_root="/boot/config/plugins/incus/bind-mounts"
+  mkdir -p "$config_root"
+  config_root="$(readlink -f "$config_root")" || return 1
   old_ifs="$IFS"
   IFS=,
   for item in $JAIL_BIND_MOUNTS; do
     IFS=: read -r host target mode extra <<<"$item"
     IFS="$old_ifs"
-    [ -n "$host" ] && [ -n "$target" ] && [ -z "$extra" ] || {
-      log "FATAL: invalid JAIL_BIND_MOUNTS entry '$item' (expected host:container[:ro])" >&2
+    if [ -z "$host" ] || [ -z "$target" ] || [ -n "$extra" ]; then
+      log "FATAL: invalid JAIL_BIND_MOUNTS entry '$item' (expected host:container[:ro|rw])" >&2
       return 1
-    }
-    mode="${mode:-rw}"
+    fi
+    mode="${mode:-ro}"
     case "$host" in /*) ;; *) log "FATAL: bind source must be absolute: $host" >&2; return 1 ;; esac
     case "$target" in /*) ;; *) log "FATAL: bind target must be absolute: $target" >&2; return 1 ;; esac
     case "$host:$target" in *[!A-Za-z0-9_./:-]*) log "FATAL: unsupported character in bind mount '$item'" >&2; return 1 ;; esac
@@ -265,8 +315,25 @@ render_bind_mounts() {
     [ "$mode" = "rw" ] || [ "$mode" = "ro" ] || {
       log "FATAL: bind mode must be ro or rw: $item" >&2; return 1
     }
+    canonical_host="$(readlink -f "$host")" || {
+      log "FATAL: cannot resolve bind source: $host" >&2
+      return 1
+    }
+    case "$canonical_host" in
+      "$canonical_workspace"|"$canonical_workspace"/*) ;;
+      "$config_root"|"$config_root"/*)
+        if [ "$mode" != "ro" ]; then
+          log "FATAL: config bind mounts must be read-only: $item" >&2
+          return 1
+        fi
+        ;;
+      *)
+        log "FATAL: bind source must be under ${canonical_workspace} or ${config_root}: $host" >&2
+        return 1
+        ;;
+    esac
     printf '  config-bind-%s:\n' "$index"
-    printf '    type: disk\n    source: "%s"\n    path: "%s"\n    shift: "true"\n' "$host" "$target"
+    printf '    type: disk\n    source: "%s"\n    path: "%s"\n    shift: "true"\n' "$canonical_host" "$target"
     [ "$mode" = "ro" ] && printf '    readonly: "true"\n'
     index=$((index + 1))
     IFS=,

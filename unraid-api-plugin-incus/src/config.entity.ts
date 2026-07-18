@@ -1,7 +1,7 @@
 import { registerAs } from "@nestjs/config";
-import { ArgsType, Field, InputType, Int, ObjectType, registerEnumType } from "@nestjs/graphql";
+import { Field, InputType, Int, ObjectType, registerEnumType } from "@nestjs/graphql";
 import { Exclude, Expose } from "class-transformer";
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
+import { IsArray, IsBoolean, IsOptional, IsString, Length, Matches } from "class-validator";
 
 /**
  * Whitelist patterns for IncusConfigInput's free-text fields. Not a
@@ -76,7 +76,7 @@ export class IncusConfig {
   jailNat!: boolean;
 
   @Expose()
-  @Field(() => String, { description: "IPv6 address for the jail bridge, or 'none'" })
+  @Field(() => String, { description: "IPv6 is fail-closed; this value is always 'none'" })
   @IsString()
   jailIpv6!: string;
 
@@ -210,7 +210,10 @@ export class IncusConfigInput {
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.ifname) jailBridge?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) jailSubnet?: string;
   @Field(() => Boolean, { nullable: true }) @IsOptional() @IsBoolean() jailNat?: boolean;
-  @Field(() => String, { nullable: true }) @IsOptional() @Matches(/^none$/) jailIpv6?: string;
+  @Field(() => String, { nullable: true, description: "IPv6 is fail-closed; only 'none' is accepted" })
+  @IsOptional()
+  @Matches(/^none$/, { message: "jailIpv6 must be 'none' because container IPv6 is disabled fail-closed" })
+  jailIpv6?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.shellSafeToken) aclName?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclBlock?: string;
   @Field(() => String, { nullable: true }) @IsOptional() @Matches(PATTERNS.cidrList) aclAllow?: string;
@@ -349,15 +352,4 @@ export class PackageSearchResponse {
   @Field(() => [PackageSearchResult]) results!: PackageSearchResult[];
   @Field(() => [PackageSearchError], { description: "Sources that failed — results from other sources still come back" })
   errors!: PackageSearchError[];
-}
-
-@ArgsType()
-export class JailNameArgs {
-  @Field(() => String) @IsString() @Length(1, 63) @Matches(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/) name!: string;
-}
-
-@ArgsType()
-export class TerminalStartArgs extends JailNameArgs {
-  @Field(() => Int, { nullable: true }) @IsOptional() @IsInt() @Min(20) @Max(500) cols?: number;
-  @Field(() => Int, { nullable: true }) @IsOptional() @IsInt() @Min(5) @Max(300) rows?: number;
 }

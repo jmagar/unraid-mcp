@@ -29,17 +29,48 @@ rotate_log() {
   [ ! -f "${LOG}.1" ] || mv -f "${LOG}.1" "${LOG}.2"
   mv -f "$LOG" "${LOG}.1"
 }
-pid_is_live() { [ -f "$1" ] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+pid_is_live() {
+  local pid
+  [ -f "$1" ] || return 1
+  pid="$(cat "$1" 2>/dev/null)"
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+pid_matches() {
+  local pid
+  pid_is_live "$1" || return 1
+  pid="$(cat "$1")"
+  tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null | grep -Fq -- "$2"
+}
+terminate_tracked() {
+  local pidfile="$1" expected="$2" pid attempt
+  [ -f "$pidfile" ] || return 0
+  if ! pid_matches "$pidfile" "$expected"; then
+    log "refusing to kill stale PID from ${pidfile}: process identity does not match ${expected}"
+    rm -f "$pidfile"
+    return 1
+  fi
+  pid="$(cat "$pidfile")"
+  kill "$pid" 2>/dev/null || true
+  for attempt in $(seq 1 20); do
+    kill -0 "$pid" 2>/dev/null || break
+    sleep 0.25
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    log "process ${pid} (${expected}) ignored TERM; sending KILL"
+    kill -KILL "$pid" 2>/dev/null || true
+  fi
+  rm -f "$pidfile"
+}
 ensure_watchdog() {
-  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && ! pid_is_live "$WATCHDOG_PID"; then
+  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && ! pid_matches "$WATCHDOG_PID" "incus-watchdog.sh"; then
     setsid "${EMHTTP}/scripts/incus-watchdog.sh" >>"$LOG" 2>&1 &
     echo $! >"$WATCHDOG_PID"
   fi
 }
 cleanup_failed_start() {
   log "startup failed; rolling back partial daemon/lxcfs resources"
-  pid_is_live "$PIDFILE" && kill "$(cat "$PIDFILE")" 2>/dev/null || true
-  pid_is_live "$LXCFS_PID" && kill "$(cat "$LXCFS_PID")" 2>/dev/null || true
+  terminate_tracked "$PIDFILE" "incusd" || true
+  terminate_tracked "$LXCFS_PID" "lxcfs" || true
   fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null || true
   rm -f "$PIDFILE" "$LXCFS_PID"
   health failed "daemon readiness timeout; partial startup rolled back"
@@ -86,9 +117,8 @@ start() {
 
 stop() {
   echo "incus: stopping"
-  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && pid_is_live "$WATCHDOG_PID"; then
-    kill "$(cat "$WATCHDOG_PID")" 2>/dev/null || true
-    rm -f "$WATCHDOG_PID"
+  if [ "${INCUS_WATCHDOG:-0}" != "1" ] && pid_matches "$WATCHDOG_PID" "incus-watchdog.sh"; then
+    terminate_tracked "$WATCHDOG_PID" "incus-watchdog.sh" || true
   fi
   # Graceful daemon shutdown (stops instances per their config first).
   if ! "${PREFIX}/bin/incus" admin shutdown </dev/null >/dev/null 2>&1; then
@@ -97,10 +127,10 @@ stop() {
     # so fall back to a raw kill by pidfile. That doesn't cascade to
     # incusd's own spawned children (e.g. dnsmasq for a managed bridge),
     # so reap those explicitly by their distinctive incus-only invocation.
-    [ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2>/dev/null
+    terminate_tracked "$PIDFILE" "incusd" || true
     pkill -f 'dnsmasq.*-s incus ' 2>/dev/null
   fi
-  [ -f "$LXCFS_PID" ] && kill "$(cat "$LXCFS_PID")" 2>/dev/null
+  terminate_tracked "$LXCFS_PID" "lxcfs" || true
   fusermount3 -u "${INCUS_DIR}/lxcfs" 2>/dev/null
   rm -f "$PIDFILE" "$LXCFS_PID"
   if "${PREFIX}/bin/incus" info </dev/null >/dev/null 2>&1; then

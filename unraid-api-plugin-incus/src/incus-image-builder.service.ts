@@ -29,6 +29,9 @@ const LOG_TAIL_BYTES = 16_384;
 const MAX_CONCURRENT_BUILDS = 2;
 const MAX_QUEUED_BUILDS = 8;
 const BUILD_RETENTION_MS = 24 * 60 * 60 * 1000;
+const BUILD_TIMEOUT_MS = 60 * 60 * 1000;
+const BUILD_KILL_GRACE_MS = 10_000;
+const MAX_BUILD_LOG_BYTES = 16 * 1024 * 1024;
 
 /** Private-prefixed runtime bundled by the plugin's .plg (see incus-env.sh) — matches incusd/lxcfs/nft. */
 const INCUS_PREFIX = "/usr/local/incus";
@@ -159,7 +162,7 @@ export class IncusImageBuilderService {
   ): Promise<string> {
     validateBuildInput(distro, release, packages, alias, postInstallCommands ?? []);
     if (this.queue.length >= MAX_QUEUED_BUILDS) throw new Error("Image build queue is full; wait for a running build to finish");
-    this.pruneBuildHistory();
+    await this.pruneBuildHistory();
     const id = randomUUID();
     await mkdir(this.buildRoot, { recursive: true });
     const workDir = await mkdtemp(join(tmpdir(), `distrobuilder-${id}-`));
@@ -344,19 +347,44 @@ export class IncusImageBuilderService {
       });
 
       const log = createWriteStream(build.logFile, { flags: "a", mode: 0o600 });
-      const appendLog = (chunk: Buffer) => { if (!log.write(chunk)) child.stdout.pause(); };
-      log.on("drain", () => child.stdout.resume());
+      let logBytes = 0;
+      let logTruncated = false;
+      const appendLog = (chunk: Buffer) => {
+        if (logBytes >= MAX_BUILD_LOG_BYTES) return;
+        const remaining = MAX_BUILD_LOG_BYTES - logBytes;
+        const output = chunk.subarray(0, remaining);
+        logBytes += output.length;
+        if (!log.write(output)) {
+          child.stdout.pause();
+          child.stderr.pause();
+        }
+        if (output.length < chunk.length && !logTruncated) {
+          logTruncated = true;
+          log.write("\n[build log truncated at 16 MiB]\n");
+        }
+      };
+      log.on("drain", () => { child.stdout.resume(); child.stderr.resume(); });
       child.stdout.on("data", appendLog);
       child.stderr.on("data", appendLog);
 
       let settled = false;
+      let forcedError: Error | undefined;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = setTimeout(() => {
+        forcedError = new Error("Image build exceeded the 60 minute limit");
+        child.kill("SIGTERM");
+        killTimer = setTimeout(() => child.kill("SIGKILL"), BUILD_KILL_GRACE_MS);
+      }, BUILD_TIMEOUT_MS);
       const finish = async (code: number | null, error?: Error) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timeout);
+        if (killTimer) clearTimeout(killTimer);
         log.end();
-        if (error) {
+        const failure = error ?? forcedError;
+        if (failure) {
           build.status = "failed";
-          build.error = error.message;
+          build.error = failure.message;
         } else if (code === 0) {
           build.status = "success";
           try {
@@ -412,9 +440,16 @@ export class IncusImageBuilderService {
     });
   }
 
-  private pruneBuildHistory(): void {
+  private async pruneBuildHistory(): Promise<void> {
     const cutoff = Date.now() - BUILD_RETENTION_MS;
-    for (const [id, build] of this.builds) if (build.finishedAt && build.finishedAt < cutoff) this.builds.delete(id);
+    for (const [id, build] of this.builds) {
+      if (build.finishedAt && build.finishedAt < cutoff) {
+        this.builds.delete(id);
+        await rm(build.logFile, { force: true }).catch((error) =>
+          this.logger.warn(`Unable to remove expired build log ${build.logFile}: ${(error as Error).message}`)
+        );
+      }
+    }
   }
 }
 

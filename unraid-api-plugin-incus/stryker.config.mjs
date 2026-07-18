@@ -8,7 +8,7 @@ export default {
   // eight-minute surprise in every local verification run.
   mutate: ["src/json-store.ts"],
   reporters: ["clear-text", "progress"],
-  ignorePatterns: ["dist", "coverage", ".stryker-tmp"],
+  ignorePatterns: ["dist", "dist-web", "dist-web-dashboard", "web", "coverage", ".stryker-tmp"],
   thresholds: { high: 80, low: 60, break: 50 },
   timeoutMS: 10_000,
   concurrency: 2,

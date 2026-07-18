@@ -14,6 +14,11 @@ export interface IncusResponse<T = unknown> {
 
 const DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
+interface RawResponse {
+  statusCode: number;
+  text: string;
+}
+
 @Injectable()
 export class IncusUnixClient {
   constructor(private readonly config: ConfigService) {}
@@ -30,6 +35,20 @@ export class IncusUnixClient {
     timeoutMs = 30_000,
     maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
   ): Promise<string> {
+    const response = await this.requestRaw(method, path, body, timeoutMs, maxBytes);
+    if (response.statusCode >= 400) {
+      throw new Error(`Incus HTTP ${response.statusCode} on ${method} ${path}`);
+    }
+    return response.text;
+  }
+
+  private async requestRaw(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutMs = 30_000,
+    maxBytes = DEFAULT_MAX_RESPONSE_BYTES,
+  ): Promise<RawResponse> {
     const payload = body === undefined ? undefined : JSON.stringify(body);
     return new Promise((resolve, reject) => {
       let failed = false;
@@ -57,11 +76,10 @@ export class IncusUnixClient {
         });
         res.on("end", () => {
           if (failed) return;
-          if ((res.statusCode ?? 500) >= 400) {
-            reject(new Error(`Incus HTTP ${res.statusCode} on ${method} ${path}`));
-            return;
-          }
-          resolve(Buffer.concat(chunks).toString("utf-8"));
+          resolve({
+            statusCode: res.statusCode ?? 500,
+            text: Buffer.concat(chunks).toString("utf-8"),
+          });
         });
       });
       req.on("timeout", () => req.destroy(new Error(`Incus request timed out after ${timeoutMs}ms: ${method} ${path}`)));
@@ -72,15 +90,21 @@ export class IncusUnixClient {
   }
 
   async request<T = unknown>(method: string, path: string, body?: unknown, timeoutMs = 30_000): Promise<IncusResponse<T>> {
-    const text = await this.requestText(method, path, body, timeoutMs);
+    const { statusCode, text } = await this.requestRaw(method, path, body, timeoutMs);
     let parsed: IncusResponse<T>;
     try {
       parsed = text ? JSON.parse(text) as IncusResponse<T> : {} as IncusResponse<T>;
     } catch (error) {
+      if (statusCode >= 400) {
+        throw new Error(`Incus HTTP ${statusCode} on ${method} ${path}`);
+      }
       throw new Error(`Incus API parse error on ${path}: ${(error as Error).message}`);
     }
     if (parsed.type === "error") {
       throw new Error(`Incus API error on ${method} ${path}: ${parsed.error} (${parsed.error_code})`);
+    }
+    if (statusCode >= 400) {
+      throw new Error(`Incus HTTP ${statusCode} on ${method} ${path}`);
     }
     return parsed;
   }

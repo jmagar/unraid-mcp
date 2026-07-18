@@ -31,4 +31,19 @@ describe("startPolling", () => {
     expect(task).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
+
+  it("invalidates an in-flight task when stopped", async () => {
+    let resolveTask!: () => void;
+    let activeAfterAwait = true;
+    const poller = startPolling(async (context) => {
+      await new Promise<void>((resolve) => { resolveTask = resolve; });
+      activeAfterAwait = context.isActive();
+    }, 100, { immediate: true });
+
+    poller.stop();
+    resolveTask();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(activeAfterAwait).toBe(false);
+  });
 });

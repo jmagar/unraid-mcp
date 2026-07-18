@@ -23,12 +23,22 @@ describe("IncusUnixClient", () => {
   it("parses success and surfaces Incus error envelopes", async () => {
     const client = await fixture((req, res) => {
       res.setHeader("content-type", "application/json");
+      if (req.url === "/bad") res.statusCode = 403;
       res.end(req.url === "/bad"
         ? JSON.stringify({ type: "error", error: "denied", error_code: 403 })
         : JSON.stringify({ type: "sync", status_code: 200, metadata: { ok: true } }));
     });
     await expect(client.request<{ ok: boolean }>("GET", "/ok")).resolves.toMatchObject({ metadata: { ok: true } });
     await expect(client.request("GET", "/bad")).rejects.toThrow("denied");
+  });
+
+  it("falls back to the HTTP status when an error response is not an Incus envelope", async () => {
+    const client = await fixture((_req, res) => {
+      res.statusCode = 502;
+      res.end("upstream failure");
+    });
+    await expect(client.request("GET", "/bad")).rejects.toThrow("Incus HTTP 502");
+    await expect(client.requestText("GET", "/bad")).rejects.toThrow("Incus HTTP 502");
   });
 
   it("rejects response bodies above the configured limit", async () => {

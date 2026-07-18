@@ -19,6 +19,7 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly configService: ConfigService,
     paths?: { cfgPath: string; jsonPath: string },
+    private readonly renameFile: (oldPath: string, newPath: string) => void = renameSync,
   ) {
     this.cfgPath = paths?.cfgPath ?? (existsSync("/boot/config/plugins/incus/incus.cfg")
       ? "/boot/config/plugins/incus/incus.cfg" : join(process.cwd(), "incus.cfg"));
@@ -91,11 +92,16 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
       const cfgContent = readFileSync(this.cfgPath, "utf-8");
       const current = this.mapShellToTS(this.parseShellConfig(cfgContent));
       const merged = { ...current, ...input } as IncusConfig;
+      merged.tsAuthKeyConfigured = Boolean(merged.tsAuthKey);
 
-      this.writeFileAtomic(this.cfgPath, this.updateShellConfig(cfgContent, input));
-      this.writeFileAtomic(this.jsonPath, JSON.stringify(merged, null, 2));
+      this.writeConfigPair(
+        this.updateShellConfig(cfgContent, input),
+        JSON.stringify(merged, null, 2),
+      );
       this.configService.set("incus", merged);
-      return merged;
+      // The service contract is safe to return directly from GraphQL or another
+      // adapter: callers get only the derived presence bit, never the secret.
+      return { ...merged, tsAuthKey: "" };
     } finally {
       this.isSyncing = false;
       this.releaseCfgLock(lockToken);
@@ -413,7 +419,65 @@ export class IncusConfigSyncService implements OnModuleInit, OnModuleDestroy {
     // world-readable mode.
     const mode = 0o600;
     writeFileSync(tmpPath, content, { encoding: "utf-8", mode });
-    renameSync(tmpPath, path);
+    this.renameFile(tmpPath, path);
+  }
+
+  /**
+   * Replace the canonical shell and JSON files as one recoverable transaction.
+   * Both new files are staged before either old file moves. Existing files are
+   * then renamed to backups, the staged pair is installed, and any failure
+   * restores both originals before the error reaches the caller.
+   */
+  private writeConfigPair(cfgContent: string, jsonContent: string): void {
+    const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const cfgStage = `${this.cfgPath}.stage-${token}`;
+    const jsonStage = `${this.jsonPath}.stage-${token}`;
+    const cfgBackup = `${this.cfgPath}.backup-${token}`;
+    const jsonBackup = `${this.jsonPath}.backup-${token}`;
+    const cfgExisted = existsSync(this.cfgPath);
+    const jsonExisted = existsSync(this.jsonPath);
+    let cfgBackedUp = false;
+    let jsonBackedUp = false;
+    let cfgInstalled = false;
+    let jsonInstalled = false;
+    const removeIfPresent = (path: string) => {
+      if (existsSync(path)) unlinkSync(path);
+    };
+
+    try {
+      writeFileSync(cfgStage, cfgContent, { encoding: "utf-8", mode: 0o600 });
+      writeFileSync(jsonStage, jsonContent, { encoding: "utf-8", mode: 0o600 });
+      if (cfgExisted) {
+        this.renameFile(this.cfgPath, cfgBackup);
+        cfgBackedUp = true;
+      }
+      if (jsonExisted) {
+        this.renameFile(this.jsonPath, jsonBackup);
+        jsonBackedUp = true;
+      }
+      this.renameFile(cfgStage, this.cfgPath);
+      cfgInstalled = true;
+      this.renameFile(jsonStage, this.jsonPath);
+      jsonInstalled = true;
+    } catch (error) {
+      const rollbackErrors: unknown[] = [];
+      const attempt = (operation: () => void) => {
+        try { operation(); } catch (rollbackError) { rollbackErrors.push(rollbackError); }
+      };
+      if (cfgInstalled) attempt(() => removeIfPresent(this.cfgPath));
+      if (jsonInstalled) attempt(() => removeIfPresent(this.jsonPath));
+      if (cfgBackedUp) attempt(() => this.renameFile(cfgBackup, this.cfgPath));
+      if (jsonBackedUp) attempt(() => this.renameFile(jsonBackup, this.jsonPath));
+      attempt(() => removeIfPresent(cfgStage));
+      attempt(() => removeIfPresent(jsonStage));
+      if (rollbackErrors.length) {
+        throw new AggregateError([error, ...rollbackErrors], "Config transaction failed and rollback was incomplete");
+      }
+      throw error;
+    }
+
+    removeIfPresent(cfgBackup);
+    removeIfPresent(jsonBackup);
   }
 
   /** Renders one config value the way updateShellConfig writes it (enabled/disabled, true/false, or as-is). */

@@ -18,10 +18,17 @@ while [ -f "$CFG" ]; do
     failures=$((failures + 1))
     logger -t incus-watchdog "incusd unhealthy; restart attempt ${failures}/3"
     if [ "$failures" -le 3 ]; then
-      /etc/rc.d/rc.incus start && "${EMHTTP}/scripts/incus-init.sh" || true
+      if /etc/rc.d/rc.incus stop; then
+        if ! /etc/rc.d/rc.incus start || ! "${EMHTTP}/scripts/incus-init.sh"; then
+          logger -t incus-watchdog "verified stop completed but restart/reconciliation failed"
+        fi
+      else
+        logger -t incus-watchdog "refusing restart because the unhealthy daemon did not stop cleanly"
+      fi
     else
-      printf 'status=failed\ntime=%s\nbuild=2026.07.18\nmessage=watchdog restart limit reached\n' "$(date -Is)" >"${INCUS_DIR}/plugin-health.tmp" 2>/dev/null &&
+      if printf 'status=failed\ntime=%s\nbuild=2026.07.18\nmessage=watchdog restart limit reached\n' "$(date -Is)" >"${INCUS_DIR}/plugin-health.tmp" 2>/dev/null; then
         mv -f "${INCUS_DIR}/plugin-health.tmp" "${INCUS_DIR}/plugin-health" 2>/dev/null || true
+      fi
       logger -t incus-watchdog "restart limit reached; manual intervention required"
       exit 1
     fi

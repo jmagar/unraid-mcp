@@ -10,6 +10,8 @@ interface ExecSession {
   jailName: string;
   ioSocket: WebSocket;
   controlSocket: WebSocket;
+  idleTimer: ReturnType<typeof setTimeout>;
+  lifetimeTimer: ReturnType<typeof setTimeout>;
 }
 
 export interface HomebrewInstallJob {
@@ -36,6 +38,8 @@ const MAX_SESSIONS = 8;
 const MAX_JOBS = 100;
 const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_CAPTURE_BYTES = 256 * 1024;
+const SESSION_IDLE_MS = 30 * 60 * 1000;
+const SESSION_MAX_LIFETIME_MS = 8 * 60 * 60 * 1000;
 
 /**
  * Bridges a browser-facing GraphQL subscription/mutations to Incus's own
@@ -79,16 +83,28 @@ export class IncusExecService implements OnModuleDestroy {
     const controlSocket = this.connectOperationSocket(operationUrl, fds.control);
 
     ioSocket.on("message", (data, isBinary) => {
+      this.touchSession(sessionId);
       const text = isBinary ? Buffer.from(data as Buffer).toString("utf-8") : data.toString();
       void this.pubsub.publish(OUTPUT_TOPIC_PREFIX + sessionId, { jailExecOutput: text });
     });
-    ioSocket.on("close", () => this.sessions.delete(sessionId));
-    ioSocket.on("error", (err) => this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`));
-    controlSocket.on("error", (err) =>
-      this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`)
-    );
+    ioSocket.on("close", () => this.cleanupSession(sessionId));
+    ioSocket.on("error", (err) => {
+      this.logger.warn(`exec io socket error (${sessionId}): ${err.message}`);
+      this.cleanupSession(sessionId);
+    });
+    controlSocket.on("close", () => this.cleanupSession(sessionId));
+    controlSocket.on("error", (err) => {
+      this.logger.warn(`exec control socket error (${sessionId}): ${err.message}`);
+      this.cleanupSession(sessionId);
+    });
 
-    this.sessions.set(sessionId, { jailName, ioSocket, controlSocket });
+    this.sessions.set(sessionId, {
+      jailName,
+      ioSocket,
+      controlSocket,
+      idleTimer: this.createIdleTimer(sessionId),
+      lifetimeTimer: setTimeout(() => this.cleanupSession(sessionId), SESSION_MAX_LIFETIME_MS),
+    });
     return sessionId;
   }
 
@@ -96,6 +112,7 @@ export class IncusExecService implements OnModuleDestroy {
     if (Buffer.byteLength(data) > MAX_INPUT_BYTES) throw new Error("Terminal input exceeds 64 KiB");
     const session = this.getSession(sessionId);
     if (session.ioSocket.readyState !== WebSocket.OPEN) return false;
+    this.touchSession(sessionId);
     // Incus's exec fd-0 channel expects binary frames for stdin — a plain
     // string send() here defaults to a text frame, which it silently drops.
     session.ioSocket.send(Buffer.from(data, "utf-8"));
@@ -106,6 +123,7 @@ export class IncusExecService implements OnModuleDestroy {
     if (cols < 20 || cols > 500 || rows < 5 || rows > 300) throw new Error("Terminal dimensions are out of range");
     const session = this.getSession(sessionId);
     if (session.controlSocket.readyState !== WebSocket.OPEN) return false;
+    this.touchSession(sessionId);
     session.controlSocket.send(
       JSON.stringify({ command: "window-resize", args: { width: String(cols), height: String(rows) } })
     );
@@ -113,12 +131,35 @@ export class IncusExecService implements OnModuleDestroy {
   }
 
   stop(sessionId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    session.ioSocket.close();
-    session.controlSocket.close();
-    this.sessions.delete(sessionId);
+    if (!this.sessions.has(sessionId)) return false;
+    this.cleanupSession(sessionId);
     return true;
+  }
+
+  private createIdleTimer(sessionId: string): ReturnType<typeof setTimeout> {
+    return setTimeout(() => this.cleanupSession(sessionId), SESSION_IDLE_MS);
+  }
+
+  private touchSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    clearTimeout(session.idleTimer);
+    session.idleTimer = this.createIdleTimer(sessionId);
+  }
+
+  private cleanupSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.sessions.delete(sessionId);
+    clearTimeout(session.idleTimer);
+    clearTimeout(session.lifetimeTimer);
+    this.closeSocket(session.ioSocket);
+    this.closeSocket(session.controlSocket);
+  }
+
+  private closeSocket(socket: WebSocket): void {
+    if (socket.readyState === WebSocket.CONNECTING) socket.terminate();
+    else if (socket.readyState === WebSocket.OPEN) socket.close();
   }
 
   /**

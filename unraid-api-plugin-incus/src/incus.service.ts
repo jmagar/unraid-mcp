@@ -4,6 +4,43 @@ import { mkdir, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { IncusUnixClient, type IncusResponse } from "./incus-unix-client.service.js";
 
+export interface JailSummary {
+  name: string;
+  status: string;
+  ipv4?: string;
+  cpuUsageNs?: string;
+  memoryUsageBytes?: string;
+  memoryTotalBytes?: string;
+}
+
+interface IncusNetworkAddress {
+  family?: string;
+  address?: string;
+}
+
+interface IncusDevice extends Record<string, string | undefined> {
+  type?: string;
+  source?: string;
+  path?: string;
+  pool?: string;
+  network?: string;
+}
+
+interface IncusInstance {
+  name: string;
+  status: string;
+  profiles?: string[];
+  state?: {
+    network?: Record<string, { addresses?: IncusNetworkAddress[] }>;
+    cpu?: { usage?: string | number };
+    memory?: { usage?: string | number; total?: string | number };
+  };
+  config?: Record<string, string>;
+  expanded_config?: Record<string, string>;
+  devices?: Record<string, IncusDevice>;
+  expanded_devices?: Record<string, IncusDevice>;
+}
+
 /**
  * Thin client for the Incus REST API over its local unix socket
  * ($INCUS_DIR/unix.socket). No `incus` CLI, no output scraping — Incus is
@@ -12,7 +49,7 @@ import { IncusUnixClient, type IncusResponse } from "./incus-unix-client.service
 @Injectable()
 export class IncusService {
   private readonly logger = new Logger(IncusService.name);
-  private jailSnapshot?: { expiresAt: number; value: Promise<Array<any>> };
+  private jailSnapshot?: { expiresAt: number; value: Promise<JailSummary[]> };
 
   constructor(private readonly config: ConfigService, private readonly client: IncusUnixClient) {}
 
@@ -45,6 +82,9 @@ export class IncusService {
     if (resp.type === "async" && resp.operation) {
       await this.waitForOperation(resp.operation);
     }
+    if (method !== "GET" && path.startsWith("/1.0/instances")) {
+      this.jailSnapshot = undefined;
+    }
     return resp;
   }
 
@@ -59,34 +99,22 @@ export class IncusService {
   }
 
   /** List jails (instances) with state, expanded to name/status/ipv4/resource usage. */
-  async listJails(): Promise<
-    Array<{
-      name: string;
-      status: string;
-      ipv4?: string;
-      cpuUsageNs?: string;
-      memoryUsageBytes?: string;
-      memoryTotalBytes?: string;
-    }>
-  > {
+  async listJails(): Promise<JailSummary[]> {
     if (this.jailSnapshot && this.jailSnapshot.expiresAt > Date.now()) return this.jailSnapshot.value;
     const value = this.fetchJails();
     this.jailSnapshot = { expiresAt: Date.now() + 1_000, value };
     try { return await value; } catch (error) { this.jailSnapshot = undefined; throw error; }
   }
 
-  private async fetchJails(): Promise<Array<{
-    name: string; status: string; ipv4?: string; cpuUsageNs?: string;
-    memoryUsageBytes?: string; memoryTotalBytes?: string;
-  }>> {
-    const { metadata } = await this.call<Array<Record<string, any>>>(
+  private async fetchJails(): Promise<JailSummary[]> {
+    const { metadata } = await this.call<IncusInstance[]>(
       "GET",
       "/1.0/instances?recursion=2"
     );
     return (metadata ?? []).map((i) => ({
       name: i.name,
       status: i.status,
-      ipv4: i.state?.network?.eth0?.addresses?.find((a: any) => a.family === "inet")?.address,
+      ipv4: i.state?.network?.eth0?.addresses?.find((address) => address.family === "inet")?.address,
       cpuUsageNs: i.state?.cpu?.usage === undefined ? undefined : String(i.state.cpu.usage),
       memoryUsageBytes: i.state?.memory?.usage === undefined ? undefined : String(i.state.memory.usage),
       memoryTotalBytes: i.state?.memory?.total === undefined ? undefined : String(i.state.memory.total),
@@ -260,7 +288,7 @@ export class IncusService {
     const canonical = await realpath(hostPath);
     if (!this.isContained(workspaceRoot, canonical)) throw new Error(`Workspace must be beneath ${workspaceRoot}`);
     if (!(await stat(canonical)).isDirectory()) throw new Error("Workspace source must be a directory");
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
@@ -289,7 +317,7 @@ export class IncusService {
 
   /** Drop the instance-level workspace override so it falls back to the profile's own device. */
   async clearWorkspaceOverride(name: string): Promise<void> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
@@ -306,7 +334,7 @@ export class IncusService {
    * to the profile's value again — Incus's own config-unset semantics for a config key.
    */
   async setJailLimits(name: string, cpu?: string, memory?: string): Promise<void> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
@@ -336,7 +364,7 @@ export class IncusService {
     workspaceHostPath?: string;
     workspaceIsOverride: boolean;
   }> {
-    const { metadata: inst } = await this.call<Record<string, any>>(
+    const { metadata: inst } = await this.call<IncusInstance>(
       "GET",
       `/1.0/instances/${encodeURIComponent(name)}`
     );
