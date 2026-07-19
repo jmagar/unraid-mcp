@@ -255,7 +255,7 @@ remain open by design; 46 implementation/review issues are closed.
 | `codex-full-review-20260718-5dv` | Reserve concurrent terminal session starts | Created, fixed, closed | closed | Enforced capacity across concurrent awaits |
 | `codex-full-review-20260718-exp` | Verify resolver argument and return signatures | Created, fixed, closed | closed | Extended schema tests beyond field names |
 | `codex-full-review-20260718-myl` | Publish install artifacts on anonymous endpoint | Created, dependency target | open | Requires owner choice of public repository or immutable public host |
-| `codex-full-review-20260718-4rs` | Save full-review remediation session log | Created and claimed | in progress | Tracks this session artifact until push verification completes |
+| `codex-full-review-20260718-4rs` | Save full-review remediation session log | Created, claimed, and closed after push verification | closed | Tracked this session artifact through publication on `main` |
 | `codex-full-review-20260718-2xg` | Refresh stale frontend build guidance in CLAUDE.md | Created | open | Tracks incorrect “no code-splitting” source-of-truth text |
 | `codex-full-review-20260718-xhc` | Remediate open development dependency advisories | Created | open | Tracks five Dependabot lockfile alerts |
 | `codex-full-review-20260718-4b8` | Reconcile divergent Beads Dolt histories | Created | open | Tracks blocked tracker synchronization |
@@ -271,7 +271,7 @@ remain open by design; 46 implementation/review issues are closed.
 
 - Read all open, in-progress, closed-on-July-18 issues and the interaction log before changing tracker state.
 - Added `codex-full-review-20260718-myl` as a blocker of the review parent and noted that implementation/merge work is complete.
-- Created and claimed the session-log issue plus four evidence-backed follow-ups listed above.
+- Created, claimed, and closed the session-log issue after its first path-only commit reached `main`; also created four evidence-backed follow-ups listed above.
 - `bd dolt push` previously failed because local and remote histories have no common ancestor. No `bd bootstrap`, database deletion, or force-push was attempted; `codex-full-review-20260718-4b8` tracks resolution.
 
 ### Worktrees, branches, and PRs
