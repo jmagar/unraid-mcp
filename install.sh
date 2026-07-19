@@ -2,7 +2,7 @@
 # install.sh — One-line installer for unraid-rmcp
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/install.sh | bash
 #
 # What it does:
 #   1. Runs pre-flight checks (OS/arch, tools, disk space, PATH, port)
@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-REPO="jmagar/unraid-rmcp"
+REPO="jmagar/runraid"
 BIN_NAME="runraid"
 SERVICE="unraid-rmcp"
 INSTALL_DIR="${HOME}/.local/bin"

@@ -4,9 +4,9 @@
   "title": "Unraid RMCP",
   "description": "Rust MCP server and CLI for Unraid GraphQL, NAS, Docker, VM, and storage workflows.",
   "version": "0.2.3",
-  "websiteUrl": "https://github.com/jmagar/unraid-rmcp",
+  "websiteUrl": "https://github.com/jmagar/runraid",
   "repository": {
-    "url": "https://github.com/jmagar/unraid-rmcp",
+    "url": "https://github.com/jmagar/runraid",
     "source": "github",
     "id": "1238227303"
   },
@@ -68,8 +68,8 @@
           "format": "string",
           "isRequired": false,
           "isSecret": false,
-          "default": "jmagar/unraid-rmcp",
-          "placeholder": "jmagar/unraid-rmcp"
+          "default": "jmagar/runraid",
+          "placeholder": "jmagar/runraid"
         },
         {
           "name": "UNRAID_RMCP_RELEASE_BASE_URL",
@@ -103,7 +103,7 @@
       },
       "buildInfo": {
         "version": "0.2.3",
-        "repository": "https://github.com/jmagar/unraid-rmcp"
+        "repository": "https://github.com/jmagar/runraid"
       }
     }
   }

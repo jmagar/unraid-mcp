@@ -45,7 +45,7 @@ cargo build --release
 
 **Install via one-liner:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/install.sh | bash
 ```
 
 See individual pages for detailed guidance.

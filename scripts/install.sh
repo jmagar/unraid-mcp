@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-REPO="${UNRAID_RMCP_REPO:-jmagar/unraid-rmcp}"
+REPO="${UNRAID_RMCP_REPO:-jmagar/runraid}"
 INSTALL_DIR="${INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${UNRAID_RMCP_VERSION:-latest}"
 RELEASE_BASE_URL="${UNRAID_RMCP_RELEASE_BASE_URL:-}"
@@ -12,7 +12,7 @@ Install runraid from GitHub Releases.
 Environment:
   INSTALL_DIR Destination directory (default: ~/.local/bin)
   UNRAID_RMCP_VERSION Release tag such as v0.2.0 (default: latest)
-  UNRAID_RMCP_REPO GitHub repo owner/name (default: jmagar/unraid-rmcp)
+  UNRAID_RMCP_REPO GitHub repo owner/name (default: jmagar/runraid)
 USAGE
 }
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then usage; exit 0; fi

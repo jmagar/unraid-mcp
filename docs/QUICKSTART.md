@@ -11,7 +11,7 @@ Get unraid-rmcp running and make your first MCP call in five minutes.
 ## 1. Clone and build
 
 ```bash
-git clone https://github.com/jmagar/unraid-rmcp
+git clone https://github.com/jmagar/runraid
 cd unraid-rmcp
 cargo build --release
 # Binary at: target/release/runraid

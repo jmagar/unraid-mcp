@@ -22,7 +22,7 @@
 
 ```bash
 # Clone and build
-git clone https://github.com/jmagar/unraid-rmcp
+git clone https://github.com/jmagar/runraid
 cd unrust
 cargo build --release
 
@@ -63,7 +63,7 @@ curl -s -X POST http://localhost:40010/mcp \
 ### One-line installer
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/install.sh | bash
 ```
 
 ## Documentation sections
@@ -125,6 +125,6 @@ How to deploy, configure, test, and develop the project.
 
 ## External resources
 
-- [GitHub repository](https://github.com/jmagar/unraid-rmcp)
+- [GitHub repository](https://github.com/jmagar/runraid)
 - [Unraid API documentation](https://docs.unraid.net/api/)
 - [MCP specification](https://modelcontextprotocol.io/)

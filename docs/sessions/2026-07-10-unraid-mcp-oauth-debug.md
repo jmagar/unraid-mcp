@@ -1,6 +1,6 @@
 ---
 date: 2026-07-10 00:45:48 EST
-repo: git@github.com:jmagar/unraid-rmcp.git
+repo: git@github.com:jmagar/runraid.git
 branch: main
 head: ad3c743
 working directory: /home/jmagar/workspace/unraid-rmcp
@@ -35,7 +35,7 @@ The live deployment was updated, rebuilt, and verified. A tracked compose defaul
 - Root cause: deployed `UNRAID_RMCP_AUTH_ALLOWED_REDIRECT_URIS` allowed `lab.tootie.tv` but not `labby.tootie.tv`; live logs showed the rejected Labby URI.
 - The old container name `unraid-mcp` was an orphan from stale compose metadata and held port `40010`; the current compose service is `unraid-rmcp`.
 - Public `/health` initially reported version `0.1.1`; after rebuild/recreate it reported `0.2.2`.
-- [docker-compose.prod.yml](/home/jmagar/workspace/unraid-rmcp/docker-compose.prod.yml:25) now defaults the production image to `ghcr.io/jmagar/unraid-rmcp:${VERSION:-0.2.2}`.
+- [docker-compose.prod.yml](/home/jmagar/workspace/unraid-rmcp/docker-compose.prod.yml:25) now defaults the production image to `ghcr.io/jmagar/runraid:${VERSION:-0.2.2}`.
 - No new GitHub release was cut during this session; latest release remained `v0.2.2` from `2026-07-09T23:40:57Z`.
 
 ## Technical Decisions
@@ -129,7 +129,7 @@ The ignored `.env` was intentionally not staged or committed. The session artifa
 - `mcp__lumen__semantic_search` was requested by developer instruction but not available through `tool_search`; investigation continued with targeted shell commands.
 - A broad remote search on `squirts` was stopped because it was too slow and not necessary after Docker labels/runtime inspection identified `dookie`.
 - `docker compose up -d --build unraid-rmcp` built successfully but failed to start because old orphan container `unraid-mcp` held port `40010`; removing the orphan and restarting fixed it.
-- GitHub package API lookup under `/repos/jmagar/unraid-rmcp/packages/container/unraid-rmcp/versions` returned 404; querying `/user/packages/container/unraid-rmcp/versions` returned the GHCR tag data.
+- GitHub package API lookup under `/repos/jmagar/runraid/packages/container/unraid-rmcp/versions` returned 404; querying `/user/packages/container/unraid-rmcp/versions` returned the GHCR tag data.
 
 ## Behavior Changes (Before/After)
 
@@ -167,7 +167,7 @@ The ignored `.env` was intentionally not staged or committed. The session artifa
 
 ## References
 
-- GitHub release list for `jmagar/unraid-rmcp`.
+- GitHub release list for `jmagar/runraid`.
 - GHCR package metadata for `unraid-rmcp`.
 - Live service URLs: `https://unraid.tootie.tv/mcp`, `https://unraid.tootie.tv/health`, `https://unraid.tootie.tv/register`, and `https://unraid.tootie.tv/authorize`.
 - Bead `unrust-ycf`.
@@ -175,7 +175,7 @@ The ignored `.env` was intentionally not staged or committed. The session artifa
 ## Open Questions
 
 - Whether to cut a formal release after the OAuth allowlist/deployment fix remains a product/release decision.
-- Whether production should deploy `ghcr.io/jmagar/unraid-rmcp:latest`/`:main` instead of locally built `unrust:dev` was not decided in this session.
+- Whether production should deploy `ghcr.io/jmagar/runraid:latest`/`:main` instead of locally built `unrust:dev` was not decided in this session.
 
 ## Next Steps
 

@@ -12,7 +12,7 @@ How to install and run unrust in different environments.
 ### Install via one-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/install.sh | bash
 ```
 
 **What it does:**
@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh 
 ### Build from source
 
 ```bash
-git clone https://github.com/jmagar/unraid-rmcp
+git clone https://github.com/jmagar/runraid
 cd unrust
 cargo build --release
 
@@ -336,7 +336,7 @@ scrape_configs:
 ### Upgrade via one-liner
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmagar/unraid-rmcp/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/install.sh | bash
 ```
 
 ### Upgrade via cargo
@@ -348,7 +348,7 @@ cargo install --force --path .
 ### Upgrade via Docker
 
 ```bash
-docker pull ghcr.io/jmagar/unraid-rmcp:latest
+docker pull ghcr.io/jmagar/runraid:latest
 docker stop unraid-rmcp
 docker rm unraid-rmcp
 # Run with new image
@@ -359,7 +359,7 @@ docker rm unraid-rmcp
 ```bash
 # Pull new binary
 sudo systemctl stop unraid-rmcp
-curl -fsSL https://github.com/jmagar/unraid-rmcp/releases/latest/download/runraid-amd64 -o /opt/unraid-rmcp/runraid
+curl -fsSL https://github.com/jmagar/runraid/releases/latest/download/runraid-amd64 -o /opt/unraid-rmcp/runraid
 chmod +x /opt/unraid-rmcp/runraid
 sudo systemctl start unraid-rmcp
 ```

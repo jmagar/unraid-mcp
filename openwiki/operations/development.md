@@ -13,7 +13,7 @@ How to contribute to unrust, including adding actions, code style, and the relea
 ### Clone and build
 
 ```bash
-git clone https://github.com/jmagar/unraid-rmcp
+git clone https://github.com/jmagar/runraid
 cd unrust
 cargo build
 ```
@@ -370,7 +370,7 @@ version = "0.2.0"  # Bump version
 {
   "version": "0.2.0",
   "packages": [{
-    "identifier": "ghcr.io/jmagar/unraid-rmcp:0.2.0"
+    "identifier": "ghcr.io/jmagar/runraid:0.2.0"
   }]
 }
 ```
@@ -415,7 +415,7 @@ Release is automatic via CI after tag push.
 
 **Artifacts:**
 - GitHub Release with binaries
-- OCI image at `ghcr.io/jmagar/unraid-rmcp:<version>`
+- OCI image at `ghcr.io/jmagar/runraid:<version>`
 
 ## CI/CD
 
