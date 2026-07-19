@@ -121,7 +121,7 @@ docker-compose up -d
 
 ```bash
 docker run -d \
-  --name unraid-rmcp \
+  --name runraid \
   -p 40010:40010 \
   -e UNRAID_API_URL="https://tower.local/graphql" \
   -e UNRAID_API_KEY="your-api-key" \
