@@ -23,7 +23,7 @@ concurrency:
 jobs:
   sync:
     if: github.ref == 'refs/heads/main' || github.event_name != 'push'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v4
         with:

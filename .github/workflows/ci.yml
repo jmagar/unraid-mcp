@@ -12,7 +12,7 @@ env:
 jobs:
   fmt:
     name: Formatting
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
 
@@ -26,7 +26,7 @@ jobs:
 
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
 
@@ -44,7 +44,7 @@ jobs:
 
   test:
     name: Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
 
@@ -66,7 +66,7 @@ jobs:
 
   check-toml:
     name: TOML Format
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
 
@@ -80,7 +80,7 @@ jobs:
 
   audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     permissions:
       contents: read
       checks: write
@@ -99,7 +99,7 @@ jobs:
 
   gitleaks:
     name: Secret Scan
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -110,7 +110,7 @@ jobs:
 
   no-env-files:
     name: No tracked .env files
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
       # CI equivalent of the lefthook block-env-commits.sh guard: fail if any
@@ -127,7 +127,7 @@ jobs:
 
   npm:
     name: npm launcher
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

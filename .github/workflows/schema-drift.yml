@@ -15,7 +15,7 @@ permissions:
 jobs:
   drift:
     name: Compare vendored SDL to unraid/api
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v5
 

@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   release-meta:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     outputs:
       tag_name: ${{ steps.meta.outputs.tag_name }}
       release_name: ${{ steps.meta.outputs.release_name }}
@@ -60,7 +60,7 @@ jobs:
             artifact: runraid-windows-x86_64.exe
             archive: runraid-windows-x86_64.tar.gz
             ext: ".exe"
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -127,7 +127,7 @@ jobs:
 
   publish-release:
     needs: [release-meta, build]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     steps:
       - name: Download release assets
         uses: actions/download-artifact@v4
@@ -145,7 +145,7 @@ jobs:
 
   npm:
     needs: [release-meta, publish-release]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, unraid]
     permissions:
       contents: read
       id-token: write
