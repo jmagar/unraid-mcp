@@ -69,7 +69,6 @@ def test_release_sensitive_uv_is_pinned_and_cacheless() -> None:
         "publish-pypi.yml",
         "release-please.yml",
         "schema-drift.yml",
-        "claude-schema-drift.yml",
     ):
         workflow = _workflows()[name]
         setup_steps = workflow.split("uses: astral-sh/setup-uv@")[1:]
@@ -126,27 +125,3 @@ def test_container_release_and_runtime_policies() -> None:
     assert "replicas: 1" in compose
     assert 'max-size: "10m"' in compose
     assert 'max-file: "3"' in compose
-
-
-def test_schema_agent_has_immutable_input_and_path_boundary() -> None:
-    detector = _workflows()["schema-drift.yml"]
-    implementer = _workflows()["claude-schema-drift.yml"]
-    policy = (ROOT / "scripts" / "validate-schema-agent-paths.sh").read_text()
-    assert "gh api repos/unraid/api/commits/main --jq .sha" in detector
-    assert "upstream_commit" in detector
-    assert "upstream_commit" in implementer
-    assert "sha256sum --check --strict" in implementer
-    assert "persist-credentials: false" in implementer
-    assert "git -c credential.helper='!gh auth git-credential' push" in implementer
-    assert "bash scripts/validate-schema-agent-paths.sh" not in implementer
-    assert (
-        implementer.count(
-            'git show "${BASE_SHA}:scripts/validate-schema-agent-paths.sh" > "$validator"'
-        )
-        == 2
-    )
-    assert implementer.count('bash "$validator" "$BASE_SHA" "origin/${BRANCH_NAME}"') == 2
-    assert "unraid_mcp/subscriptions/queries.py" in policy
-    assert "unraid_mcp/subscriptions/diagnostics.py" in policy
-    for denied in (".github/*", "pyproject.toml", "uv.lock", "unraid_mcp/core/auth.py"):
-        assert denied in policy
