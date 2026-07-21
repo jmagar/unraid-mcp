@@ -175,4 +175,3 @@ def test_sensitive_workflows_pin_privileged_actions() -> None:
         "actions/upload-artifact",
     ):
         assert_uses_pinned_action(combined, action)
-
