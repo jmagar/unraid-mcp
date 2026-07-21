@@ -1,3 +1,10 @@
+---
+type: Playbook
+title: incus-unraid — Quickstart
+description: Entry-point documentation for the incus-unraid plugin repository, including architecture, install surfaces, and OpenWiki workflows.
+tags: [incus, unraid, plugin, documentation, openwiki]
+---
+
 # incus-unraid — Quickstart
 
 **incus-unraid** is a plugin for Unraid that runs coding agents and stdio MCP servers inside LAN-banned Incus system-container "jails". Each jail gets a dedicated NAT bridge firewalled off from your LAN while keeping Internet access — so an agent, or a compromised dependency in its toolchain, can't reach your NAS, routers, or internal services.
@@ -114,6 +121,12 @@ No automated tests are present in the repository. Testing is manual via Unraid i
 - `/MANIFEST.md` — Repackaging details and library closure
 - `/LICENSE` — MIT license
 - `/.github/workflows/openwiki-update.yml` — Scheduled OpenWiki documentation updates
+- `/CLAUDE.md` — Repository and agent workflow instructions, including OpenWiki update guidance
+
+## OpenWiki maintenance workflow
+
+- Documentation generation is automated via `/.github/workflows/openwiki-update.yml`. The workflow installs `openwiki`, runs `openwiki code --update --print`, and creates an update PR containing `openwiki/`, `AGENTS.md`, `CLAUDE.md`, and the workflow file itself.
+- The OpenWiki run is configured to use the OpenRouter provider (`OPENWIKI_PROVIDER=openrouter`) with model `z-ai/glm-5.2` and reads secrets from repository secrets.
 
 ## Getting started
 
