@@ -156,7 +156,6 @@ def test_claude_schema_drift_workflow_can_write_branch_pr_and_issue() -> None:
 def test_sensitive_workflows_pin_privileged_actions() -> None:
     sensitive_workflows = [
         "claude.yml",
-        "claude-code-review.yml",
         "claude-schema-drift.yml",
         "release-please.yml",
         "schema-drift.yml",
@@ -176,11 +175,3 @@ def test_sensitive_workflows_pin_privileged_actions() -> None:
         "actions/upload-artifact",
     ):
         assert_uses_pinned_action(combined, action)
-
-
-def test_claude_review_allows_claude_bot_prs() -> None:
-    workflow = (WORKFLOWS / "claude-code-review.yml").read_text(encoding="utf-8")
-
-    assert "allowed_bots: claude" in workflow
-    assert "plugin_marketplaces:" not in workflow
-    assert "plugins:" not in workflow
