@@ -38,7 +38,12 @@ jobs:
           ping: 100.120.242.29
 
       - name: Install checksum-locked OpenWiki
-        run: npm ci --prefix scripts/openwiki --ignore-scripts
+        run: |
+          npm ci --prefix scripts/openwiki --ignore-scripts
+          # --ignore-scripts skips native builds; better-sqlite3 needs its
+          # binding compiled or OpenWiki dies with "Could not locate the
+          # bindings file". Rebuild only that module.
+          npm rebuild --prefix scripts/openwiki better-sqlite3
 
       - name: Preflight OpenWiki API
         env:
