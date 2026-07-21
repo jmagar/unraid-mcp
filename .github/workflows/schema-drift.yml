@@ -6,7 +6,6 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  actions: write
   contents: read
   issues: write
 
@@ -171,15 +170,7 @@ jobs:
               --jq ".[] | select(.title == \"$title\") | select((.body // \"\") | contains(\"<!-- upstream-schema-sha256:\")) | .number" |
               head -n 1
           )"
-          previous_hash=""
           if [ -n "$existing" ]; then
-            previous_hash="$(
-              gh issue view "$existing" \
-                --json body \
-                --jq ".body" |
-                sed -n 's/.*<!-- upstream-schema-sha256: \([0-9a-f]\{64\}\) -->.*/\1/p' |
-                head -n 1
-            )"
             gh issue edit "$existing" --body-file issue-body.md
             gh issue edit "$existing" --add-label "$label"
             issue_number="$existing"
@@ -191,22 +182,7 @@ jobs:
           echo "issue_number=${issue_number}" >&4
           echo "schema_hash=${schema_hash}" >&4
           echo "upstream_commit=${{ steps.upstream.outputs.commit }}" >&4
-          if [ "$previous_hash" = "$schema_hash" ]; then
-            echo "dispatch_claude=false" >&4
-            echo "Schema hash ${schema_hash} already has a drift issue; skipping Claude dispatch."
-          else
-            echo "dispatch_claude=true" >&4
-          fi
           exec 4>&-
-
-      - name: Dispatch Claude schema drift implementer
-        if: steps.issue.outputs.dispatch_claude == 'true'
-        run: |
-          gh workflow run claude-schema-drift.yml \
-            --ref main \
-            -f issue_number="${{ steps.issue.outputs.issue_number }}" \
-            -f schema_hash="${{ steps.issue.outputs.schema_hash }}" \
-            -f upstream_commit="${{ steps.issue.outputs.upstream_commit }}"
 
       - name: Close resolved drift issue
         if: steps.diff.outputs.drift == 'false'
