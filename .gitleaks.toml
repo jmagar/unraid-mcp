@@ -1,0 +1,15 @@
+# Gitleaks config for the Secret Scan CI job (.github/workflows/ci.yml).
+# Extends the default ruleset; allowlists paths that contain only placeholder
+# credentials (docs examples, test fixtures, skill references). Real secrets
+# must never be committed anywhere, including these paths.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Docs, tests, and skill references use placeholder credentials only"
+paths = [
+  '''^docs/''',
+  '''^tests/''',
+  '''^skills/''',
+]
