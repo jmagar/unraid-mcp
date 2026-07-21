@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.4.0...v2.4.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **ci:** repair OpenWiki native bindings; remove Claude workflows ([#196](https://github.com/dinglebear-ai/unraid-mcp/issues/196)) ([e4feeb9](https://github.com/dinglebear-ai/unraid-mcp/commit/e4feeb971d82c4413bfdb0051766c10504efcc4e))
+* **ci:** run gitleaks CLI directly instead of gitleaks-action ([#194](https://github.com/dinglebear-ai/unraid-mcp/issues/194)) ([3e7ee59](https://github.com/dinglebear-ai/unraid-mcp/commit/3e7ee5939ab415dd0208525974d7bff6cc89df1e))
+
+
+### Dependencies
+
+* **deps-dev:** bump hypothesis from 6.156.6 to 6.158.1 ([#193](https://github.com/dinglebear-ai/unraid-mcp/issues/193)) ([52ebbd5](https://github.com/dinglebear-ai/unraid-mcp/commit/52ebbd512f760fd8fdb0a06b9df725176bf1a58f))
+* **deps-dev:** bump ty from 0.0.60 to 0.0.61 ([#189](https://github.com/dinglebear-ai/unraid-mcp/issues/189)) ([1126f32](https://github.com/dinglebear-ai/unraid-mcp/commit/1126f32196be189d6f8d1ffbdb28e0e9c25db108))
+* **deps:** bump actions/setup-node from 6.4.0 to 7.0.0 ([#184](https://github.com/dinglebear-ai/unraid-mcp/issues/184)) ([c271ebf](https://github.com/dinglebear-ai/unraid-mcp/commit/c271ebffc52ace6825ab7e9b4d527658ce73cd8c))
+* **deps:** bump anyio from 4.12.1 to 4.14.2 ([#187](https://github.com/dinglebear-ai/unraid-mcp/issues/187)) ([05f18d6](https://github.com/dinglebear-ai/unraid-mcp/commit/05f18d68ff439acaa155a04374ecc13ff77544d7))
+* **deps:** bump github/codeql-action/upload-sarif from 4.37.0 to 4.37.2 ([#185](https://github.com/dinglebear-ai/unraid-mcp/issues/185)) ([1b112d2](https://github.com/dinglebear-ai/unraid-mcp/commit/1b112d2b60c05cf25c13b9096b6284586c8050da))
+* **deps:** bump pypa/gh-action-pypi-publish from 1.14.0 to 1.14.1 ([#192](https://github.com/dinglebear-ai/unraid-mcp/issues/192)) ([a83318a](https://github.com/dinglebear-ai/unraid-mcp/commit/a83318af96020fa79433b05c430ff318e81e0419))
+* **deps:** bump tailscale/github-action from 4.1.2 to 4.1.3 ([#183](https://github.com/dinglebear-ai/unraid-mcp/issues/183)) ([475a84b](https://github.com/dinglebear-ai/unraid-mcp/commit/475a84b593eacc23530eb2a7a3183071b98d0bbb))
+* **deps:** bump websockets from 16.1 to 16.1.1 ([#190](https://github.com/dinglebear-ai/unraid-mcp/issues/190)) ([bfb9b95](https://github.com/dinglebear-ai/unraid-mcp/commit/bfb9b95f986c3b25c164e80dc8f11543b1772bfc))
+
 ## [2.4.0](https://github.com/jmagar/unraid-mcp/compare/v2.3.6...v2.4.0) (2026-07-16)
 
 
