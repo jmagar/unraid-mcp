@@ -8,11 +8,12 @@ Tag="plug"
  * Thin shell — all UI lives in the Vue custom element bundle, which talks to
  * include/config.php using the webGUI session cookie + the csrf token below.
  * DefaultPageLayout does NOT define a csrf_token JS global (stock pages embed
- * it server-side in their forms), so we emit it here from the page's PHP
- * scope; $var is populated from state/var.ini by the layout, with a direct
- * parse as fallback.
+ * it server-side), and a .page does not render with cwd=/usr/local/emhttp, so
+ * read var.ini by ABSOLUTE path — a cwd-relative parse yields an empty token
+ * and every POST then fails the CSRF check.
  */
-$mcp_csrf = $var['csrf_token'] ?? (@parse_ini_file('state/var.ini')['csrf_token'] ?? '');
+$mcp_csrf = @parse_ini_file('/usr/local/emhttp/state/var.ini')['csrf_token'] ?? '';
+if ($mcp_csrf === '' && isset($var['csrf_token'])) $mcp_csrf = $var['csrf_token'];
 ?>
 <script>window.csrf_token = "<?= htmlspecialchars($mcp_csrf, ENT_QUOTES) ?>";</script>
 <link rel="stylesheet" href="/plugins/unraid-mcp/web/unraid-mcp-settings.css">

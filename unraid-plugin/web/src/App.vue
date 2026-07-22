@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
+import { SECTIONS, type FieldDef } from "./fields";
 import {
   checkUpdate,
   fetchLogs,
+  fetchStats,
   loadConfig,
   resetServer,
   revealSecret,
@@ -14,281 +16,8 @@ import {
   type ServiceOp,
 } from "./lib/config-client";
 
-/** Field metadata drives the whole form — one row per env var. */
-interface FieldDef {
-  key: string;
-  label: string;
-  help: string;
-  kind: "text" | "secret" | "toggle" | "select" | "number";
-  options?: string[];
-  mono?: boolean;
-  placeholder?: string;
-}
-
-interface Section {
-  title: string;
-  collapsed?: boolean;
-  fields: FieldDef[];
-}
-
-const SECTIONS: Section[] = [
-  {
-    title: "Unraid API",
-    fields: [
-      {
-        key: "UNRAID_API_URL",
-        label: "GraphQL URL",
-        help: "The local Unraid GraphQL endpoint, e.g. http://127.0.0.1:<webgui port>/graphql. Detected automatically at install.",
-        kind: "text",
-        mono: true,
-        placeholder: "http://127.0.0.1/graphql",
-      },
-      {
-        key: "UNRAID_API_KEY",
-        label: "API key",
-        help: "Unraid API key. Auto-provisioned at install when possible; create one with: unraid-api apikey --create --name unraidmcp -r admin --json",
-        kind: "secret",
-      },
-      {
-        key: "UNRAID_VERIFY_SSL",
-        label: "Verify SSL",
-        help: "Only relevant for https:// API URLs. Instead of turning this off, point it at a CA bundle path to trust a self-signed cert.",
-        kind: "toggle",
-      },
-      {
-        key: "UNRAID_ALLOW_INSECURE_TLS",
-        label: "Allow insecure TLS",
-        help: "Required opt-in when Verify SSL is off for an https:// URL — acknowledges the API key travels to an unverified peer.",
-        kind: "toggle",
-      },
-    ],
-  },
-  {
-    title: "MCP server",
-    fields: [
-      {
-        key: "UNRAID_MCP_TRANSPORT",
-        label: "Transport",
-        help: "streamable-http serves MCP over HTTP (what claude.ai and Claude Code connect to); stdio is for local piping only.",
-        kind: "select",
-        options: ["streamable-http", "sse", "stdio"],
-      },
-      {
-        key: "UNRAID_MCP_HOST",
-        label: "Bind host",
-        help: "0.0.0.0 exposes the server on all interfaces; bearer auth protects it.",
-        kind: "text",
-        mono: true,
-        placeholder: "0.0.0.0",
-      },
-      {
-        key: "UNRAID_MCP_PORT",
-        label: "Port",
-        help: "TCP port for the MCP HTTP endpoint.",
-        kind: "number",
-        placeholder: "6970",
-      },
-      {
-        key: "UNRAID_MCP_TAILSCALE_SERVE",
-        label: "Tailscale Serve",
-        help: "Publish the MCP endpoint on your tailnet as HTTPS with automatic certs, via the official Tailscale plugin's daemon (tailscale serve). Uses a dedicated HTTPS port equal to the MCP port, so any serve config on 443 is untouched.",
-        kind: "toggle",
-      },
-    ],
-  },
-  {
-    title: "Authentication",
-    fields: [
-      {
-        key: "UNRAID_MCP_BEARER_TOKEN",
-        label: "Bearer token",
-        help: "Pre-shared token MCP clients send as Authorization: Bearer <token>. Auto-generated at install.",
-        kind: "secret",
-      },
-      {
-        key: "UNRAID_MCP_DISABLE_HTTP_AUTH",
-        label: "Disable HTTP auth",
-        help: "Only behind a trusted authenticating gateway. With a non-loopback bind host this also requires Trust proxy.",
-        kind: "toggle",
-      },
-      {
-        key: "UNRAID_MCP_TRUST_PROXY",
-        label: "Trust proxy",
-        help: "Confirms an upstream gateway (SWAG/Authelia) enforces authentication when HTTP auth is disabled.",
-        kind: "toggle",
-      },
-    ],
-  },
-  {
-    title: "Tuning",
-    fields: [
-      {
-        key: "UNRAID_MCP_LOG_LEVEL",
-        label: "Log level",
-        help: "Server log verbosity. Logs land in /var/log/unraid-mcp/server.log.",
-        kind: "select",
-        options: ["DEBUG", "INFO", "WARNING", "ERROR"],
-      },
-      {
-        key: "UNRAID_MCP_MAX_RESPONSE_BYTES",
-        label: "Response cap",
-        help: "Backstop cap in bytes on serialized tool responses (default 40000 ≈ 10K tokens).",
-        kind: "number",
-        placeholder: "40000",
-      },
-      {
-        key: "UNRAID_AUTO_START_SUBSCRIPTIONS",
-        label: "Subscriptions",
-        help: "Lazily start WebSocket subscriptions on first live-data access.",
-        kind: "toggle",
-      },
-      {
-        key: "UNRAID_MAX_RECONNECT_ATTEMPTS",
-        label: "Reconnect limit",
-        help: "WebSocket reconnect limit before a subscription is marked failed.",
-        kind: "number",
-        placeholder: "10",
-      },
-    ],
-  },
-  {
-    title: "Subscription tuning",
-    collapsed: true,
-    fields: [
-      {
-        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS",
-        label: "Collect max events",
-        help: "Bound on events retained while streaming a live collection call.",
-        kind: "number",
-        placeholder: "100",
-      },
-      {
-        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES",
-        label: "Collect max bytes",
-        help: "Bound on bytes retained while streaming (default 1048576 = 1 MiB).",
-        kind: "number",
-        placeholder: "1048576",
-      },
-      {
-        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS",
-        label: "Collect max seconds",
-        help: "Bound on duration of a live collection window.",
-        kind: "number",
-        placeholder: "30",
-      },
-      {
-        key: "UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS",
-        label: "Cache max age",
-        help: "Cached subscription payloads older than this are not served.",
-        kind: "number",
-        placeholder: "300",
-      },
-      {
-        key: "UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS",
-        label: "Timeout cap",
-        help: "Upper bound on per-call WebSocket timeout.",
-        kind: "number",
-        placeholder: "60",
-      },
-      {
-        key: "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE",
-        label: "Raw probe",
-        help: "Debug-only, data-sensitive raw frame in subscriptions/test_query. Never enable on shared deployments.",
-        kind: "toggle",
-      },
-      {
-        key: "UNRAID_MCP_LOG_FILE",
-        label: "Log filename",
-        help: "Log filename inside the server's logs directory (default unraid-mcp.log).",
-        kind: "text",
-        mono: true,
-        placeholder: "unraid-mcp.log",
-      },
-    ],
-  },
-  {
-    title: "Google OAuth (claude.ai)",
-    collapsed: true,
-    fields: [
-      {
-        key: "UNRAID_MCP_GOOGLE_CLIENT_ID",
-        label: "Client ID",
-        help: "Google OAuth Web application client ID. Setting ID and secret enables OAuth for HTTP; an explicitly set bearer token stays valid alongside.",
-        kind: "text",
-        mono: true,
-        placeholder: "1234.apps.googleusercontent.com",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
-        label: "Client secret",
-        help: "Google OAuth client secret (GOCSPX-…).",
-        kind: "secret",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_BASE_URL",
-        label: "Base URL",
-        help: "This server's public https:// base URL; must match the client's authorized redirect URI host.",
-        kind: "text",
-        mono: true,
-        placeholder: "https://mcp.example.com",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_ALLOWED_EMAILS",
-        label: "Allowed emails",
-        help: "Comma/space-separated verified Google emails allowed to sign in.",
-        kind: "text",
-        mono: true,
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS",
-        label: "Allowed domains",
-        help: "Comma/space-separated verified email domains allowed to sign in.",
-        kind: "text",
-        mono: true,
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_ALLOW_ANY_USER",
-        label: "Allow any user",
-        help: "Escape hatch for private deployments that intentionally allow any Google account.",
-        kind: "toggle",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_REQUIRED_SCOPES",
-        label: "Scopes",
-        help: "OAuth scopes; default is openid + userinfo.email.",
-        kind: "text",
-        mono: true,
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_REDIRECT_PATH",
-        label: "Redirect path",
-        help: "OAuth callback path; must match the Google client config (default /auth/callback).",
-        kind: "text",
-        mono: true,
-        placeholder: "/auth/callback",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY",
-        label: "JWT signing key",
-        help: "With the encryption key, persists issued tokens across restarts.",
-        kind: "secret",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_ENCRYPTION_KEY",
-        label: "Encryption key",
-        help: "Fernet key for encrypting persisted tokens at rest. Set both persistence keys or neither.",
-        kind: "secret",
-      },
-      {
-        key: "UNRAID_MCP_GOOGLE_STORAGE_DIR",
-        label: "Token storage dir",
-        help: "Directory for persisted encrypted tokens (default ~/.unraid-mcp/oauth-tokens).",
-        kind: "text",
-        mono: true,
-      },
-    ],
-  },
-];
+type Tab = "dashboard" | "settings";
+const tab = ref<Tab>("dashboard");
 
 const payload = ref<ConfigPayload | null>(null);
 const form = reactive<Record<string, string>>({});
@@ -302,9 +31,9 @@ const error = ref("");
 const savedFlash = ref(false);
 const copied = ref(false);
 const logText = ref("");
-const logOpen = ref(false);
 const logAuto = ref(false);
 let logTimer: ReturnType<typeof setInterval> | null = null;
+let statsTimer: ReturnType<typeof setInterval> | null = null;
 const latestVersion = ref("");
 const checkingUpdate = ref(false);
 const updating = ref(false);
@@ -338,16 +67,27 @@ function secretConfigured(key: string): boolean {
 }
 
 const service = computed(() => payload.value?.service ?? { enabled: false, running: false });
+const tailscale = computed(
+  () => payload.value?.tailscale ?? { available: false, dnsName: "", serveActive: false },
+);
 const version = computed(() => payload.value?.version ?? { installed: "unknown", overlay: false });
+const proc = computed(() => payload.value?.process ?? { pid: 0, cpu: 0, memMB: 0, uptime: 0 });
 const updateAvailable = computed(() => {
   const l = latestVersion.value.replace(/^v/, "");
   return l !== "" && l !== version.value.installed;
 });
-const tailscale = computed(
-  () => payload.value?.tailscale ?? { available: false, dnsName: "", serveActive: false },
-);
 
-/** The endpoint MCP clients connect to, derived from live form state. */
+const uptimeText = computed(() => {
+  const s = proc.value.uptime;
+  if (!s || !service.value.running) return "—";
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m`;
+});
+
 const endpoint = computed(() => {
   if (form.UNRAID_MCP_TRANSPORT === "stdio") return "";
   const port = form.UNRAID_MCP_PORT || "6970";
@@ -378,7 +118,6 @@ function boolVal(key: string): boolean {
 function setBool(key: string, v: boolean) {
   form[key] = v ? "true" : "false";
 }
-
 function fieldDisabled(field: FieldDef): boolean {
   return field.key === "UNRAID_MCP_TAILSCALE_SERVE" && !tailscale.value.available;
 }
@@ -399,7 +138,6 @@ async function apply() {
     const edit = secretEdits[key];
     if (edit?.clear) changes[key] = "";
     else if (edit?.value && edit.value !== edit.original) changes[key] = edit.value;
-    // untouched (or revealed-but-unchanged) secrets are omitted -> kept server-side
   }
   await run(() => saveConfig(changes));
   saving.value = false;
@@ -449,13 +187,11 @@ async function doCheckUpdate() {
   }
   checkingUpdate.value = false;
 }
-
-async function doUpdate(toLatest: boolean) {
+async function doUpdate() {
   updating.value = true;
-  await run(() => updateServer(toLatest ? latestVersion.value.replace(/^v/, "") : ""));
+  await run(() => updateServer(latestVersion.value.replace(/^v/, "")));
   updating.value = false;
 }
-
 async function doReset() {
   updating.value = true;
   await run(() => resetServer());
@@ -469,7 +205,6 @@ async function refreshLogs() {
     logText.value = `failed to fetch log: ${e instanceof Error ? e.message : e}`;
   }
 }
-
 function setLogAuto(on: boolean) {
   logAuto.value = on;
   if (logTimer) {
@@ -482,112 +217,179 @@ function setLogAuto(on: boolean) {
   }
 }
 
-async function toggleLog() {
-  logOpen.value = !logOpen.value;
-  if (logOpen.value && !logText.value) await refreshLogs();
-  if (!logOpen.value) setLogAuto(false);
+/** Poll cheap process stats while the dashboard is visible. */
+async function pollStats() {
+  try {
+    const s = await fetchStats();
+    if (payload.value) {
+      payload.value.service = s.service;
+      payload.value.process = s.process;
+    }
+  } catch {
+    /* transient; next tick retries */
+  }
+}
+function setStatsPolling(on: boolean) {
+  if (statsTimer) {
+    clearInterval(statsTimer);
+    statsTimer = null;
+  }
+  if (on) statsTimer = setInterval(pollStats, 3000);
+}
+
+function switchTab(t: Tab) {
+  tab.value = t;
+  setStatsPolling(t === "dashboard");
+  if (t !== "dashboard") setLogAuto(false);
 }
 
 onMounted(async () => {
   await run(() => loadConfig());
   loading.value = false;
+  void refreshLogs();
+  void doCheckUpdate();
+  setStatsPolling(true);
 });
-onBeforeUnmount(() => setLogAuto(false));
+onBeforeUnmount(() => {
+  setLogAuto(false);
+  setStatsPolling(false);
+});
 </script>
 
 <template>
   <div class="unapi @container w-full max-w-[1400px] text-foreground flex flex-col gap-3 pb-4">
-    <!-- Connection strip -->
-    <div class="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div class="flex items-center gap-2">
-        <h2 class="text-base font-semibold whitespace-nowrap">Unraid MCP</h2>
-        <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
-          {{ service.running ? "Running" : "Stopped" }}
-        </Badge>
-        <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">
-          tailnet
-        </Badge>
-      </div>
-
+    <!-- Tab bar -->
+    <div class="flex items-center gap-1 border-b border-border">
       <button
-        v-if="endpoint"
+        v-for="t in (['dashboard', 'settings'] as Tab[])"
+        :key="t"
         type="button"
-        class="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1 font-mono text-sm text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors"
-        :title="copied ? 'Copied' : 'Copy endpoint'"
-        @click="copyEndpoint"
+        class="px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors"
+        :class="tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
+        @click="switchTab(t)"
       >
-        <span class="truncate max-w-[26rem]">{{ endpoint }}</span>
-        <span class="text-xs uppercase tracking-wide" :class="copied ? 'text-unraid-green-500' : 'text-primary'">
-          {{ copied ? "copied" : "copy" }}
-        </span>
+        {{ t }}
       </button>
-      <span v-else class="text-sm text-muted-foreground">stdio transport — no network endpoint</span>
-
-      <div class="ms-auto flex items-center gap-2">
-        <span v-if="savedFlash" class="text-sm text-unraid-green-500 whitespace-nowrap">Saved — restarted</span>
-        <div class="flex items-center gap-1.5" :title="service.enabled ? 'Start automatically with the array' : 'Do not start with the array'">
-          <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
-          <span class="text-sm text-muted-foreground">Autostart</span>
-        </div>
-        <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
-          {{ service.running ? "Stop" : "Start" }}
-        </Button>
-        <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">
-          Restart
-        </Button>
-        <Button size="sm" variant="outline" @click="toggleLog">{{ logOpen ? "Hide log" : "Log" }}</Button>
-        <Button size="sm" :disabled="saving || loading" @click="apply">
-          {{ saving ? "Applying…" : "Apply" }}
-        </Button>
-      </div>
     </div>
 
     <div v-if="error" role="alert" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
       {{ error }}
     </div>
 
-    <!-- Version / self-update -->
-    <div class="rounded-lg border border-border bg-card px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-      <span class="text-muted-foreground">Server version</span>
-      <span class="font-mono">{{ version.installed }}</span>
-      <Badge v-if="version.overlay" variant="gray" size="sm">updated</Badge>
-      <span v-if="latestVersion" class="text-muted-foreground">
-        latest <span class="font-mono text-foreground">{{ latestVersion.replace(/^v/, "") }}</span>
-      </span>
-      <div class="ms-auto flex items-center gap-2">
-        <span v-if="updateAvailable" class="text-primary">Update available</span>
-        <Button size="sm" variant="ghost" :disabled="checkingUpdate || updating" @click="doCheckUpdate">
-          {{ checkingUpdate ? "Checking…" : "Check for updates" }}
-        </Button>
-        <Button v-if="updateAvailable" size="sm" :disabled="updating" @click="doUpdate(true)">
-          {{ updating ? "Updating…" : `Update to ${latestVersion.replace(/^v/, "")}` }}
-        </Button>
-        <Button v-if="version.overlay" size="sm" variant="outline" :disabled="updating" @click="doReset">
-          Revert to bundled
-        </Button>
-      </div>
-    </div>
+    <div v-if="loading" class="text-sm text-muted-foreground">Loading…</div>
 
-    <!-- Log viewer -->
-    <section v-if="logOpen" class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
-          Server log <span class="normal-case tracking-normal font-normal">/var/log/unraid-mcp/server.log</span>
-        </h3>
-        <div class="flex items-center gap-2">
-          <div class="flex items-center gap-1.5">
-            <Switch :model-value="logAuto" @update:model-value="setLogAuto($event)" />
-            <span class="text-xs text-muted-foreground">Follow</span>
+    <!-- ── DASHBOARD ─────────────────────────────────────────────── -->
+    <template v-else-if="tab === 'dashboard'">
+      <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
+        <!-- Status + controls -->
+        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-semibold">Server</h3>
+            <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
+              {{ service.running ? "Running" : "Stopped" }}
+            </Badge>
+            <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">tailnet</Badge>
           </div>
-          <Button size="sm" variant="ghost" class="px-2" @click="refreshLogs">Refresh</Button>
-        </div>
+          <div class="flex items-center gap-2">
+            <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
+              {{ service.running ? "Stop" : "Start" }}
+            </Button>
+            <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">Restart</Button>
+            <div class="ms-auto flex items-center gap-1.5" :title="service.enabled ? 'Starts with the array' : 'Does not start with the array'">
+              <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
+              <span class="text-sm text-muted-foreground">Autostart</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- Resource usage -->
+        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+          <h3 class="text-base font-semibold">Resources</h3>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.cpu.toFixed(1) + "%" : "—" }}</div>
+              <div class="text-xs text-muted-foreground">CPU</div>
+            </div>
+            <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.memMB.toFixed(0) + " MB" : "—" }}</div>
+              <div class="text-xs text-muted-foreground">Memory</div>
+            </div>
+            <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="text-lg font-semibold tabular-nums">{{ uptimeText }}</div>
+              <div class="text-xs text-muted-foreground">Uptime</div>
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">PID {{ proc.pid || "—" }} · updates live</p>
+        </section>
+
+        <!-- Connection -->
+        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
+          <h3 class="text-base font-semibold">Connection</h3>
+          <button
+            v-if="endpoint"
+            type="button"
+            class="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors w-full"
+            :title="copied ? 'Copied' : 'Copy endpoint'"
+            @click="copyEndpoint"
+          >
+            <span class="truncate flex-1 text-start">{{ endpoint }}</span>
+            <span class="text-xs uppercase tracking-wide shrink-0" :class="copied ? 'text-unraid-green-500' : 'text-primary'">{{ copied ? "copied" : "copy" }}</span>
+          </button>
+          <span v-else class="text-sm text-muted-foreground">stdio transport — no network endpoint</span>
+          <p class="text-xs text-muted-foreground">
+            Transport <span class="font-mono text-foreground">{{ form.UNRAID_MCP_TRANSPORT }}</span> ·
+            authenticate with the bearer token from Settings
+          </p>
+        </section>
+
+        <!-- Version / update -->
+        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-semibold">Version</h3>
+            <span class="font-mono text-sm">{{ version.installed }}</span>
+            <Badge v-if="version.overlay" variant="gray" size="sm">updated</Badge>
+            <Badge v-if="updateAvailable" variant="orange" size="sm">update available</Badge>
+          </div>
+          <p v-if="latestVersion" class="text-xs text-muted-foreground">
+            latest release <span class="font-mono text-foreground">{{ latestVersion.replace(/^v/, "") }}</span>
+          </p>
+          <div class="flex items-center gap-2">
+            <Button size="sm" variant="ghost" class="px-2" :disabled="checkingUpdate || updating" @click="doCheckUpdate">
+              {{ checkingUpdate ? "Checking…" : "Check" }}
+            </Button>
+            <Button v-if="updateAvailable" size="sm" :disabled="updating" @click="doUpdate">
+              {{ updating ? "Updating…" : `Update to ${latestVersion.replace(/^v/, "")}` }}
+            </Button>
+            <Button v-if="version.overlay" size="sm" variant="outline" :disabled="updating" @click="doReset">Revert to bundled</Button>
+          </div>
+        </section>
       </div>
-      <pre class="max-h-72 overflow-auto rounded-md bg-background border border-border p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">{{ logText }}</pre>
-    </section>
 
-    <div v-if="loading" class="text-sm text-muted-foreground">Loading configuration…</div>
+      <!-- Log viewer (full width) -->
+      <section class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
+            Server log <span class="normal-case tracking-normal font-normal">/var/log/unraid-mcp/server.log</span>
+          </h3>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5">
+              <Switch :model-value="logAuto" @update:model-value="setLogAuto($event)" />
+              <span class="text-xs text-muted-foreground">Follow</span>
+            </div>
+            <Button size="sm" variant="ghost" class="px-2" @click="refreshLogs">Refresh</Button>
+          </div>
+        </div>
+        <pre class="max-h-80 overflow-auto rounded-md bg-background border border-border p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">{{ logText }}</pre>
+      </section>
+    </template>
 
+    <!-- ── SETTINGS ──────────────────────────────────────────────── -->
     <template v-else>
+      <div class="flex items-center justify-end gap-3">
+        <span v-if="savedFlash" class="text-sm text-unraid-green-500">Saved — restarted</span>
+        <Button size="sm" :disabled="saving" @click="apply">{{ saving ? "Applying…" : "Apply" }}</Button>
+      </div>
+
       <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
         <component
           :is="section.collapsed ? 'details' : 'section'"
@@ -638,12 +440,7 @@ onBeforeUnmount(() => setLogAuto(false));
               </div>
 
               <div v-else-if="field.kind === 'toggle'" class="flex items-center gap-2">
-                <Switch
-                  :id="field.key"
-                  :model-value="boolVal(field.key)"
-                  :disabled="fieldDisabled(field)"
-                  @update:model-value="setBool(field.key, $event)"
-                />
+                <Switch :id="field.key" :model-value="boolVal(field.key)" :disabled="fieldDisabled(field)" @update:model-value="setBool(field.key, $event)" />
                 <span v-if="fieldDisabled(field)" class="text-xs text-muted-foreground">Tailscale plugin not detected</span>
               </div>
 
@@ -669,7 +466,6 @@ onBeforeUnmount(() => setLogAuto(false));
         </component>
       </div>
 
-      <!-- Unmanaged keys: single quiet line, only when present -->
       <p v-if="payload && Object.keys(payload.extra).length" class="text-xs text-muted-foreground px-1">
         Also in <span class="font-mono">/boot/config/plugins/unraid-mcp/.env</span> (preserved on save):
         <span class="font-mono">{{ Object.keys(payload.extra).join(", ") }}</span>

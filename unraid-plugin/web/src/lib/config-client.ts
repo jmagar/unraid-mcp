@@ -31,12 +31,25 @@ export interface VersionState {
   overlay: boolean;
 }
 
+export interface ProcessState {
+  pid: number;
+  cpu: number;
+  memMB: number;
+  uptime: number;
+}
+
 export interface ConfigPayload {
   config: Record<string, string | boolean>;
   extra: Record<string, string>;
   service: ServiceState;
   tailscale?: TailscaleState;
   version?: VersionState;
+  process?: ProcessState;
+}
+
+export interface StatsPayload {
+  service: ServiceState;
+  process: ProcessState;
 }
 
 async function csrfToken(): Promise<string> {
@@ -120,7 +133,7 @@ export async function fetchLogs(lines = 200): Promise<string> {
 
 /** Ask GitHub for the latest release tag (explicit user action). */
 export async function checkUpdate(): Promise<string> {
-  return (await postJson({ action: "checkUpdate" })).latest ?? "";
+  return (await postJson<{ latest?: string }>({ action: "checkUpdate" })).latest ?? "";
 }
 
 /** Install a version (empty string = latest) into the array overlay venv. */
@@ -133,8 +146,8 @@ export async function resetServer(): Promise<ConfigPayload> {
   return post({ action: "resetVersion" });
 }
 
-/** POST returning a raw JSON object (not the full ConfigPayload). */
-async function postJson(payload: object): Promise<Record<string, string>> {
+/** POST returning a typed JSON object (not the full ConfigPayload). */
+async function postJson<T>(payload: object): Promise<T> {
   const res = await fetch(ENDPOINT, {
     method: "POST",
     credentials: "include",
@@ -146,5 +159,10 @@ async function postJson(payload: object): Promise<Record<string, string>> {
   });
   const body = await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.error ?? `request failed: HTTP ${res.status}`);
-  return (body ?? {}) as Record<string, string>;
+  return (body ?? {}) as T;
+}
+
+/** Cheap live poll for the dashboard (service + process, no env reads). */
+export async function fetchStats(): Promise<StatsPayload> {
+  return await postJson<StatsPayload>({ action: "stats" });
 }

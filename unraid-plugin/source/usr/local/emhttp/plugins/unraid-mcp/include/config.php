@@ -21,6 +21,7 @@ const ENV_FILE = CFG_DIR . '/.env';
 const CFG_FILE = CFG_DIR . '/unraid-mcp.cfg';
 const RC = '/etc/rc.d/rc.unraid-mcp';
 const UPDATE_SH = '/usr/local/emhttp/plugins/unraid-mcp/scripts/unraid-mcp-update.sh';
+const PID_FILE = '/var/run/unraid-mcp.pid';
 
 /** Env keys whose values must never be sent back to the browser. */
 const SECRET_KEYS = [
@@ -140,6 +141,32 @@ function tailscale_info(): array
     return ['available' => $dns !== '', 'dnsName' => $dns, 'serveActive' => $serveActive];
 }
 
+function process_stats(): array
+{
+    $pid = (int) @trim((string) @file_get_contents(PID_FILE));
+    if ($pid <= 0 || !is_dir("/proc/$pid")) {
+        return ['pid' => 0, 'cpu' => 0.0, 'memMB' => 0.0, 'uptime' => 0];
+    }
+    // Sum the process group (parent + worker threads/children share the tree).
+    $out = [];
+    exec('ps -o %cpu=,rss=,etimes= -p ' . $pid . ' 2>/dev/null', $out);
+    $cpu = 0.0;
+    $rss = 0.0;
+    $etimes = 0;
+    if (!empty($out[0])) {
+        $parts = preg_split('/\\s+/', trim($out[0]));
+        $cpu = (float) ($parts[0] ?? 0);
+        $rss = (float) ($parts[1] ?? 0);
+        $etimes = (int) ($parts[2] ?? 0);
+    }
+    return [
+        'pid' => $pid,
+        'cpu' => round($cpu, 1),
+        'memMB' => round($rss / 1024, 1),
+        'uptime' => $etimes,
+    ];
+}
+
 function version_info(): array
 {
     $installed = trim((string) @shell_exec(escapeshellarg(UPDATE_SH) . ' installed 2>/dev/null'));
@@ -178,6 +205,7 @@ function current_payload(): array
         ],
         'tailscale' => tailscale_info(),
         'version' => version_info(),
+        'process' => process_stats(),
     ];
 }
 
@@ -207,6 +235,19 @@ if ($action === 'reveal') {
     }
     $env = read_env(ENV_FILE);
     echo json_encode(['key' => $key, 'value' => $env[$key] ?? '']);
+    exit;
+}
+
+if ($action === 'stats') {
+    // Cheap poll for the dashboard: live service/process state, no env reads.
+    $cfg = @parse_ini_file(CFG_FILE) ?: [];
+    echo json_encode([
+        'service' => [
+            'enabled' => ($cfg['SERVICE'] ?? 'disabled') === 'enabled',
+            'running' => service_running(),
+        ],
+        'process' => process_stats(),
+    ]);
     exit;
 }
 
