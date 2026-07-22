@@ -55,18 +55,31 @@ if [ ! -f "&plugin;/.env" ]; then
   # Auto-generate the MCP bearer token.
   bearer_token="$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')"
 
+  # The webGUI may run on a custom HTTP port (ident.cfg PORT) — do not assume 80.
+  # ident.cfg lives on the FAT flash with CRLF line endings: strip \r or the
+  # port lands in the URL with an embedded carriage return.
+  gui_port="$(cat /boot/config/ident.cfg 2>/dev/null | tr -d '\r' | sed -n 's/^PORT="\?\([0-9]*\)"\?.*/\1/p' | head -n1)"
+  case "$gui_port" in
+    ''|*[!0-9]*) gui_port=80 ;;
+  esac
+
   # Auto-provision a local Unraid API key when the unraid-api CLI is present —
-  # zero-paste setup. Falls back to empty (user fills in Settings).
+  # zero-paste setup. Key names may not contain hyphens (letters/numbers/spaces
+  # only). Falls back to empty (user fills in Settings). Reuses an existing key
+  # on reinstall rather than erroring on the duplicate name.
   api_key=""
   if command -v unraid-api >/dev/null 2>&amp;1; then
-    api_key="$(unraid-api apikey --create --name unraid-mcp -r admin --json 2>/dev/null | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')" || api_key=""
+    api_key="$(unraid-api apikey --name unraidmcp --json 2>/dev/null | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')" || api_key=""
+    if [ -z "$api_key" ]; then
+      api_key="$(unraid-api apikey --create --name unraidmcp -r admin --json 2>/dev/null | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')" || api_key=""
+    fi
+    [ -z "$api_key" ] &amp;&amp; echo "unraid-mcp: could not auto-provision an API key — set one in Settings -> Unraid MCP"
   fi
 
   {
     echo "# unraid-mcp configuration — managed by the plugin settings page."
-    echo "UNRAID_API_URL='http://127.0.0.1/graphql'"
+    echo "UNRAID_API_URL='http://127.0.0.1:${gui_port}/graphql'"
     echo "UNRAID_API_KEY='${api_key}'"
-    echo "UNRAID_VERIFY_SSL='false'"
     echo "UNRAID_MCP_TRANSPORT='streamable-http'"
     echo "UNRAID_MCP_HOST='0.0.0.0'"
     echo "UNRAID_MCP_PORT='6970'"
