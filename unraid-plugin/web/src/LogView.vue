@@ -15,6 +15,18 @@ const logError = ref("");
 const auto = ref(true); // Follow on by default
 const loading = ref(false);
 const lineCount = ref(300);
+const search = ref("");
+const minLevel = ref(""); // "" = all; else DEBUG|INFO|WARNING|ERROR
+const LEVEL_RANK: Record<string, number> = {
+  DEBUG: 10,
+  INFO: 20,
+  NOTICE: 20,
+  WARNING: 30,
+  WARN: 30,
+  ERROR: 40,
+  CRITICAL: 50,
+  FATAL: 50,
+};
 const pane = ref<HTMLElement | null>(null);
 let timer: ReturnType<typeof setInterval> | null = null;
 let fails = 0;
@@ -93,11 +105,30 @@ function lineLevel(line: string): string {
   return m ? LEVEL_COLOR[m[1] as Level] : "transparent";
 }
 
+/** Numeric severity of a line for the min-level filter (0 = none detected). */
+function lineRank(line: string): number {
+  const m = line.match(/\b(DEBUG|INFO|NOTICE|WARNING|WARN|ERROR|CRITICAL|FATAL)\b/);
+  return m ? (LEVEL_RANK[m[1]] ?? 0) : 0;
+}
+
 const lines = computed(() => {
   const text = raw.value.replace(/\n+$/, "");
   if (!text) return [];
-  return text.split("\n").map((l) => ({ rail: lineLevel(l), segs: tokenize(l) }));
+  const q = search.value.trim().toLowerCase();
+  const floor = minLevel.value ? LEVEL_RANK[minLevel.value] : 0;
+  return text
+    .split("\n")
+    .filter((l) => {
+      if (q && !l.toLowerCase().includes(q)) return false;
+      // Level filter keeps matching lines plus continuation lines (rank 0),
+      // so a wrapped multi-line record isn't chopped mid-entry.
+      if (floor && lineRank(l) !== 0 && lineRank(l) < floor) return false;
+      return true;
+    })
+    .map((l) => ({ rail: lineLevel(l), segs: tokenize(l) }));
 });
+
+const totalLines = computed(() => raw.value.replace(/\n+$/, "").split("\n").filter(Boolean).length);
 
 async function refresh(scroll = true) {
   // Drop overlapping ticks: only one request is ever in flight, which also
@@ -150,6 +181,24 @@ onBeforeUnmount(() => {
         <span class="font-mono text-xs" style="color: #7c93a1">/var/log/unraid-mcp/server.log</span>
       </div>
       <div class="flex items-center gap-3">
+        <input
+          v-model="search"
+          type="search"
+          placeholder="filter…"
+          class="h-7 w-40 rounded-md border bg-transparent px-2 text-xs"
+          style="border-color: #1d3d4e; color: #e6f4fb"
+        />
+        <select
+          v-model="minLevel"
+          class="h-7 rounded-md border bg-transparent px-1.5 text-xs"
+          style="border-color: #1d3d4e; color: #e6f4fb"
+          title="Minimum severity"
+        >
+          <option value="">all levels</option>
+          <option value="INFO">info+</option>
+          <option value="WARNING">warning+</option>
+          <option value="ERROR">error+</option>
+        </select>
         <label class="flex items-center gap-1.5 text-xs" style="color: #a7bcc9">
           lines
           <select
@@ -198,7 +247,13 @@ onBeforeUnmount(() => {
           <span v-for="(s, j) in ln.segs" :key="j" :style="{ color: s.c, fontWeight: s.b ? 600 : 400 }">{{ s.t }}</span>
         </code>
       </div>
-      <div v-if="lines.length === 0" class="px-2 py-1" style="color: #7c93a1">(log is empty)</div>
+      <div v-if="lines.length === 0" class="px-2 py-1" style="color: #7c93a1">
+        {{ totalLines === 0 ? "(log is empty)" : "no lines match the filter" }}
+      </div>
     </div>
+
+    <p v-if="search || minLevel" class="text-xs" style="color: #7c93a1">
+      showing {{ lines.length }} of {{ totalLines }} lines
+    </p>
   </div>
 </template>

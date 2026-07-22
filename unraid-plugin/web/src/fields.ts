@@ -14,6 +14,8 @@ export interface Section {
   collapsed?: boolean;
   /** Which of the three settings columns this section renders in. */
   col: "a" | "b" | "c";
+  /** Gated sections stay collapsed to an enable toggle until opted in. */
+  gated?: boolean;
   fields: FieldDef[];
 }
 
@@ -200,6 +202,7 @@ export const SECTIONS: Section[] = [
   {
     title: "Google OAuth (claude.ai)",
     col: "c",
+    gated: true,
     fields: [
       {
         key: "UNRAID_MCP_GOOGLE_CLIENT_ID",

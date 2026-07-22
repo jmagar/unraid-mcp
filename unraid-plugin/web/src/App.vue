@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
-import { SECTIONS, type FieldDef } from "./fields";
+import { SECTIONS, type FieldDef, type Section } from "./fields";
 import LogView from "./LogView.vue";
 import {
   checkUpdate,
@@ -37,6 +37,12 @@ const statsStale = ref(false);
 const latestVersion = ref("");
 const checkingUpdate = ref(false);
 const updating = ref(false);
+const copiedConfig = ref(false);
+const initialSnapshot = ref(""); // form state at last load, for dirty detection
+const cpuHist = ref<number[]>([]); // rolling samples for sparklines
+const memHist = ref<number[]>([]);
+const gateOpen = reactive<Record<string, boolean>>({}); // opted-in gated sections
+const TABS: Tab[] = ["dashboard", "logs", "settings"];
 
 const secretKeys = SECTIONS.flatMap((s) => s.fields)
   .filter((f) => f.kind === "secret")
@@ -60,11 +66,57 @@ function hydrate(p: ConfigPayload) {
       }
     }
   }
+  initialSnapshot.value = JSON.stringify(form);
 }
 
 function secretConfigured(key: string): boolean {
   return Boolean(payload.value?.config[`${key}_configured`]);
 }
+
+// ── Dirty tracking + validation ───────────────────────────────────────────
+const dirty = computed(() => {
+  if (JSON.stringify(form) !== initialSnapshot.value) return true;
+  return secretKeys.some((k) => {
+    const e = secretEdits[k];
+    return Boolean(e && (e.clear || (e.value !== "" && e.value !== e.original)));
+  });
+});
+
+const URL_KEYS = new Set(["UNRAID_API_URL", "UNRAID_MCP_GOOGLE_BASE_URL"]);
+function fieldError(key: string): string {
+  const v = form[key] ?? "";
+  if (v === "") return "";
+  if (key === "UNRAID_MCP_PORT") {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) return "Port must be 1–65535";
+  }
+  if (URL_KEYS.has(key) && !/^https?:\/\/.+/i.test(v)) return "Must start with http:// or https://";
+  return "";
+}
+const hasErrors = computed(() =>
+  SECTIONS.some((s) => s.fields.some((f) => fieldError(f.key) !== "")),
+);
+
+// ── Google OAuth gate: keep the section compact until opted in ─────────────
+const oauthConfigured = computed(
+  () => Boolean(form.UNRAID_MCP_GOOGLE_CLIENT_ID) || secretConfigured("UNRAID_MCP_GOOGLE_CLIENT_SECRET"),
+);
+function sectionShowsFields(section: Section): boolean {
+  if (!section.gated) return true;
+  return Boolean(gateOpen[section.title]) || oauthConfigured.value;
+}
+
+// ── Sparklines: normalise a rolling series to a 100×24 polyline ────────────
+function sparkPoints(hist: number[]): string {
+  if (hist.length < 2) return "";
+  const max = Math.max(...hist, 1);
+  const n = hist.length;
+  return hist.map((v, i) => `${(i / (n - 1)) * 100},${23 - (v / max) * 21}`).join(" ");
+}
+
+const apiKeyMissing = computed(
+  () => Boolean(payload.value) && !secretConfigured("UNRAID_API_KEY"),
+);
 
 const service = computed(() => payload.value?.service ?? { enabled: false, running: false });
 const tailscale = computed(
@@ -107,6 +159,31 @@ async function copyEndpoint() {
     await navigator.clipboard.writeText(endpoint.value);
     copied.value = true;
     setTimeout(() => (copied.value = false), 1500);
+  } catch {
+    /* clipboard unavailable over plain http */
+  }
+}
+
+/** Copy a ready-to-paste MCP client config (mcpServers block) with the token. */
+async function copyConfig() {
+  if (!endpoint.value) return;
+  let token = "<your bearer token>";
+  if (secretConfigured("UNRAID_MCP_BEARER_TOKEN")) {
+    try {
+      token = await revealSecret("UNRAID_MCP_BEARER_TOKEN");
+    } catch {
+      /* fall back to the placeholder */
+    }
+  }
+  const cfg = {
+    mcpServers: {
+      unraid: { url: endpoint.value, headers: { Authorization: `Bearer ${token}` } },
+    },
+  };
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(cfg, null, 2));
+    copiedConfig.value = true;
+    setTimeout(() => (copiedConfig.value = false), 1800);
   } catch {
     /* clipboard unavailable over plain http */
   }
@@ -208,6 +285,10 @@ async function pollStats() {
       payload.value.service = s.service;
       if (s.process) payload.value.process = s.process;
     }
+    if (s.process && s.service.running) {
+      cpuHist.value = [...cpuHist.value, s.process.cpu].slice(-40);
+      memHist.value = [...memHist.value, s.process.memMB].slice(-40);
+    }
     statFails = 0;
     statsStale.value = false;
   } catch {
@@ -227,8 +308,24 @@ function setStatsPolling(on: boolean) {
 }
 
 function switchTab(t: Tab) {
+  // Guard against silently discarding edits (Apply restarts the service).
+  if (tab.value === "settings" && t !== "settings" && dirty.value && payload.value) {
+    if (!window.confirm("Discard unsaved settings changes?")) return;
+    hydrate(payload.value); // revert form to last-loaded config
+  }
   tab.value = t;
   setStatsPolling(t === "dashboard");
+}
+
+function onTabKey(e: KeyboardEvent, current: Tab) {
+  const i = TABS.indexOf(current);
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+    e.preventDefault();
+    switchTab(TABS[(i + 1) % TABS.length]);
+  } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+    e.preventDefault();
+    switchTab(TABS[(i + TABS.length - 1) % TABS.length]);
+  }
 }
 
 onMounted(async () => {
@@ -245,16 +342,22 @@ onBeforeUnmount(() => {
 <template>
   <div class="unapi @container w-full text-foreground flex flex-col gap-3 pb-4">
     <!-- Tab bar -->
-    <div class="flex items-center gap-1 border-b border-border">
+    <div role="tablist" aria-label="Unraid MCP sections" class="flex items-center gap-1 border-b border-border">
       <button
-        v-for="t in (['dashboard', 'logs', 'settings'] as Tab[])"
+        v-for="t in TABS"
+        :id="`tab-${t}`"
         :key="t"
         type="button"
-        class="px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors"
+        role="tab"
+        :aria-selected="tab === t"
+        :tabindex="tab === t ? 0 : -1"
+        class="px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-t-sm flex items-center gap-1.5"
         :class="tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
         @click="switchTab(t)"
+        @keydown="onTabKey($event, t)"
       >
         {{ t }}
+        <span v-if="t === 'settings' && dirty" class="h-1.5 w-1.5 rounded-full bg-primary" title="Unsaved changes"></span>
       </button>
     </div>
 
@@ -282,24 +385,35 @@ onBeforeUnmount(() => {
               <span class="text-xs uppercase tracking-wide shrink-0" :class="copied ? 'text-unraid-green-500' : 'text-primary'">{{ copied ? "copied" : "copy" }}</span>
             </button>
             <span v-else class="text-sm text-muted-foreground">stdio transport — no network endpoint</span>
+            <div v-if="endpoint" class="flex items-center gap-2">
+              <Button size="sm" variant="outline" @click="copyConfig">
+                {{ copiedConfig ? "Config copied" : "Copy MCP client config" }}
+              </Button>
+              <span class="text-xs text-muted-foreground">mcpServers block with your bearer token, ready to paste</span>
+            </div>
             <p class="text-xs text-muted-foreground">
-              Transport <span class="font-mono text-foreground">{{ form.UNRAID_MCP_TRANSPORT }}</span> ·
-              authenticate with the bearer token from Settings
+              Transport <span class="font-mono text-foreground">{{ form.UNRAID_MCP_TRANSPORT }}</span>
             </p>
           </section>
 
           <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
             <h3 class="text-base font-semibold">Resources</h3>
             <div class="grid grid-cols-3 gap-2">
-              <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="rounded-md bg-background border border-border p-2 text-center flex flex-col gap-1">
                 <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.cpu.toFixed(1) + "%" : "—" }}</div>
+                <svg v-if="cpuHist.length > 1" viewBox="0 0 100 24" preserveAspectRatio="none" class="h-5 w-full">
+                  <polyline :points="sparkPoints(cpuHist)" fill="none" stroke="#29b6f6" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+                </svg>
                 <div class="text-xs text-muted-foreground">CPU</div>
               </div>
-              <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="rounded-md bg-background border border-border p-2 text-center flex flex-col gap-1">
                 <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.memMB.toFixed(0) + " MB" : "—" }}</div>
+                <svg v-if="memHist.length > 1" viewBox="0 0 100 24" preserveAspectRatio="none" class="h-5 w-full">
+                  <polyline :points="sparkPoints(memHist)" fill="none" stroke="#a78bfa" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+                </svg>
                 <div class="text-xs text-muted-foreground">Memory</div>
               </div>
-              <div class="rounded-md bg-background border border-border p-2 text-center">
+              <div class="rounded-md bg-background border border-border p-2 text-center flex flex-col justify-center">
                 <div class="text-lg font-semibold tabular-nums">{{ uptimeText }}</div>
                 <div class="text-xs text-muted-foreground">Uptime</div>
               </div>
@@ -362,9 +476,22 @@ onBeforeUnmount(() => {
 
     <!-- ── SETTINGS ──────────────────────────────────────────────── -->
     <template v-else>
+      <div
+        v-if="apiKeyMissing"
+        class="rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-sm"
+      >
+        No Unraid API key is set — the server can't reach the Unraid API. Auto-provisioning may have
+        failed at install; generate one with
+        <span class="font-mono">unraid-api apikey --create --name unraidmcp -r admin --json</span>
+        and paste it below.
+      </div>
+
       <div class="flex items-center justify-end gap-3">
         <span v-if="savedFlash" class="text-sm text-unraid-green-500">Saved — restarted</span>
-        <Button size="sm" :disabled="saving" @click="apply">{{ saving ? "Applying…" : "Apply" }}</Button>
+        <span v-else-if="dirty" class="text-sm text-muted-foreground">Unsaved changes</span>
+        <Button size="sm" :disabled="saving || !dirty || hasErrors" @click="apply">
+          {{ saving ? "Applying…" : "Apply" }}
+        </Button>
       </div>
 
       <!-- Three independent columns so each stacks freely (no row-alignment
@@ -387,7 +514,17 @@ onBeforeUnmount(() => {
               {{ section.title }}
             </h3>
 
-            <div class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2" :class="section.collapsed ? 'mt-2' : ''">
+            <!-- Gated section (Google OAuth): compact until enabled. -->
+            <div v-if="!sectionShowsFields(section)" class="flex items-center gap-2 mt-1">
+              <Switch :model-value="false" @update:model-value="gateOpen[section.title] = $event" />
+              <span class="text-sm text-muted-foreground">Enable — optional, for claude.ai web connector</span>
+            </div>
+
+            <div
+              v-if="sectionShowsFields(section)"
+              class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2"
+              :class="section.collapsed ? 'mt-2' : ''"
+            >
               <template v-for="field in section.fields" :key="field.key">
                 <Label :for="field.key" class="text-sm self-center leading-tight">{{ field.label }}</Label>
 
@@ -439,6 +576,7 @@ onBeforeUnmount(() => {
                 />
 
                 <div class="col-span-2">
+                  <p v-if="fieldError(field.key)" class="text-xs text-destructive mb-0.5">{{ fieldError(field.key) }}</p>
                   <HelpText>{{ field.help }}</HelpText>
                 </div>
               </template>
