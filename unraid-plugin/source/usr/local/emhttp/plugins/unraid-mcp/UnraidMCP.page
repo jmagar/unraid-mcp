@@ -1,0 +1,15 @@
+Menu="Utilities"
+Title="Unraid MCP"
+Icon="unraid-mcp.png"
+Tag="plug"
+---
+<?php
+/*
+ * Thin shell — all UI lives in the Vue custom element bundle. The element
+ * talks to include/config.php with the webGUI session cookie + csrf token
+ * (window.csrf_token, injected by DefaultPageLayout.php).
+ */
+?>
+<link rel="stylesheet" href="/plugins/unraid-mcp/web/unraid-mcp-settings.css">
+<unraid-mcp-settings-app></unraid-mcp-settings-app>
+<script type="module" src="/plugins/unraid-mcp/web/unraid-mcp-settings.js"></script>
