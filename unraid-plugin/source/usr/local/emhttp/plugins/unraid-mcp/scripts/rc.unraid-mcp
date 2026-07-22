@@ -29,6 +29,44 @@ pid_matches() {
     tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null | grep -q "unraid_mcp"
 }
 
+# Read one value from the plugin env file (our writer single-quotes values).
+env_get() {
+    sed -n "s/^$1='\(.*\)'\$/\1/p" "/boot/config/plugins/unraid-mcp/.env" 2>/dev/null | head -n1
+}
+
+TAILSCALE_BIN="/usr/local/sbin/tailscale"
+
+# Prefer a self-updated overlay venv on the array over the bundled interpreter,
+# so `Update` in the settings page survives reboots without a plugin rebuild.
+OVERLAY_PY="/mnt/user/appdata/unraid-mcp/venv/bin/python3"
+server_python() {
+    if [ -x "$OVERLAY_PY" ]; then echo "$OVERLAY_PY"; else echo "${PREFIX}/python/bin/python3"; fi
+}
+
+# Tailscale Serve integration (rides the official Tailscale Unraid plugin's
+# daemon). Serves the MCP port as HTTPS on the tailnet under a dedicated
+# port so existing serve config on 443 is never touched.
+serve_start() {
+    [ "$(env_get UNRAID_MCP_TAILSCALE_SERVE)" = "true" ] || return 0
+    [ -x "$TAILSCALE_BIN" ] || { log "tailscale serve requested but tailscale CLI not found"; return 0; }
+    local port
+    port="$(env_get UNRAID_MCP_PORT)"
+    port="${port:-6970}"
+    if "$TAILSCALE_BIN" serve --bg --https="$port" "http://127.0.0.1:${port}" >/dev/null 2>&1; then
+        log "tailscale serve enabled: https :${port} -> 127.0.0.1:${port}"
+    else
+        log "tailscale serve setup failed (is HTTPS enabled for the tailnet?)"
+    fi
+}
+
+serve_stop() {
+    [ -x "$TAILSCALE_BIN" ] || return 0
+    local port
+    port="$(env_get UNRAID_MCP_PORT)"
+    port="${port:-6970}"
+    "$TAILSCALE_BIN" serve --https="$port" off >/dev/null 2>&1 || true
+}
+
 rotate_log() {
     mkdir -p "${LOG_DIR}"
     if [ -f "${LOG_FILE}" ] && [ "$(stat -c%s "${LOG_FILE}" 2>/dev/null || echo 0)" -ge "${LOG_MAX_BYTES}" ]; then
@@ -47,13 +85,15 @@ start() {
         log "already running (pid $(cat "${PID_FILE}"))"
         return 0
     fi
-    if [ ! -x "${PREFIX}/python/bin/python3" ]; then
-        log "FATAL: bundled python missing at ${PREFIX}/python/bin/python3"
+    local py
+    py="$(server_python)"
+    if [ ! -x "$py" ]; then
+        log "FATAL: server python missing at ${py}"
         return 1
     fi
     rotate_log
     log "starting unraid-mcp server"
-    setsid "${PREFIX}/python/bin/python3" -m unraid_mcp.main >>"${LOG_FILE}" 2>&1 &
+    setsid "$py" -m unraid_mcp.main >>"${LOG_FILE}" 2>&1 &
     local pid=$!
     echo "$pid" >"${PID_FILE}"
 
@@ -67,6 +107,7 @@ start() {
         fi
     done
     log "started (pid ${pid})"
+    serve_start
     return 0
 }
 
@@ -89,6 +130,7 @@ stop() {
         kill -9 "$pid" 2>/dev/null
     fi
     rm -f "${PID_FILE}"
+    serve_stop
     log "stopped"
     return 0
 }
