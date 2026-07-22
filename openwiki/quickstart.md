@@ -113,7 +113,9 @@ The repository includes:
 - **Shell scripts** — `source/usr/local/emhttp/plugins/incus/scripts/` (init, preflight, service control)
 - **TypeScript API plugin** — `unraid-api-plugin-incus/` (builds to `dist/`)
 
-No automated tests are present in the repository. Testing is manual via Unraid installation and jail operations.
+Automated backend, frontend, coverage, package, and classic-contract checks run
+in CI. Privileged live isolation and health checks still require a disposable
+Unraid host.
 
 ## Related files
 
@@ -125,8 +127,8 @@ No automated tests are present in the repository. Testing is manual via Unraid i
 
 ## OpenWiki maintenance workflow
 
-- Documentation generation is automated via `/.github/workflows/openwiki-update.yml`. The workflow installs `openwiki`, runs `openwiki code --update --print`, and creates an update PR containing `openwiki/`, `AGENTS.md`, `CLAUDE.md`, and the workflow file itself.
-- The OpenWiki run is configured to use the OpenRouter provider (`OPENWIKI_PROVIDER=openrouter`) with model `z-ai/glm-5.2` and reads secrets from repository secrets.
+- Documentation generation is automated via `/.github/workflows/openwiki-update.yml`. The workflow installs `openwiki@0.2.0`, runs `openwiki --update --print`, and creates an update PR limited to `openwiki/`.
+- The job joins Tailscale, preflights the private OpenAI-compatible API, and runs model `gpt-5.3-codex-spark` using `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`, and `OPENAI_COMPATIBLE_API_KEY` repository secrets.
 
 ## Getting started
 
