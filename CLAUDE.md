@@ -211,9 +211,9 @@ Note: there is **no query cache**. The only caching middleware ever present —
 reads and mutations under one name, making per-subaction cache exclusion impossible. The
 `health/diagnose` "caching disabled" note is simply accurate.
 
-### HTTP Authentication (bearer token OR Google OAuth)
+### HTTP Authentication (bearer token, Google OAuth, or both)
 
-HTTP transport supports two **mutually exclusive** auth modes, selected by env vars:
+HTTP transport supports two auth modes, selected by env vars:
 1. **Pre-shared bearer token** (default) — enforced by the ASGI `BearerAuthMiddleware`
    in `core/auth.py`, auto-generated on first HTTP startup. `WellKnownMiddleware` advertises
    *no* OAuth authorization server (clients must send a static token).
@@ -230,6 +230,12 @@ HTTP transport supports two **mutually exclusive** auth modes, selected by env v
    setting only one is a fatal config error. Misconfig raises `GoogleOAuthConfigError`, which
    `server.py` converts to a fatal `sys.exit(1)` at import. See `.env.example` for the full
    variable reference.
+
+**Coexistence:** when Google OAuth is active AND `UNRAID_MCP_BEARER_TOKEN` is explicitly set,
+both modes work at once — `_StaticBearerFallbackVerifier` (in `core/google_auth.py`) accepts
+the static token via constant-time compare before delegating to Google verification, so OAuth
+clients (claude.ai) and static-token clients share the endpoint. The token is not
+auto-generated in OAuth mode; setting it is the opt-in.
 
 ### Performance Considerations
 - Increased timeouts for disk operations (90s read timeout)
