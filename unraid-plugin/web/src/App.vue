@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
 import {
+  fetchLogs,
   loadConfig,
   revealSecret,
   saveConfig,
@@ -23,6 +24,7 @@ interface FieldDef {
 
 interface Section {
   title: string;
+  collapsed?: boolean;
   fields: FieldDef[];
 }
 
@@ -47,7 +49,13 @@ const SECTIONS: Section[] = [
       {
         key: "UNRAID_VERIFY_SSL",
         label: "Verify SSL",
-        help: "Only relevant for https:// API URLs. Leave on unless you know why; for self-signed certs prefer a CA bundle path.",
+        help: "Only relevant for https:// API URLs. Instead of turning this off, point it at a CA bundle path to trust a self-signed cert.",
+        kind: "toggle",
+      },
+      {
+        key: "UNRAID_ALLOW_INSECURE_TLS",
+        label: "Allow insecure TLS",
+        help: "Required opt-in when Verify SSL is off for an https:// URL — acknowledges the API key travels to an unverified peer.",
         kind: "toggle",
       },
     ],
@@ -77,6 +85,12 @@ const SECTIONS: Section[] = [
         kind: "number",
         placeholder: "6970",
       },
+      {
+        key: "UNRAID_MCP_TAILSCALE_SERVE",
+        label: "Tailscale Serve",
+        help: "Publish the MCP endpoint on your tailnet as HTTPS with automatic certs, via the official Tailscale plugin's daemon (tailscale serve). Uses a dedicated HTTPS port equal to the MCP port, so any serve config on 443 is untouched.",
+        kind: "toggle",
+      },
     ],
   },
   {
@@ -87,6 +101,18 @@ const SECTIONS: Section[] = [
         label: "Bearer token",
         help: "Pre-shared token MCP clients send as Authorization: Bearer <token>. Auto-generated at install.",
         kind: "secret",
+      },
+      {
+        key: "UNRAID_MCP_DISABLE_HTTP_AUTH",
+        label: "Disable HTTP auth",
+        help: "Only behind a trusted authenticating gateway. With a non-loopback bind host this also requires Trust proxy.",
+        kind: "toggle",
+      },
+      {
+        key: "UNRAID_MCP_TRUST_PROXY",
+        label: "Trust proxy",
+        help: "Confirms an upstream gateway (SWAG/Authelia) enforces authentication when HTTP auth is disabled.",
+        kind: "toggle",
       },
     ],
   },
@@ -122,6 +148,143 @@ const SECTIONS: Section[] = [
       },
     ],
   },
+  {
+    title: "Subscription tuning",
+    collapsed: true,
+    fields: [
+      {
+        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS",
+        label: "Collect max events",
+        help: "Bound on events retained while streaming a live collection call.",
+        kind: "number",
+        placeholder: "100",
+      },
+      {
+        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES",
+        label: "Collect max bytes",
+        help: "Bound on bytes retained while streaming (default 1048576 = 1 MiB).",
+        kind: "number",
+        placeholder: "1048576",
+      },
+      {
+        key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS",
+        label: "Collect max seconds",
+        help: "Bound on duration of a live collection window.",
+        kind: "number",
+        placeholder: "30",
+      },
+      {
+        key: "UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS",
+        label: "Cache max age",
+        help: "Cached subscription payloads older than this are not served.",
+        kind: "number",
+        placeholder: "300",
+      },
+      {
+        key: "UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS",
+        label: "Timeout cap",
+        help: "Upper bound on per-call WebSocket timeout.",
+        kind: "number",
+        placeholder: "60",
+      },
+      {
+        key: "UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE",
+        label: "Raw probe",
+        help: "Debug-only, data-sensitive raw frame in subscriptions/test_query. Never enable on shared deployments.",
+        kind: "toggle",
+      },
+      {
+        key: "UNRAID_MCP_LOG_FILE",
+        label: "Log filename",
+        help: "Log filename inside the server's logs directory (default unraid-mcp.log).",
+        kind: "text",
+        mono: true,
+        placeholder: "unraid-mcp.log",
+      },
+    ],
+  },
+  {
+    title: "Google OAuth (claude.ai)",
+    collapsed: true,
+    fields: [
+      {
+        key: "UNRAID_MCP_GOOGLE_CLIENT_ID",
+        label: "Client ID",
+        help: "Google OAuth Web application client ID. Setting ID and secret enables OAuth for HTTP; an explicitly set bearer token stays valid alongside.",
+        kind: "text",
+        mono: true,
+        placeholder: "1234.apps.googleusercontent.com",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_CLIENT_SECRET",
+        label: "Client secret",
+        help: "Google OAuth client secret (GOCSPX-…).",
+        kind: "secret",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_BASE_URL",
+        label: "Base URL",
+        help: "This server's public https:// base URL; must match the client's authorized redirect URI host.",
+        kind: "text",
+        mono: true,
+        placeholder: "https://mcp.example.com",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_ALLOWED_EMAILS",
+        label: "Allowed emails",
+        help: "Comma/space-separated verified Google emails allowed to sign in.",
+        kind: "text",
+        mono: true,
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS",
+        label: "Allowed domains",
+        help: "Comma/space-separated verified email domains allowed to sign in.",
+        kind: "text",
+        mono: true,
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_ALLOW_ANY_USER",
+        label: "Allow any user",
+        help: "Escape hatch for private deployments that intentionally allow any Google account.",
+        kind: "toggle",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_REQUIRED_SCOPES",
+        label: "Scopes",
+        help: "OAuth scopes; default is openid + userinfo.email.",
+        kind: "text",
+        mono: true,
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_REDIRECT_PATH",
+        label: "Redirect path",
+        help: "OAuth callback path; must match the Google client config (default /auth/callback).",
+        kind: "text",
+        mono: true,
+        placeholder: "/auth/callback",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY",
+        label: "JWT signing key",
+        help: "With the encryption key, persists issued tokens across restarts.",
+        kind: "secret",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_ENCRYPTION_KEY",
+        label: "Encryption key",
+        help: "Fernet key for encrypting persisted tokens at rest. Set both persistence keys or neither.",
+        kind: "secret",
+      },
+      {
+        key: "UNRAID_MCP_GOOGLE_STORAGE_DIR",
+        label: "Token storage dir",
+        help: "Directory for persisted encrypted tokens (default ~/.unraid-mcp/oauth-tokens).",
+        kind: "text",
+        mono: true,
+      },
+    ],
+  },
 ];
 
 const payload = ref<ConfigPayload | null>(null);
@@ -135,8 +298,10 @@ const busy = ref(false);
 const error = ref("");
 const savedFlash = ref(false);
 const copied = ref(false);
-const advancedText = ref("");
-const advancedError = ref("");
+const logText = ref("");
+const logOpen = ref(false);
+const logAuto = ref(false);
+let logTimer: ReturnType<typeof setInterval> | null = null;
 
 const secretKeys = SECTIONS.flatMap((s) => s.fields)
   .filter((f) => f.kind === "secret")
@@ -160,31 +325,6 @@ function hydrate(p: ConfigPayload) {
       }
     }
   }
-  advancedText.value = Object.entries(p.extra)
-    .map(([k, v]) => `${k}=${v}`)
-    .join("\n");
-}
-
-/** Parse the advanced textarea into {key: value}; sets advancedError on bad lines. */
-function parseAdvanced(): Record<string, string> | null {
-  advancedError.value = "";
-  const out: Record<string, string> = {};
-  for (const raw of advancedText.value.split("\n")) {
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    const key = eq === -1 ? line : line.slice(0, eq).trim();
-    if (!/^UNRAID_[A-Z0-9_]{1,64}$/.test(key)) {
-      advancedError.value = `Not a valid variable name: ${key || raw}`;
-      return null;
-    }
-    if (eq === -1) {
-      advancedError.value = `Missing '=' after ${key}`;
-      return null;
-    }
-    out[key] = line.slice(eq + 1).trim();
-  }
-  return out;
 }
 
 function secretConfigured(key: string): boolean {
@@ -192,15 +332,22 @@ function secretConfigured(key: string): boolean {
 }
 
 const service = computed(() => payload.value?.service ?? { enabled: false, running: false });
+const tailscale = computed(
+  () => payload.value?.tailscale ?? { available: false, dnsName: "", serveActive: false },
+);
 
 /** The endpoint MCP clients connect to, derived from live form state. */
 const endpoint = computed(() => {
   if (form.UNRAID_MCP_TRANSPORT === "stdio") return "";
+  const port = form.UNRAID_MCP_PORT || "6970";
+  if (boolVal("UNRAID_MCP_TAILSCALE_SERVE") && tailscale.value.dnsName) {
+    return `https://${tailscale.value.dnsName}:${port}/mcp`;
+  }
   const host =
     !form.UNRAID_MCP_HOST || form.UNRAID_MCP_HOST === "0.0.0.0"
       ? window.location.hostname
       : form.UNRAID_MCP_HOST;
-  return `http://${host}:${form.UNRAID_MCP_PORT || "6970"}/mcp`;
+  return `http://${host}:${port}/mcp`;
 });
 
 async function copyEndpoint() {
@@ -210,7 +357,7 @@ async function copyEndpoint() {
     copied.value = true;
     setTimeout(() => (copied.value = false), 1500);
   } catch {
-    /* clipboard unavailable over plain http — selection fallback not worth it */
+    /* clipboard unavailable over plain http */
   }
 }
 
@@ -219,6 +366,10 @@ function boolVal(key: string): boolean {
 }
 function setBool(key: string, v: boolean) {
   form[key] = v ? "true" : "false";
+}
+
+function fieldDisabled(field: FieldDef): boolean {
+  return field.key === "UNRAID_MCP_TAILSCALE_SERVE" && !tailscale.value.available;
 }
 
 async function run(fn: () => Promise<ConfigPayload>) {
@@ -231,14 +382,8 @@ async function run(fn: () => Promise<ConfigPayload>) {
 }
 
 async function apply() {
-  const advanced = parseAdvanced();
-  if (advanced === null) return;
   saving.value = true;
-  const changes: Record<string, string> = { ...form, ...advanced };
-  // A key previously shown in Advanced but now removed is an explicit delete.
-  for (const key of Object.keys(payload.value?.extra ?? {})) {
-    if (!(key in advanced)) changes[key] = "";
-  }
+  const changes: Record<string, string> = { ...form };
   for (const key of secretKeys) {
     const edit = secretEdits[key];
     if (edit?.clear) changes[key] = "";
@@ -257,7 +402,6 @@ async function toggleSecret(key: string) {
   const edit = secretEdits[key];
   if (!edit) return;
   if (edit.show) {
-    // Re-mask; drop a revealed-but-unedited value so Apply keeps omitting it.
     edit.show = false;
     if (edit.value === edit.original) {
       edit.value = "";
@@ -284,20 +428,50 @@ async function svc(op: ServiceOp) {
   busy.value = false;
 }
 
+async function refreshLogs() {
+  try {
+    logText.value = (await fetchLogs(300)) || "(log is empty)";
+  } catch (e) {
+    logText.value = `failed to fetch log: ${e instanceof Error ? e.message : e}`;
+  }
+}
+
+function setLogAuto(on: boolean) {
+  logAuto.value = on;
+  if (logTimer) {
+    clearInterval(logTimer);
+    logTimer = null;
+  }
+  if (on) {
+    void refreshLogs();
+    logTimer = setInterval(() => void refreshLogs(), 3000);
+  }
+}
+
+async function toggleLog() {
+  logOpen.value = !logOpen.value;
+  if (logOpen.value && !logText.value) await refreshLogs();
+  if (!logOpen.value) setLogAuto(false);
+}
+
 onMounted(async () => {
   await run(() => loadConfig());
   loading.value = false;
 });
+onBeforeUnmount(() => setLogAuto(false));
 </script>
 
 <template>
   <div class="unapi w-full max-w-6xl text-foreground flex flex-col gap-3 pb-4">
-    <!-- Connection strip: identity, state, endpoint, controls — one row, no scroll -->
+    <!-- Connection strip -->
     <div class="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
       <div class="flex items-center gap-2">
         <h2 class="text-base font-semibold whitespace-nowrap">Unraid MCP</h2>
         <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
           {{ service.running ? "Running" : "Stopped" }}
+        </Badge>
+        <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">
+          tailnet
         </Badge>
       </div>
 
@@ -308,7 +482,7 @@ onMounted(async () => {
         :title="copied ? 'Copied' : 'Copy endpoint'"
         @click="copyEndpoint"
       >
-        <span class="truncate max-w-[22rem]">{{ endpoint }}</span>
+        <span class="truncate max-w-[26rem]">{{ endpoint }}</span>
         <span class="text-xs uppercase tracking-wide" :class="copied ? 'text-unraid-green-500' : 'text-primary'">
           {{ copied ? "copied" : "copy" }}
         </span>
@@ -327,6 +501,7 @@ onMounted(async () => {
         <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">
           Restart
         </Button>
+        <Button size="sm" variant="outline" @click="toggleLog">{{ logOpen ? "Hide log" : "Log" }}</Button>
         <Button size="sm" :disabled="saving || loading" @click="apply">
           {{ saving ? "Applying…" : "Apply" }}
         </Button>
@@ -337,24 +512,47 @@ onMounted(async () => {
       {{ error }}
     </div>
 
+    <!-- Log viewer -->
+    <section v-if="logOpen" class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
+          Server log <span class="normal-case tracking-normal font-normal">/var/log/unraid-mcp/server.log</span>
+        </h3>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1.5">
+            <Switch :model-value="logAuto" @update:model-value="setLogAuto($event)" />
+            <span class="text-xs text-muted-foreground">Follow</span>
+          </div>
+          <Button size="sm" variant="ghost" class="px-2" @click="refreshLogs">Refresh</Button>
+        </div>
+      </div>
+      <pre class="max-h-72 overflow-auto rounded-md bg-background border border-border p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">{{ logText }}</pre>
+    </section>
+
     <div v-if="loading" class="text-sm text-muted-foreground">Loading configuration…</div>
 
     <template v-else>
       <div class="grid gap-3 lg:grid-cols-2 items-start">
-        <section
+        <component
+          :is="section.collapsed ? 'details' : 'section'"
           v-for="section in SECTIONS"
           :key="section.title"
           class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 min-w-0"
         >
-          <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
+          <summary
+            v-if="section.collapsed"
+            class="cursor-pointer select-none text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground marker:text-primary"
+          >
+            {{ section.title }}
+          </summary>
+          <h3 v-else class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
             {{ section.title }}
           </h3>
 
-          <div class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+          <div class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2" :class="section.collapsed ? 'mt-2' : ''">
             <template v-for="field in section.fields" :key="field.key">
-              <Label :for="field.key" class="text-sm self-center whitespace-nowrap">{{ field.label }}</Label>
+              <Label :for="field.key" class="text-sm self-center leading-tight">{{ field.label }}</Label>
 
-              <!-- secret: write-only with reveal + clear -->
               <div v-if="field.kind === 'secret'" class="flex items-center gap-1.5 min-w-0">
                 <Input
                   :id="field.key"
@@ -383,8 +581,14 @@ onMounted(async () => {
                 </Button>
               </div>
 
-              <div v-else-if="field.kind === 'toggle'" class="flex items-center">
-                <Switch :id="field.key" :model-value="boolVal(field.key)" @update:model-value="setBool(field.key, $event)" />
+              <div v-else-if="field.kind === 'toggle'" class="flex items-center gap-2">
+                <Switch
+                  :id="field.key"
+                  :model-value="boolVal(field.key)"
+                  :disabled="fieldDisabled(field)"
+                  @update:model-value="setBool(field.key, $event)"
+                />
+                <span v-if="fieldDisabled(field)" class="text-xs text-muted-foreground">Tailscale plugin not detected</span>
               </div>
 
               <Select v-else-if="field.kind === 'select'" :id="field.key" v-model="form[field.key]" class="[&>select]:h-8 [&>select]:py-1">
@@ -401,40 +605,19 @@ onMounted(async () => {
                 :placeholder="field.placeholder ?? ''"
               />
 
-              <!-- Native Unraid help: hidden until the header “?” toggle -->
               <div class="col-span-2">
                 <HelpText>{{ field.help }}</HelpText>
               </div>
             </template>
           </div>
-        </section>
+        </component>
       </div>
 
-      <!-- Advanced: every other env var, editable as key=value lines -->
-      <section class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
-        <div class="flex items-baseline justify-between">
-          <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Advanced</h3>
-          <span class="text-xs text-muted-foreground">
-            Any <span class="font-mono">UNRAID_*</span> variable, one per line — applied to
-            <span class="font-mono">.env</span> with the form fields
-          </span>
-        </div>
-        <textarea
-          v-model="advancedText"
-          rows="3"
-          spellcheck="false"
-          class="w-full resize-y rounded-md border border-input bg-background px-3 py-1.5 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
-          placeholder="UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS=100"
-        ></textarea>
-        <p v-if="advancedError" class="text-sm text-destructive">{{ advancedError }}</p>
-        <div class="col-span-2 -mt-1">
-          <HelpText>
-            Full reference in the project README. Secret-typed variables (Google OAuth keys) can be
-            set here but are write-only: they disappear from this box after saving and stay stored.
-            Removing a listed line deletes that variable on Apply.
-          </HelpText>
-        </div>
-      </section>
+      <!-- Unmanaged keys: single quiet line, only when present -->
+      <p v-if="payload && Object.keys(payload.extra).length" class="text-xs text-muted-foreground px-1">
+        Also in <span class="font-mono">/boot/config/plugins/unraid-mcp/.env</span> (preserved on save):
+        <span class="font-mono">{{ Object.keys(payload.extra).join(", ") }}</span>
+      </p>
     </template>
   </div>
 </template>

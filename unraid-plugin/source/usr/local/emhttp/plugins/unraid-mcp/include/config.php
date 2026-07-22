@@ -121,6 +121,24 @@ function service_running(): bool
     return $code === 0;
 }
 
+function tailscale_info(): array
+{
+    $bin = '/usr/local/sbin/tailscale';
+    if (!is_executable($bin)) {
+        return ['available' => false, 'dnsName' => '', 'serveActive' => false];
+    }
+    exec($bin . ' status --json 2>/dev/null', $out, $code);
+    $dns = '';
+    if ($code === 0) {
+        $status = json_decode(implode('', $out), true);
+        $dns = rtrim((string) ($status['Self']['DNSName'] ?? ''), '.');
+    }
+    exec($bin . ' serve status 2>/dev/null', $serveOut, $serveCode);
+    $serveActive = $serveCode === 0 && str_contains(implode("\n", $serveOut), ':6970');
+    // serveActive is a heuristic on the default port; the rc script owns truth.
+    return ['available' => $dns !== '', 'dnsName' => $dns, 'serveActive' => $serveActive];
+}
+
 function current_payload(): array
 {
     $env = read_env(ENV_FILE);
@@ -147,6 +165,7 @@ function current_payload(): array
             'enabled' => ($cfg['SERVICE'] ?? 'disabled') === 'enabled',
             'running' => service_running(),
         ],
+        'tailscale' => tailscale_info(),
     ];
 }
 
@@ -176,6 +195,18 @@ if ($action === 'reveal') {
     }
     $env = read_env(ENV_FILE);
     echo json_encode(['key' => $key, 'value' => $env[$key] ?? '']);
+    exit;
+}
+
+if ($action === 'logs') {
+    $lines = (int) ($body['lines'] ?? 200);
+    $lines = max(10, min(1000, $lines));
+    $log = '/var/log/unraid-mcp/server.log';
+    $out = [];
+    if (is_readable($log)) {
+        exec('tail -n ' . $lines . ' ' . escapeshellarg($log), $out);
+    }
+    echo json_encode(['log' => implode("\n", $out)]);
     exit;
 }
 

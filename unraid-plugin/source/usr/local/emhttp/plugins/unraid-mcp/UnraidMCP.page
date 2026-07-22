@@ -5,11 +5,16 @@ Tag="plug"
 ---
 <?php
 /*
- * Thin shell — all UI lives in the Vue custom element bundle. The element
- * talks to include/config.php with the webGUI session cookie + csrf token
- * (window.csrf_token, injected by DefaultPageLayout.php).
+ * Thin shell — all UI lives in the Vue custom element bundle, which talks to
+ * include/config.php using the webGUI session cookie + the csrf token below.
+ * DefaultPageLayout does NOT define a csrf_token JS global (stock pages embed
+ * it server-side in their forms), so we emit it here from the page's PHP
+ * scope; $var is populated from state/var.ini by the layout, with a direct
+ * parse as fallback.
  */
+$mcp_csrf = $var['csrf_token'] ?? (@parse_ini_file('state/var.ini')['csrf_token'] ?? '');
 ?>
+<script>window.csrf_token = "<?= htmlspecialchars($mcp_csrf, ENT_QUOTES) ?>";</script>
 <link rel="stylesheet" href="/plugins/unraid-mcp/web/unraid-mcp-settings.css">
 <unraid-mcp-settings-app></unraid-mcp-settings-app>
 <script type="module" src="/plugins/unraid-mcp/web/unraid-mcp-settings.js"></script>
