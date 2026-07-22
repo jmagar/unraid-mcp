@@ -367,80 +367,84 @@ onBeforeUnmount(() => {
         <Button size="sm" :disabled="saving" @click="apply">{{ saving ? "Applying…" : "Apply" }}</Button>
       </div>
 
+      <!-- Explicit left/right columns so each stacks independently (no
+           row-alignment gaps); Google OAuth lives in the right column. -->
       <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
-        <component
-          :is="section.collapsed ? 'details' : 'section'"
-          v-for="section in SECTIONS"
-          :key="section.title"
-          class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 min-w-0"
-        >
-          <summary
-            v-if="section.collapsed"
-            class="cursor-pointer select-none text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground marker:text-primary"
+        <div v-for="col in (['left', 'right'] as const)" :key="col" class="flex flex-col gap-3 min-w-0">
+          <component
+            :is="section.collapsed ? 'details' : 'section'"
+            v-for="section in SECTIONS.filter((s) => s.col === col)"
+            :key="section.title"
+            class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2 min-w-0"
           >
-            {{ section.title }}
-          </summary>
-          <h3 v-else class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
-            {{ section.title }}
-          </h3>
+            <summary
+              v-if="section.collapsed"
+              class="cursor-pointer select-none text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground marker:text-primary"
+            >
+              {{ section.title }}
+            </summary>
+            <h3 v-else class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
+              {{ section.title }}
+            </h3>
 
-          <div class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2" :class="section.collapsed ? 'mt-2' : ''">
-            <template v-for="field in section.fields" :key="field.key">
-              <Label :for="field.key" class="text-sm self-center leading-tight">{{ field.label }}</Label>
+            <div class="grid grid-cols-[9.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-2" :class="section.collapsed ? 'mt-2' : ''">
+              <template v-for="field in section.fields" :key="field.key">
+                <Label :for="field.key" class="text-sm self-center leading-tight">{{ field.label }}</Label>
 
-              <div v-if="field.kind === 'secret'" class="flex items-center gap-1.5 min-w-0">
+                <div v-if="field.kind === 'secret'" class="flex items-center gap-1.5 min-w-0">
+                  <Input
+                    :id="field.key"
+                    v-model="secretEdits[field.key].value"
+                    :type="secretEdits[field.key].show ? 'text' : 'password'"
+                    class="h-8 font-mono text-sm flex-1 min-w-0"
+                    :placeholder="secretConfigured(field.key) ? '•••••• configured' : 'not set'"
+                    :disabled="secretEdits[field.key].clear"
+                    autocomplete="new-password"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    data-bwignore="true"
+                    data-form-type="other"
+                  />
+                  <Button size="sm" variant="ghost" class="px-2" @click="toggleSecret(field.key)">
+                    {{ secretEdits[field.key].show ? "Hide" : "Show" }}
+                  </Button>
+                  <Button
+                    v-if="secretConfigured(field.key)"
+                    size="sm"
+                    :variant="secretEdits[field.key].clear ? 'destructive' : 'ghost'"
+                    class="px-2"
+                    @click="secretEdits[field.key].clear = !secretEdits[field.key].clear"
+                  >
+                    {{ secretEdits[field.key].clear ? "Will clear" : "Clear" }}
+                  </Button>
+                </div>
+
+                <div v-else-if="field.kind === 'toggle'" class="flex items-center gap-2">
+                  <Switch :id="field.key" :model-value="boolVal(field.key)" :disabled="fieldDisabled(field)" @update:model-value="setBool(field.key, $event)" />
+                  <span v-if="fieldDisabled(field)" class="text-xs text-muted-foreground">Tailscale plugin not detected</span>
+                </div>
+
+                <Select v-else-if="field.kind === 'select'" :id="field.key" v-model="form[field.key]" class="[&>select]:h-8 [&>select]:py-1">
+                  <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
+                </Select>
+
                 <Input
+                  v-else
                   :id="field.key"
-                  v-model="secretEdits[field.key].value"
-                  :type="secretEdits[field.key].show ? 'text' : 'password'"
-                  class="h-8 font-mono text-sm flex-1 min-w-0"
-                  :placeholder="secretConfigured(field.key) ? '•••••• configured' : 'not set'"
-                  :disabled="secretEdits[field.key].clear"
-                  autocomplete="new-password"
-                  data-1p-ignore
-                  data-lpignore="true"
-                  data-bwignore="true"
-                  data-form-type="other"
+                  v-model="form[field.key]"
+                  :type="field.kind === 'number' ? 'number' : 'text'"
+                  class="h-8 text-sm"
+                  :class="field.mono ? 'font-mono' : ''"
+                  :placeholder="field.placeholder ?? ''"
                 />
-                <Button size="sm" variant="ghost" class="px-2" @click="toggleSecret(field.key)">
-                  {{ secretEdits[field.key].show ? "Hide" : "Show" }}
-                </Button>
-                <Button
-                  v-if="secretConfigured(field.key)"
-                  size="sm"
-                  :variant="secretEdits[field.key].clear ? 'destructive' : 'ghost'"
-                  class="px-2"
-                  @click="secretEdits[field.key].clear = !secretEdits[field.key].clear"
-                >
-                  {{ secretEdits[field.key].clear ? "Will clear" : "Clear" }}
-                </Button>
-              </div>
 
-              <div v-else-if="field.kind === 'toggle'" class="flex items-center gap-2">
-                <Switch :id="field.key" :model-value="boolVal(field.key)" :disabled="fieldDisabled(field)" @update:model-value="setBool(field.key, $event)" />
-                <span v-if="fieldDisabled(field)" class="text-xs text-muted-foreground">Tailscale plugin not detected</span>
-              </div>
-
-              <Select v-else-if="field.kind === 'select'" :id="field.key" v-model="form[field.key]" class="[&>select]:h-8 [&>select]:py-1">
-                <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
-              </Select>
-
-              <Input
-                v-else
-                :id="field.key"
-                v-model="form[field.key]"
-                :type="field.kind === 'number' ? 'number' : 'text'"
-                class="h-8 text-sm"
-                :class="field.mono ? 'font-mono' : ''"
-                :placeholder="field.placeholder ?? ''"
-              />
-
-              <div class="col-span-2">
-                <HelpText>{{ field.help }}</HelpText>
-              </div>
-            </template>
-          </div>
-        </component>
+                <div class="col-span-2">
+                  <HelpText>{{ field.help }}</HelpText>
+                </div>
+              </template>
+            </div>
+          </component>
+        </div>
       </div>
 
       <p v-if="payload && Object.keys(payload.extra).length" class="text-xs text-muted-foreground px-1">
