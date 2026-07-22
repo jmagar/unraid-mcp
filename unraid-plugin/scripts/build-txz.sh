@@ -19,8 +19,8 @@ set -euo pipefail
 VERSION="${1:?usage: build-txz.sh <version> [wheel-path]}"
 WHEEL="${2:-}"
 
-PYTHON_VERSION="3.12.12"
-PBS_RELEASE="20260710"
+PYTHON_VERSION="3.12.13"
+PBS_RELEASE="20260718"
 PBS_TARBALL="cpython-${PYTHON_VERSION}+${PBS_RELEASE}-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_RELEASE}/${PBS_TARBALL}"
 
