@@ -2,9 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
 import { SECTIONS, type FieldDef } from "./fields";
+import LogView from "./LogView.vue";
 import {
   checkUpdate,
-  fetchLogs,
   fetchStats,
   loadConfig,
   resetServer,
@@ -16,7 +16,7 @@ import {
   type ServiceOp,
 } from "./lib/config-client";
 
-type Tab = "dashboard" | "settings";
+type Tab = "dashboard" | "logs" | "settings";
 const tab = ref<Tab>("dashboard");
 
 const payload = ref<ConfigPayload | null>(null);
@@ -30,9 +30,6 @@ const busy = ref(false);
 const error = ref("");
 const savedFlash = ref(false);
 const copied = ref(false);
-const logText = ref("");
-const logAuto = ref(false);
-let logTimer: ReturnType<typeof setInterval> | null = null;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
 const latestVersion = ref("");
 const checkingUpdate = ref(false);
@@ -198,25 +195,6 @@ async function doReset() {
   updating.value = false;
 }
 
-async function refreshLogs() {
-  try {
-    logText.value = (await fetchLogs(300)) || "(log is empty)";
-  } catch (e) {
-    logText.value = `failed to fetch log: ${e instanceof Error ? e.message : e}`;
-  }
-}
-function setLogAuto(on: boolean) {
-  logAuto.value = on;
-  if (logTimer) {
-    clearInterval(logTimer);
-    logTimer = null;
-  }
-  if (on) {
-    void refreshLogs();
-    logTimer = setInterval(() => void refreshLogs(), 3000);
-  }
-}
-
 /** Poll cheap process stats while the dashboard is visible. */
 async function pollStats() {
   try {
@@ -240,18 +218,15 @@ function setStatsPolling(on: boolean) {
 function switchTab(t: Tab) {
   tab.value = t;
   setStatsPolling(t === "dashboard");
-  if (t !== "dashboard") setLogAuto(false);
 }
 
 onMounted(async () => {
   await run(() => loadConfig());
   loading.value = false;
-  void refreshLogs();
   void doCheckUpdate();
   setStatsPolling(true);
 });
 onBeforeUnmount(() => {
-  setLogAuto(false);
   setStatsPolling(false);
 });
 </script>
@@ -261,7 +236,7 @@ onBeforeUnmount(() => {
     <!-- Tab bar -->
     <div class="flex items-center gap-1 border-b border-border">
       <button
-        v-for="t in (['dashboard', 'settings'] as Tab[])"
+        v-for="t in (['dashboard', 'logs', 'settings'] as Tab[])"
         :key="t"
         type="button"
         class="px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors"
@@ -366,24 +341,10 @@ onBeforeUnmount(() => {
           </section>
         </div>
       </div>
-
-      <!-- Log viewer (full width) -->
-      <section class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">
-            Server log <span class="normal-case tracking-normal font-normal">/var/log/unraid-mcp/server.log</span>
-          </h3>
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1.5">
-              <Switch :model-value="logAuto" @update:model-value="setLogAuto($event)" />
-              <span class="text-xs text-muted-foreground">Follow</span>
-            </div>
-            <Button size="sm" variant="ghost" class="px-2" @click="refreshLogs">Refresh</Button>
-          </div>
-        </div>
-        <pre class="max-h-80 overflow-auto rounded-md bg-background border border-border p-2 font-mono text-xs leading-relaxed whitespace-pre-wrap">{{ logText }}</pre>
-      </section>
     </template>
+
+    <!-- ── LOGS ──────────────────────────────────────────────────── -->
+    <LogView v-else-if="tab === 'logs'" />
 
     <!-- ── SETTINGS ──────────────────────────────────────────────── -->
     <template v-else>
