@@ -8,12 +8,15 @@ the server attaches FastMCP's :class:`GoogleProvider` (an OAuth-proxy auth
 backend) to the ``FastMCP`` instance, and MCP clients authenticate via the
 standard OAuth browser flow instead of sending a static token.
 
-The two mechanisms are mutually exclusive at the HTTP layer: when Google OAuth is
-active, ``server.py`` does NOT install ``BearerAuthMiddleware`` /
-``WellKnownMiddleware`` (the provider serves its own ``.well-known`` discovery
-metadata and gates requests itself). Everything here is gated entirely on
-environment variables, so a deployment that sets none of them is byte-for-byte
-unchanged.
+When Google OAuth is active, ``server.py`` does NOT install
+``BearerAuthMiddleware`` / ``WellKnownMiddleware`` (the provider serves its own
+``.well-known`` discovery metadata and gates requests itself). If
+``UNRAID_MCP_BEARER_TOKEN`` is also configured, the two modes coexist: the
+static token is accepted by a constant-time fallback in the provider's token
+verifier chain (see :class:`_StaticBearerFallbackVerifier`), so OAuth clients
+(e.g. claude.ai) and pre-shared-token clients can use the same endpoint.
+Everything here is gated entirely on environment variables, so a deployment
+that sets none of them is byte-for-byte unchanged.
 
 Token persistence
 -----------------
@@ -31,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import ipaddress
 import time
 import weakref
@@ -280,6 +284,35 @@ class _AuthorizedGoogleTokenVerifier:
         await self._client.aclose()
 
 
+class _StaticBearerFallbackVerifier:
+    """Accept the pre-shared bearer token alongside Google OAuth tokens.
+
+    Checked before Google verification: the static token is compared in
+    constant time and, on match, mapped to a synthetic principal without any
+    network round-trip. Everything else delegates to the wrapped Google
+    verifier (including its email/domain authorization). This only exists when
+    UNRAID_MCP_BEARER_TOKEN is explicitly configured next to Google OAuth —
+    the operator's opt-in to running both auth modes at once.
+    """
+
+    def __init__(self, wrapped: TokenVerifier, *, static_token: str, scopes: list[str]) -> None:
+        self._wrapped = wrapped
+        self._static_token = static_token.encode()
+        self._scopes = list(scopes)
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if hmac.compare_digest(token.encode(), self._static_token):
+            from mcp.server.auth.provider import AccessToken
+
+            return AccessToken(
+                token=token,
+                client_id="static-bearer-token",
+                scopes=self._scopes,
+                expires_at=None,
+            )
+        return await self._wrapped.verify_token(token)
+
+
 _identity_verifiers = weakref.WeakSet()
 
 
@@ -463,12 +496,26 @@ def build_google_provider() -> GoogleProvider | None:
     )
     _install_authorized_token_verifier(provider, verifier)
 
+    # Coexistence opt-in: a configured static bearer token stays valid next to
+    # OAuth. The fallback wraps the (already installed and compatibility-checked)
+    # authorized verifier, so the plain setattr here reuses that guarantee. It is
+    # intentionally NOT added to _identity_verifiers — it owns no HTTP client.
+    static_token = (_settings.UNRAID_MCP_BEARER_TOKEN or "").strip()
+    if static_token:
+        fallback = _StaticBearerFallbackVerifier(
+            provider._token_validator,
+            static_token=static_token,
+            scopes=scopes,
+        )
+        setattr(provider, "_token_validator", fallback)  # noqa: B010 - compatibility adapter
+
     logger.info(
-        "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s, authz=%s)",
+        "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s, authz=%s, static_bearer=%s)",
         base_url,
         ",".join(scopes),
         redirect_path or "/auth/callback",
         persistence_label,
         "allow-any-user" if allow_any_user else "email/domain allowlist",
+        "also-accepted" if static_token else "disabled",
     )
     return provider

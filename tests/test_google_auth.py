@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import importlib
 import time
+from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -26,6 +27,7 @@ from unraid_mcp.core.google_auth import (
     GoogleOAuthConfigError,
     _AuthorizedGoogleTokenVerifier,
     _parse_scopes,
+    _StaticBearerFallbackVerifier,
     build_google_provider,
     google_oauth_enabled,
 )
@@ -598,3 +600,71 @@ class TestServerImportWiring:
             assert server.mcp.auth is None
         finally:
             self._restore_server(original_transport)
+
+
+# ---------------------------------------------------------------------------
+# Static bearer coexistence
+# ---------------------------------------------------------------------------
+
+
+class TestStaticBearerCoexistence:
+    """A configured UNRAID_MCP_BEARER_TOKEN stays valid alongside Google OAuth."""
+
+    _VALID: ClassVar[dict[str, str]] = {
+        "UNRAID_MCP_GOOGLE_CLIENT_ID": "x.apps.googleusercontent.com",
+        "UNRAID_MCP_GOOGLE_CLIENT_SECRET": "GOCSPX-secret",
+        "UNRAID_MCP_GOOGLE_BASE_URL": "https://mcp.example.com",
+        "UNRAID_MCP_GOOGLE_ALLOWED_EMAILS": "me@example.com",
+    }
+
+    def test_fallback_installed_when_bearer_token_configured(self):
+        with _google_settings(**self._VALID), patch.object(s, "UNRAID_MCP_BEARER_TOKEN", "tok"):
+            provider = build_google_provider()
+        assert isinstance(provider._token_validator, _StaticBearerFallbackVerifier)
+
+    def test_no_fallback_without_bearer_token(self):
+        with _google_settings(**self._VALID), patch.object(s, "UNRAID_MCP_BEARER_TOKEN", None):
+            provider = build_google_provider()
+        assert isinstance(provider._token_validator, _AuthorizedGoogleTokenVerifier)
+
+    def test_blank_bearer_token_does_not_opt_in(self):
+        with _google_settings(**self._VALID), patch.object(s, "UNRAID_MCP_BEARER_TOKEN", "  "):
+            provider = build_google_provider()
+        assert isinstance(provider._token_validator, _AuthorizedGoogleTokenVerifier)
+
+    @pytest.mark.asyncio
+    async def test_static_token_accepted_without_google_roundtrip(self):
+        wrapped = AsyncMock()
+        wrapped.verify_token = AsyncMock(return_value=None)
+        verifier = _StaticBearerFallbackVerifier(
+            wrapped, static_token="static-tok", scopes=["openid"]
+        )
+        access = await verifier.verify_token("static-tok")
+        assert access is not None
+        assert access.client_id == "static-bearer-token"
+        assert access.scopes == ["openid"]
+        assert access.expires_at is None
+        wrapped.verify_token.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_other_tokens_delegate_to_google_verifier(self):
+        google_token = AccessToken(
+            token="google-tok", client_id="google-client", scopes=["openid"], expires_at=None
+        )
+        wrapped = AsyncMock()
+        wrapped.verify_token = AsyncMock(return_value=google_token)
+        verifier = _StaticBearerFallbackVerifier(
+            wrapped, static_token="static-tok", scopes=["openid"]
+        )
+        access = await verifier.verify_token("google-tok")
+        assert access is google_token
+        wrapped.verify_token.assert_awaited_once_with("google-tok")
+
+    @pytest.mark.asyncio
+    async def test_wrong_token_rejected_when_google_rejects(self):
+        wrapped = AsyncMock()
+        wrapped.verify_token = AsyncMock(return_value=None)
+        verifier = _StaticBearerFallbackVerifier(
+            wrapped, static_token="static-tok", scopes=["openid"]
+        )
+        assert await verifier.verify_token("wrong") is None
