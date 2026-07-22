@@ -330,6 +330,11 @@ onMounted(async () => {
                   class="h-8 font-mono text-sm flex-1 min-w-0"
                   :placeholder="secretConfigured(field.key) ? '•••••• configured' : 'not set'"
                   :disabled="secretEdits[field.key].clear"
+                  autocomplete="new-password"
+                  data-1p-ignore
+                  data-lpignore="true"
+                  data-bwignore="true"
+                  data-form-type="other"
                 />
                 <Button size="sm" variant="ghost" class="px-2" @click="toggleSecret(field.key)">
                   {{ secretEdits[field.key].show ? "Hide" : "Show" }}
