@@ -1,0 +1,118 @@
+#!/bin/bash
+# rc.unraid-mcp — service control for the Unraid MCP server plugin.
+# Symlinked to /etc/rc.d/rc.unraid-mcp by the .plg install script (the rootfs
+# is RAM-based, so the symlink is re-created every boot).
+
+PLUGIN_NAME="unraid-mcp"
+EMHTTP_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
+PREFIX="/usr/local/${PLUGIN_NAME}"
+# Service-enable flag lives in /boot/config/plugins/unraid-mcp/unraid-mcp.cfg
+# (read by the event scripts, not here).
+PID_FILE="/var/run/${PLUGIN_NAME}.pid"
+LOG_DIR="/var/log/${PLUGIN_NAME}"
+LOG_FILE="${LOG_DIR}/server.log"
+LOG_MAX_BYTES=$((5 * 1024 * 1024))
+
+# shellcheck source=unraid-mcp-env.sh
+source "${EMHTTP_DIR}/scripts/unraid-mcp-env.sh"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') rc.${PLUGIN_NAME}: $*" >>"${LOG_FILE}" 2>/dev/null
+    echo "rc.${PLUGIN_NAME}: $*"
+}
+
+# Only kill a PID if /proc/<pid>/cmdline is actually our server — guards
+# against PID recycling between boots/restarts.
+pid_matches() {
+    local pid="$1"
+    [ -n "$pid" ] && [ -d "/proc/${pid}" ] || return 1
+    tr '\0' ' ' <"/proc/${pid}/cmdline" 2>/dev/null | grep -q "unraid_mcp"
+}
+
+rotate_log() {
+    mkdir -p "${LOG_DIR}"
+    if [ -f "${LOG_FILE}" ] && [ "$(stat -c%s "${LOG_FILE}" 2>/dev/null || echo 0)" -ge "${LOG_MAX_BYTES}" ]; then
+        mv -f "${LOG_FILE}" "${LOG_FILE}.1"
+    fi
+}
+
+is_running() {
+    local pid
+    pid="$(cat "${PID_FILE}" 2>/dev/null)"
+    pid_matches "$pid"
+}
+
+start() {
+    if is_running; then
+        log "already running (pid $(cat "${PID_FILE}"))"
+        return 0
+    fi
+    if [ ! -x "${PREFIX}/python/bin/python3" ]; then
+        log "FATAL: bundled python missing at ${PREFIX}/python/bin/python3"
+        return 1
+    fi
+    rotate_log
+    log "starting unraid-mcp server"
+    setsid "${PREFIX}/python/bin/python3" -m unraid_mcp.main >>"${LOG_FILE}" 2>&1 &
+    local pid=$!
+    echo "$pid" >"${PID_FILE}"
+
+    # Give it a moment to fail fast on config errors and report honestly.
+    for _ in $(seq 1 10); do
+        sleep 1
+        if ! pid_matches "$pid"; then
+            log "FATAL: server exited during startup — check ${LOG_FILE}"
+            rm -f "${PID_FILE}"
+            return 1
+        fi
+    done
+    log "started (pid ${pid})"
+    return 0
+}
+
+stop() {
+    local pid
+    pid="$(cat "${PID_FILE}" 2>/dev/null)"
+    if ! pid_matches "$pid"; then
+        log "not running"
+        rm -f "${PID_FILE}"
+        return 0
+    fi
+    log "stopping (pid ${pid})"
+    kill "$pid" 2>/dev/null
+    for _ in $(seq 1 15); do
+        pid_matches "$pid" || break
+        sleep 1
+    done
+    if pid_matches "$pid"; then
+        log "did not exit after 15s, sending SIGKILL"
+        kill -9 "$pid" 2>/dev/null
+    fi
+    rm -f "${PID_FILE}"
+    log "stopped"
+    return 0
+}
+
+status() {
+    if is_running; then
+        echo "running (pid $(cat "${PID_FILE}"))"
+        return 0
+    fi
+    echo "stopped"
+    return 1
+}
+
+case "$1" in
+    start) start ;;
+    stop) stop ;;
+    restart)
+        stop
+        sleep 1
+        start
+        ;;
+    status) status ;;
+    *)
+        echo "usage: $0 start|stop|restart|status"
+        exit 1
+        ;;
+esac
