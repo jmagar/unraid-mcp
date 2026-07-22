@@ -281,88 +281,90 @@ onBeforeUnmount(() => {
     <!-- ── DASHBOARD ─────────────────────────────────────────────── -->
     <template v-else-if="tab === 'dashboard'">
       <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
-        <!-- Status + controls -->
-        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <h3 class="text-base font-semibold">Server</h3>
-            <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
-              {{ service.running ? "Running" : "Stopped" }}
-            </Badge>
-            <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">tailnet</Badge>
-          </div>
-          <div class="flex items-center gap-2">
-            <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
-              {{ service.running ? "Stop" : "Start" }}
-            </Button>
-            <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">Restart</Button>
-            <div class="ms-auto flex items-center gap-1.5" :title="service.enabled ? 'Starts with the array' : 'Does not start with the array'">
-              <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
-              <span class="text-sm text-muted-foreground">Autostart</span>
-            </div>
-          </div>
-        </section>
+        <!-- LEFT: Connection, then Resources -->
+        <div class="flex flex-col gap-3">
+          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
+            <h3 class="text-base font-semibold">Connection</h3>
+            <button
+              v-if="endpoint"
+              type="button"
+              class="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors w-full"
+              :title="copied ? 'Copied' : 'Copy endpoint'"
+              @click="copyEndpoint"
+            >
+              <span class="truncate flex-1 text-start">{{ endpoint }}</span>
+              <span class="text-xs uppercase tracking-wide shrink-0" :class="copied ? 'text-unraid-green-500' : 'text-primary'">{{ copied ? "copied" : "copy" }}</span>
+            </button>
+            <span v-else class="text-sm text-muted-foreground">stdio transport — no network endpoint</span>
+            <p class="text-xs text-muted-foreground">
+              Transport <span class="font-mono text-foreground">{{ form.UNRAID_MCP_TRANSPORT }}</span> ·
+              authenticate with the bearer token from Settings
+            </p>
+          </section>
 
-        <!-- Resource usage -->
-        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
-          <h3 class="text-base font-semibold">Resources</h3>
-          <div class="grid grid-cols-3 gap-2">
-            <div class="rounded-md bg-background border border-border p-2 text-center">
-              <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.cpu.toFixed(1) + "%" : "—" }}</div>
-              <div class="text-xs text-muted-foreground">CPU</div>
+          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+            <h3 class="text-base font-semibold">Resources</h3>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="rounded-md bg-background border border-border p-2 text-center">
+                <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.cpu.toFixed(1) + "%" : "—" }}</div>
+                <div class="text-xs text-muted-foreground">CPU</div>
+              </div>
+              <div class="rounded-md bg-background border border-border p-2 text-center">
+                <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.memMB.toFixed(0) + " MB" : "—" }}</div>
+                <div class="text-xs text-muted-foreground">Memory</div>
+              </div>
+              <div class="rounded-md bg-background border border-border p-2 text-center">
+                <div class="text-lg font-semibold tabular-nums">{{ uptimeText }}</div>
+                <div class="text-xs text-muted-foreground">Uptime</div>
+              </div>
             </div>
-            <div class="rounded-md bg-background border border-border p-2 text-center">
-              <div class="text-lg font-semibold tabular-nums">{{ service.running ? proc.memMB.toFixed(0) + " MB" : "—" }}</div>
-              <div class="text-xs text-muted-foreground">Memory</div>
-            </div>
-            <div class="rounded-md bg-background border border-border p-2 text-center">
-              <div class="text-lg font-semibold tabular-nums">{{ uptimeText }}</div>
-              <div class="text-xs text-muted-foreground">Uptime</div>
-            </div>
-          </div>
-          <p class="text-xs text-muted-foreground">PID {{ proc.pid || "—" }} · updates live</p>
-        </section>
+            <p class="text-xs text-muted-foreground">PID {{ proc.pid || "—" }} · updates live</p>
+          </section>
+        </div>
 
-        <!-- Connection -->
-        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
-          <h3 class="text-base font-semibold">Connection</h3>
-          <button
-            v-if="endpoint"
-            type="button"
-            class="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-sm text-muted-foreground hover:text-foreground hover:border-primary/60 transition-colors w-full"
-            :title="copied ? 'Copied' : 'Copy endpoint'"
-            @click="copyEndpoint"
-          >
-            <span class="truncate flex-1 text-start">{{ endpoint }}</span>
-            <span class="text-xs uppercase tracking-wide shrink-0" :class="copied ? 'text-unraid-green-500' : 'text-primary'">{{ copied ? "copied" : "copy" }}</span>
-          </button>
-          <span v-else class="text-sm text-muted-foreground">stdio transport — no network endpoint</span>
-          <p class="text-xs text-muted-foreground">
-            Transport <span class="font-mono text-foreground">{{ form.UNRAID_MCP_TRANSPORT }}</span> ·
-            authenticate with the bearer token from Settings
-          </p>
-        </section>
+        <!-- RIGHT: Server, then Version -->
+        <div class="flex flex-col gap-3">
+          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-semibold">Server</h3>
+              <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
+                {{ service.running ? "Running" : "Stopped" }}
+              </Badge>
+              <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">tailnet</Badge>
+            </div>
+            <div class="flex items-center gap-2">
+              <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
+                {{ service.running ? "Stop" : "Start" }}
+              </Button>
+              <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">Restart</Button>
+              <div class="ms-auto flex items-center gap-1.5" :title="service.enabled ? 'Starts with the array' : 'Does not start with the array'">
+                <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
+                <span class="text-sm text-muted-foreground">Autostart</span>
+              </div>
+            </div>
+          </section>
 
-        <!-- Version / update -->
-        <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
-          <div class="flex items-center gap-2">
-            <h3 class="text-base font-semibold">Version</h3>
-            <span class="font-mono text-sm">{{ version.installed }}</span>
-            <Badge v-if="version.overlay" variant="gray" size="sm">updated</Badge>
-            <Badge v-if="updateAvailable" variant="orange" size="sm">update available</Badge>
-          </div>
-          <p v-if="latestVersion" class="text-xs text-muted-foreground">
-            latest release <span class="font-mono text-foreground">{{ latestVersion.replace(/^v/, "") }}</span>
-          </p>
-          <div class="flex items-center gap-2">
-            <Button size="sm" variant="ghost" class="px-2" :disabled="checkingUpdate || updating" @click="doCheckUpdate">
-              {{ checkingUpdate ? "Checking…" : "Check" }}
-            </Button>
-            <Button v-if="updateAvailable" size="sm" :disabled="updating" @click="doUpdate">
-              {{ updating ? "Updating…" : `Update to ${latestVersion.replace(/^v/, "")}` }}
-            </Button>
-            <Button v-if="version.overlay" size="sm" variant="outline" :disabled="updating" @click="doReset">Revert to bundled</Button>
-          </div>
-        </section>
+          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-semibold">Version</h3>
+              <span class="font-mono text-sm">{{ version.installed }}</span>
+              <Badge v-if="version.overlay" variant="gray" size="sm">updated</Badge>
+              <Badge v-if="updateAvailable" variant="orange" size="sm">update available</Badge>
+            </div>
+            <p v-if="latestVersion" class="text-xs text-muted-foreground">
+              latest release <span class="font-mono text-foreground">{{ latestVersion.replace(/^v/, "") }}</span>
+            </p>
+            <div class="flex items-center gap-2">
+              <Button size="sm" variant="ghost" class="px-2" :disabled="checkingUpdate || updating" @click="doCheckUpdate">
+                {{ checkingUpdate ? "Checking…" : "Check" }}
+              </Button>
+              <Button v-if="updateAvailable" size="sm" :disabled="updating" @click="doUpdate">
+                {{ updating ? "Updating…" : `Update to ${latestVersion.replace(/^v/, "")}` }}
+              </Button>
+              <Button v-if="version.overlay" size="sm" variant="outline" :disabled="updating" @click="doReset">Revert to bundled</Button>
+            </div>
+          </section>
+        </div>
       </div>
 
       <!-- Log viewer (full width) -->

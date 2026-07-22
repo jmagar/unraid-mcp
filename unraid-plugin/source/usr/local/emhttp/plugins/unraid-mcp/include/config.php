@@ -64,16 +64,6 @@ function fail(int $code, string $msg): void
     exit;
 }
 
-function check_csrf(): void
-{
-    $vars = @parse_ini_file('/var/local/emhttp/var.ini');
-    $expected = $vars['csrf_token'] ?? '';
-    $got = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '');
-    if ($expected === '' || !hash_equals($expected, (string) $got)) {
-        fail(403, 'invalid csrf token');
-    }
-}
-
 /** Parse a dotenv file into [key => value], tolerating quotes and comments. */
 function read_env(string $path): array
 {
@@ -217,7 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     fail(405, 'method not allowed');
 }
-check_csrf();
+// CSRF for this POST was already enforced by the global auto_prepend
+// (webGui/include/local_prepend.php) before this script ran — the same gate
+// every stock webGUI page uses. No plugin-level re-check needed.
 
 $body = json_decode(file_get_contents('php://input') ?: '', true);
 if (!is_array($body)) {
