@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
 import {
   loadConfig,
+  revealSecret,
   saveConfig,
   serviceAction,
   type ConfigPayload,
@@ -125,7 +126,9 @@ const SECTIONS: Section[] = [
 
 const payload = ref<ConfigPayload | null>(null);
 const form = reactive<Record<string, string>>({});
-const secretEdits = reactive<Record<string, { value: string; clear: boolean; show: boolean }>>({});
+const secretEdits = reactive<
+  Record<string, { value: string; clear: boolean; show: boolean; original: string | null }>
+>({});
 const loading = ref(true);
 const saving = ref(false);
 const busy = ref(false);
@@ -143,10 +146,12 @@ function hydrate(p: ConfigPayload) {
     for (const f of section.fields) {
       if (f.kind === "secret") {
         if (!secretEdits[f.key]) {
-          secretEdits[f.key] = { value: "", clear: false, show: false };
+          secretEdits[f.key] = { value: "", clear: false, show: false, original: null };
         } else {
           secretEdits[f.key].value = "";
           secretEdits[f.key].clear = false;
+          secretEdits[f.key].show = false;
+          secretEdits[f.key].original = null;
         }
       } else {
         form[f.key] = String(p.config[f.key] ?? "");
@@ -204,8 +209,8 @@ async function apply() {
   for (const key of secretKeys) {
     const edit = secretEdits[key];
     if (edit?.clear) changes[key] = "";
-    else if (edit?.value) changes[key] = edit.value;
-    // untouched secrets are omitted -> kept server-side
+    else if (edit?.value && edit.value !== edit.original) changes[key] = edit.value;
+    // untouched (or revealed-but-unchanged) secrets are omitted -> kept server-side
   }
   await run(() => saveConfig(changes));
   saving.value = false;
@@ -213,6 +218,31 @@ async function apply() {
     savedFlash.value = true;
     setTimeout(() => (savedFlash.value = false), 2500);
   }
+}
+
+async function toggleSecret(key: string) {
+  const edit = secretEdits[key];
+  if (!edit) return;
+  if (edit.show) {
+    // Re-mask; drop a revealed-but-unedited value so Apply keeps omitting it.
+    edit.show = false;
+    if (edit.value === edit.original) {
+      edit.value = "";
+      edit.original = null;
+    }
+    return;
+  }
+  if (!edit.value && secretConfigured(key)) {
+    try {
+      const v = await revealSecret(key);
+      edit.value = v;
+      edit.original = v;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+      return;
+    }
+  }
+  edit.show = true;
 }
 
 async function svc(op: ServiceOp) {
@@ -301,7 +331,7 @@ onMounted(async () => {
                   :placeholder="secretConfigured(field.key) ? '•••••• configured' : 'not set'"
                   :disabled="secretEdits[field.key].clear"
                 />
-                <Button size="sm" variant="ghost" class="px-2" @click="secretEdits[field.key].show = !secretEdits[field.key].show">
+                <Button size="sm" variant="ghost" class="px-2" @click="toggleSecret(field.key)">
                   {{ secretEdits[field.key].show ? "Hide" : "Show" }}
                 </Button>
                 <Button
