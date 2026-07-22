@@ -68,3 +68,21 @@ export type ServiceOp = "start" | "stop" | "restart" | "enable" | "disable";
 export function serviceAction(op: ServiceOp): Promise<ConfigPayload> {
   return post({ action: "service", op });
 }
+
+/** Fetch a stored secret value (session + CSRF gated server-side). */
+export async function revealSecret(key: string): Promise<string> {
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Csrf-Token": await csrfToken(),
+    },
+    body: JSON.stringify({ action: "reveal", key }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(body?.error ?? `reveal failed: HTTP ${res.status}`);
+  }
+  return String(body?.value ?? "");
+}

@@ -164,6 +164,18 @@ if (!is_array($body)) {
 
 $action = $body['action'] ?? 'save';
 
+if ($action === 'reveal') {
+    // Return a stored secret to the (already session+CSRF authenticated)
+    // webGUI admin — the bearer token exists to be copied into MCP clients.
+    $key = $body['key'] ?? '';
+    if (!in_array($key, SECRET_KEYS, true)) {
+        fail(400, 'not a secret key');
+    }
+    $env = read_env(ENV_FILE);
+    echo json_encode(['key' => $key, 'value' => $env[$key] ?? '']);
+    exit;
+}
+
 if ($action === 'service') {
     // {action: "service", op: "start"|"stop"|"restart"|"enable"|"disable"}
     $op = $body['op'] ?? '';
