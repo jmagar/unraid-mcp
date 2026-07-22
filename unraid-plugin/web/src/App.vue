@@ -243,7 +243,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="unapi @container w-full max-w-[1400px] text-foreground flex flex-col gap-3 pb-4">
+  <div class="unapi @container w-full text-foreground flex flex-col gap-3 pb-4">
     <!-- Tab bar -->
     <div class="flex items-center gap-1 border-b border-border">
       <button
