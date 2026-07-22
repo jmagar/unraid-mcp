@@ -32,29 +32,46 @@ const SECRET_KEYS = [
     'UNRAID_MCP_GOOGLE_ENCRYPTION_KEY',
 ];
 
-/** Writable key pattern: every server env var is namespaced UNRAID_*. */
-const KEY_PATTERN = '/^UNRAID_[A-Z0-9_]{1,64}$/';
-
-/** Keys rendered as first-class form fields (secrets get *_configured flags). */
+/**
+ * The exhaustive set of keys the settings UI may write. Writes are gated on
+ * this list (NOT a broad UNRAID_* prefix) so a value crossing the endpoint
+ * cannot persist unmanaged keys like UNRAID_CREDENTIALS_DIR that alter runtime
+ * behavior the page never exposes. Must stay in sync with web/src/fields.ts.
+ */
 const ALLOWED_KEYS = [
     'UNRAID_API_URL',
     'UNRAID_API_KEY',
     'UNRAID_VERIFY_SSL',
+    'UNRAID_ALLOW_INSECURE_TLS',
     'UNRAID_MCP_TRANSPORT',
     'UNRAID_MCP_HOST',
     'UNRAID_MCP_PORT',
+    'UNRAID_MCP_TAILSCALE_SERVE',
     'UNRAID_MCP_LOG_LEVEL',
+    'UNRAID_MCP_LOG_FILE',
     'UNRAID_MCP_BEARER_TOKEN',
+    'UNRAID_MCP_DISABLE_HTTP_AUTH',
+    'UNRAID_MCP_TRUST_PROXY',
     'UNRAID_MCP_MAX_RESPONSE_BYTES',
     'UNRAID_AUTO_START_SUBSCRIPTIONS',
     'UNRAID_MAX_RECONNECT_ATTEMPTS',
+    'UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS',
+    'UNRAID_SUBSCRIPTION_COLLECT_MAX_BYTES',
+    'UNRAID_SUBSCRIPTION_COLLECT_MAX_SECONDS',
+    'UNRAID_SUBSCRIPTION_CACHE_MAX_AGE_SECONDS',
+    'UNRAID_SUBSCRIPTION_TIMEOUT_MAX_SECONDS',
+    'UNRAID_MCP_ENABLE_RAW_SUBSCRIPTION_PROBE',
     'UNRAID_MCP_GOOGLE_CLIENT_ID',
     'UNRAID_MCP_GOOGLE_CLIENT_SECRET',
     'UNRAID_MCP_GOOGLE_BASE_URL',
     'UNRAID_MCP_GOOGLE_ALLOWED_EMAILS',
     'UNRAID_MCP_GOOGLE_ALLOWED_DOMAINS',
+    'UNRAID_MCP_GOOGLE_ALLOW_ANY_USER',
+    'UNRAID_MCP_GOOGLE_REQUIRED_SCOPES',
+    'UNRAID_MCP_GOOGLE_REDIRECT_PATH',
     'UNRAID_MCP_GOOGLE_JWT_SIGNING_KEY',
     'UNRAID_MCP_GOOGLE_ENCRYPTION_KEY',
+    'UNRAID_MCP_GOOGLE_STORAGE_DIR',
 ];
 
 function fail(int $code, string $msg): void
@@ -93,11 +110,18 @@ function write_env(string $path, array $env): void
         $lines[] = $k . "='" . str_replace("'", "'\\''", (string) $v) . "'";
     }
     $tmp = $path . '.tmp';
-    if (@file_put_contents($tmp, implode("\n", $lines) . "\n") === false) {
+    if (is_link($tmp)) {
+        @unlink($tmp); // never follow a pre-planted symlink
+    }
+    // Create the temp file already restricted (0600) rather than chmod-after,
+    // closing the brief world-readable window. On the FAT32 flash the mount
+    // umask governs the real mode, so this is belt-and-braces.
+    $old = umask(0077);
+    $ok = @file_put_contents($tmp, implode("\n", $lines) . "\n");
+    umask($old);
+    if ($ok === false) {
         fail(500, 'failed to write config');
     }
-    // chmod before rename so the token never exists world-readable; on the
-    // FAT32 flash the mount umask governs, so this is belt-and-braces.
     @chmod($tmp, 0600);
     if (!@rename($tmp, $path)) {
         @unlink($tmp);
@@ -287,7 +311,14 @@ if ($action === 'logs') {
     if (is_readable($log)) {
         exec('tail -n ' . $lines . ' ' . escapeshellarg($log), $out);
     }
-    echo json_encode(['log' => implode("\n", $out)]);
+    // Defense in depth: never surface a secret-looking value even if the
+    // server ever logs one. Redact assignments to *KEY/TOKEN/SECRET names.
+    $text = preg_replace(
+        '/(UNRAID_[A-Z0-9_]*(?:KEY|TOKEN|SECRET)[A-Z0-9_]*\s*[=:]\s*)\S+/i',
+        '$1<redacted>',
+        implode("\n", $out)
+    );
+    echo json_encode(['log' => $text]);
     exit;
 }
 
@@ -324,7 +355,7 @@ if (!is_array($changes)) {
 
 $env = read_env(ENV_FILE);
 foreach ($changes as $key => $value) {
-    if (!preg_match(KEY_PATTERN, $key)) {
+    if (!in_array($key, ALLOWED_KEYS, true)) {
         fail(400, "key not allowed: $key");
     }
     if (!is_string($value)) {

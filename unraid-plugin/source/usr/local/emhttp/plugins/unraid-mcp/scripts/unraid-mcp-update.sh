@@ -38,6 +38,12 @@ latest_tag() {
         | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
+# Compare dotted versions: returns 0 if $1 < $2 (a strict downgrade).
+version_lt() {
+    [ "$1" = "$2" ] && return 1
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
 do_update() {
     local target="${1:-}"
     if [ -z "$target" ]; then
@@ -45,6 +51,20 @@ do_update() {
         [ -z "$target" ] && { echo "error: could not resolve latest release" >&2; exit 1; }
     fi
     local version="${target#v}"
+    if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "error: refusing to install non-release version '${version}'" >&2
+        exit 1
+    fi
+
+    # Refuse rollbacks: a tampered/compromised "latest" that points at an older,
+    # known-vulnerable release must not silently downgrade the running server.
+    local current
+    current="$(installed_version)"
+    if [ "$current" != "unknown" ] && version_lt "$version" "$current"; then
+        echo "error: ${version} is older than the installed ${current}; refusing to downgrade" >&2
+        echo "run 'reset' to revert to the bundled version instead" >&2
+        exit 1
+    fi
 
     # Create the overlay venv layered on the bundled site-packages so heavy
     # shared deps don't need reinstalling — only unraid-mcp and any changed
@@ -54,7 +74,10 @@ do_update() {
         "$BUNDLED_PY" -m venv --system-site-packages "$OVERLAY_DIR"
     fi
 
-    "$OVERLAY_PY" -m pip install --quiet --upgrade --no-cache-dir "unraid-mcp==${version}" >&2
+    # Pin the index explicitly so a stray PIP_INDEX_URL can't redirect the pull;
+    # pip verifies PyPI's own artifact hashes over TLS.
+    "$OVERLAY_PY" -m pip install --quiet --upgrade --no-cache-dir \
+        --index-url https://pypi.org/simple "unraid-mcp==${version}" >&2
     local got
     got="$("$OVERLAY_PY" -c 'import importlib.metadata as m; print(m.version("unraid-mcp"))' 2>/dev/null)"
     if [ "$got" != "$version" ]; then
