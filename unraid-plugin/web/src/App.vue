@@ -462,7 +462,7 @@ onBeforeUnmount(() => setLogAuto(false));
 </script>
 
 <template>
-  <div class="unapi w-full max-w-6xl text-foreground flex flex-col gap-3 pb-4">
+  <div class="unapi @container w-full max-w-[1400px] text-foreground flex flex-col gap-3 pb-4">
     <!-- Connection strip -->
     <div class="rounded-lg border border-border bg-card px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
       <div class="flex items-center gap-2">
@@ -532,7 +532,7 @@ onBeforeUnmount(() => setLogAuto(false));
     <div v-if="loading" class="text-sm text-muted-foreground">Loading configuration…</div>
 
     <template v-else>
-      <div class="grid gap-3 lg:grid-cols-2 items-start">
+      <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
         <component
           :is="section.collapsed ? 'details' : 'section'"
           v-for="section in SECTIONS"
