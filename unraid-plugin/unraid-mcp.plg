@@ -1,0 +1,110 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "unraid-mcp">
+  <!ENTITY author    "jmagar">
+  <!ENTITY version   "VERSION_PLACEHOLDER">
+  <!ENTITY launch    "Settings/UnraidMCP">
+  <!ENTITY txz       "unraid-mcp-VERSION_PLACEHOLDER-x86_64-1.txz">
+  <!ENTITY txzURL    "https://github.com/dinglebear-ai/unraid-mcp/releases/download/vVERSION_PLACEHOLDER/&txz;">
+  <!ENTITY md5       "MD5_PLACEHOLDER">
+  <!ENTITY sha256    "SHA256_PLACEHOLDER">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="https://github.com/dinglebear-ai/unraid-mcp/releases/latest/download/unraid-mcp.plg" min="7.0.0">
+
+<CHANGES>
+###VERSION_PLACEHOLDER
+- Initial unRAID plugin release: MCP server with bundled Python runtime,
+  bearer-token auth (auto-generated), settings page for all configuration.
+</CHANGES>
+
+<!-- Download the package to the flash drive (survives reboot; re-installed each boot). -->
+<FILE Name="&plugin;/&txz;">
+<URL>&txzURL;</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!-- Verify (sha256 on top of the loader's md5), install, bootstrap config. -->
+<FILE Run="/bin/bash">
+<INLINE>
+set -e
+echo "&sha256;  &plugin;/&txz;" | sha256sum -c - || {
+  echo "unraid-mcp: package checksum mismatch — aborting install"
+  rm -f "&plugin;/&txz;"
+  exit 1
+}
+
+upgradepkg --install-new --reinstall "&plugin;/&txz;"
+
+mkdir -p "&plugin;"
+chmod 700 "&plugin;" 2>/dev/null || true
+
+# Service flag — default disabled until the user enables it in Settings.
+if [ ! -f "&plugin;/unraid-mcp.cfg" ]; then
+  echo 'SERVICE="disabled"' > "&plugin;/unraid-mcp.cfg"
+fi
+chmod 600 "&plugin;/unraid-mcp.cfg" 2>/dev/null || true
+
+# Bootstrap the env file ONLY if absent — never clobber user config.
+if [ ! -f "&plugin;/.env" ]; then
+  touch "&plugin;/.env"
+  chmod 600 "&plugin;/.env" 2>/dev/null || true
+
+  # Auto-generate the MCP bearer token.
+  bearer_token="$(head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=')"
+
+  # Auto-provision a local Unraid API key when the unraid-api CLI is present —
+  # zero-paste setup. Falls back to empty (user fills in Settings).
+  api_key=""
+  if command -v unraid-api >/dev/null 2>&amp;1; then
+    api_key="$(unraid-api apikey --create --name unraid-mcp -r admin --json 2>/dev/null | sed -n 's/.*"key":"\([^"]*\)".*/\1/p')" || api_key=""
+  fi
+
+  {
+    echo "# unraid-mcp configuration — managed by the plugin settings page."
+    echo "UNRAID_API_URL='http://127.0.0.1/graphql'"
+    echo "UNRAID_API_KEY='${api_key}'"
+    echo "UNRAID_VERIFY_SSL='false'"
+    echo "UNRAID_MCP_TRANSPORT='streamable-http'"
+    echo "UNRAID_MCP_HOST='0.0.0.0'"
+    echo "UNRAID_MCP_PORT='6970'"
+    echo "UNRAID_MCP_BEARER_TOKEN='${bearer_token}'"
+  } > "&plugin;/.env"
+  chmod 600 "&plugin;/.env" 2>/dev/null || true
+fi
+
+# Wire the service + event scripts (rootfs is RAM — re-done every install/boot).
+chmod +x "&emhttp;/scripts/"*.sh "&emhttp;/scripts/rc.unraid-mcp" "&emhttp;/event/"* 2>/dev/null || true
+ln -sf "&emhttp;/scripts/rc.unraid-mcp" /etc/rc.d/rc.unraid-mcp
+
+# If the array is already mounted (plugin installed on a running system) and
+# the service is enabled, start now instead of waiting for the next boot.
+source "&plugin;/unraid-mcp.cfg" 2>/dev/null || true
+if [ "$SERVICE" = "enabled" ] &amp;&amp; /usr/bin/pgrep -f emhttpd >/dev/null 2>&amp;1 &amp;&amp; mount | grep -q '/mnt/user'; then
+  /etc/rc.d/rc.unraid-mcp start || true
+fi
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " unraid-mcp installed."
+echo " Configure and enable it at Settings -> Unraid MCP."
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+<!-- Uninstall: stop service, remove package + RAM tree. Keeps &plugin; (flash
+     config incl. tokens) so a reinstall picks up where it left off. -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+/etc/rc.d/rc.unraid-mcp stop 2>/dev/null || true
+rm -f /etc/rc.d/rc.unraid-mcp
+removepkg &name; 2>/dev/null || true
+rm -rf "&emhttp;" /usr/local/&name;
+echo "unraid-mcp removed. Config (including tokens) kept at &plugin;."
+</INLINE>
+</FILE>
+
+</PLUGIN>
