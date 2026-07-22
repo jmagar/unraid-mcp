@@ -117,7 +117,7 @@ just setup
 | `UNRAID_MCP_BEARER_TOKEN` | Conditional | — | Static Bearer token for HTTP transports; auto-generated on first start if unset |
 | `UNRAID_MCP_DISABLE_HTTP_AUTH` | No | `false` | Set `true` to skip Bearer auth (use behind a reverse proxy that handles auth) |
 | `UNRAID_MCP_TRUST_PROXY` | Conditional | `false` | Required when disabling HTTP auth while binding a non-loopback interface |
-| `UNRAID_MCP_GOOGLE_CLIENT_ID` | No | — | Google OAuth client ID; setting both client ID and secret replaces Bearer auth for HTTP transports |
+| `UNRAID_MCP_GOOGLE_CLIENT_ID` | No | — | Google OAuth client ID; setting both client ID and secret enables OAuth for HTTP transports (required for claude.ai connectors). An explicitly set `UNRAID_MCP_BEARER_TOKEN` stays valid alongside OAuth |
 | `UNRAID_MCP_GOOGLE_CLIENT_SECRET` | No | — | Google OAuth client secret |
 | `UNRAID_MCP_GOOGLE_BASE_URL` | Conditional | — | Public server base URL, required when Google OAuth is enabled |
 | `UNRAID_MCP_GOOGLE_REQUIRED_SCOPES` | No | `openid` + `userinfo.email` | Comma/space-separated OAuth scopes |

@@ -78,10 +78,26 @@ environment:
 ## Google OAuth (optional)
 
 Set **both** `UNRAID_MCP_GOOGLE_CLIENT_ID` and `UNRAID_MCP_GOOGLE_CLIENT_SECRET` to
-delegate HTTP authentication to Google OAuth (FastMCP's `GoogleProvider`) instead of
-the static bearer token. When active, the bearer-token middleware is **not** installed
-and clients authenticate via the standard OAuth browser flow — there's no static token
-to distribute. Leave these unset to keep bearer-token auth (the default).
+delegate HTTP authentication to Google OAuth (FastMCP's `GoogleProvider`). When
+active, the bearer-token middleware is **not** installed and clients authenticate via
+the standard OAuth browser flow. Leave these unset to keep bearer-token auth (the
+default).
+
+**Coexistence:** if `UNRAID_MCP_BEARER_TOKEN` is *also* explicitly set while OAuth is
+enabled, the static token stays valid alongside OAuth tokens (compared in constant
+time before Google verification). This lets OAuth clients (claude.ai) and
+static-token clients (Claude Code, scripts, gateways) share the same endpoint. The
+token is never auto-generated in OAuth mode — setting it is the opt-in.
+
+### Using with claude.ai custom connectors
+
+claude.ai's custom connector UI only supports OAuth 2.1 with dynamic client
+registration — it cannot send a static bearer token. Enabling Google OAuth mode makes
+the server fully claude.ai-compatible: it serves OAuth discovery metadata
+(`/.well-known/oauth-authorization-server`) and a registration endpoint, so adding
+`https://<your-host>/mcp` as a custom connector walks you through Google sign-in
+(restricted to your allowlist). No client ID needs to be entered in claude.ai's
+connector form.
 
 ### Setup
 
