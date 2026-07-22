@@ -77,7 +77,6 @@ tar -tvJf packages/incus-unraid-7.0.0-46-x86_64-1.txz
 
 ## Remaining provenance limitation
 
-Publication is currently private. `incus.plg` points at the correct repository
-and branch, but anonymous Community Apps/direct-URL installation cannot work
-until the repository or immutable release assets are made public. Publishing
-that asset is an external release action, not something source changes can do.
+Publication is public. Anonymous Community Apps/direct-URL installation can
+fetch both `incus.plg` and its manifest-derived package URL; release validation
+must still verify the downloaded package against the SHA-256 recorded above.
