@@ -65,7 +65,9 @@ do_update() {
 }
 
 do_reset() {
-    rm -rf "$OVERLAY_DIR"
+    # Best-effort; the caller stops the service first so nothing holds files.
+    rm -rf "$OVERLAY_DIR" 2>/dev/null || true
+    [ -e "$OVERLAY_DIR" ] && rm -rf "$OVERLAY_DIR"
     installed_version
 }
 

@@ -227,14 +227,20 @@ if ($action === 'update' || $action === 'resetVersion') {
     } else {
         $cmd = escapeshellarg(UPDATE_SH) . ' reset';
     }
+    // Stop first so the interpreter being replaced isn't in use (an overlay
+    // venv can't be deleted while the running server holds files open in it).
+    $wasRunning = service_running();
+    if ($wasRunning) {
+        exec(RC . ' stop >/dev/null 2>&1');
+    }
     $out = [];
     $code = 0;
     exec($cmd . ' 2>&1', $out, $code);
+    if ($wasRunning) {
+        exec(RC . ' start >/dev/null 2>&1');
+    }
     if ($code !== 0) {
         fail(500, 'update failed: ' . trim(implode(' ', array_slice($out, -3))));
-    }
-    if (service_running()) {
-        exec(RC . ' restart >/dev/null 2>&1');
     }
     echo json_encode(current_payload());
     exit;
