@@ -199,7 +199,6 @@ export const SECTIONS: Section[] = [
   },
   {
     title: "Google OAuth (claude.ai)",
-    collapsed: true,
     col: "right",
     fields: [
       {
