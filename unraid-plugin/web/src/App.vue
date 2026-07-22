@@ -367,10 +367,10 @@ onBeforeUnmount(() => {
         <Button size="sm" :disabled="saving" @click="apply">{{ saving ? "Applying…" : "Apply" }}</Button>
       </div>
 
-      <!-- Explicit left/right columns so each stacks independently (no
-           row-alignment gaps); Google OAuth lives in the right column. -->
-      <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
-        <div v-for="col in (['left', 'right'] as const)" :key="col" class="flex flex-col gap-3 min-w-0">
+      <!-- Three independent columns so each stacks freely (no row-alignment
+           gaps); Google OAuth lives in the third column. -->
+      <div class="grid gap-3 @min-[700px]:grid-cols-2 @min-[1100px]:grid-cols-3 items-start">
+        <div v-for="col in (['a', 'b', 'c'] as const)" :key="col" class="flex flex-col gap-3 min-w-0">
           <component
             :is="section.collapsed ? 'details' : 'section'"
             v-for="section in SECTIONS.filter((s) => s.col === col)"

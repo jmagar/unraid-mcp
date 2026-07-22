@@ -12,7 +12,7 @@ import { fetchLogs } from "./lib/config-client";
 
 const raw = ref("");
 const logError = ref("");
-const auto = ref(false);
+const auto = ref(true); // Follow on by default
 const loading = ref(false);
 const lineCount = ref(300);
 const pane = ref<HTMLElement | null>(null);
@@ -136,14 +136,14 @@ function setAuto(on: boolean) {
   }
 }
 
-onMounted(() => void refresh());
+onMounted(() => setAuto(true)); // start following immediately
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);
 });
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 rounded-lg border p-3" style="background: #07131c; border-color: #1d3d4e">
+  <div class="flex flex-col gap-2 rounded-lg border p-3" style="background: #07131c; border-color: #1d3d4e; height: calc(100vh - 190px); min-height: 320px">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span class="text-[11px] font-semibold tracking-[0.08em] uppercase" style="color: #a7bcc9">Server log</span>
@@ -184,8 +184,8 @@ onBeforeUnmount(() => {
 
     <div
       ref="pane"
-      class="overflow-auto rounded-md font-mono text-xs leading-relaxed"
-      style="background: #07111a; border: 1px solid #142a37; height: min(70vh, 640px)"
+      class="flex-1 min-h-0 overflow-auto rounded-md font-mono text-xs leading-relaxed"
+      style="background: #07111a; border: 1px solid #142a37"
     >
       <div
         v-for="(ln, i) in lines"

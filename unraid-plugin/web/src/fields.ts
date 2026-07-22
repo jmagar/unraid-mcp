@@ -12,15 +12,15 @@ export interface FieldDef {
 export interface Section {
   title: string;
   collapsed?: boolean;
-  /** Which settings column this section renders in. */
-  col: "left" | "right";
+  /** Which of the three settings columns this section renders in. */
+  col: "a" | "b" | "c";
   fields: FieldDef[];
 }
 
 export const SECTIONS: Section[] = [
   {
     title: "Unraid API",
-    col: "left",
+    col: "a",
     fields: [
       {
         key: "UNRAID_API_URL",
@@ -52,7 +52,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: "MCP server",
-    col: "right",
+    col: "b",
     fields: [
       {
         key: "UNRAID_MCP_TRANSPORT",
@@ -86,7 +86,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: "Authentication",
-    col: "left",
+    col: "a",
     fields: [
       {
         key: "UNRAID_MCP_BEARER_TOKEN",
@@ -110,7 +110,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: "Tuning",
-    col: "right",
+    col: "b",
     fields: [
       {
         key: "UNRAID_MCP_LOG_LEVEL",
@@ -144,7 +144,7 @@ export const SECTIONS: Section[] = [
   {
     title: "Subscription tuning",
     collapsed: true,
-    col: "left",
+    col: "c",
     fields: [
       {
         key: "UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS",
@@ -199,7 +199,7 @@ export const SECTIONS: Section[] = [
   },
   {
     title: "Google OAuth (claude.ai)",
-    col: "right",
+    col: "c",
     fields: [
       {
         key: "UNRAID_MCP_GOOGLE_CLIENT_ID",
