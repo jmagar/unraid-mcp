@@ -16,6 +16,7 @@ Thumbs.db
 *~
 .vscode/
 .idea/
+.worktrees/
 
 # Logs
 *.log
