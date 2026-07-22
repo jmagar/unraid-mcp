@@ -30,7 +30,10 @@ const SECRET_KEYS = [
     'UNRAID_MCP_GOOGLE_ENCRYPTION_KEY',
 ];
 
-/** Keys the UI may write. Everything else in the file is preserved untouched. */
+/** Writable key pattern: every server env var is namespaced UNRAID_*. */
+const KEY_PATTERN = '/^UNRAID_[A-Z0-9_]{1,64}$/';
+
+/** Keys rendered as first-class form fields (secrets get *_configured flags). */
 const ALLOWED_KEYS = [
     'UNRAID_API_URL',
     'UNRAID_API_KEY',
@@ -209,7 +212,7 @@ if (!is_array($changes)) {
 
 $env = read_env(ENV_FILE);
 foreach ($changes as $key => $value) {
-    if (!in_array($key, ALLOWED_KEYS, true)) {
+    if (!preg_match(KEY_PATTERN, $key)) {
         fail(400, "key not allowed: $key");
     }
     if (!is_string($value)) {
@@ -218,8 +221,8 @@ foreach ($changes as $key => $value) {
     if (preg_match('/[\r\n]/', $value)) {
         fail(400, "value for $key must not contain newlines");
     }
-    if ($value === '' && in_array($key, SECRET_KEYS, true)) {
-        unset($env[$key]); // explicit clear
+    if ($value === '') {
+        unset($env[$key]); // empty value removes the line
     } else {
         $env[$key] = $value;
     }

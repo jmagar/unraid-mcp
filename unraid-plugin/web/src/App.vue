@@ -135,6 +135,8 @@ const busy = ref(false);
 const error = ref("");
 const savedFlash = ref(false);
 const copied = ref(false);
+const advancedText = ref("");
+const advancedError = ref("");
 
 const secretKeys = SECTIONS.flatMap((s) => s.fields)
   .filter((f) => f.kind === "secret")
@@ -158,6 +160,31 @@ function hydrate(p: ConfigPayload) {
       }
     }
   }
+  advancedText.value = Object.entries(p.extra)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("\n");
+}
+
+/** Parse the advanced textarea into {key: value}; sets advancedError on bad lines. */
+function parseAdvanced(): Record<string, string> | null {
+  advancedError.value = "";
+  const out: Record<string, string> = {};
+  for (const raw of advancedText.value.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    const key = eq === -1 ? line : line.slice(0, eq).trim();
+    if (!/^UNRAID_[A-Z0-9_]{1,64}$/.test(key)) {
+      advancedError.value = `Not a valid variable name: ${key || raw}`;
+      return null;
+    }
+    if (eq === -1) {
+      advancedError.value = `Missing '=' after ${key}`;
+      return null;
+    }
+    out[key] = line.slice(eq + 1).trim();
+  }
+  return out;
 }
 
 function secretConfigured(key: string): boolean {
@@ -204,8 +231,14 @@ async function run(fn: () => Promise<ConfigPayload>) {
 }
 
 async function apply() {
+  const advanced = parseAdvanced();
+  if (advanced === null) return;
   saving.value = true;
-  const changes: Record<string, string> = { ...form };
+  const changes: Record<string, string> = { ...form, ...advanced };
+  // A key previously shown in Advanced but now removed is an explicit delete.
+  for (const key of Object.keys(payload.value?.extra ?? {})) {
+    if (!(key in advanced)) changes[key] = "";
+  }
   for (const key of secretKeys) {
     const edit = secretEdits[key];
     if (edit?.clear) changes[key] = "";
@@ -377,11 +410,31 @@ onMounted(async () => {
         </section>
       </div>
 
-      <!-- Unmanaged keys: single quiet line, only when present -->
-      <p v-if="payload && Object.keys(payload.extra).length" class="text-xs text-muted-foreground px-1">
-        Also in <span class="font-mono">/boot/config/plugins/unraid-mcp/.env</span> (unmanaged, preserved on save):
-        <span class="font-mono">{{ Object.keys(payload.extra).join(", ") }}</span>
-      </p>
+      <!-- Advanced: every other env var, editable as key=value lines -->
+      <section class="rounded-lg border border-border bg-card p-3 flex flex-col gap-2">
+        <div class="flex items-baseline justify-between">
+          <h3 class="text-[11px] font-semibold tracking-[0.08em] uppercase text-muted-foreground">Advanced</h3>
+          <span class="text-xs text-muted-foreground">
+            Any <span class="font-mono">UNRAID_*</span> variable, one per line — applied to
+            <span class="font-mono">.env</span> with the form fields
+          </span>
+        </div>
+        <textarea
+          v-model="advancedText"
+          rows="3"
+          spellcheck="false"
+          class="w-full resize-y rounded-md border border-input bg-background px-3 py-1.5 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-hidden"
+          placeholder="UNRAID_SUBSCRIPTION_COLLECT_MAX_EVENTS=100"
+        ></textarea>
+        <p v-if="advancedError" class="text-sm text-destructive">{{ advancedError }}</p>
+        <div class="col-span-2 -mt-1">
+          <HelpText>
+            Full reference in the project README. Secret-typed variables (Google OAuth keys) can be
+            set here but are write-only: they disappear from this box after saving and stay stored.
+            Removing a listed line deletes that variable on Apply.
+          </HelpText>
+        </div>
+      </section>
     </template>
   </div>
 </template>
