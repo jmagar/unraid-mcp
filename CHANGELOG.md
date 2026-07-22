@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.4.1...v2.5.0) (2026-07-22)
+
+
+### Features
+
+* **auth:** accept static bearer token alongside Google OAuth ([#197](https://github.com/dinglebear-ai/unraid-mcp/issues/197)) ([ac5d9b2](https://github.com/dinglebear-ai/unraid-mcp/commit/ac5d9b24d13d10cb64344d2b142fa93a9f67112c))
+
+
+### Documentation
+
+* update auth docs for OAuth+bearer coexistence and claude.ai connectors ([#199](https://github.com/dinglebear-ai/unraid-mcp/issues/199)) ([f40b5c5](https://github.com/dinglebear-ai/unraid-mcp/commit/f40b5c5ef0e1089f6208218bbd3a3527279071e3))
+
 ## [2.4.1](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.4.0...v2.4.1) (2026-07-21)
 
 
