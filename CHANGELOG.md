@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.5.0...v2.6.0) (2026-07-22)
+
+
+### Features
+
+* **plugin:** make every UNRAID_* env var configurable from settings ([#206](https://github.com/dinglebear-ai/unraid-mcp/issues/206)) ([2f6489c](https://github.com/dinglebear-ai/unraid-mcp/commit/2f6489c348fee6d75fe01940525511cfe96387b9))
+* **plugin:** scaffold native unRAID plugin (.plg + txz + settings UI) ([#201](https://github.com/dinglebear-ai/unraid-mcp/issues/201)) ([685e325](https://github.com/dinglebear-ai/unraid-mcp/commit/685e3250bc7e8df1135cdf316269d80477c43405))
+* **plugin:** single-viewport settings page polish ([#204](https://github.com/dinglebear-ai/unraid-mcp/issues/204)) ([9751b32](https://github.com/dinglebear-ai/unraid-mcp/commit/9751b32d12d14b12779affc08e78f60ec83d35f9))
+
+
+### Bug Fixes
+
+* **ci:** wait for PyPI visibility before MCP Registry publish ([#200](https://github.com/dinglebear-ai/unraid-mcp/issues/200)) ([5580b41](https://github.com/dinglebear-ai/unraid-mcp/commit/5580b41bf89eb48328134c53e695ac467c0a95bb))
+* **plugin:** harden install bootstrap after live testing on Unraid 7.3.1 ([#203](https://github.com/dinglebear-ai/unraid-mcp/issues/203)) ([76d501e](https://github.com/dinglebear-ai/unraid-mcp/commit/76d501ea7d9cd52b41638c2c918797966bc0c323))
+* **plugin:** Show button reveals stored secrets ([#205](https://github.com/dinglebear-ai/unraid-mcp/issues/205)) ([5a879fb](https://github.com/dinglebear-ai/unraid-mcp/commit/5a879fb12f8339146004756119435e656dd1f103))
+
 ## [2.5.0](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.4.1...v2.5.0) (2026-07-22)
 
 
