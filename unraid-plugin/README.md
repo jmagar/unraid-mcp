@@ -36,7 +36,7 @@ page. Personal-use distribution for now (no Community Apps).
   `/var/log/unraid-mcp/server.log` (5 MB rotation).
 - Install auto-generates `UNRAID_MCP_BEARER_TOKEN` and, when the
   `unraid-api` CLI is present, auto-provisions `UNRAID_API_KEY` via
-  `unraid-api apikey --create --name unraid-mcp -r admin --json` — zero-paste
+  `unraid-api apikey --create --name unraidmcp -r admin --json` — zero-paste
   setup.
 
 ## Settings page
