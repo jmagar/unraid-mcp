@@ -51,6 +51,8 @@ from ..config.settings import CREDENTIALS_DIR
 
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from fastmcp.server.auth.providers.google import GoogleProvider
     from key_value.aio.protocols.key_value import AsyncKeyValue
     from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -287,16 +289,25 @@ class _AuthorizedGoogleTokenVerifier:
 class _StaticBearerFallbackVerifier:
     """Accept the pre-shared bearer token alongside Google OAuth tokens.
 
-    Checked before Google verification: the static token is compared in
-    constant time and, on match, mapped to a synthetic principal without any
-    network round-trip. Everything else delegates to the wrapped Google
-    verifier (including its email/domain authorization). This only exists when
-    UNRAID_MCP_BEARER_TOKEN is explicitly configured next to Google OAuth —
-    the operator's opt-in to running both auth modes at once.
+    Installed over ``OAuthProxy.load_access_token`` — the single request-time
+    verification entry point (``verify_token`` delegates to it). That layer
+    first checks the FastMCP-issued JWT signature, which a static token can
+    never pass, so the fallback must sit ABOVE it: the static token is compared
+    in constant time and, on match, mapped to a synthetic principal without any
+    network round-trip. Everything else delegates to the captured original
+    (JWT check → upstream Google validation → email/domain allowlist). This
+    only exists when UNRAID_MCP_BEARER_TOKEN is explicitly configured next to
+    Google OAuth — the operator's opt-in to running both auth modes at once.
     """
 
-    def __init__(self, wrapped: TokenVerifier, *, static_token: str, scopes: list[str]) -> None:
-        self._wrapped = wrapped
+    def __init__(
+        self,
+        wrapped_verify: Callable[[str], Awaitable[AccessToken | None]],
+        *,
+        static_token: str,
+        scopes: list[str],
+    ) -> None:
+        self._wrapped_verify = wrapped_verify
         self._static_token = static_token.encode()
         self._scopes = list(scopes)
 
@@ -310,7 +321,7 @@ class _StaticBearerFallbackVerifier:
                 scopes=self._scopes,
                 expires_at=None,
             )
-        return await self._wrapped.verify_token(token)
+        return await self._wrapped_verify(token)
 
 
 _identity_verifiers = weakref.WeakSet()
@@ -497,17 +508,25 @@ def build_google_provider() -> GoogleProvider | None:
     _install_authorized_token_verifier(provider, verifier)
 
     # Coexistence opt-in: a configured static bearer token stays valid next to
-    # OAuth. The fallback wraps the (already installed and compatibility-checked)
-    # authorized verifier, so the plain setattr here reuses that guarantee. It is
+    # OAuth. Request auth flows through OAuthProxy.load_access_token (which
+    # verifies the FastMCP-issued JWT first — a static token can never pass
+    # it), so the fallback shadows that bound method on the instance and
+    # delegates non-matching tokens to the captured original. It is
     # intentionally NOT added to _identity_verifiers — it owns no HTTP client.
     static_token = (_settings.UNRAID_MCP_BEARER_TOKEN or "").strip()
     if static_token:
+        original_load = provider.load_access_token
+        if not callable(original_load):  # pragma: no cover - fail closed
+            raise GoogleOAuthConfigError(
+                "Installed FastMCP is incompatible with static-bearer coexistence: "
+                "OAuthProxy.load_access_token is unavailable."
+            )
         fallback = _StaticBearerFallbackVerifier(
-            provider._token_validator,
+            original_load,
             static_token=static_token,
             scopes=scopes,
         )
-        setattr(provider, "_token_validator", fallback)  # noqa: B010 - compatibility adapter
+        setattr(provider, "load_access_token", fallback.verify_token)  # noqa: B010 - compatibility adapter
 
     logger.info(
         "Google OAuth enabled (base_url=%s, scopes=%s, redirect_path=%s, persistence=%s, authz=%s, static_bearer=%s)",
