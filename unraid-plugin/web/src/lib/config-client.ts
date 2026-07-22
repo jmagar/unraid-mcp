@@ -26,11 +26,17 @@ export interface TailscaleState {
   serveActive: boolean;
 }
 
+export interface VersionState {
+  installed: string;
+  overlay: boolean;
+}
+
 export interface ConfigPayload {
   config: Record<string, string | boolean>;
   extra: Record<string, string>;
   service: ServiceState;
   tailscale?: TailscaleState;
+  version?: VersionState;
 }
 
 async function csrfToken(): Promise<string> {
@@ -110,4 +116,35 @@ export async function fetchLogs(lines = 200): Promise<string> {
     throw new Error(body?.error ?? `log fetch failed: HTTP ${res.status}`);
   }
   return String(body?.log ?? "");
+}
+
+/** Ask GitHub for the latest release tag (explicit user action). */
+export async function checkUpdate(): Promise<string> {
+  return (await postJson({ action: "checkUpdate" })).latest ?? "";
+}
+
+/** Install a version (empty string = latest) into the array overlay venv. */
+export async function updateServer(version: string): Promise<ConfigPayload> {
+  return post({ action: "update", version });
+}
+
+/** Remove the overlay venv, reverting to the plugin-bundled version. */
+export async function resetServer(): Promise<ConfigPayload> {
+  return post({ action: "resetVersion" });
+}
+
+/** POST returning a raw JSON object (not the full ConfigPayload). */
+async function postJson(payload: object): Promise<Record<string, string>> {
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Csrf-Token": await csrfToken(),
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.error ?? `request failed: HTTP ${res.status}`);
+  return (body ?? {}) as Record<string, string>;
 }

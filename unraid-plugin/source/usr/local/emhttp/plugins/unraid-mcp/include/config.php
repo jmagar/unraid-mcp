@@ -20,6 +20,7 @@ const CFG_DIR = '/boot/config/plugins/unraid-mcp';
 const ENV_FILE = CFG_DIR . '/.env';
 const CFG_FILE = CFG_DIR . '/unraid-mcp.cfg';
 const RC = '/etc/rc.d/rc.unraid-mcp';
+const UPDATE_SH = '/usr/local/emhttp/plugins/unraid-mcp/scripts/unraid-mcp-update.sh';
 
 /** Env keys whose values must never be sent back to the browser. */
 const SECRET_KEYS = [
@@ -139,6 +140,16 @@ function tailscale_info(): array
     return ['available' => $dns !== '', 'dnsName' => $dns, 'serveActive' => $serveActive];
 }
 
+function version_info(): array
+{
+    $installed = trim((string) @shell_exec(escapeshellarg(UPDATE_SH) . ' installed 2>/dev/null'));
+    $overlay = trim((string) @shell_exec(escapeshellarg(UPDATE_SH) . ' which 2>/dev/null'));
+    return [
+        'installed' => $installed ?: 'unknown',
+        'overlay' => str_contains($overlay, '/appdata/'),
+    ];
+}
+
 function current_payload(): array
 {
     $env = read_env(ENV_FILE);
@@ -166,6 +177,7 @@ function current_payload(): array
             'running' => service_running(),
         ],
         'tailscale' => tailscale_info(),
+        'version' => version_info(),
     ];
 }
 
@@ -195,6 +207,36 @@ if ($action === 'reveal') {
     }
     $env = read_env(ENV_FILE);
     echo json_encode(['key' => $key, 'value' => $env[$key] ?? '']);
+    exit;
+}
+
+if ($action === 'checkUpdate') {
+    // Contacts GitHub — kept behind an explicit user click, not in every GET.
+    $latest = trim((string) @shell_exec(escapeshellarg(UPDATE_SH) . ' latest 2>/dev/null'));
+    echo json_encode(['latest' => $latest]);
+    exit;
+}
+
+if ($action === 'update' || $action === 'resetVersion') {
+    if ($action === 'update') {
+        $ver = (string) ($body['version'] ?? '');
+        if ($ver !== '' && !preg_match('/^v?\\d+\\.\\d+\\.\\d+$/', $ver)) {
+            fail(400, 'invalid version');
+        }
+        $cmd = escapeshellarg(UPDATE_SH) . ' update ' . escapeshellarg($ver);
+    } else {
+        $cmd = escapeshellarg(UPDATE_SH) . ' reset';
+    }
+    $out = [];
+    $code = 0;
+    exec($cmd . ' 2>&1', $out, $code);
+    if ($code !== 0) {
+        fail(500, 'update failed: ' . trim(implode(' ', array_slice($out, -3))));
+    }
+    if (service_running()) {
+        exec(RC . ' restart >/dev/null 2>&1');
+    }
+    echo json_encode(current_payload());
     exit;
 }
 

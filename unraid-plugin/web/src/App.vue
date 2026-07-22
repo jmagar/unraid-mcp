@@ -2,11 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Badge, Button, HelpText, Input, Label, Select, Switch } from "./components/ui";
 import {
+  checkUpdate,
   fetchLogs,
   loadConfig,
+  resetServer,
   revealSecret,
   saveConfig,
   serviceAction,
+  updateServer,
   type ConfigPayload,
   type ServiceOp,
 } from "./lib/config-client";
@@ -302,6 +305,9 @@ const logText = ref("");
 const logOpen = ref(false);
 const logAuto = ref(false);
 let logTimer: ReturnType<typeof setInterval> | null = null;
+const latestVersion = ref("");
+const checkingUpdate = ref(false);
+const updating = ref(false);
 
 const secretKeys = SECTIONS.flatMap((s) => s.fields)
   .filter((f) => f.kind === "secret")
@@ -332,6 +338,11 @@ function secretConfigured(key: string): boolean {
 }
 
 const service = computed(() => payload.value?.service ?? { enabled: false, running: false });
+const version = computed(() => payload.value?.version ?? { installed: "unknown", overlay: false });
+const updateAvailable = computed(() => {
+  const l = latestVersion.value.replace(/^v/, "");
+  return l !== "" && l !== version.value.installed;
+});
 const tailscale = computed(
   () => payload.value?.tailscale ?? { available: false, dnsName: "", serveActive: false },
 );
@@ -428,6 +439,29 @@ async function svc(op: ServiceOp) {
   busy.value = false;
 }
 
+async function doCheckUpdate() {
+  checkingUpdate.value = true;
+  error.value = "";
+  try {
+    latestVersion.value = await checkUpdate();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  }
+  checkingUpdate.value = false;
+}
+
+async function doUpdate(toLatest: boolean) {
+  updating.value = true;
+  await run(() => updateServer(toLatest ? latestVersion.value.replace(/^v/, "") : ""));
+  updating.value = false;
+}
+
+async function doReset() {
+  updating.value = true;
+  await run(() => resetServer());
+  updating.value = false;
+}
+
 async function refreshLogs() {
   try {
     logText.value = (await fetchLogs(300)) || "(log is empty)";
@@ -510,6 +544,28 @@ onBeforeUnmount(() => setLogAuto(false));
 
     <div v-if="error" role="alert" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
       {{ error }}
+    </div>
+
+    <!-- Version / self-update -->
+    <div class="rounded-lg border border-border bg-card px-4 py-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <span class="text-muted-foreground">Server version</span>
+      <span class="font-mono">{{ version.installed }}</span>
+      <Badge v-if="version.overlay" variant="gray" size="sm">updated</Badge>
+      <span v-if="latestVersion" class="text-muted-foreground">
+        latest <span class="font-mono text-foreground">{{ latestVersion.replace(/^v/, "") }}</span>
+      </span>
+      <div class="ms-auto flex items-center gap-2">
+        <span v-if="updateAvailable" class="text-primary">Update available</span>
+        <Button size="sm" variant="ghost" :disabled="checkingUpdate || updating" @click="doCheckUpdate">
+          {{ checkingUpdate ? "Checking…" : "Check for updates" }}
+        </Button>
+        <Button v-if="updateAvailable" size="sm" :disabled="updating" @click="doUpdate(true)">
+          {{ updating ? "Updating…" : `Update to ${latestVersion.replace(/^v/, "")}` }}
+        </Button>
+        <Button v-if="version.overlay" size="sm" variant="outline" :disabled="updating" @click="doReset">
+          Revert to bundled
+        </Button>
+      </div>
     </div>
 
     <!-- Log viewer -->

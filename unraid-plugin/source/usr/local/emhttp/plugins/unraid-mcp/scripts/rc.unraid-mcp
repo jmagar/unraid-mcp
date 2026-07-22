@@ -36,6 +36,13 @@ env_get() {
 
 TAILSCALE_BIN="/usr/local/sbin/tailscale"
 
+# Prefer a self-updated overlay venv on the array over the bundled interpreter,
+# so `Update` in the settings page survives reboots without a plugin rebuild.
+OVERLAY_PY="/mnt/user/appdata/unraid-mcp/venv/bin/python3"
+server_python() {
+    if [ -x "$OVERLAY_PY" ]; then echo "$OVERLAY_PY"; else echo "${PREFIX}/python/bin/python3"; fi
+}
+
 # Tailscale Serve integration (rides the official Tailscale Unraid plugin's
 # daemon). Serves the MCP port as HTTPS on the tailnet under a dedicated
 # port so existing serve config on 443 is never touched.
@@ -78,13 +85,15 @@ start() {
         log "already running (pid $(cat "${PID_FILE}"))"
         return 0
     fi
-    if [ ! -x "${PREFIX}/python/bin/python3" ]; then
-        log "FATAL: bundled python missing at ${PREFIX}/python/bin/python3"
+    local py
+    py="$(server_python)"
+    if [ ! -x "$py" ]; then
+        log "FATAL: server python missing at ${py}"
         return 1
     fi
     rotate_log
     log "starting unraid-mcp server"
-    setsid "${PREFIX}/python/bin/python3" -m unraid_mcp.main >>"${LOG_FILE}" 2>&1 &
+    setsid "$py" -m unraid_mcp.main >>"${LOG_FILE}" 2>&1 &
     local pid=$!
     echo "$pid" >"${PID_FILE}"
 
