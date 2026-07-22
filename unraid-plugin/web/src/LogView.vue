@@ -11,14 +11,14 @@ import { Button, Switch } from "./components/ui";
 import { fetchLogs } from "./lib/config-client";
 
 const raw = ref("");
+const logError = ref("");
 const auto = ref(false);
 const loading = ref(false);
 const lineCount = ref(300);
+const pane = ref<HTMLElement | null>(null);
 let timer: ReturnType<typeof setInterval> | null = null;
-let pane: HTMLElement | null = null;
-const paneRef = (el: unknown) => {
-  pane = el as HTMLElement | null;
-};
+let fails = 0;
+const MAX_FOLLOW_FAILS = 5;
 
 // Aurora dark tokens (registry/aurora/styles/aurora.css) + CLI violet.
 const C = {
@@ -34,7 +34,8 @@ const C = {
   ok: "#7dd3c7",
 };
 
-const LEVEL_COLOR: Record<string, string> = {
+type Level = "DEBUG" | "INFO" | "NOTICE" | "WARNING" | "WARN" | "ERROR" | "CRITICAL" | "FATAL";
+const LEVEL_COLOR: Record<Level, string> = {
   DEBUG: C.debug,
   INFO: C.info,
   NOTICE: C.notice,
@@ -44,6 +45,7 @@ const LEVEL_COLOR: Record<string, string> = {
   CRITICAL: C.critical,
   FATAL: C.critical,
 };
+const BOLD: ReadonlySet<string> = new Set(["ERROR", "CRITICAL", "FATAL"]);
 
 interface Seg {
   t: string;
@@ -51,9 +53,12 @@ interface Seg {
   b?: boolean;
 }
 
-// One combined scanner; classify each match by which group hit.
+// One combined scanner with named groups; classify each match by which fired.
+// The http-status branch captures its `"<space>` prefix separately (emitted as
+// message text) instead of a lookbehind, so the pattern parses on older
+// engines too.
 const TOKEN_RE =
-  /(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)|\b(DEBUG|INFO|NOTICE|WARNING|WARN|ERROR|CRITICAL|FATAL)\b|(?<=" )([1-5]\d{2})\b|\b((?:unraid_mcp|rc\.unraid-mcp|uvicorn|fastmcp)[\w.-]*)/g;
+  /(?<ts>\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?)|\b(?<lvl>DEBUG|INFO|NOTICE|WARNING|WARN|ERROR|CRITICAL|FATAL)\b|(?<pre>"\s+)(?<status>[1-5]\d{2})\b|\b(?<mod>(?:unraid_mcp|rc\.unraid-mcp|uvicorn|fastmcp)[\w.-]*)/g;
 
 function tokenize(line: string): Seg[] {
   const segs: Seg[] = [];
@@ -61,18 +66,19 @@ function tokenize(line: string): Seg[] {
   let m: RegExpExecArray | null;
   TOKEN_RE.lastIndex = 0;
   while ((m = TOKEN_RE.exec(line)) !== null) {
+    const g = m.groups!;
     if (m.index > last) segs.push({ t: line.slice(last, m.index), c: C.msg });
-    if (m[1]) {
-      segs.push({ t: m[1], c: C.ts });
-    } else if (m[2]) {
-      const col = LEVEL_COLOR[m[2]] ?? C.msg;
-      segs.push({ t: m[2], c: col, b: col === C.error || col === C.critical });
-    } else if (m[3]) {
-      const code = Number(m[3]);
+    if (g.ts) {
+      segs.push({ t: g.ts, c: C.ts });
+    } else if (g.lvl) {
+      segs.push({ t: g.lvl, c: LEVEL_COLOR[g.lvl as Level], b: BOLD.has(g.lvl) });
+    } else if (g.status) {
+      segs.push({ t: g.pre, c: C.msg }); // the "<space> prefix, uncolored
+      const code = Number(g.status);
       const col = code < 300 ? C.ok : code < 400 ? C.info : code < 500 ? C.warn : C.error;
-      segs.push({ t: m[3], c: col, b: code >= 500 });
-    } else if (m[4]) {
-      segs.push({ t: m[4], c: C.module });
+      segs.push({ t: g.status, c: col, b: code >= 500 });
+    } else if (g.mod) {
+      segs.push({ t: g.mod, c: C.module });
     }
     last = m.index + m[0].length;
   }
@@ -84,7 +90,7 @@ function tokenize(line: string): Seg[] {
 /** Severity of a whole line, for the left accent rail. */
 function lineLevel(line: string): string {
   const m = line.match(/\b(DEBUG|INFO|NOTICE|WARNING|WARN|ERROR|CRITICAL|FATAL)\b/);
-  return m ? (LEVEL_COLOR[m[1]] ?? "transparent") : "transparent";
+  return m ? LEVEL_COLOR[m[1] as Level] : "transparent";
 }
 
 const lines = computed(() => {
@@ -94,14 +100,27 @@ const lines = computed(() => {
 });
 
 async function refresh(scroll = true) {
+  // Drop overlapping ticks: only one request is ever in flight, which also
+  // rules out an older response clobbering a newer one. The next Follow tick
+  // retries in 3s.
+  if (loading.value) return;
   loading.value = true;
   try {
     raw.value = (await fetchLogs(lineCount.value)) || "(log is empty)";
+    logError.value = "";
+    fails = 0;
   } catch (e) {
-    raw.value = `failed to fetch log: ${e instanceof Error ? e.message : e}`;
+    // Keep the last-good logs on screen; surface the failure as a banner.
+    logError.value = `failed to fetch log: ${e instanceof Error ? e.message : e}`;
+    // Stop hammering a dead endpoint (expired session / service down) forever.
+    if (auto.value && ++fails >= MAX_FOLLOW_FAILS) setAuto(false);
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
-  if (scroll && pane) requestAnimationFrame(() => (pane!.scrollTop = pane!.scrollHeight));
+  if (scroll && pane.value) {
+    const el = pane.value;
+    requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
+  }
 }
 
 function setAuto(on: boolean) {
@@ -111,6 +130,7 @@ function setAuto(on: boolean) {
     timer = null;
   }
   if (on) {
+    fails = 0;
     void refresh();
     timer = setInterval(() => void refresh(), 3000);
   }
@@ -154,7 +174,16 @@ onBeforeUnmount(() => {
     </div>
 
     <div
-      :ref="paneRef"
+      v-if="logError"
+      role="alert"
+      class="rounded-md px-2.5 py-1.5 text-xs"
+      style="background: #2a1720; border: 1px solid #6e3a46; color: #d9909a"
+    >
+      {{ logError }}
+    </div>
+
+    <div
+      ref="pane"
       class="overflow-auto rounded-md font-mono text-xs leading-relaxed"
       style="background: #07111a; border: 1px solid #142a37; height: min(70vh, 640px)"
     >

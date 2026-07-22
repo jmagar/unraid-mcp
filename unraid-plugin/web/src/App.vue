@@ -31,6 +31,9 @@ const error = ref("");
 const savedFlash = ref(false);
 const copied = ref(false);
 let statsTimer: ReturnType<typeof setInterval> | null = null;
+let statsBusy = false;
+let statFails = 0;
+const statsStale = ref(false);
 const latestVersion = ref("");
 const checkingUpdate = ref(false);
 const updating = ref(false);
@@ -197,14 +200,22 @@ async function doReset() {
 
 /** Poll cheap process stats while the dashboard is visible. */
 async function pollStats() {
+  if (statsBusy) return; // drop overlapping ticks
+  statsBusy = true;
   try {
     const s = await fetchStats();
     if (payload.value) {
       payload.value.service = s.service;
-      payload.value.process = s.process;
+      if (s.process) payload.value.process = s.process;
     }
+    statFails = 0;
+    statsStale.value = false;
   } catch {
-    /* transient; next tick retries */
+    // A single miss is a blip; after a few, mark the tiles stale so they stop
+    // asserting live values the poll can no longer verify.
+    if (++statFails >= 3) statsStale.value = true;
+  } finally {
+    statsBusy = false;
   }
 }
 function setStatsPolling(on: boolean) {
@@ -293,7 +304,10 @@ onBeforeUnmount(() => {
                 <div class="text-xs text-muted-foreground">Uptime</div>
               </div>
             </div>
-            <p class="text-xs text-muted-foreground">PID {{ proc.pid || "—" }} · updates live</p>
+            <p class="text-xs text-muted-foreground">
+              PID {{ proc.pid || "—" }} ·
+              <span :style="statsStale ? 'color:#c6a36b' : ''">{{ statsStale ? "stale — can't reach server" : "updates live" }}</span>
+            </p>
           </section>
         </div>
 

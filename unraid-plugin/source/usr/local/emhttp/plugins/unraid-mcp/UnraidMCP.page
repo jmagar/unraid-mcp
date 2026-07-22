@@ -18,8 +18,13 @@ $mcp_csrf = $var['csrf_token'] ?? '';
 if ($mcp_csrf === '') {
     $mcp_csrf = @parse_ini_file('/usr/local/emhttp/state/var.ini')['csrf_token'] ?? '';
 }
+// Cache-bust the bundle by its mtime: the asset filename is stable, so without
+// this the browser serves a stale bundle after every plugin update. mtime
+// changes on each redeploy and is otherwise stable (so normal caching holds).
+$mcp_web = '/usr/local/emhttp/plugins/unraid-mcp/web';
+$mcp_v = @filemtime("$mcp_web/unraid-mcp-settings.js") ?: '0';
 ?>
 <script>window.csrf_token = "<?= htmlspecialchars($mcp_csrf, ENT_QUOTES) ?>";</script>
-<link rel="stylesheet" href="/plugins/unraid-mcp/web/unraid-mcp-settings.css">
+<link rel="stylesheet" href="/plugins/unraid-mcp/web/unraid-mcp-settings.css?v=<?= $mcp_v ?>">
 <unraid-mcp-settings-app></unraid-mcp-settings-app>
-<script type="module" src="/plugins/unraid-mcp/web/unraid-mcp-settings.js"></script>
+<script type="module" src="/plugins/unraid-mcp/web/unraid-mcp-settings.js?v=<?= $mcp_v ?>"></script>
