@@ -38,7 +38,12 @@ npm run build           # builds BOTH bundles (chains build:settings + build:das
                         #   ../dist-web/incus-settings.{js,css}     (full settings app)
                         #   ../dist-web-dashboard/incus-dashboard.js (small Main/Dashboard widget)
 ```
-This builds a single-file Vue 3 custom element (`<incus-settings-app>`) — no code-splitting, everything inlined. It inherits Unraid's own CSS variables (`--primary` etc., driven by the host page's light/dark mode) rather than shipping its own palette; don't introduce a separate color system.
+The settings app remains a Vue 3 custom element (`<incus-settings-app>`), but
+it is not a single-file bundle: Vite emits the `incus-settings.js` ES-module
+entry, CSS, shared hashed chunks, and an intentionally lazy-loaded Terminal
+chunk. Ship every file in `dist-web/` together. It inherits Unraid's own CSS
+variables (`--primary` etc., driven by the host page's light/dark mode) rather
+than shipping its own palette; don't introduce a separate color system.
 
 ## CI
 
