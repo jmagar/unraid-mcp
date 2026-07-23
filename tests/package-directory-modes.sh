@@ -16,7 +16,7 @@ build_fixture() {
     "$fixture/scripts" \
     "$fixture/packages" \
     "$fixture/source/usr/local/emhttp/plugins/incus" \
-    "$fixture/source/usr/local/incus" \
+    "$fixture/source/usr/local/incus/bin" \
     "$seed/usr/local/emhttp/plugins/incus"
   cp "$ROOT/scripts/build-classic-package.sh" "$fixture/scripts/"
   printf '{"release":"test"}\n' >"$fixture/release-manifest.json"
@@ -27,6 +27,8 @@ build_fixture() {
     '- MD5: old' \
     '- SHA-256: old' >"$fixture/MANIFEST.md"
   printf 'fixture\n' >"$seed/usr/local/emhttp/plugins/incus/fixture"
+  printf '#!/bin/sh\nexit 0\n' >"$fixture/source/usr/local/incus/bin/zstd"
+  chmod 0644 "$fixture/source/usr/local/incus/bin/zstd"
 
   # Reproduce the unsafe input metadata that caused the tootie incident.
   chmod 0777 "$seed" "$seed/usr" "$seed/usr/local" \
@@ -49,9 +51,23 @@ build_fixture() {
     echo "umask $mask produced unsafe directory metadata: $bad_directory" >&2
     exit 1
   }
+  [ "$(tar -tvJf "$output" usr/local/incus/bin/zstd | awk '{print $1}')" = "-rwxr-xr-x" ] || {
+    echo "umask $mask produced a non-executable private runtime helper" >&2
+    exit 1
+  }
+  first_hash="$(sha256sum "$output" | awk '{print $1}')"
+  (
+    umask "$mask"
+    "$fixture/scripts/build-classic-package.sh" 9001 "$previous" >/dev/null
+  )
+  second_hash="$(sha256sum "$output" | awk '{print $1}')"
+  [ "$first_hash" = "$second_hash" ] || {
+    echo "umask $mask produced different hashes for unchanged package content" >&2
+    exit 1
+  }
 }
 
 build_fixture 022
 build_fixture 077
 
-echo "package directory modes are safe under umask 022 and 077"
+echo "package modes and hashes are stable under umask 022 and 077"
