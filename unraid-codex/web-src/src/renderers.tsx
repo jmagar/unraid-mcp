@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Check, Copy } from "lucide-react"
+import { Check, ChevronRight, Copy, XCircle } from "lucide-react"
 import { Action } from "@/components/aurora/ai/action"
 import { Actions } from "@/components/aurora/ai/actions"
 import { Agent } from "@/components/aurora/ai/agent"
@@ -76,6 +76,8 @@ function InventoryBadges({ values }: { values: string[] }) {
 
 export function SessionContextRenderer({
   state,
+  onMcpLogin,
+  onUpdateSettings,
 }: {
   state: {
     thread: JsonObject | null
@@ -88,8 +90,14 @@ export function SessionContextRenderer({
     rateLimits: JsonObject | null
     permissionProfiles: JsonObject[]
     hooks: JsonObject[]
+    apps: JsonObject[]
+    plugins: JsonObject[]
+    marketplaceErrors: JsonObject[]
+    events: Array<{ method: string; params: JsonObject; at: number }>
     items: TimelineItem[]
   }
+  onMcpLogin?: (name: string) => void
+  onUpdateSettings?: (settings: JsonObject) => void
 }) {
   const config = state.config ?? {}
   const settings = state.settings ?? {}
@@ -111,6 +119,13 @@ export function SessionContextRenderer({
     ["collabAgentToolCall", "subAgentActivity"].includes(entry.item.type),
   )
   const rateWindow = state.rateLimits?.primary
+  const selectedModel = state.models.find(
+    (model) => (model.model ?? model.id) === currentModel,
+  )
+  const effortOptions =
+    selectedModel?.supportedReasoningEfforts?.map(
+      (option: JsonObject) => option.reasoningEffort ?? option.effort ?? option.value,
+    ).filter(Boolean) ?? ["minimal", "low", "medium", "high", "xhigh"]
   const goalPercent =
     state.goal?.tokenBudget && state.goal.tokenBudget > 0
       ? Math.min(100, Math.round((state.goal.tokensUsed / state.goal.tokenBudget) * 100))
@@ -122,10 +137,43 @@ export function SessionContextRenderer({
         <DescriptionItem
           label="Model"
           value={
-            <span className="uc-inline-meta">
-              <strong>{currentModel}</strong>
-              <Badge tone="cyan" fill="soft" size="sm">{compactValue(effort)} effort</Badge>
-            </span>
+            <div className="uc-setting-controls">
+              <Select
+                value={String(currentModel)}
+                onValueChange={(model) => onUpdateSettings?.({ model })}
+              >
+                <SelectTrigger aria-label="Session model">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {state.models.filter((model) => !model.hidden).map((model) => (
+                    <SelectItem
+                      key={model.model ?? model.id}
+                      value={model.model ?? model.id}
+                    >
+                      {model.displayName ?? model.model ?? model.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={String(effort)}
+                onValueChange={(nextEffort) =>
+                  onUpdateSettings?.({ effort: nextEffort })
+                }
+              >
+                <SelectTrigger aria-label="Reasoning effort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {effortOptions.map((option: string) => (
+                    <SelectItem key={option} value={option}>
+                      {option} effort
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           }
           active
         />
@@ -191,12 +239,115 @@ export function SessionContextRenderer({
                   </Badge>
                 </div>
                 <div className="aurora-text-meta">
-                  {tools.length} tools · {(server.resources ?? []).length} resources
+                  {tools.length} tools · {(server.resources ?? []).length} resources ·{" "}
+                  {(server.resourceTemplates ?? []).length} templates
                 </div>
                 {tools.length ? <InventoryBadges values={tools} /> : null}
+                {(server.resources ?? []).length ? (
+                  <InventoryBadges
+                    values={(server.resources ?? [])
+                      .map((resource: JsonObject) => resource.name ?? resource.uri)
+                      .filter(Boolean)}
+                  />
+                ) : null}
+                {(server.resourceTemplates ?? []).length ? (
+                  <InventoryBadges
+                    values={(server.resourceTemplates ?? [])
+                      .map(
+                        (template: JsonObject) =>
+                          template.name ?? template.uriTemplate,
+                      )
+                      .filter(Boolean)}
+                  />
+                ) : null}
+                {server.authStatus === "notLoggedIn" && onMcpLogin ? (
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => onMcpLogin(server.name)}
+                  >
+                    Sign in
+                  </Button>
+                ) : null}
               </div>
             )
           }) : <div className="aurora-text-meta">No MCP servers advertised.</div>}
+        </div>
+      </Collapsible>
+
+      <Collapsible
+        title={
+          <span className="uc-collapsible-title">
+            Apps & Plugins
+            <Badge tone="info" size="sm">
+              {state.apps.length + state.plugins.length}
+            </Badge>
+          </span>
+        }
+      >
+        <div className="uc-inventory-list">
+          {state.plugins.map((plugin) => (
+            <div className="uc-inventory-row" key={`plugin-${plugin.id}`}>
+              <div className="uc-inventory-heading">
+                <strong>{plugin.name}</strong>
+                <Badge
+                  tone={plugin.enabled ? "success" : "neutral"}
+                  size="sm"
+                >
+                  {plugin.enabled ? "plugin enabled" : "plugin disabled"}
+                </Badge>
+              </div>
+              <div className="aurora-text-meta">
+                {[plugin.marketplaceName, plugin.localVersion ?? plugin.version]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </div>
+              {plugin.keywords?.length ? (
+                <InventoryBadges values={plugin.keywords.slice(0, 8)} />
+              ) : null}
+            </div>
+          ))}
+          {state.apps.map((app) => (
+            <div className="uc-inventory-row" key={`app-${app.id}`}>
+              <div className="uc-inventory-heading">
+                <strong>{app.name}</strong>
+                <Badge
+                  tone={app.isAccessible && app.isEnabled ? "success" : "neutral"}
+                  size="sm"
+                >
+                  {app.isAccessible && app.isEnabled ? "app ready" : "app unavailable"}
+                </Badge>
+              </div>
+              {app.description ? (
+                <div className="aurora-text-meta">{app.description}</div>
+              ) : null}
+              {app.pluginDisplayNames?.length ? (
+                <InventoryBadges values={app.pluginDisplayNames} />
+              ) : null}
+              {!app.isAccessible && app.installUrl ? (
+                <Button
+                  variant="neutral"
+                  size="sm"
+                  onClick={() =>
+                    window.open(app.installUrl, "_blank", "noopener,noreferrer")
+                  }
+                >
+                  Connect app
+                </Button>
+              ) : null}
+            </div>
+          ))}
+          {!state.apps.length && !state.plugins.length ? (
+            <div className="aurora-text-meta">No apps or plugins discovered.</div>
+          ) : null}
+          {state.marketplaceErrors.map((error, index) => (
+            <Banner
+              key={`marketplace-error-${index}`}
+              variant="warn"
+              title="Plugin marketplace unavailable"
+              description={error.message ?? formatJson(error)}
+            />
+          ))}
         </div>
       </Collapsible>
 
@@ -246,9 +397,55 @@ export function SessionContextRenderer({
           />
           <DescriptionItem
             label="Profiles"
-            value={state.permissionProfiles.length
-              ? <InventoryBadges values={state.permissionProfiles.map((entry) => entry.name ?? entry.id).filter(Boolean)} />
-              : "Default"}
+            value={
+              state.permissionProfiles.length ? (
+                <Select
+                  value={
+                    settings.activePermissionProfile?.id ??
+                    config.permission_profile ??
+                    state.permissionProfiles.find((entry) => entry.allowed !== false)?.id
+                  }
+                  onValueChange={(permissions) =>
+                    onUpdateSettings?.({ permissions })
+                  }
+                >
+                  <SelectTrigger aria-label="Permission profile">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {state.permissionProfiles
+                      .filter((entry) => entry.allowed !== false)
+                      .map((entry) => (
+                        <SelectItem key={entry.id} value={entry.id}>
+                          {entry.name ?? entry.id}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                "Default"
+              )
+            }
+          />
+          <DescriptionItem
+            label="Personality"
+            value={
+              <Select
+                value={settings.personality ?? config.personality ?? "none"}
+                onValueChange={(personality) =>
+                  onUpdateSettings?.({ personality })
+                }
+              >
+                <SelectTrigger aria-label="Personality">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="friendly">Friendly</SelectItem>
+                  <SelectItem value="pragmatic">Pragmatic</SelectItem>
+                </SelectContent>
+              </Select>
+            }
           />
           <DescriptionItem
             label="Hooks"
@@ -273,6 +470,38 @@ export function SessionContextRenderer({
           />
         </Collapsible>
       ) : null}
+
+      <Collapsible
+        title={
+          <span className="uc-collapsible-title">
+            Protocol Activity
+            <Badge tone="neutral" size="sm">{state.events.length}</Badge>
+          </span>
+        }
+      >
+        <div className="uc-protocol-events">
+          {state.events.length ? state.events.slice(-20).reverse().map((event, index) => (
+            <div className="uc-protocol-event" key={`${event.at}-${event.method}-${index}`}>
+              <code>{event.method}</code>
+              <time dateTime={new Date(event.at).toISOString()}>
+                {new Date(event.at).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </time>
+              {Object.keys(event.params).length ? (
+                <details>
+                  <summary>Payload</summary>
+                  <pre>{formatJson(event.params)}</pre>
+                </details>
+              ) : null}
+            </div>
+          )) : (
+            <div className="aurora-text-meta">No app-server events yet.</div>
+          )}
+        </div>
+      </Collapsible>
     </div>
   )
 }
@@ -316,6 +545,71 @@ function terminalLines(item: JsonObject): TerminalLine[] {
     lines.push({ text: `Command failed${item.exitCode == null ? "" : ` with exit code ${item.exitCode}`}`, type: "error" })
   }
   return lines
+}
+
+function UnraidTerminalItem({ entry }: { entry: TimelineItem }) {
+  const item = entry.item
+  const [copied, setCopied] = React.useState(false)
+  const copyCommand = React.useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(item.command ?? "")
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1200)
+    } catch {
+      setCopied(false)
+    }
+  }, [item.command])
+  const complete = entry.completedAtMs != null
+  const failed = item.status === "failed" || (item.exitCode != null && item.exitCode !== 0)
+
+  return (
+    <section className="uc-unraid-terminal" aria-label="Command output">
+      <div className="uc-unraid-terminal-head">
+        <span className="uc-unraid-terminal-kind">EXEC</span>
+        <code title={item.command}>{item.command}</code>
+        <span
+          className={`uc-unraid-terminal-exit ${failed ? "is-error" : ""}`}
+        >
+          {complete
+            ? `exit ${item.exitCode ?? (failed ? 1 : 0)}`
+            : "running"}
+        </span>
+        <Button
+          variant="plain"
+          size="unstyled"
+          className="uc-unraid-terminal-copy"
+          onClick={() => void copyCommand()}
+          aria-label={copied ? "Copied command" : "Copy command"}
+        >
+          {copied ? "copied" : "copy"}
+        </Button>
+      </div>
+      <pre>{item.aggregatedOutput || (complete ? "No output" : "Running…")}</pre>
+    </section>
+  )
+}
+
+function UnraidReasoningItem({ entry }: { entry: TimelineItem }) {
+  const item = entry.item
+  const summary = [...(item.summary ?? []), ...(item.content ?? [])]
+    .filter(Boolean)
+    .join("\n\n")
+  const preview =
+    String(item.summary?.[0] ?? item.content?.[0] ?? "Working through the request")
+      .replace(/\s+/g, " ")
+      .trim()
+
+  return (
+    <details className="uc-unraid-thinking" open={!entry.completedAtMs}>
+      <summary>
+        <ChevronRight size={13} strokeWidth={1.7} aria-hidden />
+        <span>Thinking</span>
+        <span aria-hidden>—</span>
+        <em>{preview}</em>
+      </summary>
+      <div>{summary}</div>
+    </details>
+  )
 }
 
 function mappedToolCall(entry: TimelineItem): ToolCall {
@@ -486,8 +780,10 @@ function ImageItem({ entry }: { entry: TimelineItem }) {
 
 export function TimelineRenderer({
   entries,
+  theme = "aurora",
 }: {
   entries: TimelineItem[]
+  theme?: "aurora" | "unraid"
 }) {
   return (
     <>
@@ -510,6 +806,9 @@ export function TimelineRenderer({
               </Message>
             )
           case "reasoning":
+            if (theme === "unraid") {
+              return <UnraidReasoningItem key={entry.id} entry={entry} />
+            }
             return (
               <Reasoning
                 key={entry.id}
@@ -532,6 +831,9 @@ export function TimelineRenderer({
           case "plan":
             return <PlanItem key={entry.id} entry={entry} />
           case "commandExecution":
+            if (theme === "unraid") {
+              return <UnraidTerminalItem key={entry.id} entry={entry} />
+            }
             return (
               <Terminal
                 key={entry.id}
@@ -599,6 +901,8 @@ export function TimelineRenderer({
                 variant="compact"
               />
             )
+          case "approvalResolution":
+            return <ApprovalResolutionItem key={entry.id} entry={entry} />
           default:
             return (
               <CodeBlock
@@ -614,6 +918,113 @@ export function TimelineRenderer({
   )
 }
 
+function approvalDetails(method: string, params: JsonObject) {
+  const fileChange =
+    method === "item/fileChange/requestApproval" ||
+    method === "applyPatchApproval"
+  const legacy =
+    method === "execCommandApproval" ||
+    method === "applyPatchApproval"
+  const target =
+    params.command ??
+    params.cmd ??
+    params.changes?.map((change: JsonObject) => change.path).join(", ") ??
+    params.reason
+  const available = params.availableDecisions
+  const allowSession =
+    legacy ||
+    !Array.isArray(available) ||
+    available.includes("acceptForSession")
+
+  return {
+    fileChange,
+    legacy,
+    allowSession,
+    target: typeof target === "string" ? target : formatJson(target),
+    description:
+      params.reason ??
+      (fileChange
+        ? "Codex wants to apply file changes to your system:"
+        : "Codex wants to run a command that can modify your system:"),
+  }
+}
+
+function ApprovalCard({
+  method,
+  params,
+  approved,
+  denied,
+  session,
+  exitCode,
+  onAllow,
+  onDeny,
+}: {
+  method: string
+  params: JsonObject
+  approved?: boolean
+  denied?: boolean
+  session?: boolean
+  exitCode?: number | null
+  onAllow?: (always: boolean) => void
+  onDeny?: () => void
+}) {
+  const details = approvalDetails(method, params)
+  const [always, setAlways] = React.useState(false)
+  const resolved = approved || denied
+  return (
+    <section
+      className={`uc-approval-card${resolved ? " is-resolved" : ""}`}
+      aria-label={resolved ? "Approval result" : "Approval needed"}
+    >
+      <div className="uc-approval-eyebrow">
+        {resolved ? (approved ? "Approved" : "Denied") : "Approval Needed"}
+      </div>
+      {!resolved ? <p>{details.description}</p> : null}
+      {details.target ? <code>{details.target}</code> : null}
+      {resolved ? (
+        <div className={`uc-approval-result${denied ? " is-denied" : ""}`}>
+          {approved ? (
+            <Check size={14} strokeWidth={2} aria-hidden />
+          ) : (
+            <XCircle size={14} strokeWidth={1.8} aria-hidden />
+          )}
+          <span>
+            {approved
+              ? `Approved${session ? " for this session" : ""}${
+                  exitCode == null ? " — command queued" : ` — command ran with exit ${exitCode}`
+                }`
+              : "Denied — command was not run"}
+          </span>
+        </div>
+      ) : (
+        <div className="uc-approval-actions">
+          <Button
+            variant="rose"
+            size="sm"
+            filled
+            onClick={() => onAllow?.(always)}
+          >
+            Allow
+          </Button>
+          <Button variant="neutral" size="sm" onClick={onDeny}>
+            Deny
+          </Button>
+          {details.allowSession ? (
+            <label className="uc-approval-always">
+              <input
+                type="checkbox"
+                checked={always}
+                onChange={(event) => setAlways(event.target.checked)}
+              />
+              <span>Always allow</span>
+            </label>
+          ) : null}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function ApprovalRequest({
   request,
   answer,
@@ -621,31 +1032,39 @@ function ApprovalRequest({
   request: ServerRequest
   answer: (result: JsonObject) => void
 }) {
-  const fileChange =
-    request.method === "item/fileChange/requestApproval" ||
-    request.method === "applyPatchApproval"
-  const legacy =
-    request.method === "execCommandApproval" ||
-    request.method === "applyPatchApproval"
-  const target =
-    request.params.command ??
-    request.params.cmd ??
-    request.params.changes?.map((change: JsonObject) => change.path).join(", ") ??
-    request.params.reason
+  const details = approvalDetails(request.method, request.params)
   return (
-    <PermissionPrompt
-      tool={fileChange ? "File Changes" : "Command"}
-      action={request.params.reason ?? (fileChange ? "Apply the proposed patch" : "Run this command")}
-      target={typeof target === "string" ? target : formatJson(target)}
-      variant="inline"
-      onAllow={() =>
-        answer({ decision: legacy ? "approved" : "accept" })
+    <ApprovalCard
+      method={request.method}
+      params={request.params}
+      onAllow={(always) =>
+        answer({
+          decision: details.legacy
+            ? always
+              ? "approved_for_session"
+              : "approved"
+            : always
+              ? "acceptForSession"
+              : "accept",
+        })
       }
       onDeny={() =>
-        answer({ decision: legacy ? "denied" : "decline" })
+        answer({ decision: details.legacy ? "denied" : "decline" })
       }
-      allowLabel="Approve Once"
-      denyLabel="Decline"
+    />
+  )
+}
+
+function ApprovalResolutionItem({ entry }: { entry: TimelineItem }) {
+  const item = entry.item
+  return (
+    <ApprovalCard
+      method={item.requestMethod}
+      params={item.requestParams ?? {}}
+      approved={item.approved}
+      denied={!item.approved}
+      session={item.session}
+      exitCode={item.exitCode}
     />
   )
 }

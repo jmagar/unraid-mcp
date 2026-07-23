@@ -1,6 +1,6 @@
 import React from "react"
 import { createRoot } from "react-dom/client"
-import { App } from "@/App"
+import { App, readChatTheme } from "@/App"
 import { PortalContainerContext } from "@/lib/aurora/portal-container"
 import "./index.css"
 
@@ -25,13 +25,15 @@ class UnraidCodexChathead extends HTMLElement {
     const shadow = this.attachShadow({ mode: "open" })
     const stylesheet = document.createElement("link")
     stylesheet.rel = "stylesheet"
-    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=10"
+    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=12"
     const mount = document.createElement("div")
-    mount.className = "uc-root light"
+    const theme = readChatTheme()
+    mount.className = `uc-root light uc-theme-${theme}`
+    mount.dataset.chatTheme = theme
     shadow.append(stylesheet, mount)
     createRoot(mount).render(
       <PortalContainerContext.Provider value={mount}>
-        <App />
+        <App rootElement={mount} />
       </PortalContainerContext.Provider>,
     )
   }

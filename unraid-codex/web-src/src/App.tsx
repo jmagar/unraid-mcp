@@ -4,6 +4,7 @@ import {
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
+  SquareTerminal,
   SlidersHorizontal,
 } from "lucide-react"
 import { CodeBlock } from "@/components/aurora/code-block"
@@ -29,6 +30,13 @@ import {
 import { Banner } from "@/components/ui/aurora/banner"
 import { Button } from "@/components/ui/aurora/button"
 import { StatusIndicator } from "@/components/ui/aurora/status-indicator"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/aurora/select"
 import {
   Tooltip,
   TooltipContent,
@@ -72,7 +80,13 @@ function connectionTone(status: string) {
   return "offline" as const
 }
 
-export function App() {
+export type ChatTheme = "aurora" | "unraid"
+
+export function readChatTheme(): ChatTheme {
+  return localStorage.getItem("unraid-codex.theme") === "unraid" ? "unraid" : "aurora"
+}
+
+export function App({ rootElement }: { rootElement: HTMLElement }) {
   const {
     state,
     send,
@@ -80,6 +94,8 @@ export function App() {
     answerRequest,
     rejectRequest,
     login,
+    loginMcpServer,
+    updateThreadSettings,
     dismissNotice,
   } = useCodexAppServer()
   const [open, setOpen] = React.useState(false)
@@ -92,10 +108,18 @@ export function App() {
     return Number.isFinite(saved) ? Math.min(900, Math.max(360, saved)) : 520
   })
   const [viewportWidth, setViewportWidth] = React.useState(() => window.innerWidth)
+  const [theme, setTheme] = React.useState<ChatTheme>(readChatTheme)
   const [inspectorOpen, setInspectorOpen] = React.useState(false)
   const [prompt, setPrompt] = React.useState("")
   const [attachments, setAttachments] = React.useState<Attachment[]>([])
   const scrollRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    rootElement.dataset.chatTheme = theme
+    rootElement.classList.toggle("uc-theme-unraid", theme === "unraid")
+    rootElement.classList.toggle("uc-theme-aurora", theme === "aurora")
+    localStorage.setItem("unraid-codex.theme", theme)
+  }, [rootElement, theme])
 
   React.useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth)
@@ -171,6 +195,26 @@ export function App() {
     }
   }, [dockWidth, docked, open, viewportWidth])
 
+  React.useEffect(() => {
+    if (!open || viewportWidth >= 900) return
+    const previousOverflow = document.body.style.getPropertyValue("overflow")
+    const previousOverscroll = document.body.style.getPropertyValue("overscroll-behavior")
+    document.body.style.setProperty("overflow", "hidden", "important")
+    document.body.style.setProperty("overscroll-behavior", "none", "important")
+    return () => {
+      if (previousOverflow) {
+        document.body.style.setProperty("overflow", previousOverflow)
+      } else {
+        document.body.style.removeProperty("overflow")
+      }
+      if (previousOverscroll) {
+        document.body.style.setProperty("overscroll-behavior", previousOverscroll)
+      } else {
+        document.body.style.removeProperty("overscroll-behavior")
+      }
+    }
+  }, [open, viewportWidth])
+
   const beginResize = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -210,10 +254,14 @@ export function App() {
                 <Button
                   variant="neutral"
                   size="icon"
-                  className="uc-launcher"
+                  className={`uc-launcher uc-theme-${theme}`}
                   aria-label="Open Codex"
                 >
-                  <MessageSquare size={22} strokeWidth={1.65} aria-hidden />
+                  {theme === "unraid" ? (
+                    <SquareTerminal size={23} strokeWidth={1.75} aria-hidden />
+                  ) : (
+                    <MessageSquare size={22} strokeWidth={1.65} aria-hidden />
+                  )}
                 </Button>
               </SheetTrigger>
             </TooltipTrigger>
@@ -223,7 +271,8 @@ export function App() {
 
         <SheetContent
           side="right"
-          className="uc-sheet"
+          className={`uc-sheet uc-theme-${theme}`}
+          data-chat-theme={theme}
           style={{ "--uc-dock-width": `${dockWidth}px` } as React.CSSProperties}
         >
           {docked ? (
@@ -252,7 +301,11 @@ export function App() {
           <SheetHeader className="uc-header">
             <div className="uc-brand">
               <span className="uc-mark">
-                <MessageSquare size={18} strokeWidth={1.65} aria-hidden />
+                {theme === "unraid" ? (
+                  <SquareTerminal size={20} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <MessageSquare size={18} strokeWidth={1.65} aria-hidden />
+                )}
               </span>
               <div className="uc-brand-copy">
                 <SheetTitle className="aurora-text-section">Codex</SheetTitle>
@@ -327,7 +380,31 @@ export function App() {
                     Runtime inventory and policy for the active Codex session.
                   </div>
                 </div>
-                <SessionContextRenderer state={state} />
+                <div className="uc-theme-setting">
+                  <div>
+                    <div className="aurora-text-label">Chat Theme</div>
+                    <div className="aurora-text-meta">
+                      Switch the complete token and component treatment.
+                    </div>
+                  </div>
+                  <Select
+                    value={theme}
+                    onValueChange={(value) => setTheme(value as ChatTheme)}
+                  >
+                    <SelectTrigger aria-label="Chat theme">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aurora">Aurora Light</SelectItem>
+                      <SelectItem value="unraid">Unraid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <SessionContextRenderer
+                  state={state}
+                  onMcpLogin={(name) => void loginMcpServer(name)}
+                  onUpdateSettings={(settings) => void updateThreadSettings(settings)}
+                />
               </div>
             ) : (
               <Conversation
@@ -396,7 +473,7 @@ export function App() {
               </div>
             ) : null}
 
-            <TimelineRenderer entries={state.items} />
+            <TimelineRenderer entries={state.items} theme={theme} />
 
             {state.plan ? (
               <PlanRenderer plan={state.plan} streaming={Boolean(state.activeTurnId)} />
@@ -426,7 +503,8 @@ export function App() {
 
           {!inspectorOpen ? <SheetFooter className="uc-footer">
             {state.tokenUsage ? <ContextRenderer tokenUsage={state.tokenUsage} /> : null}
-            <PromptInput
+            <div className="uc-prompt">
+              <PromptInput
               value={prompt}
               onChange={setPrompt}
               onSubmit={submit}
@@ -441,6 +519,7 @@ export function App() {
                 )
               }
               model={state.settings?.model ?? state.config?.model ?? "codex"}
+              onModelChange={(model) => void updateThreadSettings({ model })}
               models={
                 state.models.length
                   ? state.models
@@ -452,7 +531,7 @@ export function App() {
                   : [{ id: "codex", label: "Codex" }]
               }
               isStreaming={Boolean(state.activeTurnId)}
-              placeholder="Ask Codex…"
+              placeholder={theme === "unraid" ? "Ask Codex about your server…" : "Ask Codex…"}
               toolbarStart={
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -474,7 +553,8 @@ export function App() {
                 { id: "workspace", label: "/workspace", kind: "folder" },
                 { id: "instructions", label: "AGENTS.md", kind: "file" },
               ]}
-            />
+              />
+            </div>
           </SheetFooter> : null}
         </SheetContent>
       </Sheet>

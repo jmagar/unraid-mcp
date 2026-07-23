@@ -57,6 +57,9 @@ export interface CodexState {
   permissionProfiles: JsonObject[]
   hooks: JsonObject[]
   apps: JsonObject[]
+  plugins: JsonObject[]
+  marketplaceErrors: JsonObject[]
+  events: Array<{ method: string; params: JsonObject; at: number }>
 }
 
 const INITIAL_STATE: CodexState = {
@@ -84,6 +87,9 @@ const INITIAL_STATE: CodexState = {
   permissionProfiles: [],
   hooks: [],
   apps: [],
+  plugins: [],
+  marketplaceErrors: [],
+  events: [],
 }
 
 function flattenTurns(thread: JsonObject): TimelineItem[] {
@@ -112,6 +118,50 @@ function upsertTimeline(
   copy[index] =
     typeof update === "function" ? update(copy[index]) : { ...copy[index], ...update }
   return copy
+}
+
+function isApprovalRequest(method: string): boolean {
+  return [
+    "item/commandExecution/requestApproval",
+    "item/fileChange/requestApproval",
+    "execCommandApproval",
+    "applyPatchApproval",
+  ].includes(method)
+}
+
+function addApprovalResolution(
+  items: TimelineItem[],
+  request: ServerRequest,
+  result: JsonObject,
+): TimelineItem[] {
+  if (!isApprovalRequest(request.method)) return items
+  const decision = result.decision
+  const approved = [
+    "accept",
+    "acceptForSession",
+    "approved",
+    "approved_for_session",
+  ].includes(decision)
+  const resolution: TimelineItem = {
+    id: `approval-${String(request.id)}`,
+    turnId: request.params.turnId ?? "",
+    startedAtMs: request.params.startedAtMs ?? Date.now(),
+    completedAtMs: Date.now(),
+    item: {
+      id: `approval-${String(request.id)}`,
+      type: "approvalResolution",
+      requestMethod: request.method,
+      requestParams: request.params,
+      approvalItemId: request.params.itemId,
+      decision,
+      approved,
+      session: ["acceptForSession", "approved_for_session"].includes(decision),
+    },
+  }
+  const targetIndex = items.findIndex((entry) => entry.id === request.params.itemId)
+  const next = items.slice()
+  next.splice(targetIndex < 0 ? next.length : targetIndex, 0, resolution)
+  return next
 }
 
 function textFromError(error: any): string {
@@ -181,6 +231,19 @@ export function useCodexAppServer() {
   const handleNotification = React.useCallback(
     (message: JsonObject) => {
       const params = message.params ?? {}
+      if (
+        !message.method.endsWith("/delta") &&
+        !message.method.endsWith("/outputDelta") &&
+        !message.method.endsWith("/progress")
+      ) {
+        setState((current) => ({
+          ...current,
+          events: [
+            ...current.events.slice(-49),
+            { method: message.method, params, at: Date.now() },
+          ],
+        }))
+      }
       switch (message.method) {
         case "item/started":
           setState((current) => ({
@@ -212,7 +275,19 @@ export function useCodexAppServer() {
             items: upsertTimeline(current.items, params.item.id, {
               item: params.item,
               completedAtMs: params.completedAtMs,
-            }),
+            }).map((entry) =>
+              entry.item.type === "approvalResolution" &&
+              entry.item.approvalItemId === params.item.id
+                ? {
+                    ...entry,
+                    item: {
+                      ...entry.item,
+                      commandStatus: params.item.status,
+                      exitCode: params.item.exitCode,
+                    },
+                  }
+                : entry,
+            ),
           }))
           break
         case "item/agentMessage/delta":
@@ -412,6 +487,63 @@ export function useCodexAppServer() {
             })
           }
           break
+        case "mcpServer/oauthLogin/completed":
+          addNotice({
+            tone: params.success ? "success" : "error",
+            title: params.success
+              ? `${params.name} connected`
+              : `${params.name} sign-in failed`,
+            description: params.error,
+          })
+          if (params.success) {
+            rpc("mcpServerStatus/list", {
+              detail: "full",
+              threadId: threadIdRef.current,
+              limit: 100,
+            }).then((result) => {
+              setState((current) => ({
+                ...current,
+                mcpServers: result.data ?? current.mcpServers,
+              }))
+            }).catch(() => undefined)
+          }
+          break
+        case "skills/changed":
+          rpc("skills/list", { cwds: ["/workspace"] }).then((result) => {
+            setState((current) => ({
+              ...current,
+              skills: (result.data ?? []).flatMap(
+                (entry: JsonObject) => entry.skills ?? [],
+              ),
+            }))
+          }).catch(() => undefined)
+          break
+        case "app/list/updated":
+          setState((current) => ({ ...current, apps: params.data ?? [] }))
+          break
+        case "account/updated":
+          setState((current) => ({
+            ...current,
+            authenticated: Boolean(params.authMode),
+            statusText: params.authMode ? "Connected" : "Connected. Sign-in required.",
+          }))
+          break
+        case "serverRequest/resolved":
+          setState((current) => ({
+            ...current,
+            requests: current.requests.filter(
+              (request) => String(request.id) !== String(params.requestId),
+            ),
+          }))
+          break
+        case "thread/name/updated":
+          setState((current) => ({
+            ...current,
+            thread: current.thread
+              ? { ...current.thread, name: params.threadName }
+              : current.thread,
+          }))
+          break
         case "hook/started":
           addNotice({
             tone: "info",
@@ -437,7 +569,7 @@ export function useCodexAppServer() {
           break
       }
     },
-    [addNotice],
+    [addNotice, rpc],
   )
 
   const handleMessage = React.useCallback(
@@ -459,6 +591,30 @@ export function useCodexAppServer() {
       }
 
       if (Object.hasOwn(message, "id") && message.method) {
+        if (message.method === "currentTime/read") {
+          socketRef.current?.send(
+            JSON.stringify({
+              id: message.id,
+              result: { currentTimeAt: Math.floor(Date.now() / 1000) },
+            }),
+          )
+          return
+        }
+        if (
+          message.method === "account/chatgptAuthTokens/refresh" ||
+          message.method === "attestation/generate"
+        ) {
+          socketRef.current?.send(
+            JSON.stringify({
+              id: message.id,
+              error: {
+                code: -32601,
+                message: `${message.method} is not available in the browser client.`,
+              },
+            }),
+          )
+          return
+        }
         setState((current) => ({
           ...current,
           requests: [...current.requests, message as ServerRequest],
@@ -475,6 +631,18 @@ export function useCodexAppServer() {
     let disposed = false
 
     async function establishSession() {
+      async function listAll(method: string, params: JsonObject) {
+        const data: JsonObject[] = []
+        let cursor: string | null | undefined
+        for (let page = 0; page < 20; page += 1) {
+          const result = await rpc(method, { ...params, cursor, limit: 100 })
+          data.push(...(result.data ?? []))
+          cursor = result.nextCursor
+          if (!cursor) break
+        }
+        return { data }
+      }
+
       await rpc("initialize", {
         clientInfo: {
           name: "unraid-codex-chathead",
@@ -529,18 +697,31 @@ export function useCodexAppServer() {
       threadIdRef.current = threadId
       localStorage.setItem(STORAGE_THREAD, threadId)
 
-      const [config, skills, hooks, permissionProfiles, mcpServers, apps, goal, rateLimits] =
+      const [
+        config,
+        skills,
+        hooks,
+        permissionProfiles,
+        mcpServers,
+        apps,
+        plugins,
+        goal,
+        rateLimits,
+      ] =
         await Promise.all([
           rpc("config/read", { cwd: "/workspace", includeLayers: false }).catch(() => null),
           rpc("skills/list", { cwds: ["/workspace"] }).catch(() => ({ data: [] })),
           rpc("hooks/list", { cwds: ["/workspace"] }).catch(() => ({ data: [] })),
           rpc("permissionProfile/list", { cwd: "/workspace", limit: 100 }).catch(() => ({ data: [] })),
-          rpc("mcpServerStatus/list", {
+          listAll("mcpServerStatus/list", {
             detail: "full",
             threadId,
-            limit: 100,
           }).catch(() => ({ data: [] })),
-          rpc("app/list", { threadId, limit: 100 }).catch(() => ({ data: [] })),
+          listAll("app/list", { threadId }).catch(() => ({ data: [] })),
+          rpc("plugin/installed", { cwds: ["/workspace"] }).catch(() => ({
+            marketplaces: [],
+            marketplaceLoadErrors: [],
+          })),
           rpc("thread/goal/get", { threadId }).catch(() => ({ goal: null })),
           rpc("account/rateLimits/read").catch(() => ({ rateLimits: null })),
         ])
@@ -562,6 +743,14 @@ export function useCodexAppServer() {
         permissionProfiles: permissionProfiles.data ?? [],
         mcpServers: mcpServers.data ?? [],
         apps: apps.data ?? [],
+        plugins: (plugins.marketplaces ?? []).flatMap(
+          (marketplace: JsonObject) =>
+            (marketplace.plugins ?? []).map((plugin: JsonObject) => ({
+              ...plugin,
+              marketplaceName: marketplace.name,
+            })),
+        ),
+        marketplaceErrors: plugins.marketplaceLoadErrors ?? [],
         goal: goal.goal ?? null,
         rateLimits: rateLimits.rateLimits ?? null,
       }))
@@ -718,6 +907,7 @@ export function useCodexAppServer() {
     socketRef.current?.send(JSON.stringify({ id: request.id, result }))
     setState((current) => ({
       ...current,
+      items: addApprovalResolution(current.items, request, result),
       requests: current.requests.filter((entry) => entry.id !== request.id),
     }))
   }, [rpc])
@@ -747,6 +937,46 @@ export function useCodexAppServer() {
       addNotice({ tone: "error", title: "Could not start sign-in", description: textFromError(error) })
     }
   }, [addNotice, rpc])
+
+  const loginMcpServer = React.useCallback(
+    async (name: string) => {
+      try {
+        const result = await rpc("mcpServer/oauth/login", {
+          name,
+          threadId: threadIdRef.current,
+        })
+        window.open(result.authorizationUrl, "_blank", "noopener,noreferrer")
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: `Could not sign in to ${name}`,
+          description: textFromError(error),
+        })
+      }
+    },
+    [addNotice, rpc],
+  )
+
+  const updateThreadSettings = React.useCallback(
+    async (updates: JsonObject) => {
+      const threadId = threadIdRef.current
+      if (!threadId) return
+      try {
+        await rpc("thread/settings/update", { threadId, ...updates })
+        setState((current) => ({
+          ...current,
+          settings: { ...(current.settings ?? {}), ...updates },
+        }))
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: "Could not update session",
+          description: textFromError(error),
+        })
+      }
+    },
+    [addNotice, rpc],
+  )
 
   const readMcpResource = React.useCallback(
     (server: string, uri: string) =>
@@ -802,6 +1032,8 @@ export function useCodexAppServer() {
     answerRequest,
     rejectRequest,
     login,
+    loginMcpServer,
+    updateThreadSettings,
     dismissNotice,
     readMcpResource,
     requestMcpAppTool,

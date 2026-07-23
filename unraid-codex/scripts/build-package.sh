@@ -27,7 +27,21 @@ chmod 0755 \
 mkdir -p "${output_dir}"
 (
   cd "${stage_dir}"
-  makepkg -l y -c n "${output_dir}/${package_name}"
+  if command -v makepkg >/dev/null 2>&1; then
+    makepkg -l y -c n "${output_dir}/${package_name}"
+  else
+    # A Slackware .txz is a root-relative tar.xz archive. Keep the non-Unraid
+    # development path reproducible so UI-only releases do not depend on a
+    # round-trip to an Unraid host merely to assemble the package.
+    tar \
+      --sort=name \
+      --mtime="@${SOURCE_DATE_EPOCH:-0}" \
+      --owner=0 \
+      --group=0 \
+      --numeric-owner \
+      -cJf "${output_dir}/${package_name}" \
+      .
+  fi
 )
 
 sha256sum "${output_dir}/${package_name}"

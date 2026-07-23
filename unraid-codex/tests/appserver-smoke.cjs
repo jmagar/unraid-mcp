@@ -66,15 +66,22 @@ socket.on("open", async () => {
     try {
       resumed = await request("thread/resume", { threadId });
     } catch (error) {
-      if (Boolean(account.requiresOpenaiAuth && !account.account) &&
-          error.message.includes("no rollout found")) {
+      if (error.message.includes("no rollout found")) {
         resumeDeferredUntilFirstTurn = true;
       } else {
         throw error;
       }
     }
-    const mcp = await request("mcpServerStatus/list", { threadId });
+    const [mcp, models, skills, apps, plugins] = await Promise.all([
+      request("mcpServerStatus/list", { threadId, detail: "full", limit: 100 }),
+      request("model/list", {}),
+      request("skills/list", { cwds: ["/workspace"] }),
+      request("app/list", { threadId, limit: 100 }),
+      request("plugin/installed", { cwds: ["/workspace"] }),
+    ]);
     const servers = mcp.data || mcp.servers || [];
+    const installedPlugins = (plugins.marketplaces || [])
+      .flatMap((marketplace) => marketplace.plugins || []);
 
     console.log(
       JSON.stringify({
@@ -84,6 +91,15 @@ socket.on("open", async () => {
         threadResumed: resumed ? resumed.thread.id === threadId : false,
         resumeDeferredUntilFirstTurn,
         mcpServers: servers.map((server) => server.name || server.id).filter(Boolean),
+        mcpTools: servers.reduce(
+          (count, server) => count + Object.keys(server.tools || {}).length,
+          0,
+        ),
+        models: (models.data || []).length,
+        skills: (skills.data || [])
+          .reduce((count, group) => count + (group.skills || []).length, 0),
+        apps: (apps.data || []).length,
+        plugins: installedPlugins.length,
       }),
     );
     socket.close();

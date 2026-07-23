@@ -434,7 +434,9 @@
 
   .uc-conversation > * {
     min-width: 0;
+    min-height: min-content;
     width: 100%;
+    height: max-content;
     max-width: 100%;
   }
 
@@ -532,6 +534,13 @@
     gap: 6px;
   }
 
+  .uc-setting-controls {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 0.72fr);
+    gap: 8px;
+  }
+
   .uc-collapsible-title {
     width: 100%;
     justify-content: space-between;
@@ -559,6 +568,64 @@
     border-bottom: 0;
   }
 
+  .uc-protocol-events {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .uc-protocol-event {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--aurora-border-default);
+    border-radius: 7px;
+    background: var(--aurora-control-surface);
+  }
+
+  .uc-protocol-event > code {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--aurora-text-primary);
+    font-family: var(--aurora-font-mono);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .uc-protocol-event > time,
+  .uc-protocol-event summary {
+    color: var(--aurora-text-muted);
+    font-family: var(--aurora-font-sans);
+    font-size: 10px;
+  }
+
+  .uc-protocol-event > details {
+    grid-column: 1 / -1;
+  }
+
+  .uc-protocol-event summary {
+    width: fit-content;
+    cursor: pointer;
+  }
+
+  .uc-protocol-event pre {
+    max-height: 180px;
+    margin: 7px 0 0;
+    padding: 8px;
+    overflow: auto;
+    color: var(--aurora-text-primary);
+    border-radius: 5px;
+    background: var(--aurora-panel-medium);
+    font-family: var(--aurora-font-mono);
+    font-size: 10px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
   .uc-badge-list {
     align-items: flex-start;
   }
@@ -579,6 +646,223 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .uc-approval-card {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+    padding: 16px;
+    color: var(--aurora-text-primary);
+    border: 1px solid color-mix(in srgb, var(--aurora-warn) 34%, var(--aurora-border-default));
+    border-radius: var(--aurora-radius-1);
+    background: color-mix(in srgb, var(--aurora-warn) 13%, var(--aurora-panel-medium));
+    box-shadow: var(--aurora-shadow-medium);
+  }
+
+  .uc-approval-card p {
+    margin: 0;
+    font-family: var(--aurora-font-sans);
+    font-size: var(--aurora-type-body);
+    line-height: 1.5;
+  }
+
+  .uc-approval-card > code {
+    display: block;
+    min-width: 0;
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
+    color: var(--aurora-text-primary);
+    border: 1px solid color-mix(in srgb, var(--aurora-warn) 22%, var(--aurora-border-default));
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--aurora-warn) 8%, var(--aurora-control-surface));
+    font-family: var(--aurora-font-mono);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+
+  .uc-approval-eyebrow {
+    color: var(--aurora-warn);
+    font-family: var(--aurora-font-sans);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .uc-approval-actions {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .uc-approval-always {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    gap: 7px;
+    color: var(--aurora-text-muted);
+    cursor: pointer;
+    font-family: var(--aurora-font-sans);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .uc-approval-always:hover {
+    color: var(--aurora-text-primary);
+  }
+
+  .uc-approval-always input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--aurora-accent-button);
+  }
+
+  .uc-approval-result {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--aurora-success);
+    font-family: var(--aurora-font-sans);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
+  .uc-approval-result.is-denied {
+    color: var(--aurora-error);
+  }
+
+  .uc-unraid-terminal {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--gray-100, #f2f2f2);
+    border: 1px solid var(--gray-600, #404040);
+    border-radius: 8px;
+    background: var(--black, #1d1b1b);
+    box-shadow: none;
+    font-family: var(--aurora-font-mono);
+  }
+
+  .uc-unraid-terminal-head {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 8px;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--gray-600, #404040);
+    background: var(--gray-800, #212121);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .uc-unraid-terminal-kind {
+    flex: 0 0 auto;
+    color: var(--blue-700, #0099ff);
+    font-weight: 750;
+  }
+
+  .uc-unraid-terminal-head > code {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--gray-300, #cccccc);
+    font-family: var(--aurora-font-mono);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .uc-unraid-terminal-exit {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--green-200, #33cc33);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .uc-unraid-terminal-exit.is-error {
+    color: var(--red-300, #ff9e9e);
+  }
+
+  .uc-unraid-terminal-copy {
+    flex: 0 0 auto;
+    color: var(--gray-500, #808080) !important;
+    font-family: var(--aurora-font-sans) !important;
+    font-size: 10px !important;
+  }
+
+  .uc-unraid-terminal-copy:hover {
+    color: var(--white, #ffffff) !important;
+  }
+
+  .uc-unraid-terminal pre {
+    max-height: 250px;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: auto;
+    color: var(--gray-100, #f2f2f2);
+    background: var(--black, #1d1b1b);
+    font-family: var(--aurora-font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .uc-unraid-thinking {
+    min-width: 0;
+    color: var(--gray-400, #909090);
+    font-family: var(--aurora-font-sans);
+  }
+
+  .uc-unraid-thinking > summary {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 5px;
+    padding: 2px 0;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.35;
+    list-style: none;
+  }
+
+  .uc-unraid-thinking > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .uc-unraid-thinking > summary svg {
+    flex: 0 0 auto;
+    transition: transform 140ms ease;
+  }
+
+  .uc-unraid-thinking[open] > summary svg {
+    transform: rotate(90deg);
+  }
+
+  .uc-unraid-thinking > summary > span:first-of-type {
+    font-style: italic;
+  }
+
+  .uc-unraid-thinking > summary em {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--gray-400, #909090);
+    font-weight: 400;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .uc-unraid-thinking > div {
+    margin: 6px 0 0;
+    padding: 0 0 0 12px;
+    color: var(--gray-400, #909090);
+    border-left: 2px solid var(--gray-200, #d3d3d3);
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
   }
 
   .uc-field {
@@ -607,24 +891,408 @@
     box-shadow: 0 -4px 16px color-mix(in srgb, var(--aurora-page-bg) 70%, transparent);
   }
 
+  .uc-theme-setting {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+    border: 1px solid var(--aurora-border-default);
+    border-radius: var(--aurora-radius-1);
+    background: var(--aurora-panel-medium);
+  }
+
+  /*
+   * Unraid presentation mode.
+   *
+   * These aliases intentionally resolve against variables exported by the
+   * live Unraid webGUI. Fallbacks keep the standalone QA harness usable.
+   * The React composition stays shared; the host theme swaps its full token
+   * contract and applies Unraid's flatter component treatment.
+   */
+  .uc-theme-unraid {
+    --aurora-page-bg: var(--gray-100, #f2f2f2);
+    --aurora-bg: var(--aurora-page-bg);
+    --aurora-nav-bg: var(--black, #1d1b1b);
+    --aurora-panel-medium: var(--white, #ffffff);
+    --aurora-panel-strong: var(--white, #ffffff);
+    --aurora-panel-medium-top: var(--white, #ffffff);
+    --aurora-panel-strong-top: var(--white, #ffffff);
+    --aurora-control-surface: var(--white, #ffffff);
+    --aurora-hover-bg: var(--gray-150, #e8e8e8);
+    --aurora-surface-raised: var(--white, #ffffff);
+    --aurora-border-default: var(--gray-200, #d3d3d3);
+    --aurora-border-strong: var(--gray-300, #cccccc);
+    --aurora-text-primary: var(--black, #1d1b1b);
+    --aurora-text-muted: var(--gray-500, #808080);
+    --aurora-accent-primary: var(--orange-500, #ff8c2f);
+    --aurora-accent-strong: var(--orange-800, #f15a2c);
+    --aurora-accent-deep: var(--orange-900, #d63301);
+    --aurora-accent-lift: var(--orange-200, #ff9900);
+    --aurora-accent-button: var(--orange-800, #f15a2c);
+    --aurora-accent-foreground: var(--white, #ffffff);
+    --aurora-accent-pink: var(--orange-800, #f15a2c);
+    --aurora-accent-pink-strong: var(--orange-500, #ff8c2f);
+    --aurora-accent-pink-deep: var(--red-900, #941c00);
+    --aurora-accent-pink-button: var(--orange-800, #f15a2c);
+    --aurora-success: var(--green-800, #4f8a10);
+    --aurora-warn: var(--orange-400, #ce7c10);
+    --aurora-error: var(--red-800, #e22828);
+    --aurora-error-lift: var(--red-500, #ff3300);
+    --aurora-info: var(--blue-800, #486dba);
+    --aurora-neutral: var(--gray-500, #808080);
+    --aurora-focus-ring: color-mix(in srgb, var(--orange-500, #ff8c2f) 34%, transparent);
+    --aurora-active-glow: 0 0 0 2px color-mix(in srgb, var(--orange-500, #ff8c2f) 22%, transparent);
+    --aurora-highlight-medium: none;
+    --aurora-highlight-strong: none;
+    --aurora-shadow-medium: 0 2px 5px var(--black-opacity-10, rgba(0, 0, 0, 0.1));
+    --aurora-shadow-strong: 0 12px 30px var(--black-opacity-20, rgba(0, 0, 0, 0.2));
+    --aurora-shell-bg: var(--aurora-page-bg);
+    --aurora-radius-1: 7px;
+    --aurora-radius-2: 9px;
+    --aurora-radius-3: 11px;
+    --aurora-font-display: clear-sans, sans-serif;
+    --aurora-font-sans: clear-sans, sans-serif;
+    --font-display: var(--aurora-font-display);
+    --font-sans: clear-sans, sans-serif;
+    --background: var(--aurora-page-bg);
+    --foreground: var(--aurora-text-primary);
+    --card: var(--aurora-panel-medium);
+    --card-foreground: var(--aurora-text-primary);
+    --popover: var(--aurora-panel-strong);
+    --popover-foreground: var(--aurora-text-primary);
+    --primary: var(--aurora-accent-primary);
+    --primary-foreground: var(--aurora-accent-foreground);
+    --secondary: var(--aurora-control-surface);
+    --secondary-foreground: var(--aurora-text-primary);
+    --muted: var(--gray-150, #e8e8e8);
+    --muted-foreground: var(--aurora-text-muted);
+    --accent: var(--aurora-hover-bg);
+    --accent-foreground: var(--aurora-text-primary);
+    --destructive: var(--aurora-error);
+    --border: var(--aurora-border-default);
+    --input: var(--aurora-control-surface);
+    --ring: var(--aurora-focus-ring);
+  }
+
+  .uc-theme-unraid.uc-sheet {
+    border-color: var(--gray-200, #d3d3d3) !important;
+    background: var(--white, #ffffff) !important;
+    box-shadow: -12px 0 32px var(--black-opacity-20, rgba(0, 0, 0, 0.2)) !important;
+  }
+
+  .uc-theme-unraid .uc-header {
+    --aurora-text-primary: var(--white, #ffffff);
+    --aurora-text-muted: var(--gray-300, #cccccc);
+    --aurora-control-surface: var(--gray-700, #303030);
+    --aurora-hover-bg: var(--gray-600, #404040);
+    --aurora-border-default: var(--gray-700, #303030);
+    padding-block: 16px !important;
+    border-top: 4px solid var(--orange-500, #ff8c2f);
+    border-bottom: 0;
+    background: var(--black, #1d1b1b);
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .uc-mark {
+    width: 40px;
+    height: 40px;
+    color: var(--white, #ffffff);
+    border: 0;
+    border-radius: 8px;
+    background: linear-gradient(
+      145deg,
+      var(--red-500, #ff3300),
+      var(--orange-500, #ff8c2f)
+    );
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .uc-brand-copy [data-radix-dialog-description] {
+    display: none;
+  }
+
+  .uc-theme-unraid > [aria-label="Close"] {
+    color: var(--gray-300, #cccccc) !important;
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .uc-theme-unraid .uc-conversation-shell,
+  .uc-theme-unraid .uc-conversation {
+    background: var(--gray-100, #f2f2f2);
+  }
+
+  .uc-theme-unraid .uc-conversation {
+    gap: 15px;
+    padding: 20px !important;
+  }
+
+  .uc-theme-unraid .uc-message-content {
+    border-radius: 9px;
+    box-shadow: none !important;
+  }
+
+  .uc-theme-unraid .uc-message-assistant {
+    border-color: var(--gray-200, #d3d3d3) !important;
+    background: var(--white, #ffffff) !important;
+  }
+
+  .uc-theme-unraid .uc-message-user {
+    border-color: var(--orange-100, #ffdfb9) !important;
+    background: color-mix(
+      in srgb,
+      var(--orange-100, #ffdfb9) 55%,
+      var(--white, #ffffff)
+    ) !important;
+  }
+
+  .uc-theme-unraid .uc-approval-card {
+    color: var(--black, #1d1b1b);
+    border-color: color-mix(
+      in srgb,
+      var(--yellow-500, #ffd324) 40%,
+      var(--gray-200, #d3d3d3)
+    );
+    border-radius: 8px;
+    background: var(--yellow-100, #fff6bf);
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .uc-approval-eyebrow {
+    color: var(--orange-400, #ce7c10);
+  }
+
+  .uc-theme-unraid .uc-approval-card > code {
+    border-color: color-mix(
+      in srgb,
+      var(--orange-400, #ce7c10) 18%,
+      var(--gray-200, #d3d3d3)
+    );
+    background: color-mix(
+      in srgb,
+      var(--yellow-500, #ffd324) 12%,
+      var(--white, #ffffff)
+    );
+  }
+
+  .uc-theme-unraid .uc-approval-actions .aurora-btn--neutral {
+    color: var(--black, #1d1b1b);
+    border: 2px solid var(--black, #1d1b1b);
+    background: transparent;
+  }
+
+  .uc-theme-unraid .uc-footer {
+    padding: 14px 18px 16px !important;
+    border-color: var(--gray-200, #d3d3d3);
+    background: var(--white, #ffffff);
+    box-shadow: 0 -1px 0 var(--gray-200, #d3d3d3);
+  }
+
+  .uc-theme-unraid .uc-prompt > div > div[aria-busy] {
+    border-radius: 9px !important;
+    border-color: var(--gray-200, #d3d3d3) !important;
+    background: var(--white, #ffffff) !important;
+    box-shadow: none !important;
+  }
+
+  .uc-theme-unraid .aurora-btn {
+    border-radius: 5px;
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .aurora-btn--rose,
+  .uc-theme-unraid [aria-label="Send message"] {
+    color: var(--white, #ffffff);
+    border-color: var(--orange-800, #f15a2c);
+    background: linear-gradient(
+      135deg,
+      var(--red-500, #ff3300),
+      var(--orange-500, #ff8c2f)
+    );
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .aurora-btn--rose:hover,
+  .uc-theme-unraid [aria-label="Send message"]:hover {
+    border-color: var(--orange-900, #d63301);
+    background: var(--orange-800, #f15a2c);
+    box-shadow: none;
+  }
+
+  .uc-theme-unraid .uc-theme-setting {
+    border-radius: 7px;
+    box-shadow: none;
+  }
+
+  .uc-launcher.uc-theme-unraid {
+    width: 58px !important;
+    height: 58px !important;
+    color: var(--white, #ffffff) !important;
+    border: 0 !important;
+    background: linear-gradient(
+      145deg,
+      var(--red-500, #ff3300),
+      var(--orange-500, #ff8c2f)
+    ) !important;
+    box-shadow: 0 10px 24px var(--black-opacity-20, rgba(0, 0, 0, 0.2)) !important;
+  }
+
   @media (max-width: 560px) {
+    .uc-sheet {
+      inset: 0 0 auto auto !important;
+      width: 100vw !important;
+      max-width: 100vw !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      border-inline: 0 !important;
+    }
+
     .uc-launcher {
       right: 14px;
-      bottom: 14px;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      width: 56px !important;
+      height: 56px !important;
     }
 
     .uc-conversation {
-      padding: 14px !important;
+      gap: 12px;
+      padding: 12px !important;
+      scroll-padding-bottom: 12px;
     }
 
     .uc-header {
-      padding-left: 14px !important;
+      min-height: 64px;
+      padding: max(10px, env(safe-area-inset-top)) 64px 10px 12px !important;
+    }
+
+    .uc-mark,
+    .uc-theme-unraid .uc-mark {
+      width: 36px;
+      height: 36px;
+    }
+
+    .uc-header-actions {
+      gap: 2px;
+    }
+
+    .uc-dock-toggle {
+      width: 44px !important;
+      height: 44px !important;
+    }
+
+    .uc-dock-toggle[aria-label^="Dock Codex"],
+    .uc-dock-toggle[aria-label^="Undock Codex"] {
+      display: none !important;
+    }
+
+    .uc-connection {
+      min-width: 40px;
+      min-height: 40px;
+    }
+
+    .uc-sheet > [aria-label="Close"] {
+      top: max(14px, env(safe-area-inset-top)) !important;
+      right: 12px !important;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .uc-message-user {
+      max-width: 92%;
+    }
+
+    .uc-approval-card {
+      gap: 9px;
+      padding: 13px;
+    }
+
+    .uc-approval-actions {
+      align-items: stretch;
+      flex-wrap: wrap;
+    }
+
+    .uc-approval-actions .aurora-btn {
+      min-height: 42px;
+    }
+
+    .uc-approval-always {
+      width: 100%;
+      min-height: 42px;
+      margin-left: 0;
+      padding-top: 2px;
+    }
+
+    .uc-approval-always input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .uc-unraid-terminal-head {
+      gap: 6px;
+      padding-inline: 8px;
+    }
+
+    .uc-unraid-terminal pre {
+      max-height: min(220px, 32dvh);
+      padding: 9px 10px;
+      font-size: 11px;
+    }
+
+    .uc-footer,
+    .uc-theme-unraid .uc-footer {
+      gap: 8px;
+      padding: 10px 10px max(10px, env(safe-area-inset-bottom)) !important;
+    }
+
+    .uc-inspector {
+      padding: 12px;
+    }
+
+    .uc-theme-setting {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .uc-setting-controls {
+      grid-template-columns: 1fr;
+    }
+
+    .uc-session-summary > div,
+    .uc-runtime-list > div {
+      grid-template-columns: 1fr;
+      gap: 5px;
     }
   }
 
   @media (max-width: 899px) {
+    .uc-sheet {
+      inset: 0 0 auto auto !important;
+      width: 100vw !important;
+      max-width: 100vw !important;
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      border-inline: 0 !important;
+      overscroll-behavior: contain;
+    }
+
     .uc-resize-handle {
       display: none;
+    }
+
+    .uc-dock-toggle {
+      width: 44px !important;
+      height: 44px !important;
+    }
+
+    .uc-dock-toggle[aria-label^="Dock Codex"],
+    .uc-dock-toggle[aria-label^="Undock Codex"] {
+      display: none !important;
+    }
+
+    .uc-sheet > [aria-label="Close"] {
+      min-width: 44px;
+      min-height: 44px;
     }
   }
 
