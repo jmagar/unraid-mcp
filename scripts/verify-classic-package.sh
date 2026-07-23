@@ -24,10 +24,11 @@ if awk '$0 == "./" { found=1 } END { exit !found }' "$archive_list"; then
   exit 1
 fi
 bad_directory_mode="$(
-  find "$archive_tree" -mindepth 1 -type d ! -perm 0755 -print -quit
+  tar --numeric-owner -tvJf "$archive" |
+    awk '$1 ~ /^d/ && ($1 != "drwxr-xr-x" || $2 != "0/0") { print $NF; exit }'
 )"
 [ -z "$bad_directory_mode" ] || {
-  echo "archive contains non-0755 directory: ${bad_directory_mode#"$archive_tree"/}" >&2
+  echo "archive contains unsafe directory metadata: $bad_directory_mode" >&2
   exit 1
 }
 

@@ -14,6 +14,15 @@ PLG="$ROOT/incus.plg"
 BUILD_CLASSIC="$ROOT/scripts/build-classic-package.sh"
 VERIFY_CLASSIC="$ROOT/scripts/verify-classic-package.sh"
 
+for unsafe_build in 48 49 50 51 52; do
+  unsafe_archive="$ROOT/packages/incus-unraid-7.0.0-${unsafe_build}-x86_64-1.txz"
+  [ ! -e "$unsafe_archive" ] || {
+    echo "unsafe package build remains published: ${unsafe_archive#"$ROOT"/}" >&2
+    exit 1
+  }
+done
+"$ROOT/tests/package-directory-modes.sh"
+
 grep -Eq 'ACL_BLOCK=.*100\.64\.0\.0/10' "$CFG"
 grep -Fq 'Block host bridge and peer containers' "$INIT"
 grep -Fq 'destination_port: \"53\"' "$INIT"
