@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 rounded-lg border p-3" style="background: #07131c; border-color: #1d3d4e; height: calc(100vh - 190px); min-height: 320px">
+  <div class="flex flex-col gap-2 rounded-lg border p-3 h-full" style="background: #07131c; border-color: #1d3d4e; min-height: 320px">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
         <span class="text-[11px] font-semibold tracking-[0.08em] uppercase" style="color: #a7bcc9">Server log</span>

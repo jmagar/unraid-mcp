@@ -16,7 +16,7 @@ import {
   type ServiceOp,
 } from "./lib/config-client";
 
-type Tab = "dashboard" | "logs" | "settings";
+type Tab = "dashboard" | "settings";
 const tab = ref<Tab>("dashboard");
 
 const payload = ref<ConfigPayload | null>(null);
@@ -42,7 +42,7 @@ const initialSnapshot = ref(""); // form state at last load, for dirty detection
 const cpuHist = ref<number[]>([]); // rolling samples for sparklines
 const memHist = ref<number[]>([]);
 const gateOpen = reactive<Record<string, boolean>>({}); // opted-in gated sections
-const TABS: Tab[] = ["dashboard", "logs", "settings"];
+const TABS: Tab[] = ["dashboard", "settings"];
 
 const secretKeys = SECTIONS.flatMap((s) => s.fields)
   .filter((f) => f.kind === "secret")
@@ -367,11 +367,34 @@ onBeforeUnmount(() => {
 
     <div v-if="loading" class="text-sm text-muted-foreground">Loading…</div>
 
-    <!-- ── DASHBOARD ─────────────────────────────────────────────── -->
+    <!-- ── DASHBOARD (status cards + live log, one viewport) ─────── -->
     <template v-else-if="tab === 'dashboard'">
-      <div class="grid gap-3 @min-[880px]:grid-cols-2 items-start">
-        <!-- LEFT: Connection, then Resources -->
-        <div class="flex flex-col gap-3">
+      <div
+        class="flex flex-col @min-[900px]:flex-row gap-3"
+        style="height: calc(100vh - 150px); min-height: 420px"
+      >
+        <!-- LEFT: status cards (scroll internally if short viewport) -->
+        <div class="flex flex-col gap-3 overflow-auto @min-[900px]:w-[430px] @min-[900px]:shrink-0">
+          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-semibold">Server</h3>
+              <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
+                {{ service.running ? "Running" : "Stopped" }}
+              </Badge>
+              <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">tailnet</Badge>
+            </div>
+            <div class="flex items-center gap-2">
+              <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
+                {{ service.running ? "Stop" : "Start" }}
+              </Button>
+              <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">Restart</Button>
+              <div class="ms-auto flex items-center gap-1.5" :title="service.enabled ? 'Starts with the array' : 'Does not start with the array'">
+                <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
+                <span class="text-sm text-muted-foreground">Autostart</span>
+              </div>
+            </div>
+          </section>
+
           <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
             <h3 class="text-base font-semibold">Connection</h3>
             <button
@@ -423,29 +446,6 @@ onBeforeUnmount(() => {
               <span :style="statsStale ? 'color:#c6a36b' : ''">{{ statsStale ? "stale — can't reach server" : "updates live" }}</span>
             </p>
           </section>
-        </div>
-
-        <!-- RIGHT: Server, then Version -->
-        <div class="flex flex-col gap-3">
-          <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
-            <div class="flex items-center gap-2">
-              <h3 class="text-base font-semibold">Server</h3>
-              <Badge :variant="service.running ? 'green' : 'gray'" size="sm">
-                {{ service.running ? "Running" : "Stopped" }}
-              </Badge>
-              <Badge v-if="boolVal('UNRAID_MCP_TAILSCALE_SERVE') && tailscale.available" variant="orange" size="sm">tailnet</Badge>
-            </div>
-            <div class="flex items-center gap-2">
-              <Button size="sm" variant="outline" :disabled="busy" @click="svc(service.running ? 'stop' : 'start')">
-                {{ service.running ? "Stop" : "Start" }}
-              </Button>
-              <Button size="sm" variant="outline" :disabled="busy || !service.running" @click="svc('restart')">Restart</Button>
-              <div class="ms-auto flex items-center gap-1.5" :title="service.enabled ? 'Starts with the array' : 'Does not start with the array'">
-                <Switch :model-value="service.enabled" :disabled="busy" @update:model-value="svc($event ? 'enable' : 'disable')" />
-                <span class="text-sm text-muted-foreground">Autostart</span>
-              </div>
-            </div>
-          </section>
 
           <section class="rounded-lg border border-border bg-card p-4 flex flex-col gap-2">
             <div class="flex items-center gap-2">
@@ -468,11 +468,11 @@ onBeforeUnmount(() => {
             </div>
           </section>
         </div>
+
+        <!-- RIGHT: live log fills the remaining width + full height -->
+        <LogView class="flex-1 min-w-0 min-h-0" />
       </div>
     </template>
-
-    <!-- ── LOGS ──────────────────────────────────────────────────── -->
-    <LogView v-else-if="tab === 'logs'" />
 
     <!-- ── SETTINGS ──────────────────────────────────────────────── -->
     <template v-else>
