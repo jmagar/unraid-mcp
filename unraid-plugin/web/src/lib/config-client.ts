@@ -49,7 +49,7 @@ export interface ConfigPayload {
 
 export interface StatsPayload {
   service: ServiceState;
-  process: ProcessState;
+  process?: ProcessState;
 }
 
 async function csrfToken(): Promise<string> {

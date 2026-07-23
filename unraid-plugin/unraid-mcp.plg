@@ -89,7 +89,7 @@ if [ ! -f "&plugin;/.env" ]; then
 fi
 
 # Wire the service + event scripts (rootfs is RAM — re-done every install/boot).
-chmod +x "&emhttp;/scripts/"*.sh "&emhttp;/scripts/rc.unraid-mcp" "&emhttp;/event/"* 2>/dev/null || true
+chmod +x "&emhttp;/scripts/"*.sh "&emhttp;/scripts/rc.unraid-mcp" "&emhttp;/event/"* "&emhttp;/nchan/"* 2>/dev/null || true
 ln -sf "&emhttp;/scripts/rc.unraid-mcp" /etc/rc.d/rc.unraid-mcp
 
 # If the array is already mounted (plugin installed on a running system) and
