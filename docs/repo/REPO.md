@@ -28,7 +28,7 @@ unraid-mcp/
 +-- .codex-plugin/
 |   +-- plugin.json                    # Codex CLI plugin manifest
 |
-+-- unraid_mcp/                        # Python source package
++-- src/unraid_mcp/                        # Python source package
 |   +-- __init__.py
 |   +-- main.py                        # Entry point and shutdown cleanup
 |   +-- server.py                      # FastMCP server, middleware chain, ASGI auth
@@ -135,7 +135,7 @@ unraid-mcp/
 
 ## Key conventions
 
-- **Single source package**: `unraid_mcp/` contains all server code
+- **Single source package**: `src/unraid_mcp/` contains all server code
 - **Domain modules**: Private `_<domain>.py` files in `tools/`, imported by `unraid.py`
 - **Config module**: `config/settings.py` loads all env vars at import time
 - **Symlinks**: `AGENTS.md` and `GEMINI.md` symlink to `CLAUDE.md`

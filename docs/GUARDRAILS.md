@@ -19,7 +19,7 @@ The server loads from the first `.env` file found:
 3. `/app/.env.local`
 4. `<project-root>/.env.local`
 5. `<project-root>/.env`
-6. `unraid_mcp/.env`
+6. `src/unraid_mcp/.env`
 
 ### Sensitive value redaction
 
@@ -115,7 +115,7 @@ Log file paths are restricted to allowed prefixes (`/var/log/`, `/boot/logs/`) t
 - No string interpolation of user input into GraphQL query strings
 - The subscription test tool (`subscriptions/test_query`) only allows the **12 whitelisted
   schema field names** in `_ALLOWED_SUBSCRIPTION_FIELDS`
-  (`unraid_mcp/subscriptions/diagnostics.py`): `containerStats`, `cpu`,
+  (`src/unraid_mcp/subscriptions/diagnostics.py`): `containerStats`, `cpu`,
   `dockerContainerStats`, `memory`, `array`, `network`, `docker`,
   `systemMetricsTemperature`, `vm`, `displaySubscription`,
   `notificationsWarningsAndAlerts`, `pluginInstallUpdates`. The validator also rejects any

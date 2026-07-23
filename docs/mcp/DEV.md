@@ -92,14 +92,14 @@ just restart        # docker compose restart
 
 ## Adding a new action domain
 
-1. Create `unraid_mcp/tools/_newdomain.py`:
+1. Create `src/unraid_mcp/tools/_newdomain.py`:
    - Define `_NEWDOMAIN_QUERIES` dict with GraphQL queries
    - Define `_NEWDOMAIN_MUTATIONS` dict (if applicable)
    - Define `_NEWDOMAIN_DESTRUCTIVE` set (if applicable)
    - Implement `_handle_newdomain()` async function
    - Mutation handlers MUST return before the query dict lookup
 
-2. Register in `unraid_mcp/tools/unraid.py`:
+2. Register in `src/unraid_mcp/tools/unraid.py`:
    - Import handler and constants
    - Add to `UNRAID_ACTIONS` Literal type
    - Add routing in `unraid()` function
@@ -117,7 +117,7 @@ just restart        # docker compose restart
 
 ## Adding a new subscription
 
-1. Add query to `unraid_mcp/subscriptions/queries.py`:
+1. Add query to `src/unraid_mcp/subscriptions/queries.py`:
    - Add to `SNAPSHOT_ACTIONS` (continuous) or `COLLECT_ACTIONS` (event-driven)
    - If event-driven, add to `EVENT_DRIVEN_ACTIONS`
 

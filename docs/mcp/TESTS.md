@@ -110,7 +110,7 @@ The parity report compares the vendored Unraid SDL root query/mutation/
 subscription fields against the emitted GraphQL inventory, including internal
 helper queries and live subscription queries. Missing mutation/subscription
 roots fail the schema tests unless explicitly classified; current query gaps are
-documented as intentional in `unraid_mcp/devtools/api_parity.py`.
+documented as intentional in `src/unraid_mcp/devtools/api_parity.py`.
 
 ### HTTP layer tests (`tests/http_layer/`)
 
@@ -149,7 +149,7 @@ uv run pytest tests/integration/ -m slow
 Configuration in `pyproject.toml`:
 
 - **Minimum**: 80% branch coverage (`fail_under = 80`)
-- **Source**: `unraid_mcp/` directory
+- **Source**: `src/unraid_mcp/` directory
 - **Excludes**: tests, `__pycache__`, `.venv`, abstract methods, type checking blocks
 - **Reports**: terminal, HTML (`.cache/htmlcov/`), XML (`.cache/coverage.xml`)
 
