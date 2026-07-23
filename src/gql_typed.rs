@@ -18,11 +18,36 @@ mod schema {}
 
 // ── custom scalars (serialise transparently to their inner JSON type) ────────
 
-// cynic's `Scalar` derive already provides the serde impls (it serialises
-// transparently to the inner value — so `BigInt` stays a JSON string).
-/// `BigInt` is delivered as a JSON string; keep it a string end to end.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(transparent)]
+struct BigIntValue(String);
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum BigIntWireValue {
+    String(String),
+    Signed(i64),
+    Unsigned(u64),
+}
+
+impl<'de> serde::Deserialize<'de> for BigIntValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = BigIntWireValue::deserialize(deserializer)?;
+        Ok(Self(match value {
+            BigIntWireValue::String(value) => value,
+            BigIntWireValue::Signed(value) => value.to_string(),
+            BigIntWireValue::Unsigned(value) => value.to_string(),
+        }))
+    }
+}
+
+/// Unraid emits `BigInt` as either a JSON number or string. Accept both wire
+/// representations and normalize to a string so downstream output stays stable.
 #[derive(cynic::Scalar, Clone, Debug)]
-pub struct BigInt(pub String);
+pub struct BigInt(BigIntValue);
 
 #[derive(cynic::Scalar, Clone, Debug)]
 pub struct PrefixedID(pub String);
@@ -4209,3 +4234,17 @@ gql_enum!(SensorType {
     Vrm,         // VRM
     Custom,      // CUSTOM
 });
+
+#[cfg(test)]
+mod tests {
+    use super::BigInt;
+    use serde_json::json;
+
+    #[test]
+    fn bigint_accepts_numeric_json_and_normalizes_to_string() {
+        let value: BigInt = serde_json::from_value(json!(44_092_026_880_u64))
+            .expect("live Unraid BigInt numbers should deserialize");
+
+        assert_eq!(serde_json::to_value(value).unwrap(), json!("44092026880"));
+    }
+}

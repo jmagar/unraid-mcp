@@ -3,12 +3,13 @@
 //! Validates, against the **vendored Unraid SDL** (`schema/unraid-schema.graphql`):
 //!   1. every GraphQL query `graphql.rs` actually sends (captured by driving the
 //!      real dispatch through a recording mock), and
-//!   2. every scenario fixture's leaf values — scalar JSON-type (BigInt=string,
-//!      Int/Float=number, …) and enum membership.
+//!   2. every scenario fixture's leaf values — scalar JSON type (BigInt accepts
+//!      the number emitted by live Unraid and legacy strings, Int/Float=number,
+//!      …) and enum membership.
 //!
 //! This is the guardrail that mechanically catches the class of mistakes that
 //! were hand-fixed earlier (invalid `DiskSmartStatus`, wrong `ArrayDiskType`
-//! casing, BigInt-as-number). It uses `apollo-compiler` for real schema-aware
+//! casing, and custom-scalar wire mismatches). It uses `apollo-compiler` for real schema-aware
 //! validation rather than string heuristics.
 //!
 //! **What it does NOT prove:** that a *real* Unraid server returns data matching
@@ -234,8 +235,10 @@ fn check_named(
 /// Map a GraphQL scalar name to the JSON type the Unraid API serializes it as.
 fn check_scalar(name: &str, value: &Value, path: &str, errors: &mut Vec<String>) {
     let ok = match name {
-        // BigInt is serialized as a STRING (the whole reason BigInt exists).
-        "BigInt" | "String" | "DateTime" | "URL" | "PrefixedID" | "ID" => value.is_string(),
+        // Live Unraid serializes BigInt as a JSON number. Older releases and
+        // fixtures may use strings, and the client intentionally accepts both.
+        "BigInt" => value.is_number() || value.is_string(),
+        "String" | "DateTime" | "URL" | "PrefixedID" | "ID" => value.is_string(),
         "Int" | "Port" => value.is_i64() || value.is_u64(),
         "Float" => value.is_number(),
         "Boolean" => value.is_boolean(),
@@ -253,7 +256,8 @@ fn check_scalar(name: &str, value: &Value, path: &str, errors: &mut Vec<String>)
 
 fn expected_json_kind(scalar: &str) -> &'static str {
     match scalar {
-        "BigInt" | "String" | "DateTime" | "URL" | "PrefixedID" | "ID" => "a string",
+        "BigInt" => "a number or string",
+        "String" | "DateTime" | "URL" | "PrefixedID" | "ID" => "a string",
         "Int" | "Port" => "an integer",
         "Float" => "a number",
         "Boolean" => "a boolean",
