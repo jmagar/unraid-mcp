@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ConfigService } from "@nestjs/config";
 import { IncusService } from "./incus.service.js";
 import type { IncusResponse } from "./incus-unix-client.service.js";
@@ -9,6 +12,34 @@ function syncResponse<T>(metadata: T): IncusResponse<T> {
 }
 
 describe("IncusService jail snapshots", () => {
+  it("creates per-instance workspaces writable by the configured agent identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "incus-workspace-test-"));
+    try {
+      const uid = process.getuid?.() ?? 1000;
+      const gid = process.getgid?.() ?? 1000;
+      const values: Record<string, string> = {
+        "incus.jailWorkspaceRoot": root,
+        "incus.jailAgentUid": String(uid),
+        "incus.jailAgentGid": String(gid),
+      };
+      const config = {
+        get: (key: string, fallback: string) => values[key] ?? fallback,
+      } as unknown as ConfigService;
+      const client = {} as IncusUnixClient;
+      const service = new IncusService(config, client);
+
+      const path = await (service as unknown as {
+        ensureInstanceWorkspaceDir(name: string): Promise<string>;
+      }).ensureInstanceWorkspaceDir("agent-one");
+      const info = await stat(path);
+      expect(info.uid).toBe(uid);
+      expect(info.gid).toBe(gid);
+      expect(info.mode & 0o777).toBe(0o750);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("deduplicates reads but invalidates the snapshot after a successful instance mutation", async () => {
     let reads = 0;
     const request = async (method: string, path: string) => {

@@ -26,6 +26,8 @@ grep -Fq 'readonly: "true"' "$INIT"
 grep -Fq 'validate_containment_config' "$APPLY"
 grep -Fq 'prepare_storage_config' "$APPLY"
 grep -Fq 'prepare_storage_config' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh"
+grep -Fq 'chown "${JAIL_AGENT_UID}:${JAIL_AGENT_GID}" "${JAIL_WORKSPACE_ROOT}/default-workspace"' "$INIT"
+grep -Fq 'chmod 0750 "${JAIL_WORKSPACE_ROOT}/default-workspace"' "$INIT"
 env_source_line="$(grep -n '\. "${EMHTTP}/scripts/incus-env.sh"' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh" | cut -d: -f1)"
 tool_check_line="$(grep -n 'command -v unsquashfs' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh" | cut -d: -f1)"
 [ -n "$env_source_line" ]

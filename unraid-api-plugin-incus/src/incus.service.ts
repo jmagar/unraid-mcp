@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { chmod, chown, mkdir, realpath, stat } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { IncusUnixClient, type IncusResponse } from "./incus-unix-client.service.js";
 
@@ -266,6 +266,13 @@ export class IncusService {
       throw new Error(`Container name "${name}" produces an invalid workspace path`);
     }
     await mkdir(instanceWorkspace, { recursive: true });
+    const uid = Number.parseInt(this.config.get<string>("incus.jailAgentUid", "1000"), 10);
+    const gid = Number.parseInt(this.config.get<string>("incus.jailAgentGid", "1000"), 10);
+    if (!Number.isSafeInteger(uid) || uid < 0 || !Number.isSafeInteger(gid) || gid < 0) {
+      throw new Error("Configured agent UID/GID is invalid");
+    }
+    await chown(instanceWorkspace, uid, gid);
+    await chmod(instanceWorkspace, 0o750);
     return realpath(instanceWorkspace);
   }
 

@@ -250,6 +250,8 @@ case "$CANONICAL_WORKSPACE_ROOT" in
 esac
 JAIL_WORKSPACE_ROOT="$CANONICAL_WORKSPACE_ROOT"
 mkdir -p "${JAIL_WORKSPACE_ROOT}/default-workspace"
+chown "${JAIL_AGENT_UID}:${JAIL_AGENT_GID}" "${JAIL_WORKSPACE_ROOT}/default-workspace"
+chmod 0750 "${JAIL_WORKSPACE_ROOT}/default-workspace"
 # JAIL_WORKSPACE_ROOT gets bind-mounted with idmap shifting (shift: "true")
 # into every jail — it MUST be real persistent storage. tmpfs (Unraid's
 # RAM-based root fs) would silently discard all workspace data on every
