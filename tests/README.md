@@ -118,8 +118,8 @@ Compares the vendored SDL structurally with
 production Unraid API. Refresh or check the live snapshot with
 `just schema-live-capture` and `just schema-live-diff`; both commands require
 `UNRAID_API_URL` and `UNRAID_API_KEY`. The daily schema-drift workflow also
-runs this check against the upstream configured in the production `runraid`
-container.
+runs this check when dedicated repository secrets with those names are
+configured.
 
 ---
 

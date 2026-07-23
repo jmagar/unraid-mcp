@@ -14,8 +14,8 @@
 # Caveat : this proves query validity + fixture self-consistency, NOT that a real
 #          Unraid server returns data matching the fixtures (only a live test does;
 #          e.g. flash.guid is non-null in SDL yet null at runtime).
-# >>> VENDOR-HEADER-END <<< (schema-drift CI strips everything up to this line)
 # ─────────────────────────────────────────────────────────────────────────────
+# >>> VENDOR-HEADER-END <<< (schema-drift CI strips everything up to this line)
 # ------------------------------------------------------
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------

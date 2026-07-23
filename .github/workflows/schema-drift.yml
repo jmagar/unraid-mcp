@@ -16,6 +16,10 @@ jobs:
   drift:
     name: Compare vendored SDL to unraid/api
     runs-on: [self-hosted, unraid]
+    env:
+      UNRAID_API_URL: ${{ secrets.UNRAID_API_URL }}
+      UNRAID_API_KEY: ${{ secrets.UNRAID_API_KEY }}
+      UNRAID_API_SKIP_TLS_VERIFY: ${{ secrets.UNRAID_API_SKIP_TLS_VERIFY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -41,18 +45,16 @@ jobs:
           fi
 
       - name: Compare vendored contract to live Unraid introspection
+        if: env.UNRAID_API_URL != '' && env.UNRAID_API_KEY != ''
         run: |
-          live_url="$(docker exec runraid printenv UNRAID_API_URL)"
-          live_key="$(docker exec runraid printenv UNRAID_API_KEY)"
-          live_skip_tls="$(
-            docker exec runraid printenv UNRAID_API_SKIP_TLS_VERIFY 2>/dev/null || true
-          )"
-          UNRAID_API_URL="$live_url" \
-          UNRAID_API_KEY="$live_key" \
-          UNRAID_API_SKIP_TLS_VERIFY="$live_skip_tls" \
-            python3 scripts/live-schema-contract.py \
-              --source-label production-unraid \
-              --check schema/live-introspection.json
+          python3 scripts/live-schema-contract.py \
+            --source-label production-unraid \
+            --check schema/live-introspection.json
+
+      - name: Report unavailable live introspection credentials
+        if: env.UNRAID_API_URL == '' || env.UNRAID_API_KEY == ''
+        run: |
+          echo "::warning::Live schema check skipped: configure the dedicated UNRAID_API_URL and UNRAID_API_KEY repository secrets."
 
       - name: Open / update drift issue
         if: steps.diff.outputs.drift == 'true'

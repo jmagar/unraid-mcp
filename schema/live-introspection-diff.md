@@ -26,6 +26,7 @@ just schema-live-capture
 just schema-live-diff
 ```
 
-The daily `.github/workflows/schema-drift.yml` job runs the same live check on
-the self-hosted Unraid runner using the upstream configuration from the running
-`runraid` container.
+The daily `.github/workflows/schema-drift.yml` job runs the same live check when
+the repository has dedicated `UNRAID_API_URL` and `UNRAID_API_KEY` secrets.
+It emits a warning and continues the published-SDL check when those credentials
+are not configured; do not reuse an administrative production key for CI.
