@@ -41,7 +41,12 @@ bridge="${INCUS_TEST_BRIDGE:-agentbr0}"
 gateway_cidr="$($INCUS network get "$bridge" ipv4.address </dev/null)"
 gateway="${gateway_cidr%/*}"
 host_port="${INCUS_HOST_TEST_PORT:-45678}"
-busybox nc -l -p "$host_port" -s "$gateway" >/dev/null 2>&1 &
+python3 -c 'import socket, sys
+s = socket.socket()
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+s.bind((sys.argv[1], int(sys.argv[2])))
+s.listen(1)
+s.accept()' "$gateway" "$host_port" >/dev/null 2>&1 &
 listener_pid=$!
 sleep 1
 kill -0 "$listener_pid" 2>/dev/null || { echo "failed to start host bridge test listener" >&2; exit 1; }
@@ -49,6 +54,17 @@ if "$INCUS" exec "$name" -- nc -z -w3 "$gateway" "$host_port"; then
   echo "containment failure: reached host bridge gateway $gateway:$host_port" >&2
   exit 1
 fi
+
+# Optional site-known listeners make LAN/Tailscale denial conclusive too.
+# Format: space-separated host:port pairs.
+for endpoint in ${INCUS_KNOWN_BLOCKED_ENDPOINTS:-}; do
+  target="${endpoint%:*}"
+  port="${endpoint##*:}"
+  if "$INCUS" exec "$name" -- nc -z -w3 "$target" "$port"; then
+    echo "containment failure: reached known blocked endpoint $endpoint" >&2
+    exit 1
+  fi
+done
 if "$INCUS" exec "$name" -- ip -6 route | grep -q '^default'; then
   echo "containment failure: container has an IPv6 default route" >&2
   exit 1
