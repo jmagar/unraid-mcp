@@ -20,6 +20,15 @@ say() { printf '  %-22s %s\n' "$1" "$2"; }
 
 echo "== Incus preflight =="
 
+# Incus reads the system idmap at daemon startup, so subordinate ranges must
+# exist during preflight rather than in the post-start environment reconciler.
+if "${EMHTTP}/scripts/prepare-idmap.sh"; then
+  say "subordinate ids" "root ranges ready"
+else
+  say "subordinate ids" "FAIL — could not prepare /etc/subuid and /etc/subgid"
+  FAIL=1
+fi
+
 # 1) glibc >= 2.38 (incusd requires libc6 >= 2.38)
 GLIBC="$(ldd --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)"
 if [ -n "$GLIBC" ] && awk "BEGIN{exit !($GLIBC >= 2.38)}"; then
@@ -84,7 +93,7 @@ else
   say "userns" "disabled — only privileged containers will work"
 fi
 
-# 7) subuid/subgid + uid-mapping helpers (unprivileged containers).
+# 7) uid-mapping helpers (unprivileged containers).
 if command -v newuidmap >/dev/null && command -v newgidmap >/dev/null; then
   say "uidmap" "newuidmap/newgidmap present"
 else

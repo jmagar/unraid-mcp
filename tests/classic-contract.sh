@@ -7,6 +7,7 @@ INIT="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-init.sh"
 MIGRATE="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/migrate-config.sh"
 VALIDATE="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/config-validation.sh"
 APPLY="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/apply-settings.sh"
+PREPARE_IDMAP="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/prepare-idmap.sh"
 API_REGISTRATION="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/api-plugin-registration.sh"
 INSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/install-api-plugin.sh"
 UNINSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/uninstall-api-plugin.sh"
@@ -115,6 +116,22 @@ fi
 # production accepts only /srv and /mnt.
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+
+# incusd reads the system idmap only at daemon startup. The preflight path
+# therefore has to create root's subordinate ranges before rc.incus launches
+# the daemon, and repeated boots must not duplicate existing mappings.
+subuid="$tmp/subuid"
+subgid="$tmp/subgid"
+printf 'podman:200000:65536\n' >"$subuid"
+: >"$subgid"
+SUBUID_FILE="$subuid" SUBGID_FILE="$subgid" "$PREPARE_IDMAP"
+SUBUID_FILE="$subuid" SUBGID_FILE="$subgid" "$PREPARE_IDMAP"
+[ "$(grep -c '^root:1000000:1000000000$' "$subuid")" -eq 1 ]
+[ "$(grep -c '^root:1000000:1000000000$' "$subgid")" -eq 1 ]
+grep -Fqx 'podman:200000:65536' "$subuid"
+grep -Fq '"${EMHTTP}/scripts/prepare-idmap.sh"' \
+  "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh"
+
 storage_root="$tmp/storage-paths"
 storage_config() (
   # shellcheck source=/dev/null

@@ -62,19 +62,6 @@ if ! storage_error="$(prepare_storage_config 2>&1)"; then
   exit 1
 fi
 
-# ---------- 0. subordinate uid/gid range for root (unprivileged containers) ----------
-# Real Debian/Ubuntu Incus packages populate /etc/subuid and /etc/subgid for
-# root via a postinst hook; since we install by unpacking a repackaged
-# binary rather than through apt, that never runs, so unprivileged (non-
-# security.privileged) containers fail with "System doesn't have a
-# functional idmap setup". These files are shared, system-wide, and may
-# already have entries from other tools (Docker rootless, Podman, etc.) —
-# only add a root: line if none exists at all; never touch existing entries.
-for f in /etc/subuid /etc/subgid; do
-  [ -f "$f" ] || : > "$f"
-  grep -q '^root:' "$f" || echo "root:1000000:1000000000" >> "$f"
-done
-
 # liblxc hardcodes this exact path as a private mount-namespace target for
 # pivoting a container's rootfs — it must exist (can be empty) or every
 # container start fails with "Failed to prepare rootfs storage". Real

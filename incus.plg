@@ -2,13 +2,13 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.23">
+  <!ENTITY version   "2026.07.23a">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-54-x86_64-1.txz">
-  <!ENTITY md5       "9d25d82303365d50e630fc5ec7d2928b">
-  <!ENTITY sha256    "18fa091eeeaecebcc82336e48f0c403589aeab4c290fe511a6ba76e8020d4340">
+  <!ENTITY txz       "&name;-unraid-7.0.0-55-x86_64-1.txz">
+  <!ENTITY md5       "fe0ac455ac84bc928f9bdadf57c518b7">
+  <!ENTITY sha256    "ae3615b26aa980f2331812fa7f8e881d16ed70f03bb0370a21ccb4de6307f157">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -16,6 +16,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.23a
+- Prepare root's subordinate UID/GID ranges during daemon preflight so Incus
+  starts with a functional idmap on fresh Unraid boots and can launch
+  unprivileged containers without a manual daemon restart.
+
 ###2026.07.23
 - Restore executable permissions on every private runtime helper and verify
   their real invocation and shared-library resolution before publication.
