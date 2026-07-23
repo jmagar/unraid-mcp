@@ -57,6 +57,10 @@ if ! validation_error="$(validate_containment_config 2>&1)"; then
   log "FATAL: ${validation_error}"
   exit 1
 fi
+if ! storage_error="$(prepare_storage_config 2>&1)"; then
+  log "FATAL: ${storage_error}"
+  exit 1
+fi
 
 # ---------- 0. subordinate uid/gid range for root (unprivileged containers) ----------
 # Real Debian/Ubuntu Incus packages populate /etc/subuid and /etc/subgid for
@@ -99,11 +103,7 @@ if ! "$INCUS" storage show "$STORAGE_POOL_NAME" </dev/null >/dev/null 2>&1; then
       log "Set STORAGE_SOURCE to an existing pool/dataset, or switch STORAGE_DRIVER=dir."
       exit 1
     fi
-    # Create the dataset if the pool exists but dataset doesn't. Won't touch existing data.
-    if ! zfs list "$STORAGE_SOURCE" >/dev/null 2>&1; then
-      log "creating zfs dataset ${STORAGE_SOURCE}"
-      zfs create -p "$STORAGE_SOURCE" || { log "FATAL: could not create ${STORAGE_SOURCE}"; exit 1; }
-    fi
+    # prepare_storage_config already created and write-probed the dataset.
     cat <<EOF | "$INCUS" admin init --preseed
 config: {}
 storage_pools:
@@ -236,7 +236,7 @@ case "$JAIL_WORKSPACE_ROOT" in
     exit 1
     ;;
 esac
-mkdir -p "$JAIL_WORKSPACE_ROOT"
+# prepare_storage_config already created and write-probed this directory.
 CANONICAL_WORKSPACE_ROOT="$(readlink -f "$JAIL_WORKSPACE_ROOT")" || {
   log "FATAL: cannot resolve workspace root ${JAIL_WORKSPACE_ROOT}"
   exit 1

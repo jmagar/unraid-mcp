@@ -6,9 +6,9 @@
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-48-x86_64-1.txz">
-  <!ENTITY md5       "c4e798c0bab9af0dd4ac5dcf5e9e57a8">
-  <!ENTITY sha256    "684efa146b86707666d5191303941bfabcad7e4f10ea714f9c3fda3b0540d315">
+  <!ENTITY txz       "&name;-unraid-7.0.0-49-x86_64-1.txz">
+  <!ENTITY md5       "ff94b616c1188fe31e05bf6f77c015e9">
+  <!ENTITY sha256    "cdb39b5fcb99b4074c10c093679178253c6aa47bc8e6a56ace9380fa6bbf69d4">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>

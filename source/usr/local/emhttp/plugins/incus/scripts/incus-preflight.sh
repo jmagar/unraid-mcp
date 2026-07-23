@@ -1,11 +1,17 @@
 #!/bin/bash
 # incus-preflight.sh — verify the host can actually run incusd BEFORE we start it.
 # Prints a clear pass/fail report. Non-zero exit = do not start the daemon.
-# Nothing here mutates the system; it only inspects.
+# The configured persistent directories and ZFS source are created if missing
+# and exercised with disposable write probes before the daemon starts.
 
 PREFIX="/usr/local/incus"
+CFG="/boot/config/plugins/incus/incus.cfg"
+EMHTTP="/usr/local/emhttp/plugins/incus"
 FAIL=0
 say() { printf '  %-22s %s\n' "$1" "$2"; }
+
+[ -f "$CFG" ] && . "$CFG"
+. "${EMHTTP}/scripts/config-validation.sh"
 
 echo "== Incus preflight =="
 
@@ -78,6 +84,15 @@ if command -v newuidmap >/dev/null && command -v newgidmap >/dev/null; then
   say "uidmap" "newuidmap/newgidmap present"
 else
   say "uidmap" "absent — bundle uidmap for unprivileged containers"
+fi
+
+# 8) Persistent storage must be usable before incusd starts. This creates
+#    missing configured directories/datasets and performs real disposable
+#    write/rename/delete (directories) and snapshot/destroy (ZFS) probes.
+if storage_error="$(prepare_storage_config 2>&1)"; then
+  say "storage paths" "created/verified writable"
+else
+  say "storage paths" "FAIL — $storage_error"; FAIL=1
 fi
 
 echo ""
