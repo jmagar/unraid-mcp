@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "OpenWiki: unrust (unraid-rmcp)"
+openwiki_generated: true
+---
+
 # OpenWiki: unrust (unraid-rmcp)
 
 **unrust** is a Rust-based MCP (Model Context Protocol) server that bridges Claude and other MCP clients to the Unraid server GraphQL API. It provides read-only access to Unraid server data including array health, Docker containers, VMs, shares, logs, metrics, UPS status, and more.

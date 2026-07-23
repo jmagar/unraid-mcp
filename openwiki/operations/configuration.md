@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Configuration"
+openwiki_generated: true
+---
+
 # Configuration
 
 Environment variables, config files, and data directories for unrust.

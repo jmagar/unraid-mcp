@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "MCP Tools"
+openwiki_generated: true
+---
+
 # MCP Tools
 
 The `unraid` MCP tool and all available actions.

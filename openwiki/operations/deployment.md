@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Deployment"
+openwiki_generated: true
+---
+
 # Deployment
 
 How to install and run unrust in different environments.

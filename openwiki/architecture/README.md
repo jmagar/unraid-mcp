@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Architecture"
+openwiki_generated: true
+---
+
 # Architecture
 
 This section describes how unrust is structured and how requests flow through the system.

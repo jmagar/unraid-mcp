@@ -1,3 +1,14 @@
+---
+type: "Reference"
+title: "Operations"
+openwiki_generated: true
+---
+
+---
+type: "Reference"
+title: "Operations"
+description: "Operational guidance for building, running, configuring, deploying, and testing the unraid-rmcp repository."
+
 # Operations
 
 How to deploy, configure, test, and develop unrust.
@@ -7,7 +18,7 @@ How to deploy, configure, test, and develop unrust.
 - **[Configuration](configuration.md)** - Environment variables, config files, and data directories
 - **[Deployment](deployment.md)** - Local installation, Docker, and production deployment
 - **[Testing](testing.md)** - Test suite organization and running tests
-- **[Development workflow](development.md)** - Adding actions, code style, and release process
+- **[Development workflow](development.md)** - Adding actions, code style, release process, and OpenWiki automation
 
 ## Quick reference
 

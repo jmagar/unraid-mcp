@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "GraphQL API Integration"
+openwiki_generated: true
+---
+
 # GraphQL API Integration
 
 How unrust connects to the Unraid GraphQL API, including typed operations, schema management, and drift detection.

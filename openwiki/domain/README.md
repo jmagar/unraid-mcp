@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Domain"
+openwiki_generated: true
+---
+
 # Domain
 
 Core concepts and data models in unrust.

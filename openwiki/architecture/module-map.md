@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Module Map"
+openwiki_generated: true
+---
+
 # Module Map
 
 Source file organization and what each major component does.

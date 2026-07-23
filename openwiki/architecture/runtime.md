@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Runtime Architecture"
+openwiki_generated: true
+---
+
 # Runtime Architecture
 
 How requests flow through unrust, from MCP client to Unraid server and back.

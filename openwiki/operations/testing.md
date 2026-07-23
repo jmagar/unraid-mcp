@@ -1,3 +1,9 @@
+---
+type: "Reference"
+title: "Testing"
+openwiki_generated: true
+---
+
 # Testing
 
 Test suite organization, running tests, and testing guidance for development.

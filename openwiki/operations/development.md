@@ -1,6 +1,12 @@
+---
+type: "Reference"
+title: "Development Workflow"
+openwiki_generated: true
+---
+
 # Development Workflow
 
-How to contribute to unrust, including adding actions, code style, and the release process.
+How to contribute to unrust, including adding actions, code style, release process, and OpenWiki documentation maintenance.
 
 ## Development setup
 
@@ -440,6 +446,21 @@ Release is automatic via CI after tag push.
 - Runs daily at 06:00 UTC
 - Compares vendored SDL to upstream
 - Opens issue if drift detected
+
+## OpenWiki documentation workflow
+
+Repository documentation is refreshed via **`.github/workflows/openwiki-update.yml`**.
+
+- Scheduled at `0 8 * * *` UTC and available for manual dispatch.
+- Runs `openwiki code --update --print` on `ubuntu-latest` using OpenRouter (`OPENWIKI_PROVIDER=openrouter`, model `z-ai/glm-5.2`).
+- Expects workflow-scoped secrets for `OPENROUTER_API_KEY`, `LANGSMITH_API_KEY`, and `OPENWIKI_MODEL_ID` when configured.
+- Opens a PR from branch `openwiki/update` with updates to:
+  - `openwiki/`
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `.github/workflows/openwiki-update.yml`
+
+This means instruction files and the workflow definition are kept alongside generated wiki output when automation updates docs.
 
 ## Debugging
 
