@@ -6,6 +6,9 @@ set -euo pipefail
 PAYLOAD="/usr/local/emhttp/plugins/incus/api-plugin"
 TARGET="/usr/local/unraid-api/node_modules/unraid-api-plugin-incus"
 BACKUP="${TARGET}.rollback"
+REGISTRATION="/usr/local/emhttp/plugins/incus/scripts/api-plugin-registration.sh"
+API_PACKAGE_JSON="/usr/local/unraid-api/package.json"
+API_CONFIG_JSON="/boot/config/plugins/dynamix.my.servers/configs/api.json"
 
 if [ ! -d "$PAYLOAD/dist" ] || [ ! -d "$PAYLOAD/node_modules" ] || [ ! -f "$PAYLOAD/package.json" ]; then
   logger -t incus "API payload absent; classic runtime installed in classic-only mode"
@@ -21,6 +24,11 @@ rm -rf "$stage"
 mkdir -p "$stage"
 cp -a "$PAYLOAD/." "$stage/"
 
+state_backup="$(mktemp -d)"
+trap 'rm -rf "$stage" "$state_backup"' EXIT
+cp -p "$API_PACKAGE_JSON" "$state_backup/package.json"
+cp -p "$API_CONFIG_JSON" "$state_backup/api.json"
+
 rm -rf "$BACKUP"
 [ ! -e "$TARGET" ] || mv "$TARGET" "$BACKUP"
 mv "$stage" "$TARGET"
@@ -28,7 +36,8 @@ api_log="/var/log/graphql-api.log"
 before_inode="$(stat -c %i "$api_log" 2>/dev/null || echo missing)"
 before_size="$(stat -c %s "$api_log" 2>/dev/null || echo 0)"
 verified=0
-if unraid-api restart; then
+unraid-api stop || true
+if "$REGISTRATION" register && unraid-api start; then
   for _ in $(seq 1 30); do
     current_inode="$(stat -c %i "$api_log" 2>/dev/null || echo missing)"
     current_size="$(stat -c %s "$api_log" 2>/dev/null || echo 0)"
@@ -49,7 +58,10 @@ if [ "$verified" -eq 1 ]; then
 fi
 
 logger -t incus "API plugin reload failed; restoring previous backend"
+unraid-api stop || true
 rm -rf "$TARGET"
 [ ! -e "$BACKUP" ] || mv "$BACKUP" "$TARGET"
-unraid-api restart || true
+cp -p "$state_backup/package.json" "$API_PACKAGE_JSON"
+cp -p "$state_backup/api.json" "$API_CONFIG_JSON"
+unraid-api start || true
 exit 1

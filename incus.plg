@@ -2,13 +2,13 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.18">
+  <!ENTITY version   "2026.07.22">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-47-x86_64-1.txz">
-  <!ENTITY md5       "912aa382b326b80f2b2b994a4c01b417">
-  <!ENTITY sha256    "eb4f906d4658b5b8e41ed5b071ce8c7455d58d10964002419bb008dc09a2415b">
+  <!ENTITY txz       "&name;-unraid-7.0.0-48-x86_64-1.txz">
+  <!ENTITY md5       "c4e798c0bab9af0dd4ac5dcf5e9e57a8">
+  <!ENTITY sha256    "684efa146b86707666d5191303941bfabcad7e4f10ea714f9c3fda3b0540d315">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -16,6 +16,14 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.22
+- Fix API activation on current Unraid API releases by registering the staged
+  backend in both the persistent plugin enable-list and the runtime package
+  manifest while the API is stopped, avoiding its config-watcher overwrite.
+- Make registration idempotent and transactional: failed activation restores
+  the previous backend and both loader files; uninstall removes only Incus.
+- Fix fresh-install rollback to remove the actual versioned Slackware package.
+
 ###2026.07.18
 - Comprehensive security and reliability hardening: every GraphQL resolver is
   permission-gated, reusable Tailscale credentials are write-only and stored
@@ -412,7 +420,7 @@ if ! &emhttp;/scripts/install-api-plugin.sh; then
     upgradepkg --install-new "$previous" || logger -t incus "ERROR: automatic classic rollback failed"
   else
     logger -t incus "API activation failed on a fresh install; removing the unpaired classic package"
-    removepkg incus-unraid 2>/dev/null || logger -t incus "ERROR: automatic fresh-install cleanup failed"
+    removepkg &txz; 2>/dev/null || logger -t incus "ERROR: automatic fresh-install cleanup failed"
   fi
   exit 1
 fi
