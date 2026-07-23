@@ -8,11 +8,15 @@ build="${1:?usage: $0 NEW_BUILD_NUMBER [previous.txz]}"
 previous="${2:-$(find "$ROOT/packages" -maxdepth 1 -type f -name 'incus-unraid-*.txz' -print | sort -V | tail -1)}"
 version="7.0.0-${build}-x86_64-1"
 output="$ROOT/packages/incus-unraid-${version}.txz"
+release="$(jq -er '.release' "$ROOT/release-manifest.json")"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
 tar -xJf "$previous" -C "$stage"
 cp -a "$ROOT/source/." "$stage/"
+printf '%s+%s\n' "$release" "$build" \
+  >"$stage/usr/local/emhttp/plugins/incus/build-id"
+chmod 0644 "$stage/usr/local/emhttp/plugins/incus/build-id"
 # Avoid a circular self-hash: the embedded copy names the package but points to
 # the external signed/checksummed release metadata for final archive hashes.
 sed \

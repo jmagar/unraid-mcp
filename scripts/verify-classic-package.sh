@@ -40,10 +40,18 @@ for path in \
   usr/local/emhttp/plugins/incus/api-plugin/node_modules/ws/package.json \
   usr/local/emhttp/plugins/incus/api-plugin/node_modules/graphql-subscriptions/package.json \
   usr/local/emhttp/plugins/incus/scripts/rc.incus \
+  usr/local/emhttp/plugins/incus/build-id \
   usr/local/emhttp/plugins/incus/web/incus-settings.js \
   usr/local/emhttp/plugins/incus/web/incus-dashboard.js; do
   grep -Fxq "$path" "$archive_list" || { echo "archive missing $path" >&2; exit 1; }
 done
+
+release="$(jq -er '.release' release-manifest.json)"
+package_build="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"&name;-unraid-7\.0\.0-\([0-9][0-9]*\)-x86_64-1\.txz".*/\1/p' incus.plg)"
+[ "$(cat "$archive_tree/usr/local/emhttp/plugins/incus/build-id")" = "${release}+${package_build}" ] || {
+  echo "embedded build-id differs from coordinated release metadata" >&2
+  exit 1
+}
 
 if tar -tvJf "$archive" usr/local/emhttp/plugins/incus/api-plugin/dist | grep -q '^l'; then
   echo "API dist must contain files, not symlinks" >&2

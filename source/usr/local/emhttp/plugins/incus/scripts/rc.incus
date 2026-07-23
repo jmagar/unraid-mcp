@@ -14,11 +14,13 @@ LXCFS_PID="/var/run/incus-lxcfs.pid"
 LOG="/var/log/incusd.log"
 WATCHDOG_PID="/var/run/incus-watchdog.pid"
 HEALTH_FILE="${INCUS_DIR}/plugin-health"
+BUILD_ID_FILE="${EMHTTP}/build-id"
+PLUGIN_BUILD="$(head -n 1 "$BUILD_ID_FILE" 2>/dev/null || printf 'unknown')"
 
 log() { logger -t incus "$*"; printf '%s incus: %s\n' "$(date -Is)" "$*" >>"$LOG"; }
 health() {
   mkdir -p "$INCUS_DIR" 2>/dev/null || true
-  printf 'status=%s\ntime=%s\nbuild=%s\nmessage=%s\n' "$1" "$(date -Is)" "2026.07.18" "${2:-}" >"${HEALTH_FILE}.tmp" 2>/dev/null &&
+  printf 'status=%s\ntime=%s\nbuild=%s\nmessage=%s\n' "$1" "$(date -Is)" "$PLUGIN_BUILD" "${2:-}" >"${HEALTH_FILE}.tmp" 2>/dev/null &&
     mv -f "${HEALTH_FILE}.tmp" "$HEALTH_FILE" 2>/dev/null || true
 }
 rotate_log() {

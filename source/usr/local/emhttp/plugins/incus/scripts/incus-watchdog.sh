@@ -6,6 +6,8 @@ set -uo pipefail
 PREFIX="/usr/local/incus"
 EMHTTP="/usr/local/emhttp/plugins/incus"
 CFG="/boot/config/plugins/incus/incus.cfg"
+BUILD_ID_FILE="${EMHTTP}/build-id"
+PLUGIN_BUILD="$(head -n 1 "$BUILD_ID_FILE" 2>/dev/null || printf 'unknown')"
 export INCUS_WATCHDOG=1
 
 failures=0
@@ -26,7 +28,7 @@ while [ -f "$CFG" ]; do
         logger -t incus-watchdog "refusing restart because the unhealthy daemon did not stop cleanly"
       fi
     else
-      if printf 'status=failed\ntime=%s\nbuild=2026.07.18\nmessage=watchdog restart limit reached\n' "$(date -Is)" >"${INCUS_DIR}/plugin-health.tmp" 2>/dev/null; then
+      if printf 'status=failed\ntime=%s\nbuild=%s\nmessage=watchdog restart limit reached\n' "$(date -Is)" "$PLUGIN_BUILD" >"${INCUS_DIR}/plugin-health.tmp" 2>/dev/null; then
         mv -f "${INCUS_DIR}/plugin-health.tmp" "${INCUS_DIR}/plugin-health" 2>/dev/null || true
       fi
       logger -t incus-watchdog "restart limit reached; manual intervention required"

@@ -10,6 +10,11 @@ EMHTTP="/usr/local/emhttp/plugins/incus"
 FAIL=0
 say() { printf '  %-22s %s\n' "$1" "$2"; }
 
+[ -f "${EMHTTP}/scripts/incus-env.sh" ] || {
+  echo "PREFLIGHT: FAIL — ${EMHTTP}/scripts/incus-env.sh is missing" >&2
+  exit 1
+}
+. "${EMHTTP}/scripts/incus-env.sh"
 [ -f "$CFG" ] && . "$CFG"
 . "${EMHTTP}/scripts/config-validation.sh"
 

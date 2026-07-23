@@ -11,6 +11,7 @@ API_REGISTRATION="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/api-plugin
 INSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/install-api-plugin.sh"
 UNINSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/uninstall-api-plugin.sh"
 PLG="$ROOT/incus.plg"
+BUILD_CLASSIC="$ROOT/scripts/build-classic-package.sh"
 
 grep -Eq 'ACL_BLOCK=.*100\.64\.0\.0/10' "$CFG"
 grep -Fq 'Block host bridge and peer containers' "$INIT"
@@ -25,6 +26,15 @@ grep -Fq 'readonly: "true"' "$INIT"
 grep -Fq 'validate_containment_config' "$APPLY"
 grep -Fq 'prepare_storage_config' "$APPLY"
 grep -Fq 'prepare_storage_config' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh"
+env_source_line="$(grep -n '\. "${EMHTTP}/scripts/incus-env.sh"' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh" | cut -d: -f1)"
+tool_check_line="$(grep -n 'command -v unsquashfs' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-preflight.sh" | cut -d: -f1)"
+[ -n "$env_source_line" ]
+[ "$env_source_line" -lt "$tool_check_line" ]
+grep -Fq 'PLUGIN_BUILD="$(head -n 1 "$BUILD_ID_FILE"' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/rc.incus"
+grep -Fq 'PLUGIN_BUILD="$(head -n 1 "$BUILD_ID_FILE"' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/incus-watchdog.sh"
+! grep -Eq 'build=2026\.[0-9]{2}\.[0-9]{2}' "$ROOT/source/usr/local/emhttp/plugins/incus/scripts/"{rc.incus,incus-watchdog.sh}
+grep -Fq 'release="$(jq -er '\''.release'\'' "$ROOT/release-manifest.json")"' "$BUILD_CLASSIC"
+grep -Fq '>"$stage/usr/local/emhttp/plugins/incus/build-id"' "$BUILD_CLASSIC"
 # Fresh installs must create the persistent config before API activation. The
 # backend chooses its config path once in its constructor during that restart.
 config_bootstrap_line="$(grep -n 'cp "&emhttp;/incus.cfg" "&plugin;/incus.cfg" || exit 1' "$PLG" | cut -d: -f1)"
