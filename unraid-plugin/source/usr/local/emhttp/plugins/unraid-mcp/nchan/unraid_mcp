@@ -12,7 +12,10 @@ chan="http://localhost/pub/unraid_mcp?buffer_length=1"
 pidfile="/var/run/unraid-mcp.pid"
 interval=3
 
-json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+# Escape for a JSON string: backslash, quote, and — per RFC 8259 §7 — strip any
+# control characters (a malformed version string must degrade to plain text, not
+# an invalid frame that wedges the widget).
+json_escape() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 status_json() {
     local pid running=false cpu=0 mem=0 uptime=0 version
@@ -25,12 +28,12 @@ status_json() {
         mem=$(( ${rss:-0} / 1024 ))
         uptime="${uptime:-0}"
     fi
-    version="$(/usr/local/emhttp/plugins/unraid-mcp/scripts/unraid-mcp-update.sh installed 2>/dev/null)"
+    version="$(timeout 5 /usr/local/emhttp/plugins/unraid-mcp/scripts/unraid-mcp-update.sh installed 2>/dev/null)"
     printf '{"running":%s,"pid":%s,"cpu":%s,"memMB":%s,"uptime":%s,"version":"%s"}' \
         "$running" "${pid:-0}" "${cpu:-0}" "${mem:-0}" "${uptime:-0}" "$(json_escape "${version:-unknown}")"
 }
 
 while :; do
-    curl -s --max-time 2 --unix-socket "$socket" -d "$(status_json)" "$chan" >/dev/null 2>&1
+    curl -s --max-time 2 --unix-socket "$socket" --data-raw "$(status_json)" "$chan" >/dev/null 2>&1
     sleep "$interval"
 done

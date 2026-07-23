@@ -75,6 +75,9 @@ function secretConfigured(key: string): boolean {
 
 // ── Dirty tracking + validation ───────────────────────────────────────────
 const dirty = computed(() => {
+  // Before the first successful load, form is {} and the snapshot is "" — that
+  // mismatch would spuriously read as dirty (and enable Apply on an empty form).
+  if (!payload.value) return false;
   if (JSON.stringify(form) !== initialSnapshot.value) return true;
   return secretKeys.some((k) => {
     const e = secretEdits[k];
@@ -93,8 +96,11 @@ function fieldError(key: string): string {
   if (URL_KEYS.has(key) && !/^https?:\/\/.+/i.test(v)) return "Must start with http:// or https://";
   return "";
 }
+// Only validate sections whose fields are actually visible — otherwise an
+// invalid value inside a collapsed/gated section could disable Apply globally
+// with no error text on screen to explain why.
 const hasErrors = computed(() =>
-  SECTIONS.some((s) => s.fields.some((f) => fieldError(f.key) !== "")),
+  SECTIONS.some((s) => sectionShowsFields(s) && s.fields.some((f) => fieldError(f.key) !== "")),
 );
 
 // ── Google OAuth gate: keep the section compact until opted in ─────────────
@@ -114,9 +120,12 @@ function sparkPoints(hist: number[]): string {
   return hist.map((v, i) => `${(i / (n - 1)) * 100},${23 - (v / max) * 21}`).join(" ");
 }
 
-const apiKeyMissing = computed(
-  () => Boolean(payload.value) && !secretConfigured("UNRAID_API_KEY"),
-);
+const apiKeyMissing = computed(() => {
+  if (!payload.value) return false;
+  const edit = secretEdits.UNRAID_API_KEY;
+  if (edit?.value && !edit.clear) return false; // a key was typed but not yet saved
+  return !secretConfigured("UNRAID_API_KEY");
+});
 
 const service = computed(() => payload.value?.service ?? { enabled: false, running: false });
 const tailscale = computed(
@@ -168,7 +177,12 @@ async function copyEndpoint() {
 async function copyConfig() {
   if (!endpoint.value) return;
   let token = "<your bearer token>";
-  if (secretConfigured("UNRAID_MCP_BEARER_TOKEN")) {
+  // Prefer an unsaved edit so the copied config matches what's in the field,
+  // not the last-persisted value.
+  const edit = secretEdits.UNRAID_MCP_BEARER_TOKEN;
+  if (edit?.value && !edit.clear) {
+    token = edit.value;
+  } else if (!edit?.clear && secretConfigured("UNRAID_MCP_BEARER_TOKEN")) {
     try {
       token = await revealSecret("UNRAID_MCP_BEARER_TOKEN");
     } catch {
@@ -288,6 +302,11 @@ async function pollStats() {
     if (s.process && s.service.running) {
       cpuHist.value = [...cpuHist.value, s.process.cpu].slice(-40);
       memHist.value = [...memHist.value, s.process.memMB].slice(-40);
+    } else if (!s.service.running) {
+      // Drop history on stop so a later restart doesn't draw a line bridging
+      // the gap as if it were a continuous trend.
+      cpuHist.value = [];
+      memHist.value = [];
     }
     statFails = 0;
     statsStale.value = false;

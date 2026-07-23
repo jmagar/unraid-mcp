@@ -38,7 +38,18 @@ function connect() {
   es.onopen = () => (connected.value = true);
   es.onmessage = (e) => {
     try {
-      status.value = JSON.parse(e.data) as Status;
+      const d = JSON.parse(e.data) as Partial<Status>;
+      // Validate before trusting fields the template calls .toFixed() on — a
+      // future publisher change or partial frame must not throw in render.
+      if (typeof d.running !== "boolean") return;
+      status.value = {
+        running: d.running,
+        pid: Number(d.pid) || 0,
+        cpu: Number(d.cpu) || 0,
+        memMB: Number(d.memMB) || 0,
+        uptime: Number(d.uptime) || 0,
+        version: typeof d.version === "string" ? d.version : "unknown",
+      };
     } catch {
       /* ignore malformed frames */
     }

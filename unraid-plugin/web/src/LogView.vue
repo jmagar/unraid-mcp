@@ -128,7 +128,12 @@ const lines = computed(() => {
     .map((l) => ({ rail: lineLevel(l), segs: tokenize(l) }));
 });
 
-const totalLines = computed(() => raw.value.replace(/\n+$/, "").split("\n").filter(Boolean).length);
+// Count the same population `lines` splits from (no Boolean filter), so the
+// filtered "showing N of M" can never report N > M.
+const totalLines = computed(() => {
+  const text = raw.value.replace(/\n+$/, "");
+  return text ? text.split("\n").length : 0;
+});
 
 async function refresh(scroll = true) {
   // Drop overlapping ticks: only one request is ever in flight, which also
