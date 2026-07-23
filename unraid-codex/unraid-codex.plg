@@ -5,11 +5,11 @@
   <!ENTITY version   "2026.07.23">
   <!ENTITY launch    "">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main/unraid-codex">
-  <!ENTITY releaseURL "https://raw.githubusercontent.com/&author;/incus-unraid/unraid-codex-v2026.07.23-14/unraid-codex">
+  <!ENTITY releaseURL "https://raw.githubusercontent.com/&author;/incus-unraid/unraid-codex-v2026.07.23-15/unraid-codex">
   <!ENTITY pluginURL "&gitURL;/unraid-codex.plg">
-  <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-14.txz">
-  <!ENTITY md5       "cbbd50a4697911bf03869549e92e100f">
-  <!ENTITY sha256    "25019c01983bb793b683e7f95484805fa4ff09a83f079e4ea7638b687672cf62">
+  <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-15.txz">
+  <!ENTITY md5       "69784069fb5e4d285eaaf62d389a904d">
+  <!ENTITY sha256    "f8eebc8e00fd88c9d867ee6b4bb42d93dbb38e624cfd4c302731dcc2c3e620c2">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -18,6 +18,8 @@
 
 <CHANGES>
 ###2026.07.23
+- Build 15 replaces Unraid's fallback puzzle piece with a packaged,
+  high-contrast Codex/OpenAI mark sized for the Settings tile.
 - Build 14 adds a native Codex tile and icon to Unraid Settings. Opening the
   tile launches the chathead directly into its real Session Inspector.
 - Build 13 streamlines the header and composer, fixes latest-turn context

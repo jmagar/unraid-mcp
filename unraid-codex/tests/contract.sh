@@ -8,6 +8,8 @@ web_src="${plugin_dir}/web-src/src"
 required=(
   "${source_dir}/CodexButton.page"
   "${source_dir}/CodexSettings.page"
+  "${source_dir}/codex.png"
+  "${source_dir}/codex-icon.svg"
   "${source_dir}/web/unraid-codex.css"
   "${source_dir}/web/unraid-codex.js"
   "${source_dir}/scripts/start-appserver.sh"
@@ -42,6 +44,8 @@ done
 for path in \
   "${source_dir}/CodexButton.page" \
   "${source_dir}/CodexSettings.page" \
+  "${source_dir}/codex.png" \
+  "${source_dir}/codex-icon.svg" \
   "${source_dir}/web/unraid-codex.css" \
   "${source_dir}/web/unraid-codex.js" \
   "${source_dir}/container/codex-appserver.service" \
@@ -65,8 +69,9 @@ bash -n \
 
 grep -Fq 'Menu="Buttons:' "${source_dir}/CodexButton.page"
 grep -Fq 'Menu="Utilities"' "${source_dir}/CodexSettings.page"
-grep -Fq 'Icon="icon-u-chat"' "${source_dir}/CodexSettings.page"
+grep -Fq 'Icon="codex.png"' "${source_dir}/CodexSettings.page"
 grep -Fq 'window.UnraidCodex?.openSettings()' "${source_dir}/CodexSettings.page"
+file "${source_dir}/codex.png" | grep -Fq 'PNG image data, 128 x 128, 8-bit/color RGBA'
 grep -Fq '<URL>&releaseURL;/dist/&txz;</URL>' "${plugin_dir}/unraid-codex.plg"
 grep -Fq 'attachShadow({ mode: "open" })' "${web_src}/main.tsx"
 grep -Fq 'openSettings: () => void' "${web_src}/main.tsx"

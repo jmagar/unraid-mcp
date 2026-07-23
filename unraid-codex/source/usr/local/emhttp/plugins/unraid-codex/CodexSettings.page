@@ -1,8 +1,7 @@
 Menu="Utilities"
 Title="Codex"
-Icon="icon-u-chat"
-Tag="icon-u-chat"
-Code="e93e"
+Icon="codex.png"
+Tag="codex.png"
 ---
 <?PHP
 /* Native Unraid Settings entry for the persistent Codex chathead. The
