@@ -92,6 +92,7 @@ done
 runtime_root="$archive_tree/usr/local/incus"
 runtime_env=(
   env
+  "DEBOOTSTRAP_DIR=$runtime_root/share/debootstrap"
   "LD_LIBRARY_PATH=$runtime_root/lib"
   "PATH=$runtime_root/bin:$runtime_root/libexec/incus:/usr/bin:/bin"
 )
