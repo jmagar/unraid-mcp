@@ -53,6 +53,15 @@ grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.
 [ "$(grep -Fc '      - "packages/**"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
 [ "$(grep -Fc '      - "incus.plg"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
 grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
+grep -Fq 'required executable is not executable in archive' "$ROOT/scripts/verify-classic-package.sh"
+grep -Fq 'required helper smoke invocation failed' "$ROOT/scripts/verify-classic-package.sh"
+grep -Fq 'unresolved shared libraries for' "$ROOT/scripts/verify-classic-package.sh"
+for executable in distrobuilder debootstrap ar mksquashfs zstd zstdcat unzstd; do
+  [ -x "$ROOT/source/usr/local/incus/bin/$executable" ] || {
+    echo "tracked helper is not executable: usr/local/incus/bin/$executable" >&2
+    exit 1
+  }
+done
 for script in "$ROOT"/source/usr/local/emhttp/plugins/incus/scripts/*.sh "$ROOT"/source/usr/local/emhttp/plugins/incus/event/*; do
   bash -n "$script"
 done

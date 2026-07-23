@@ -6,9 +6,9 @@
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-51-x86_64-1.txz">
-  <!ENTITY md5       "a0fd7ca5c369c2f4752a6108e0fde310">
-  <!ENTITY sha256    "71e69f77e8af3aa5d561bd296acdb15625525561af834f3f86b67fbd616b0c8f">
+  <!ENTITY txz       "&name;-unraid-7.0.0-52-x86_64-1.txz">
+  <!ENTITY md5       "ecf34255c96429d819c35b0983ba74c0">
+  <!ENTITY sha256    "08ace6310036e29e31a03e9fd02a94807e8b0adef2a5fb2e0c617a8d9345e5af">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -17,6 +17,8 @@
 
 <CHANGES>
 ###2026.07.22
+- Restore executable permissions on the bundled distrobuilder, debootstrap,
+  ar, and mksquashfs helpers and verify executable modes in release packages.
 - Fix API activation on current Unraid API releases by registering the staged
   backend in both the persistent plugin enable-list and the runtime package
   manifest while the API is stopped, avoiding its config-watcher overwrite.
