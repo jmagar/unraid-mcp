@@ -113,13 +113,15 @@ response fields and scalar/enum values against that operation.
 
 ### `tests/live_schema_contract.rs`
 
-Compares the vendored SDL structurally with
+Checks that every type, field, argument, input, enum value, interface, union
+member, and operation root in the published vendored SDL exists unchanged in
 `schema/live-introspection.json`, a normalized snapshot captured from the
-production Unraid API. Refresh or check the live snapshot with
-`just schema-live-capture` and `just schema-live-diff`; both commands require
-`UNRAID_API_URL` and `UNRAID_API_KEY`. The daily schema-drift workflow also
-runs this check when dedicated repository secrets with those names are
-configured.
+production Unraid API. Live-only additions are allowed because installed
+Unraid plugins can extend the server schema. Refresh or check the complete live
+snapshot with `just schema-live-capture` and `just schema-live-diff`; both
+commands require `UNRAID_API_URL` and `UNRAID_API_KEY`. The daily schema-drift
+workflow also runs the exact live-snapshot check when dedicated repository
+secrets with those names are configured.
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-07-23T19:28:22+00:00",
+  "captured_at": "2026-07-23T20:14:58+00:00",
   "format": 1,
   "roots": {
     "mutationType": "Mutation",
@@ -636,6 +636,37 @@
         "partnerLogoLightUrl": "String",
         "showBannerGradient": "Boolean",
         "theme": "String"
+      },
+      "kind": "INPUT_OBJECT"
+    },
+    "BuilderPreset": {
+      "fields": {
+        "distro": {
+          "args": {},
+          "type": "String!"
+        },
+        "name": {
+          "args": {},
+          "type": "String!"
+        },
+        "packages": {
+          "args": {},
+          "type": "[String!]!"
+        },
+        "release": {
+          "args": {},
+          "type": "String!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "BuilderPresetInput": {
+      "input_fields": {
+        "distro": "String!",
+        "name": "String!",
+        "packages": "[String!]!",
+        "release": "String!"
       },
       "kind": "INPUT_OBJECT"
     },
@@ -1822,8 +1853,247 @@
       "interfaces": [],
       "kind": "INTERFACE"
     },
+    "HomebrewInstallStatus": {
+      "fields": {
+        "formula": {
+          "args": {},
+          "type": "String!"
+        },
+        "id": {
+          "args": {},
+          "type": "String!"
+        },
+        "message": {
+          "args": {},
+          "type": "String!"
+        },
+        "status": {
+          "args": {},
+          "type": "JobStatus!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
     "ID": {
       "kind": "SCALAR"
+    },
+    "ImageBuildState": {
+      "enum_values": [
+        "failed",
+        "queued",
+        "running",
+        "success"
+      ],
+      "kind": "ENUM"
+    },
+    "ImageBuildStatus": {
+      "fields": {
+        "alias": {
+          "args": {},
+          "type": "String!"
+        },
+        "distro": {
+          "args": {},
+          "type": "String!"
+        },
+        "error": {
+          "args": {},
+          "type": "String"
+        },
+        "id": {
+          "args": {},
+          "type": "String!"
+        },
+        "logTail": {
+          "args": {},
+          "type": "String!"
+        },
+        "packages": {
+          "args": {},
+          "type": "[String!]!"
+        },
+        "release": {
+          "args": {},
+          "type": "String!"
+        },
+        "status": {
+          "args": {},
+          "type": "ImageBuildState!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "ImageRecord": {
+      "fields": {
+        "alias": {
+          "args": {},
+          "type": "String!"
+        },
+        "basedOn": {
+          "args": {},
+          "type": "String"
+        },
+        "createdAt": {
+          "args": {},
+          "type": "String!"
+        },
+        "distro": {
+          "args": {},
+          "type": "String!"
+        },
+        "isMaster": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "packages": {
+          "args": {},
+          "type": "[String!]!"
+        },
+        "release": {
+          "args": {},
+          "type": "String!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "IncusConfig": {
+      "fields": {
+        "aclAllow": {
+          "args": {},
+          "type": "String!"
+        },
+        "aclBlock": {
+          "args": {},
+          "type": "String!"
+        },
+        "aclDefaultEgress": {
+          "args": {},
+          "type": "String!"
+        },
+        "aclDefaultIngress": {
+          "args": {},
+          "type": "String!"
+        },
+        "aclName": {
+          "args": {},
+          "type": "String!"
+        },
+        "dashboardWidgetEnable": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "enabled": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "jailAgentGid": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailAgentUid": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailBindMounts": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailBridge": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailCpu": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailImage": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailIpv6": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailMemory": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailNat": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "jailNesting": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "jailProfile": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailSubnet": {
+          "args": {},
+          "type": "String!"
+        },
+        "jailWorkspaceRoot": {
+          "args": {},
+          "type": "String!"
+        },
+        "stateDir": {
+          "args": {},
+          "type": "String!"
+        },
+        "storageDriver": {
+          "args": {},
+          "type": "String!"
+        },
+        "storagePoolName": {
+          "args": {},
+          "type": "String!"
+        },
+        "storageSource": {
+          "args": {},
+          "type": "String!"
+        },
+        "tsAuthKeyConfigured": {
+          "args": {},
+          "type": "Boolean!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "IncusConfigInput": {
+      "input_fields": {
+        "aclAllow": "String",
+        "aclBlock": "String",
+        "aclDefaultEgress": "String",
+        "aclDefaultIngress": "String",
+        "aclName": "String",
+        "dashboardWidgetEnable": "Boolean",
+        "enabled": "Boolean",
+        "jailAgentGid": "String",
+        "jailAgentUid": "String",
+        "jailBindMounts": "String",
+        "jailBridge": "String",
+        "jailCpu": "String",
+        "jailImage": "String",
+        "jailIpv6": "String",
+        "jailMemory": "String",
+        "jailNat": "Boolean",
+        "jailNesting": "Boolean",
+        "jailProfile": "String",
+        "jailSubnet": "String",
+        "jailWorkspaceRoot": "String",
+        "stateDir": "String",
+        "storageDriver": "String",
+        "storagePoolName": "String",
+        "storageSource": "String",
+        "tsAuthKey": "String"
+      },
+      "kind": "INPUT_OBJECT"
     },
     "Info": {
       "fields": {
@@ -2605,6 +2875,116 @@
     "JSON": {
       "kind": "SCALAR"
     },
+    "Jail": {
+      "fields": {
+        "cpuUsageNs": {
+          "args": {},
+          "type": "String"
+        },
+        "ipv4": {
+          "args": {},
+          "type": "String"
+        },
+        "memoryTotalBytes": {
+          "args": {},
+          "type": "String"
+        },
+        "memoryUsageBytes": {
+          "args": {},
+          "type": "String"
+        },
+        "name": {
+          "args": {},
+          "type": "String!"
+        },
+        "status": {
+          "args": {},
+          "type": "String!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "JailAction": {
+      "enum_values": [
+        "freeze",
+        "restart",
+        "start",
+        "stop",
+        "unfreeze"
+      ],
+      "kind": "ENUM"
+    },
+    "JailDetail": {
+      "fields": {
+        "cpuLimit": {
+          "args": {},
+          "type": "String"
+        },
+        "cpuLimitIsOverride": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "imageDescription": {
+          "args": {},
+          "type": "String"
+        },
+        "imageOs": {
+          "args": {},
+          "type": "String"
+        },
+        "imageRelease": {
+          "args": {},
+          "type": "String"
+        },
+        "memoryLimit": {
+          "args": {},
+          "type": "String"
+        },
+        "memoryLimitIsOverride": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "name": {
+          "args": {},
+          "type": "String!"
+        },
+        "networkBridge": {
+          "args": {},
+          "type": "String"
+        },
+        "profiles": {
+          "args": {},
+          "type": "[String!]!"
+        },
+        "storagePool": {
+          "args": {},
+          "type": "String"
+        },
+        "sudoEnabled": {
+          "args": {},
+          "type": "Boolean!"
+        },
+        "workspaceHostPath": {
+          "args": {},
+          "type": "String"
+        },
+        "workspaceIsOverride": {
+          "args": {},
+          "type": "Boolean!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "JobStatus": {
+      "enum_values": [
+        "failed",
+        "running",
+        "success"
+      ],
+      "kind": "ENUM"
+    },
     "KeyFile": {
       "fields": {
         "contents": {
@@ -2904,6 +3284,23 @@
           "args": {},
           "type": "ArrayMutations!"
         },
+        "buildJailImage": {
+          "args": {
+            "alias": "String!",
+            "basedOn": "String",
+            "distro": "String!",
+            "packages": "[String!]!",
+            "postInstallCommands": "[String!]",
+            "release": "String!"
+          },
+          "type": "String!"
+        },
+        "clearJailWorkspace": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
         "configureUps": {
           "args": {
             "config": "UPSConfigInput!"
@@ -2951,11 +3348,29 @@
           "args": {},
           "type": "NotificationOverview!"
         },
+        "deleteBuilderPreset": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
         "deleteDockerEntries": {
           "args": {
             "entryIds": "[String!]!"
           },
           "type": "ResolvedOrganizerV1!"
+        },
+        "deleteJail": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "deleteJailImage": {
+          "args": {
+            "alias": "String!"
+          },
+          "type": "Boolean!"
         },
         "deleteNotification": {
           "args": {
@@ -2963,6 +3378,10 @@
             "type": "NotificationType!"
           },
           "type": "NotificationOverview!"
+        },
+        "deleteStoppedJails": {
+          "args": {},
+          "type": "[String!]!"
         },
         "docker": {
           "args": {},
@@ -2974,11 +3393,38 @@
           },
           "type": "Boolean!"
         },
+        "grantJailSudo": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
         "initiateFlashBackup": {
           "args": {
             "input": "InitiateFlashBackupInput!"
           },
           "type": "FlashBackupStatus!"
+        },
+        "installHomebrewFormula": {
+          "args": {
+            "formula": "String!",
+            "name": "String!"
+          },
+          "type": "String!"
+        },
+        "launchJail": {
+          "args": {
+            "allowSudo": "Boolean",
+            "image": "String",
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "migrateJailWorkspace": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "String!"
         },
         "moveDockerEntriesToFolder": {
           "args": {
@@ -3009,6 +3455,10 @@
           "args": {},
           "type": "ParityCheckMutations!"
         },
+        "pruneStaleImageRecords": {
+          "args": {},
+          "type": "[String!]!"
+        },
         "rclone": {
           "args": {},
           "type": "RCloneMutations!"
@@ -3038,6 +3488,27 @@
           "args": {},
           "type": "Boolean!"
         },
+        "resizeJailExec": {
+          "args": {
+            "cols": "Int!",
+            "rows": "Int!",
+            "sessionId": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "saveBuilderPreset": {
+          "args": {
+            "input": "BuilderPresetInput!"
+          },
+          "type": "BuilderPreset!"
+        },
+        "sendJailExecInput": {
+          "args": {
+            "data": "String!",
+            "sessionId": "String!"
+          },
+          "type": "Boolean!"
+        },
         "setDockerFolderChildren": {
           "args": {
             "childrenIds": "[String!]!",
@@ -3045,9 +3516,59 @@
           },
           "type": "ResolvedOrganizerV1!"
         },
+        "setJailLimits": {
+          "args": {
+            "cpu": "String",
+            "memory": "String",
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "setJailState": {
+          "args": {
+            "action": "JailAction!",
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "setJailWorkspace": {
+          "args": {
+            "hostPath": "String!",
+            "name": "String!"
+          },
+          "type": "Boolean!"
+        },
+        "setMasterImage": {
+          "args": {
+            "alias": "String!",
+            "isMaster": "Boolean!"
+          },
+          "type": "ImageRecord!"
+        },
         "setupRemoteAccess": {
           "args": {
             "input": "SetupRemoteAccessInput!"
+          },
+          "type": "Boolean!"
+        },
+        "startJailExec": {
+          "args": {
+            "cols": "Int",
+            "name": "String!",
+            "rows": "Int"
+          },
+          "type": "String!"
+        },
+        "startPrivilegedCommand": {
+          "args": {
+            "command": "String!",
+            "name": "String!"
+          },
+          "type": "String!"
+        },
+        "stopJailExec": {
+          "args": {
+            "sessionId": "String!"
           },
           "type": "Boolean!"
         },
@@ -3089,6 +3610,12 @@
             "viewId": "String"
           },
           "type": "ResolvedOrganizerV1!"
+        },
+        "updateIncusConfig": {
+          "args": {
+            "input": "IncusConfigInput!"
+          },
+          "type": "IncusConfig!"
         },
         "updateServerIdentity": {
           "args": {
@@ -3708,6 +4235,65 @@
       "interfaces": [],
       "kind": "OBJECT"
     },
+    "PackageEcosystem": {
+      "enum_values": [
+        "apt",
+        "brew",
+        "npm",
+        "pypi"
+      ],
+      "kind": "ENUM"
+    },
+    "PackageSearchError": {
+      "fields": {
+        "ecosystem": {
+          "args": {},
+          "type": "String!"
+        },
+        "message": {
+          "args": {},
+          "type": "String!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "PackageSearchResponse": {
+      "fields": {
+        "errors": {
+          "args": {},
+          "type": "[PackageSearchError!]!"
+        },
+        "results": {
+          "args": {},
+          "type": "[PackageSearchResult!]!"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
+    "PackageSearchResult": {
+      "fields": {
+        "description": {
+          "args": {},
+          "type": "String"
+        },
+        "ecosystem": {
+          "args": {},
+          "type": "String!"
+        },
+        "name": {
+          "args": {},
+          "type": "String!"
+        },
+        "version": {
+          "args": {},
+          "type": "String"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
     "PackageVersions": {
       "fields": {
         "docker": {
@@ -4011,6 +4597,40 @@
     "PrefixedID": {
       "kind": "SCALAR"
     },
+    "PrivilegedCommandStatus": {
+      "fields": {
+        "command": {
+          "args": {},
+          "type": "String!"
+        },
+        "exitCode": {
+          "args": {},
+          "type": "Int"
+        },
+        "id": {
+          "args": {},
+          "type": "String!"
+        },
+        "message": {
+          "args": {},
+          "type": "String!"
+        },
+        "status": {
+          "args": {},
+          "type": "JobStatus!"
+        },
+        "stderr": {
+          "args": {},
+          "type": "String"
+        },
+        "stdout": {
+          "args": {},
+          "type": "String"
+        }
+      },
+      "interfaces": [],
+      "kind": "OBJECT"
+    },
     "ProfileModel": {
       "fields": {
         "avatar": {
@@ -4093,6 +4713,10 @@
           "args": {},
           "type": "[Disk!]!"
         },
+        "builderPresets": {
+          "args": {},
+          "type": "[BuilderPreset!]!"
+        },
         "cloud": {
           "args": {},
           "type": "Cloud!"
@@ -4145,6 +4769,20 @@
           },
           "type": "[Permission!]!"
         },
+        "homebrewInstallStatus": {
+          "args": {
+            "id": "String!"
+          },
+          "type": "HomebrewInstallStatus"
+        },
+        "incusConfig": {
+          "args": {},
+          "type": "IncusConfig!"
+        },
+        "incusHealthy": {
+          "args": {},
+          "type": "Boolean!"
+        },
         "info": {
           "args": {},
           "type": "Info!"
@@ -4164,6 +4802,26 @@
         "isSSOEnabled": {
           "args": {},
           "type": "Boolean!"
+        },
+        "jailDetail": {
+          "args": {
+            "name": "String!"
+          },
+          "type": "JailDetail!"
+        },
+        "jailImageBuildStatus": {
+          "args": {
+            "buildId": "String!"
+          },
+          "type": "ImageBuildStatus"
+        },
+        "jailImages": {
+          "args": {},
+          "type": "[ImageRecord!]!"
+        },
+        "jails": {
+          "args": {},
+          "type": "[Jail!]!"
         },
         "logFile": {
           "args": {
@@ -4244,6 +4902,12 @@
           },
           "type": "[Permission!]!"
         },
+        "privilegedCommandStatus": {
+          "args": {
+            "id": "String!"
+          },
+          "type": "PrivilegedCommandStatus"
+        },
         "publicOidcProviders": {
           "args": {},
           "type": "[PublicOidcProvider!]!"
@@ -4263,6 +4927,23 @@
         "remoteAccess": {
           "args": {},
           "type": "RemoteAccess!"
+        },
+        "searchAllPackages": {
+          "args": {
+            "distro": "String",
+            "query": "String!",
+            "release": "String"
+          },
+          "type": "PackageSearchResponse!"
+        },
+        "searchPackages": {
+          "args": {
+            "distro": "String",
+            "ecosystem": "PackageEcosystem!",
+            "query": "String!",
+            "release": "String"
+          },
+          "type": "[PackageSearchResult!]!"
         },
         "server": {
           "args": {},
@@ -4868,6 +5549,12 @@
         "dockerContainerStats": {
           "args": {},
           "type": "DockerContainerStats!"
+        },
+        "jailExecOutput": {
+          "args": {
+            "sessionId": "String!"
+          },
+          "type": "String!"
         },
         "logFile": {
           "args": {

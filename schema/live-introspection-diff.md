@@ -1,17 +1,27 @@
 # Live Unraid introspection diff
 
-- Captured: 2026-07-23T19:28:22Z
+- Captured: 2026-07-23T20:14:58Z
 - Source: production Unraid API used by `runraid`
 - Snapshot: `schema/live-introspection.json`
 - Compared with: `schema/unraid-schema.graphql`
 - Comparison: normalized structural contract
-- Result: no semantic differences
+- Result: published Unraid SDL remains compatible; the live schema has 17
+  additional types and plugin-provided fields
 
-The comparison covers operation roots, named types, field return types, field
-arguments, input fields, enum values, implemented interfaces, and union member
-types. Descriptions, ordering, default values, and applied directive locations
+The compatibility comparison covers operation roots, named types, field return
+types, field arguments, input fields, enum values, implemented interfaces, and
+union member types. Every published SDL element exists unchanged in the live
+schema. Descriptions, ordering, default values, and applied directive locations
 are excluded because standard introspection cannot reproduce the complete SDL
 source representation.
+
+The live-only surface comes from the installed Incus integration and includes
+jail lifecycle and exec operations, image building, builder presets, package
+search, Homebrew installation status, and Incus configuration. These extensions
+are retained in the live snapshot so future live drift remains visible, but
+they are not copied into `schema/unraid-schema.graphql`: that file remains an
+exact vendored copy of Unraid's published SDL so the upstream drift check stays
+meaningful.
 
 The four deprecated Docker `skipCache` arguments on `containers`, `networks`,
 `organizer`, and `portConflicts` are present in both the live API and vendored
