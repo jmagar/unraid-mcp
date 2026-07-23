@@ -2,7 +2,18 @@
 
 ## Overview
 
-The test suite is Rust integration tests under `tests/`. They do not require a real Unraid server. Stub `UnraidService` instances point at `http://localhost:1/graphql`, so GraphQL calls are never made — tests exercise routing, auth middleware, protocol framing, and CLI output.
+The test suite is Rust integration tests under `tests/`. It does not require a
+real Unraid server. Most protocol and middleware tests use a stub service;
+scenario and schema-contract tests mount the repository's scenario-driven
+GraphQL mock and drive the real Rust dispatch and typed serialization paths.
+
+The mock action suite is intentionally the full GraphQL surface:
+
+- every registered read action runs against every mock scenario;
+- every registered mutation runs against every mock scenario;
+- mutations affect only canned mock responses and never contact production;
+- every generated query/mutation and fixture is validated against the vendored
+  Unraid SDL.
 
 Run all tests:
 ```bash
@@ -86,6 +97,22 @@ Tests that Axum HTTP extensions (used for auth context propagation) are correctl
 
 ---
 
+### `tests/scenarios.rs`
+
+Mounts each scenario (`healthy`, `degraded`, `parity-running`, and
+`disk-failing`) as an HTTP GraphQL mock, then runs every canonical read and
+write action through the real MCP dispatch. The test is named
+`every_read_and_write_action_dispatches_in_every_mock_scenario` so the coverage
+boundary is explicit.
+
+### `tests/schema_contract.rs`
+
+Captures every generated query and mutation, validates each operation against
+`schema/unraid-schema.graphql`, and checks every scenario fixture's selected
+response fields and scalar/enum values against that operation.
+
+---
+
 ### `tests/test_live.sh`
 
 Shell integration test. **This file is stale** — it references syslog-mcp actions (`syslog search`, `syslog tail`, etc.) and is not applicable to unraid-rmcp.
@@ -107,4 +134,6 @@ Shell integration test. **This file is stale** — it references syslog-mcp acti
 - `testing::oauth_state(data_dir)` — `AppState` with full OAuth stack (real RS256 key, temp SQLite)
 - `testing::build_auth_state(data_dir)` — lower-level `AuthState` builder for custom test setups
 
-The stub service points at `http://localhost:1/graphql` with a dummy API key. GraphQL calls will fail if reached, but no test sends a real action through to the network layer.
+Stub-only tests point at `http://localhost:1/graphql` with a dummy API key.
+Scenario and schema-contract tests instead use an ephemeral wiremock HTTP server
+backed by `tests/fixtures/scenarios/*.json`.

@@ -37,7 +37,13 @@ async fn mock_server_for(scenario: &str) -> MockServer {
     server
 }
 
-use unraid_rmcp::testing::upstream_action_calls as action_calls;
+/// Every GraphQL-backed action, both read and write, derived from the canonical
+/// action registry. Write actions only mutate the in-memory mock responses.
+fn all_action_calls() -> Vec<(&'static str, Value)> {
+    let mut calls = unraid_rmcp::testing::upstream_action_calls();
+    calls.extend(unraid_rmcp::testing::mutation_action_calls());
+    calls
+}
 
 /// Does any string anywhere in the JSON tree contain `needle`?
 fn tree_contains(value: &Value, needle: &str) -> bool {
@@ -50,27 +56,12 @@ fn tree_contains(value: &Value, needle: &str) -> bool {
 }
 
 #[tokio::test]
-async fn every_mutation_dispatches() {
-    // Mutations are write-scoped but execute_tool runs under LoopbackDev (no auth),
-    // so this exercises dispatch + the typed round-trip for the write surface.
-    let server = mock_server_for("healthy").await;
-    let state = state_with_upstream(&server.uri());
-    for (action, args) in unraid_rmcp::testing::mutation_action_calls() {
-        let result = execute_tool(&state, "unraid", args).await;
-        assert!(
-            result.is_ok(),
-            "mutation `{action}` should dispatch ok, got: {result:?}"
-        );
-    }
-}
-
-#[tokio::test]
-async fn every_action_dispatches_in_every_scenario() {
+async fn every_read_and_write_action_dispatches_in_every_mock_scenario() {
     for scenario in SCENARIOS {
         let server = mock_server_for(scenario).await;
         let state = state_with_upstream(&server.uri());
 
-        for (action, args) in action_calls() {
+        for (action, args) in all_action_calls() {
             let result = execute_tool(&state, "unraid", args).await;
             assert!(
                 result.is_ok(),
