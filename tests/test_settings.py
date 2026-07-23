@@ -378,7 +378,7 @@ class TestGoogleOAuthSettings:
 
 @pytest.fixture
 def _reload_settings(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> Generator[None, None, None]:
     """Reload the settings module under a controlled env, restoring it afterwards.
 
@@ -386,16 +386,33 @@ def _reload_settings(
     exercised by re-importing the module. After the test, reload once more with a
     clean (verify-on) env so the global module state other tests share is left in
     a known-good shape rather than whatever the last test forced.
+
+    ``UNRAID_CREDENTIALS_DIR`` is pointed at an empty ``tmp_path`` so the reload's
+    ``_load_env_files()`` finds no ``.env`` on the search path. Without this, a
+    developer's real ``~/.unraid-mcp/.env`` leaks in: ``load_dotenv(override=False)``
+    only refuses to overwrite vars *already present* in ``os.environ``, so a TLS
+    var this fixture deliberately cleared (e.g. ``UNRAID_ALLOW_INSECURE_TLS``) gets
+    silently repopulated from that file — defeating the isolation and making the
+    S-H1 guard assertions pass or fail based on the host's credentials rather than
+    the values the test set. (CI has no such file, so this only bites locally.)
     """
     # Clear the TLS-related vars so each test starts from a known baseline and
     # only the values it sets are in effect.
     monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
     monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+    monkeypatch.setenv("UNRAID_CREDENTIALS_DIR", str(tmp_path))
     try:
         yield
     finally:
+        # Raw pop before monkeypatch's ledger is consulted: load_dotenv writes
+        # straight into os.environ, bypassing monkeypatch tracking, so a plain
+        # delenv could let monkeypatch restore a leaked value into a later test.
+        # (See _reload_settings_from_dotenv for the full rationale.)
+        os.environ.pop("UNRAID_VERIFY_SSL", None)
+        os.environ.pop("UNRAID_ALLOW_INSECURE_TLS", None)
         monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
         monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+        monkeypatch.delenv("UNRAID_CREDENTIALS_DIR", raising=False)
         importlib.reload(settings_module)
 
 
