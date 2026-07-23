@@ -6,9 +6,9 @@
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-53-x86_64-1.txz">
-  <!ENTITY md5       "2e2a2b4889fec26370fdfe54c4647ad0">
-  <!ENTITY sha256    "1ef6c074409c2bb05cf8a2bec964b4f75d0ec47e6c3b5fd2a1a9da0971c73c5a">
+  <!ENTITY txz       "&name;-unraid-7.0.0-54-x86_64-1.txz">
+  <!ENTITY md5       "9d25d82303365d50e630fc5ec7d2928b">
+  <!ENTITY sha256    "18fa091eeeaecebcc82336e48f0c403589aeab4c290fe511a6ba76e8020d4340">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -17,6 +17,10 @@
 
 <CHANGES>
 ###2026.07.23
+- Restore executable permissions on every private runtime helper and verify
+  their real invocation and shared-library resolution before publication.
+- Make carry-forward package builds byte-for-byte deterministic by normalizing
+  archive ordering and mtimes.
 - Prevent package installation from making Unraid system directories
   world-writable: omit the archive root entry, normalize all shipped
   directories to mode 0755, and reject unsafe directory metadata in release

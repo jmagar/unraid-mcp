@@ -44,19 +44,92 @@ expected_entries="$(sed -n 's/^- Entries: \([0-9][0-9]*\)$/\1/p' MANIFEST.md)"
   echo "archive entry count differs from release manifest: $entries != $expected_entries" >&2
   exit 1
 }
-for path in \
+required_executables=(
   usr/local/incus/libexec/incus/incusd \
   usr/local/incus/bin/incus \
+  usr/local/incus/bin/lxcfs \
   usr/local/incus/bin/nft \
+  usr/local/incus/bin/distrobuilder \
+  usr/local/incus/bin/debootstrap \
+  usr/local/incus/bin/ar \
+  usr/local/incus/bin/mksquashfs \
   usr/local/incus/bin/unsquashfs \
+  usr/local/incus/bin/zstd \
+  usr/local/incus/bin/zstdcat \
+  usr/local/incus/bin/unzstd
+)
+
+required_files=(
   usr/local/emhttp/plugins/incus/api-plugin/dist/index.js \
   usr/local/emhttp/plugins/incus/api-plugin/node_modules/ws/package.json \
   usr/local/emhttp/plugins/incus/api-plugin/node_modules/graphql-subscriptions/package.json \
   usr/local/emhttp/plugins/incus/scripts/rc.incus \
   usr/local/emhttp/plugins/incus/build-id \
   usr/local/emhttp/plugins/incus/web/incus-settings.js \
-  usr/local/emhttp/plugins/incus/web/incus-dashboard.js; do
+  usr/local/emhttp/plugins/incus/web/incus-dashboard.js
+)
+
+for path in "${required_executables[@]}" "${required_files[@]}"; do
   grep -Fxq "$path" "$archive_list" || { echo "archive missing $path" >&2; exit 1; }
+done
+
+for path in "${required_executables[@]}"; do
+  [ -x "$archive_tree/$path" ] || {
+    echo "required executable is not executable in archive: $path" >&2
+    exit 1
+  }
+done
+
+[ "$(readlink "$archive_tree/usr/local/incus/bin/zstdcat")" = zstd ] || {
+  echo "zstdcat must be a relative symlink to the bundled zstd" >&2
+  exit 1
+}
+[ "$(readlink "$archive_tree/usr/local/incus/bin/unzstd")" = zstd ] || {
+  echo "unzstd must be a relative symlink to the bundled zstd" >&2
+  exit 1
+}
+
+runtime_root="$archive_tree/usr/local/incus"
+runtime_env=(
+  env
+  "DEBOOTSTRAP_DIR=$runtime_root/share/debootstrap"
+  "LD_LIBRARY_PATH=$runtime_root/lib"
+  "PATH=$runtime_root/bin:$runtime_root/libexec/incus:/usr/bin:/bin"
+)
+
+smoke_helper() {
+  local expected="$1"
+  shift
+  local output rc=0
+  output="$(timeout 10 "${runtime_env[@]}" "$@" 2>&1)" || rc=$?
+  if [ "$rc" -eq 124 ] || [ "$rc" -eq 126 ] || [ "$rc" -eq 127 ] || ! grep -Eiq "$expected" <<<"$output"; then
+    echo "required helper smoke invocation failed (rc=$rc): $*" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  fi
+}
+
+smoke_helper '^7\.0\.0$' "$runtime_root/libexec/incus/incusd" --version
+smoke_helper '^7\.0\.0$' "$runtime_root/bin/incus" --version
+smoke_helper '7\.0\.0' "$runtime_root/bin/lxcfs" --version
+smoke_helper 'nftables' "$runtime_root/bin/nft" --version
+smoke_helper 'Usage:.*distrobuilder|System container and VM image builder' "$runtime_root/bin/distrobuilder" --help
+smoke_helper 'debootstrap [0-9]' "$runtime_root/bin/debootstrap" --version
+smoke_helper 'GNU ar' "$runtime_root/bin/ar" --version
+smoke_helper 'mksquashfs version' "$runtime_root/bin/mksquashfs" -version
+smoke_helper 'unsquashfs version' "$runtime_root/bin/unsquashfs" -version
+smoke_helper 'Zstandard CLI' "$runtime_root/bin/zstd" --version
+smoke_helper '^[0-9]+\.[0-9]+\.[0-9]+$' "$runtime_root/bin/zstdcat" --version
+smoke_helper 'Zstandard CLI' "$runtime_root/bin/unzstd" --version
+
+for path in "${required_executables[@]}" usr/lib/x86_64-linux-gnu/lxcfs/liblxcfs.so; do
+  if file "$archive_tree/$path" | grep -q 'dynamically linked'; then
+    unresolved="$("${runtime_env[@]}" ldd "$archive_tree/$path" 2>/dev/null | awk '/not found/{print $1}')"
+    [ -z "$unresolved" ] || {
+      echo "unresolved shared libraries for $path: $unresolved" >&2
+      exit 1
+    }
+  fi
 done
 
 release="$(jq -er '.release' release-manifest.json)"

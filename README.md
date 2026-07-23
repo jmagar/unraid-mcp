@@ -213,10 +213,9 @@ frontend typecheck/build, `scripts/verify-classic-package.sh`, and the live
 isolation suite before release. The installer verifies SHA-256 before privileged
 installation and retains one previous `.txz`; API deployment retains one prior
 backend directory. A failed coordinated API activation automatically restores
-both layers (or removes a partial fresh install). The repository is currently
-private, so anonymous direct URL
-or Community Apps distribution remains unavailable until immutable release
-assets are published publicly.
+both layers (or removes a partial fresh install). The repository and direct
+plugin manifest are public; Community Apps availability still depends on
+successful portal validation, scan, clean-system testing, and manual review.
 
 ## Repository Structure
 

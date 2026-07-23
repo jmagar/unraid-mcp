@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
 import { PubSub } from "graphql-subscriptions";
@@ -40,6 +41,7 @@ const MAX_INPUT_BYTES = 64 * 1024;
 const MAX_CAPTURE_BYTES = 256 * 1024;
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 const SESSION_MAX_LIFETIME_MS = 8 * 60 * 60 * 1000;
+const INCUS_CLI = "/usr/local/incus/bin/incus";
 
 /**
  * Bridges a browser-facing GraphQL subscription/mutations to Incus's own
@@ -218,6 +220,61 @@ export class IncusExecService implements OnModuleDestroy {
       output?.["2"] ? this.fetchAndDeleteLog(output["2"]) : Promise.resolve(undefined),
     ]);
     return { exitCode, stdout, stderr };
+  }
+
+  async writePrivateFile(jailName: string, path: string, content: string): Promise<void> {
+    if (!path.startsWith("/run/") || path.includes("\0")) {
+      throw new Error("Private runtime file path must be under /run");
+    }
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const child = spawn(
+        INCUS_CLI,
+        [
+          "exec",
+          jailName,
+          "--",
+          "sh",
+          "-c",
+          'umask 077; cat > "$1"',
+          "incus-web-private-file",
+          path,
+        ],
+        {
+          env: {
+            HOME: "/root",
+            INCUS_SOCKET: this.socketPath,
+            PATH: `/usr/local/incus/bin:${process.env.PATH ?? "/usr/bin:/bin"}`,
+            LD_LIBRARY_PATH: `/usr/local/incus/lib${process.env.LD_LIBRARY_PATH ? ":" + process.env.LD_LIBRARY_PATH : ""}`,
+          },
+          stdio: ["pipe", "ignore", "pipe"],
+        },
+      );
+      let stderr = "";
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (error) reject(error);
+        else resolve();
+      };
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        finish(new Error("Timed out writing private runtime file"));
+      }, 15_000);
+      child.stderr.on("data", (chunk: Buffer) => {
+        if (stderr.length < 16_384) stderr += chunk.toString("utf8");
+      });
+      child.once("error", (error) => {
+        finish(error);
+      });
+      child.once("close", (code) => {
+        if (code === 0) finish();
+        else finish(new Error(`Unable to write private runtime file (incus exited ${code}): ${stderr.trim()}`));
+      });
+      child.stdin.once("error", (error) => finish(error));
+      child.stdin.end(content);
+    });
   }
 
   /** GET /1.0/operations/{id}/wait and return its metadata once the operation reaches a terminal state. */

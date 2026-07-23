@@ -48,27 +48,10 @@ registerEnumType(PackageEcosystem, {
   description: "Package catalog to search — apt is Debian/Ubuntu only",
 });
 
-const READ_METHODS = new Set([
-  "incusHealthy", "incusConfig", "jails", "jailDetail", "privilegedCommandStatus",
-  "jailImageBuildStatus", "jailImages", "builderPresets", "homebrewInstallStatus",
-  "searchPackages", "searchAllPackages", "jailExecOutput",
-]);
-const DELETE_METHODS = new Set(["deleteJail", "deleteBuilderPreset", "deleteJailImage", "deleteStoppedJails", "pruneStaleImageRecords"]);
+const READ_PERMISSION = { action: AuthAction.READ_ANY, resource: Resource.VMS };
+const UPDATE_PERMISSION = { action: AuthAction.UPDATE_ANY, resource: Resource.VMS };
+const DELETE_PERMISSION = { action: AuthAction.DELETE_ANY, resource: Resource.VMS };
 
-/** Apply the host's opt-in authz metadata to every resolver method by default. */
-function IncusPermissions(): ClassDecorator {
-  return (target) => {
-    for (const name of Object.getOwnPropertyNames(target.prototype)) {
-      if (name === "constructor") continue;
-      const descriptor = Object.getOwnPropertyDescriptor(target.prototype, name);
-      if (!descriptor || typeof descriptor.value !== "function") continue;
-      const action = READ_METHODS.has(name) ? AuthAction.READ_ANY : DELETE_METHODS.has(name) ? AuthAction.DELETE_ANY : AuthAction.UPDATE_ANY;
-      UsePermissions({ action, resource: Resource.VMS })(target.prototype, name, descriptor);
-    }
-  };
-}
-
-@IncusPermissions()
 @Resolver()
 export class IncusResolver {
   private readonly logger = new Logger(IncusResolver.name);
@@ -84,11 +67,13 @@ export class IncusResolver {
   ) {}
 
   @Query(() => Boolean, { description: "Is incusd reachable over its unix socket?" })
+  @UsePermissions(READ_PERMISSION)
   async incusHealthy(): Promise<boolean> {
     return this.incus.ping();
   }
 
   @Query(() => IncusConfig, { description: "Current incus.cfg, as loaded by the API" })
+  @UsePermissions(READ_PERMISSION)
   async incusConfig(): Promise<IncusConfig> {
     const current = this.config.getOrThrow<IncusConfig>("incus");
     return { ...current, tsAuthKey: "", tsAuthKeyConfigured: Boolean(current.tsAuthKey) };
@@ -98,6 +83,7 @@ export class IncusResolver {
     description:
       "Merge changes into incus.cfg and apply them (restarts incusd + re-runs the environment setup if SERVICE is enabled, else stops it).",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   async updateIncusConfig(@Args("input") input: IncusConfigInput): Promise<IncusConfig> {
     const merged = await this.configSync.applyConfigUpdate(input);
     try {
@@ -109,11 +95,13 @@ export class IncusResolver {
   }
 
   @Query(() => [Jail], { description: "List all agent jails" })
+  @UsePermissions(READ_PERMISSION)
   async jails(): Promise<Jail[]> {
     return this.incus.listJails();
   }
 
   @Mutation(() => Boolean, { description: "Launch a new LAN-banned agent jail" })
+  @UsePermissions(UPDATE_PERMISSION)
   async launchJail(
     @Args("name") name: string,
     @Args("image", { nullable: true }) image?: string,
@@ -123,10 +111,19 @@ export class IncusResolver {
 
     const tsAuthKey = this.config.get<IncusConfig>("incus")?.tsAuthKey;
     if (tsAuthKey) {
+      const authKeyPath = "/run/incus-web-tailscale-auth.key";
       try {
-        await this.exec.runOnce(name, ["tailscale", "up", `--authkey=${tsAuthKey}`, `--hostname=${name}`]);
+        await this.exec.writePrivateFile(name, authKeyPath, tsAuthKey);
+        await this.exec.runOnce(name, [
+          "tailscale",
+          "up",
+          `--auth-key=file:${authKeyPath}`,
+          `--hostname=${name}`,
+        ]);
       } catch (err) {
         this.logger.warn(`Best-effort tailscale join failed for jail "${name}": ${(err as Error).message}`);
+      } finally {
+        await this.exec.runOnce(name, ["rm", "-f", authKeyPath]).catch(() => undefined);
       }
     }
 
@@ -141,6 +138,7 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean)
+  @UsePermissions(UPDATE_PERMISSION)
   async setJailState(
     @Args("name") name: string,
     @Args("action", { type: () => JailAction }) action: JailAction
@@ -150,6 +148,7 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean, { description: "Repoint a jail's /workspace to a host dir" })
+  @UsePermissions(UPDATE_PERMISSION)
   async setJailWorkspace(
     @Args("name") name: string,
     @Args("hostPath") hostPath: string
@@ -163,6 +162,7 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean, { description: "Drop a jail's workspace override, reverting to the profile's shared default" })
+  @UsePermissions(UPDATE_PERMISSION)
   async clearJailWorkspace(@Args("name") name: string): Promise<boolean> {
     await this.incus.clearWorkspaceOverride(name);
     return true;
@@ -171,11 +171,13 @@ export class IncusResolver {
   @Mutation(() => String, {
     description: "Give a container (still on the profile's shared default workspace) its own isolated workspace directory; returns the new host path",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   async migrateJailWorkspace(@Args("name") name: string): Promise<string> {
     return this.incus.migrateToOwnWorkspace(name);
   }
 
   @Query(() => JailDetail, { description: "Full resolved config for one jail — profile + instance overrides merged" })
+  @UsePermissions(READ_PERMISSION)
   async jailDetail(@Args("name") name: string): Promise<JailDetail> {
     const [detail, sudoEnabled] = await Promise.all([
       this.incus.getJailDetail(name),
@@ -185,6 +187,7 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean, { description: "Grant the container's non-root agent user NOPASSWD sudo (opt-in, retroactive)" })
+  @UsePermissions(UPDATE_PERMISSION)
   async grantJailSudo(@Args("name") name: string): Promise<boolean> {
     const result = await this.exec.grantSudo(name);
     if (!result.success) {
@@ -197,11 +200,13 @@ export class IncusResolver {
     description:
       "Run a command inside a container as root, mediated by the operator (not exposed to the container's own agent user) — returns a job id to poll via privilegedCommandStatus",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   startPrivilegedCommand(@Args("name") name: string, @Args("command") command: string): string {
     return this.exec.startPrivilegedCommand(name, command);
   }
 
   @Query(() => PrivilegedCommandStatus, { nullable: true, description: "Poll status/output for a privileged command job" })
+  @UsePermissions(READ_PERMISSION)
   privilegedCommandStatus(@Args("id") id: string): PrivilegedCommandStatus | undefined {
     return this.exec.getPrivilegedCommandStatus(id);
   }
@@ -209,6 +214,7 @@ export class IncusResolver {
   @Mutation(() => Boolean, {
     description: "Override a jail's CPU/memory limits independent of its profile; pass an empty string to clear an override",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   async setJailLimits(
     @Args("name") name: string,
     @Args("cpu", { nullable: true }) cpu?: string,
@@ -219,12 +225,14 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean)
+  @UsePermissions(DELETE_PERMISSION)
   async deleteJail(@Args("name") name: string): Promise<boolean> {
     await this.incus.deleteJail(name);
     return true;
   }
 
   @Mutation(() => String, { description: "Start an interactive shell session in a jail; returns a session id" })
+  @UsePermissions(UPDATE_PERMISSION)
   async startJailExec(
     @Args("name") name: string,
     @Args("cols", { type: () => Int, nullable: true }) cols?: number,
@@ -234,11 +242,13 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean, { description: "Send terminal input (keystrokes) to an exec session" })
+  @UsePermissions(UPDATE_PERMISSION)
   sendJailExecInput(@Args("sessionId") sessionId: string, @Args("data") data: string): boolean {
     return this.exec.sendInput(sessionId, data);
   }
 
   @Mutation(() => Boolean, { description: "Resize an exec session's pseudo-terminal" })
+  @UsePermissions(UPDATE_PERMISSION)
   resizeJailExec(
     @Args("sessionId") sessionId: string,
     @Args("cols", { type: () => Int }) cols: number,
@@ -248,11 +258,13 @@ export class IncusResolver {
   }
 
   @Mutation(() => Boolean, { description: "Close an exec session" })
+  @UsePermissions(UPDATE_PERMISSION)
   stopJailExec(@Args("sessionId") sessionId: string): boolean {
     return this.exec.stop(sessionId);
   }
 
   @Subscription(() => String, { description: "Streams terminal output for an exec session" })
+  @UsePermissions(READ_PERMISSION)
   jailExecOutput(@Args("sessionId") sessionId: string) {
     return this.exec.pubsub.asyncIterableIterator(`jailExecOutput:${sessionId}`);
   }
@@ -261,6 +273,7 @@ export class IncusResolver {
     description:
       "Build a custom jail image with distrobuilder (distro/release/packages only) and import it into Incus under the given alias. Returns a build id to poll via jailImageBuildStatus.",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   async buildJailImage(
     @Args("distro") distro: string,
     @Args("release") release: string,
@@ -273,6 +286,7 @@ export class IncusResolver {
   }
 
   @Query(() => ImageBuildStatus, { nullable: true, description: "Poll status/log tail for a jail image build" })
+  @UsePermissions(UPDATE_PERMISSION)
   async jailImageBuildStatus(@Args("buildId") buildId: string): Promise<ImageBuildStatus | undefined> {
     const build = await this.imageBuilder.getStatus(buildId);
     if (!build) return undefined;
@@ -289,11 +303,13 @@ export class IncusResolver {
   }
 
   @Query(() => [ImageRecord], { description: "Persisted registry of successfully built jail images" })
+  @UsePermissions(READ_PERMISSION)
   async jailImages(): Promise<ImageRecord[]> {
     return this.imageBuilder.listImages();
   }
 
   @Mutation(() => ImageRecord, { description: "Mark (or unmark) a tracked image as a master image" })
+  @UsePermissions(UPDATE_PERMISSION)
   async setMasterImage(
     @Args("alias") alias: string,
     @Args("isMaster") isMaster: boolean
@@ -302,21 +318,25 @@ export class IncusResolver {
   }
 
   @Query(() => [BuilderPreset], { description: "Saved distrobuilder presets" })
+  @UsePermissions(READ_PERMISSION)
   async builderPresets(): Promise<BuilderPreset[]> {
     return this.presets.list();
   }
 
   @Mutation(() => BuilderPreset, { description: "Save (upsert by name) a distrobuilder preset" })
+  @UsePermissions(UPDATE_PERMISSION)
   async saveBuilderPreset(@Args("input") input: BuilderPresetInput): Promise<BuilderPreset> {
     return this.presets.save(input);
   }
 
   @Mutation(() => Boolean, { description: "Delete a saved distrobuilder preset by name" })
+  @UsePermissions(DELETE_PERMISSION)
   async deleteBuilderPreset(@Args("name") name: string): Promise<boolean> {
     return this.presets.remove(name);
   }
 
   @Mutation(() => Boolean, { description: "Delete a built image (and untrack it) by alias" })
+  @UsePermissions(DELETE_PERMISSION)
   async deleteJailImage(@Args("alias") alias: string): Promise<boolean> {
     try {
       await this.incus.deleteImage(alias);
@@ -331,6 +351,7 @@ export class IncusResolver {
   @Mutation(() => [String!], {
     description: "Untrack any saved image record whose Incus image no longer actually exists (e.g. deleted via the incus CLI directly); returns the aliases pruned",
   })
+  @UsePermissions(DELETE_PERMISSION)
   async pruneStaleImageRecords(): Promise<string[]> {
     const images = await this.imageBuilder.listImages();
     const pruned: string[] = [];
@@ -344,6 +365,7 @@ export class IncusResolver {
   }
 
   @Mutation(() => [String!], { description: "Delete every currently-stopped container; returns the names deleted" })
+  @UsePermissions(DELETE_PERMISSION)
   async deleteStoppedJails(): Promise<string[]> {
     return this.incus.deleteStoppedJails();
   }
@@ -352,11 +374,13 @@ export class IncusResolver {
     description:
       "Kick off a best-effort Homebrew formula install into a running container (bootstrapping Homebrew itself first if needed); returns a job id to poll via homebrewInstallStatus",
   })
+  @UsePermissions(UPDATE_PERMISSION)
   installHomebrewFormula(@Args("name") name: string, @Args("formula") formula: string): string {
     return this.exec.startHomebrewInstall(name, formula);
   }
 
   @Query(() => HomebrewInstallStatus, { nullable: true, description: "Poll status for a Homebrew install job" })
+  @UsePermissions(READ_PERMISSION)
   homebrewInstallStatus(@Args("id") id: string): HomebrewInstallStatus | undefined {
     return this.exec.getHomebrewInstallStatus(id);
   }
@@ -364,6 +388,7 @@ export class IncusResolver {
   @Query(() => [PackageSearchResult], {
     description: "Live package search — npm/PyPI/Homebrew are cached catalogs; apt is debian/ubuntu only and requires distro+release",
   })
+  @UsePermissions(READ_PERMISSION)
   async searchPackages(
     @Args("ecosystem", { type: () => PackageEcosystem }) ecosystem: PackageEcosystem,
     @Args("query") query: string,
@@ -377,6 +402,7 @@ export class IncusResolver {
     description:
       "Search apt + npm + PyPI + Homebrew concurrently, merged into one relevance-ranked list. apt is skipped (not an error) unless distro/release are debian/ubuntu. A source failing (timeout, 5xx) degrades gracefully — its results are just absent, reported in `errors`, the rest of the search still returns.",
   })
+  @UsePermissions(READ_PERMISSION)
   async searchAllPackages(
     @Args("query") query: string,
     @Args("distro", { nullable: true }) distro?: string,

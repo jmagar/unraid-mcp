@@ -17,7 +17,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -68,8 +68,6 @@ jobs:
           )"
           if [[ "$status" != "200" ]]; then
             echo "::error::OpenWiki API preflight failed for ${OPENAI_COMPATIBLE_BASE_URL%/}/models with HTTP ${status}"
-            head -c 300 "$response"
-            echo
             exit 1
           fi
 

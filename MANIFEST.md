@@ -3,11 +3,11 @@
 Release metadata is machine-readable in `release-manifest.json`. The currently
 tracked classic artifact is:
 
-- File: `packages/incus-unraid-7.0.0-53-x86_64-1.txz`
-- Size: 36,089,248 bytes
-- Entries: 310
-- MD5 (legacy Unraid downloader field only): `2e2a2b4889fec26370fdfe54c4647ad0`
-- SHA-256: `1ef6c074409c2bb05cf8a2bec964b4f75d0ec47e6c3b5fd2a1a9da0971c73c5a`
+- File: `packages/incus-unraid-7.0.0-54-x86_64-1.txz`
+- Size: 36,075,720 bytes
+- Entries: 312
+- MD5 (legacy Unraid downloader field only): `9d25d82303365d50e630fc5ec7d2928b`
+- SHA-256: `18fa091eeeaecebcc82336e48f0c403589aeab4c290fe511a6ba76e8020d4340`
 - Target: x86_64, glibc 2.38 or newer
 
 The Incus 7.0 runtime was repackaged from Debian trixie packages and has been
@@ -36,7 +36,7 @@ Required executable inventory includes `incus`, `incusd`, `lxcfs`, `nft`,
 The authoritative full inventory is the archive itself:
 
 ```bash
-tar -tvJf packages/incus-unraid-7.0.0-53-x86_64-1.txz
+tar -tvJf packages/incus-unraid-7.0.0-54-x86_64-1.txz
 ./scripts/verify-classic-package.sh
 ```
 

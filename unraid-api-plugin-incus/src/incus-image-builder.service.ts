@@ -36,6 +36,56 @@ const MAX_BUILD_LOG_BYTES = 16 * 1024 * 1024;
 
 /** Private-prefixed runtime bundled by the plugin's .plg (see incus-env.sh) — matches incusd/lxcfs/nft. */
 const INCUS_PREFIX = "/usr/local/incus";
+const DISTROBUILDER_ENV_ALLOWLIST = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "LANG",
+  "LC_ALL",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "TMPDIR",
+] as const;
+const BUILD_SECRET_ASSIGNMENT =
+  /((?:^|[\s{,])["']?(?:[A-Za-z0-9_.-]*[_-])?(?:password|token|secret|api[_-]?key|auth[_-]?key|private[_-]?key|authorization)["']?\s*[:=]\s*["']?)([^"'\s,;}\]]+)/gi;
+
+export function distrobuilderEnvironment(
+  parentEnv: NodeJS.ProcessEnv,
+  socketPath: string,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    HOME: "/root",
+    INCUS_SOCKET: socketPath,
+    PATH: `${INCUS_PREFIX}/bin:${parentEnv.PATH ?? "/usr/bin:/bin"}`,
+    LD_LIBRARY_PATH: `${INCUS_PREFIX}/lib${parentEnv.LD_LIBRARY_PATH ? ":" + parentEnv.LD_LIBRARY_PATH : ""}`,
+    DEBOOTSTRAP_DIR: `${INCUS_PREFIX}/share/debootstrap`,
+  };
+  for (const key of DISTROBUILDER_ENV_ALLOWLIST) {
+    const value = parentEnv[key];
+    if (!value) continue;
+    if (/proxy$/i.test(key) && key.toLowerCase() !== "no_proxy") {
+      try {
+        const proxy = new URL(value);
+        if (proxy.username || proxy.password) continue;
+      } catch {
+        continue;
+      }
+    }
+    env[key] = value;
+  }
+  return env;
+}
+
+export function redactBuildLogText(value: string): string {
+  return value
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/gi, "$1[REDACTED]@")
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]+/gi, "$1 [REDACTED]")
+    .replace(/\b(?:sk-(?:proj-)?|gh[pousr]_|github_pat_|tskey-)[A-Za-z0-9_-]{8,}\b/g, "[REDACTED]")
+    .replace(BUILD_SECRET_ASSIGNMENT, "$1[REDACTED]");
+}
 
 /**
  * Per-distro distrobuilder `source`/`packages` shape for the 6 distros curated in the
@@ -177,7 +227,7 @@ export class IncusImageBuilderService {
       this.renderDefinition(distro, release, packages, postInstallCommands ?? []),
       "utf-8"
     );
-    await writeFile(logFile, "", "utf-8");
+    await writeFile(logFile, "", { encoding: "utf-8", mode: 0o600, flag: "wx" });
 
     const build: ImageBuild = {
       id,
@@ -341,30 +391,38 @@ export class IncusImageBuilderService {
         // A dedicated process group lets timeout cancellation terminate
         // debootstrap/package-manager descendants as well as distrobuilder.
         detached: true,
-        env: {
-          ...process.env,
-          INCUS_SOCKET: this.socketPath,
-          PATH: `${INCUS_PREFIX}/bin:${process.env.PATH ?? ""}`,
-          LD_LIBRARY_PATH: `${INCUS_PREFIX}/lib${process.env.LD_LIBRARY_PATH ? ":" + process.env.LD_LIBRARY_PATH : ""}`,
-          DEBOOTSTRAP_DIR: `${INCUS_PREFIX}/share/debootstrap`,
-        },
+        env: distrobuilderEnvironment(process.env, this.socketPath),
       });
 
       const log = createWriteStream(build.logFile, { flags: "a", mode: 0o600 });
       let logBytes = 0;
       let logTruncated = false;
-      const appendLog = (chunk: Buffer) => {
-        if (logBytes >= MAX_BUILD_LOG_BYTES) return;
+      let pendingLogText = "";
+      const writeRedactedLog = (text: string) => {
+        if (logBytes >= MAX_BUILD_LOG_BYTES || !text) return;
+        const encoded = Buffer.from(redactBuildLogText(text), "utf8");
         const remaining = MAX_BUILD_LOG_BYTES - logBytes;
-        const output = chunk.subarray(0, remaining);
+        const output = encoded.subarray(0, remaining);
         logBytes += output.length;
         if (!log.write(output)) {
           child.stdout.pause();
           child.stderr.pause();
         }
-        if (output.length < chunk.length && !logTruncated) {
+        if (output.length < encoded.length && !logTruncated) {
           logTruncated = true;
           log.write("\n[build log truncated at 16 MiB]\n");
+        }
+      };
+      const appendLog = (chunk: Buffer) => {
+        pendingLogText += chunk.toString("utf8");
+        const lastNewline = pendingLogText.lastIndexOf("\n");
+        if (lastNewline >= 0) {
+          writeRedactedLog(pendingLogText.slice(0, lastNewline + 1));
+          pendingLogText = pendingLogText.slice(lastNewline + 1);
+        }
+        if (pendingLogText.length > 65_536) {
+          writeRedactedLog(pendingLogText.slice(0, -512));
+          pendingLogText = pendingLogText.slice(-512);
         }
       };
       log.on("drain", () => { child.stdout.resume(); child.stderr.resume(); });
@@ -404,6 +462,8 @@ export class IncusImageBuilderService {
         if (hardSettleTimer) clearTimeout(hardSettleTimer);
         child.stdout.off("data", appendLog);
         child.stderr.off("data", appendLog);
+        writeRedactedLog(pendingLogText);
+        pendingLogText = "";
         log.end();
         const failure = error ?? forcedError;
         if (failure) {

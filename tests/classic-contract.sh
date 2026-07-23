@@ -65,6 +65,15 @@ grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.
 grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
 grep -Fq 'find "$stage" -type d -exec chmod 0755 {} +' "$BUILD_CLASSIC"
 grep -Fq 'archive must not contain a root directory entry' "$VERIFY_CLASSIC"
+grep -Fq 'required executable is not executable in archive' "$VERIFY_CLASSIC"
+grep -Fq 'required helper smoke invocation failed' "$VERIFY_CLASSIC"
+grep -Fq 'unresolved shared libraries for' "$VERIFY_CLASSIC"
+for executable in distrobuilder debootstrap ar mksquashfs zstd zstdcat unzstd; do
+  [ -x "$ROOT/source/usr/local/incus/bin/$executable" ] || {
+    echo "tracked helper is not executable: usr/local/incus/bin/$executable" >&2
+    exit 1
+  }
+done
 plugin_name="$(sed -n 's/.*<!ENTITY name[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
 txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
 txz="${txz//&name;/$plugin_name}"

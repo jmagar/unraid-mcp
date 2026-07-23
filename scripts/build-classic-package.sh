@@ -9,11 +9,41 @@ previous="${2:-$(find "$ROOT/packages" -maxdepth 1 -type f -name 'incus-unraid-*
 version="7.0.0-${build}-x86_64-1"
 output="$ROOT/packages/incus-unraid-${version}.txz"
 release="$(jq -er '.release' "$ROOT/release-manifest.json")"
+release_date="${release//./-}"
+if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+  source_date_epoch="$SOURCE_DATE_EPOCH"
+else
+  source_date_epoch="$(date -u -d "$release_date 00:00:00" +%s 2>/dev/null || printf '0')"
+fi
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
 tar -xJf "$previous" -C "$stage"
 cp -a "$ROOT/source/." "$stage/"
+
+# Carry-forward archives may contain helpers from a historically broken build
+# where regular files were mode 0600. Restore the runtime contract explicitly
+# instead of depending on the previous package or the builder's umask.
+required_executables=(
+  usr/local/incus/libexec/incus/incusd
+  usr/local/incus/bin/incus
+  usr/local/incus/bin/lxcfs
+  usr/local/incus/bin/nft
+  usr/local/incus/bin/distrobuilder
+  usr/local/incus/bin/debootstrap
+  usr/local/incus/bin/ar
+  usr/local/incus/bin/mksquashfs
+  usr/local/incus/bin/unsquashfs
+  usr/local/incus/bin/zstd
+  usr/local/incus/bin/zstdcat
+  usr/local/incus/bin/unzstd
+)
+for path in "${required_executables[@]}"; do
+  if [ -e "$stage/$path" ]; then
+    chmod 0755 "$stage/$path"
+  fi
+done
+
 printf '%s+%s\n' "$release" "$build" \
   >"$stage/usr/local/emhttp/plugins/incus/build-id"
 chmod 0644 "$stage/usr/local/emhttp/plugins/incus/build-id"
@@ -47,6 +77,10 @@ fi
 # Normalize every shipped directory and omit the staging root itself so a
 # package can never change / ownership or mode.
 find "$stage" -type d -exec chmod 0755 {} +
+# Normalize all archive mtimes and ordering. npm and archive extraction assign
+# current timestamps to generated/vendor metadata, which otherwise changes the
+# txz hash even when the staged content is identical.
+find "$stage" -exec touch -h -d "@$source_date_epoch" {} +
 mapfile -d '' package_roots < <(
   find "$stage" -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z
 )
@@ -56,7 +90,8 @@ mapfile -d '' package_roots < <(
 }
 (
   cd "$stage"
-  tar --owner=0 --group=0 --numeric-owner -cJf "$output" "${package_roots[@]}"
+  tar --sort=name --mtime="@$source_date_epoch" \
+    --owner=0 --group=0 --numeric-owner -cJf "$output" "${package_roots[@]}"
 )
 echo "built $output"
 echo "md5=$(md5sum "$output" | awk '{print $1}')"
