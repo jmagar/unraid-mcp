@@ -19,6 +19,18 @@ tar -xJf "$archive" -C "$archive_tree"
 echo "$md5  $archive" | md5sum -c -
 echo "$sha256  $archive" | sha256sum -c -
 
+if awk '$0 == "./" { found=1 } END { exit !found }' "$archive_list"; then
+  echo "archive must not contain a root directory entry" >&2
+  exit 1
+fi
+bad_directory_mode="$(
+  find "$archive_tree" -mindepth 1 -type d ! -perm 0755 -print -quit
+)"
+[ -z "$bad_directory_mode" ] || {
+  echo "archive contains non-0755 directory: ${bad_directory_mode#"$archive_tree"/}" >&2
+  exit 1
+}
+
 xmllint --noout incus.plg
 find source/usr/local/emhttp/plugins/incus -type f \( -name '*.sh' -o -path '*/event/*' \) -print0 |
   xargs -0 -r -n1 bash -n
