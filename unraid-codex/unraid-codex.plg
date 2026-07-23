@@ -1,0 +1,59 @@
+<?xml version="1.0" standalone="yes"?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "unraid-codex">
+  <!ENTITY author    "jmagar">
+  <!ENTITY version   "2026.07.23">
+  <!ENTITY launch    "">
+  <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main/unraid-codex">
+  <!ENTITY pluginURL "&gitURL;/unraid-codex.plg">
+  <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-10.txz">
+  <!ENTITY md5       "a985e8e43bdc0933241f6bb42037275c">
+  <!ENTITY sha256    "4ad05c8a8dbeacd0bb996ee4ee75fdadcc98279dfe3a97c965476ddaa71e3134">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
+
+<CHANGES>
+###2026.07.23
+- Build 10 makes the transcript itself an Aurora Conversation with Aurora
+  message actions, moves runtime inventory into the Session Inspector, and
+  adds a persisted resizable dock that reflows the stock Unraid page.
+- Build 6 replaces the prototype renderer with vendored Aurora registry
+  components for messages, reasoning, plans, terminal output, tool calls,
+  patches, approvals, elicitation, questions, context usage, and warnings.
+- Initial prototype: persistent Aurora Light chathead, Codex app-server
+  connection over an authenticated same-origin Unix-socket proxy, ChatGPT
+  device login, streamed responses, thread resume, and one-shot approvals.
+</CHANGES>
+
+<FILE Name="&plugin;/&txz;">
+<URL>&gitURL;/dist/&txz;</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+echo "&sha256;  &plugin;/&txz;" | sha256sum -c - || exit 1
+upgradepkg --install-new &plugin;/&txz; || exit 1
+chmod +x &emhttp;/scripts/*.sh &emhttp;/event/* 2>/dev/null
+mkdir -p &plugin;
+chmod 0700 &plugin;
+if mountpoint -q /mnt/user 2>/dev/null; then
+  &emhttp;/scripts/start-appserver.sh || logger -t unraid-codex "App-server is not ready yet"
+fi
+</INLINE>
+</FILE>
+
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+&emhttp;/scripts/stop-appserver.sh 2>/dev/null || true
+&emhttp;/scripts/configure-nginx.sh --remove 2>/dev/null || true
+removepkg &name; 2>/dev/null
+rm -rf &emhttp;
+echo "Unraid Codex removed. The Incus container and Codex data were left intact."
+</INLINE>
+</FILE>
+
+</PLUGIN>
