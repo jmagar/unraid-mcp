@@ -43,8 +43,21 @@ if [ -d "$ROOT/unraid-api-plugin-incus/dist" ]; then
   (cd "$api" && npm ci --omit=dev --ignore-scripts --legacy-peer-deps)
 fi
 
-tar -C "$stage" --owner=0 --group=0 --numeric-owner \
-  --transform='s|^\./||' -cJf "$output" .
+# upgradepkg applies directory metadata from the archive to the live rootfs.
+# Normalize every shipped directory and omit the staging root itself so a
+# package can never change / ownership or mode.
+find "$stage" -type d -exec chmod 0755 {} +
+mapfile -d '' package_roots < <(
+  find "$stage" -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z
+)
+[ "${#package_roots[@]}" -gt 0 ] || {
+  echo "refusing to build an empty classic package" >&2
+  exit 1
+}
+(
+  cd "$stage"
+  tar --owner=0 --group=0 --numeric-owner -cJf "$output" "${package_roots[@]}"
+)
 echo "built $output"
 echo "md5=$(md5sum "$output" | awk '{print $1}')"
 echo "sha256=$(sha256sum "$output" | awk '{print $1}')"

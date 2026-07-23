@@ -12,6 +12,16 @@ INSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/install-api-plu
 UNINSTALL_API="$ROOT/source/usr/local/emhttp/plugins/incus/scripts/uninstall-api-plugin.sh"
 PLG="$ROOT/incus.plg"
 BUILD_CLASSIC="$ROOT/scripts/build-classic-package.sh"
+VERIFY_CLASSIC="$ROOT/scripts/verify-classic-package.sh"
+
+for unsafe_build in 48 49 50 51 52; do
+  unsafe_archive="$ROOT/packages/incus-unraid-7.0.0-${unsafe_build}-x86_64-1.txz"
+  [ ! -e "$unsafe_archive" ] || {
+    echo "unsafe package build remains published: ${unsafe_archive#"$ROOT"/}" >&2
+    exit 1
+  }
+done
+"$ROOT/tests/package-directory-modes.sh"
 
 grep -Eq 'ACL_BLOCK=.*100\.64\.0\.0/10' "$CFG"
 grep -Fq 'Block host bridge and peer containers' "$INIT"
@@ -53,15 +63,29 @@ grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.
 [ "$(grep -Fc '      - "packages/**"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
 [ "$(grep -Fc '      - "incus.plg"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
 grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
-grep -Fq 'required executable is not executable in archive' "$ROOT/scripts/verify-classic-package.sh"
-grep -Fq 'required helper smoke invocation failed' "$ROOT/scripts/verify-classic-package.sh"
-grep -Fq 'unresolved shared libraries for' "$ROOT/scripts/verify-classic-package.sh"
+grep -Fq 'find "$stage" -type d -exec chmod 0755 {} +' "$BUILD_CLASSIC"
+grep -Fq 'archive must not contain a root directory entry' "$VERIFY_CLASSIC"
+grep -Fq 'required executable is not executable in archive' "$VERIFY_CLASSIC"
+grep -Fq 'required helper smoke invocation failed' "$VERIFY_CLASSIC"
+grep -Fq 'unresolved shared libraries for' "$VERIFY_CLASSIC"
 for executable in distrobuilder debootstrap ar mksquashfs zstd zstdcat unzstd; do
   [ -x "$ROOT/source/usr/local/incus/bin/$executable" ] || {
     echo "tracked helper is not executable: usr/local/incus/bin/$executable" >&2
     exit 1
   }
 done
+plugin_name="$(sed -n 's/.*<!ENTITY name[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
+txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
+txz="${txz//&name;/$plugin_name}"
+archive="$ROOT/packages/$txz"
+[ -f "$archive" ]
+root_entries="$(tar -tJf "$archive" | awk '$0 == "./" { count++ } END { print count+0 }')"
+[ "$root_entries" -eq 0 ]
+bad_directory_mode="$(
+  tar -tvJf "$archive" |
+    awk '$1 ~ /^d/ && $1 != "drwxr-xr-x" && bad == "" { bad=$NF } END { print bad }'
+)"
+[ -z "$bad_directory_mode" ]
 for script in "$ROOT"/source/usr/local/emhttp/plugins/incus/scripts/*.sh "$ROOT"/source/usr/local/emhttp/plugins/incus/event/*; do
   bash -n "$script"
 done

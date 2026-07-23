@@ -3,11 +3,11 @@
 Release metadata is machine-readable in `release-manifest.json`. The currently
 tracked classic artifact is:
 
-- File: `packages/incus-unraid-7.0.0-52-x86_64-1.txz`
-- Size: 36,024,372 bytes
-- Entries: 311
-- MD5 (legacy Unraid downloader field only): `ecf34255c96429d819c35b0983ba74c0`
-- SHA-256: `08ace6310036e29e31a03e9fd02a94807e8b0adef2a5fb2e0c617a8d9345e5af`
+- File: `packages/incus-unraid-7.0.0-53-x86_64-1.txz`
+- Size: 36,089,248 bytes
+- Entries: 310
+- MD5 (legacy Unraid downloader field only): `2e2a2b4889fec26370fdfe54c4647ad0`
+- SHA-256: `1ef6c074409c2bb05cf8a2bec964b4f75d0ec47e6c3b5fd2a1a9da0971c73c5a`
 - Target: x86_64, glibc 2.38 or newer
 
 The Incus 7.0 runtime was repackaged from Debian trixie packages and has been
@@ -32,12 +32,11 @@ immutable, checksummed lock manifest.
   independent mutable implementation.
 
 Required executable inventory includes `incus`, `incusd`, `lxcfs`, `nft`,
-`distrobuilder`, `debootstrap`, `ar`, `mksquashfs`, `unsquashfs`, `zstd`, and
-the matching `zstdcat`/`unzstd` aliases. The authoritative full inventory is
-the archive itself:
+`distrobuilder`, `debootstrap`, `ar`, `mksquashfs`, `unsquashfs`, and `zstd`.
+The authoritative full inventory is the archive itself:
 
 ```bash
-tar -tvJf packages/incus-unraid-7.0.0-52-x86_64-1.txz
+tar -tvJf packages/incus-unraid-7.0.0-53-x86_64-1.txz
 ./scripts/verify-classic-package.sh
 ```
 
@@ -51,7 +50,8 @@ tar -tvJf packages/incus-unraid-7.0.0-52-x86_64-1.txz
    SHA-256, version, and compatibility values.
 4. Run `scripts/verify-classic-package.sh`. It checks XML, shell syntax/static
    analysis, both checksums, required files, source/archive drift, build
-   metadata, and the minimum entry-count shrinkage guard.
+   metadata, normalized directory modes, absence of an archive root entry,
+   and the minimum entry-count shrinkage guard.
 5. Deploy all layers together, confirm `/var/log/graphql-api.log`, run
    `/etc/rc.d/rc.incus status`, then run the opt-in live containment suite on a
    disposable host: `INCUS_LIVE_TEST=1 tests/classic-contract.sh`.

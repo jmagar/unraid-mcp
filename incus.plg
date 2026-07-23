@@ -2,13 +2,13 @@
 <!DOCTYPE PLUGIN [
   <!ENTITY name      "incus">
   <!ENTITY author    "jmagar">
-  <!ENTITY version   "2026.07.22">
+  <!ENTITY version   "2026.07.23">
   <!ENTITY launch    "Settings/IncusSettings">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main">
   <!ENTITY pluginURL "&gitURL;/&name;.plg">
-  <!ENTITY txz       "&name;-unraid-7.0.0-52-x86_64-1.txz">
-  <!ENTITY md5       "ecf34255c96429d819c35b0983ba74c0">
-  <!ENTITY sha256    "08ace6310036e29e31a03e9fd02a94807e8b0adef2a5fb2e0c617a8d9345e5af">
+  <!ENTITY txz       "&name;-unraid-7.0.0-53-x86_64-1.txz">
+  <!ENTITY md5       "2e2a2b4889fec26370fdfe54c4647ad0">
+  <!ENTITY sha256    "1ef6c074409c2bb05cf8a2bec964b4f75d0ec47e6c3b5fd2a1a9da0971c73c5a">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -16,9 +16,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;">
 
 <CHANGES>
+###2026.07.23
+- Prevent package installation from making Unraid system directories
+  world-writable: omit the archive root entry, normalize all shipped
+  directories to mode 0755, and reject unsafe directory metadata in release
+  verification.
+
 ###2026.07.22
-- Restore executable permissions on the bundled distrobuilder, debootstrap,
-  ar, and mksquashfs helpers and verify executable modes in release packages.
 - Fix API activation on current Unraid API releases by registering the staged
   backend in both the persistent plugin enable-list and the runtime package
   manifest while the API is stopped, avoiding its config-watcher overwrite.
