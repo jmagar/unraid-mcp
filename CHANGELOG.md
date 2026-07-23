@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3](https://github.com/dinglebear-ai/runraid/compare/v0.2.2...v0.2.3) (2026-07-23)
+
+
+### Fixed
+
+* accept numeric BigInt responses ([a377767](https://github.com/dinglebear-ai/runraid/commit/a3777677e5fe7d6346ac51c3d18ff27d85cf3fc6))
+* deploy from renamed runraid image ([92176cb](https://github.com/dinglebear-ai/runraid/commit/92176cbc12139fdbfdd6d81d3e4612b3ba72c87d))
+* route rust builds through sccache wrapper ([be6b2ab](https://github.com/dinglebear-ai/runraid/commit/be6b2ab505ac7db9744b2655ec1f6c2a0090e97a))
+
 ## [Unreleased]
 
 ## [0.2.0] - 2026-07-06
