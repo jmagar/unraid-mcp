@@ -111,6 +111,16 @@ Captures every generated query and mutation, validates each operation against
 `schema/unraid-schema.graphql`, and checks every scenario fixture's selected
 response fields and scalar/enum values against that operation.
 
+### `tests/live_schema_contract.rs`
+
+Compares the vendored SDL structurally with
+`schema/live-introspection.json`, a normalized snapshot captured from the
+production Unraid API. Refresh or check the live snapshot with
+`just schema-live-capture` and `just schema-live-diff`; both commands require
+`UNRAID_API_URL` and `UNRAID_API_KEY`. The daily schema-drift workflow also
+runs this check against the upstream configured in the production `runraid`
+container.
+
 ---
 
 ### `tests/test_live.sh`

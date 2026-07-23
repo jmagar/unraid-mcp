@@ -51,6 +51,15 @@ test:
 test-ci:
     cargo nextest run --profile ci
 
+# Capture a normalized structural schema snapshot from a live Unraid API.
+# Requires UNRAID_API_URL and UNRAID_API_KEY; honors UNRAID_API_SKIP_TLS_VERIFY.
+schema-live-capture output="schema/live-introspection.json":
+    python3 scripts/live-schema-contract.py --source-label production-unraid --output {{output}}
+
+# Fail with a focused unified diff when live introspection has structurally drifted.
+schema-live-diff snapshot="schema/live-introspection.json":
+    python3 scripts/live-schema-contract.py --source-label production-unraid --check {{snapshot}}
+
 # Install binary to ~/.local/bin via install.sh
 install:
     bash install.sh

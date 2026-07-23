@@ -40,6 +40,20 @@ jobs:
             cat schema.diff
           fi
 
+      - name: Compare vendored contract to live Unraid introspection
+        run: |
+          live_url="$(docker exec runraid printenv UNRAID_API_URL)"
+          live_key="$(docker exec runraid printenv UNRAID_API_KEY)"
+          live_skip_tls="$(
+            docker exec runraid printenv UNRAID_API_SKIP_TLS_VERIFY 2>/dev/null || true
+          )"
+          UNRAID_API_URL="$live_url" \
+          UNRAID_API_KEY="$live_key" \
+          UNRAID_API_SKIP_TLS_VERIFY="$live_skip_tls" \
+            python3 scripts/live-schema-contract.py \
+              --source-label production-unraid \
+              --check schema/live-introspection.json
+
       - name: Open / update drift issue
         if: steps.diff.outputs.drift == 'true'
         uses: actions/github-script@v7
