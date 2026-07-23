@@ -3,11 +3,11 @@
 Release metadata is machine-readable in `release-manifest.json`. The currently
 tracked classic artifact is:
 
-- File: `packages/incus-unraid-7.0.0-46-x86_64-1.txz`
-- Size: 36,005,832 bytes
+- File: `packages/incus-unraid-7.0.0-47-x86_64-1.txz`
+- Size: 35,964,000 bytes
 - Entries: 309
-- MD5 (legacy Unraid downloader field only): `72cb385808a212abb9aa59246fe070c6`
-- SHA-256: `44c03afe8130a3f718c05e34d38972b6e518682ac12503c70026461043923867`
+- MD5 (legacy Unraid downloader field only): `912aa382b326b80f2b2b994a4c01b417`
+- SHA-256: `eb4f906d4658b5b8e41ed5b071ce8c7455d58d10964002419bb008dc09a2415b`
 - Target: x86_64, glibc 2.38 or newer
 
 The Incus 7.0 runtime was repackaged from Debian trixie packages and has been
@@ -36,7 +36,7 @@ Required executable inventory includes `incus`, `incusd`, `lxcfs`, `nft`,
 The authoritative full inventory is the archive itself:
 
 ```bash
-tar -tvJf packages/incus-unraid-7.0.0-46-x86_64-1.txz
+tar -tvJf packages/incus-unraid-7.0.0-47-x86_64-1.txz
 ./scripts/verify-classic-package.sh
 ```
 
@@ -77,7 +77,6 @@ tar -tvJf packages/incus-unraid-7.0.0-46-x86_64-1.txz
 
 ## Remaining provenance limitation
 
-Publication is currently private. `incus.plg` points at the correct repository
-and branch, but anonymous Community Apps/direct-URL installation cannot work
-until the repository or immutable release assets are made public. Publishing
-that asset is an external release action, not something source changes can do.
+Publication is public. Anonymous Community Apps/direct-URL installation can
+fetch both `incus.plg` and its manifest-derived package URL; release validation
+must still verify the downloaded package against the SHA-256 recorded above.

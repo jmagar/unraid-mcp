@@ -136,8 +136,8 @@ install it transactionally; older/classic-only artifacts do not. Requirements:
 - Node.js 22-compatible `unraid-api` when using the settings/backend features;
 - release values matching `release-manifest.json`.
 
-1. Install the `.plg` (Community Apps or direct plugin URL after release assets
-   are publicly accessible) — it lays down
+1. Install the `.plg` from Community Apps or the anonymous direct URL
+   `https://raw.githubusercontent.com/dinglebear-ai/incus-unraid/main/incus.plg` — it lays down
    the repackaged Incus runtime under `/usr/local/incus/` and a default
    `incus.cfg` (never overwriting an existing one).
 2. Check `/var/log/syslog` for either `API plugin installed and verified` or
