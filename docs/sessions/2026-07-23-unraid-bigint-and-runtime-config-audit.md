@@ -25,8 +25,12 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 1. Reproduced `unraid(action="shares")` through the Rust MCP route.
 2. Captured the decoder error and compared the typed scalar, live payload, fixtures, SDL, and upstream code generator.
 3. Confirmed the same scalar failure affects `shares`, `array`, `info`, and `metrics`.
-4. Filed P1 bug `unrust-hyg`; no decoder source change was made.
+4. Filed P1 bug `unrust-hyg`, then implemented tolerant numeric/string decoding with
+   live-shaped fixtures and schema-contract coverage.
 5. Copied the complete runtime env and valid TOML into `~/.unraid`, added an appdata Compose override, relocated the repo-root secret file to the secured audit backup, and verified the recreated container.
+6. Corrected the production image name, exercised the full action surface and live
+   schema checks, repaired the security/clippy CI gates, and closed the bead after live
+   CLI and MCP verification.
 
 ## Key Findings
 
@@ -36,7 +40,8 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 
 ## Technical Decisions
 
-- Kept the decoder fix as an explicit open bug rather than making an unreviewed broad scalar change.
+- Accepted both numeric and legacy string BigInt representations, normalizing them to
+  the existing string-backed Rust scalar so downstream response contracts remain stable.
 - Preserved the former repo dotenv file in `/home/jmagar/.config-audit-backup/20260723T022512/repo-env-files/runraid.env`.
 - Set the container working directory to `/data` so older relative TOML loading resolves the mounted canonical file.
 
@@ -48,21 +53,25 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 | created | `/home/jmagar/.unraid/config.toml` | `./config.toml` | Canonical non-secret config | TOML parse and Compose validation passed |
 | created | `/home/jmagar/.unraid/docker-compose.env.yml` | — | Mount/source canonical appdata and use `/data` | Docker labels and working directory verified |
 | renamed | `/home/jmagar/.config-audit-backup/20260723T022512/repo-env-files/runraid.env` | `./.env` | Securely retain old repo-root secret file | Mode `0600` |
+| modified | `src/gql_typed.rs` and runtime-shaped fixtures/contracts | — | Accept live numeric BigInt values without breaking legacy string fixtures | Unit, schema, CLI, and live MCP checks |
+| modified | `docker-compose.prod.yml` | — | Deploy the renamed `runraid` image | Live container recreated and healthy |
+| modified | `.github/workflows/ci.yml` and `.gitleaks.toml` | — | Repair security and clippy gates | Required checks pass on `main` |
 | created | `docs/sessions/2026-07-23-unraid-bigint-and-runtime-config-audit.md` | — | Persist this repo-scoped record | This file |
 
 ## Beads Activity
 
 | id | title | actions | final status | why |
 |---|---|---|---|---|
-| `unrust-hyg` | Fix numeric BigInt decoding across live Unraid responses | created, synced | open | Captures the confirmed shared decoder defect and regression requirements |
+| `unrust-hyg` | Fix numeric BigInt decoding across live Unraid responses | created, claimed, implemented, verified, closed, synced | closed | Numeric and legacy string values now decode; affected live actions pass |
 
 ## Repository Maintenance
 
 - Plans: no session-specific completed plan was moved.
-- Beads: `unrust-hyg` remains open because no source fix was implemented.
+- Beads: `unrust-hyg` is closed and its final state is pushed to Dolt.
 - Worktrees/branches: fetched/pruned; the primary worktree's unrelated live-schema changes were preserved.
-- Stale docs: the misleading BigInt guidance is part of the open bug's required source/docs correction.
-- Cleanup: no existing changed file was staged.
+- Stale docs: live schema fixtures and contracts were updated with the implementation.
+- Cleanup: removed the proven-merged `fix/health-probe-timeout` local branch; unrelated
+  checkout state was preserved.
 
 ## Tools and Skills Used
 
@@ -76,11 +85,14 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 | Live raw GraphQL probe | 14 shares returned numeric BigInt fields |
 | `docker compose ... config -q` | Canonical override valid |
 | `docker exec runraid /usr/local/bin/runraid shares --json` | Runtime check executed after migration |
+| `cargo test` / `cargo clippy -- -D warnings` / `cargo fmt --check` | Decoder and repository gates passed |
+| `mcporter` live calls for shares, array, info, and metrics | All affected actions returned successfully |
 
 ## Errors Encountered
 
 - The live typed decoder rejected JSON integers as strings; no runtime routing issue caused it.
-- Existing fixtures assert the opposite wire type and therefore do not catch the production failure.
+- Existing fixtures originally asserted the opposite wire type and did not catch the
+  production failure; they now exercise live numeric values.
 
 ## Behavior Changes (Before/After)
 
@@ -88,7 +100,7 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 |---|---|---|
 | Runtime env source | Repo-root `.env` | `~/.unraid/.env` |
 | Runtime TOML | Relative repo config | Canonical `/data/config.toml` |
-| BigInt decoder | Fails live numeric values | Unchanged; tracked by `unrust-hyg` |
+| BigInt decoder | Fails live numeric values | Accepts numeric and legacy string values |
 
 ## Verification Evidence
 
@@ -96,15 +108,17 @@ The live schema mismatch was traced to `runraid`'s typed `BigInt` decoder expect
 |---|---|---|---|
 | Compose config validation | Valid merged config | Valid | pass |
 | Container health | Running/healthy | Running/healthy | pass |
-| Live decoder regression | Decode numbers | Still fails by design pending bug | warn |
+| Live decoder regression | Decode numbers | Unit and live action checks pass | pass |
 
 ## Risks and Rollback
 
-Restore the secured dotenv backup and start the original Compose file to roll back runtime sourcing. The open decoder bug affects several read actions until fixed.
+Restore the secured dotenv backup and start the original Compose file to roll back
+runtime sourcing. Reverting `a377767` restores the old string-only decoder and would
+reintroduce the live failure.
 
 ## Decisions Not Taken
 
-- Did not change the shared scalar without tests covering both fixture and live numeric shapes.
+- Did not narrow the scalar to numbers only; legacy strings remain accepted.
 - Did not stage unrelated live-schema work already present in the checkout.
 
 ## References
@@ -113,10 +127,6 @@ Restore the secured dotenv backup and start the original Compose file to roll ba
 - `tests/fixtures/scenarios/healthy.json`
 - `schema/unraid-schema.graphql`
 
-## Open Questions
-
-- Whether the final tolerant scalar should accept both numbers and legacy strings is left to `unrust-hyg`.
-
 ## Next Steps
 
-- Implement and verify `unrust-hyg`, update fixtures, and exercise all affected live actions.
+- Keep the live schema drift checks credential-aware and monitor future Unraid scalar changes.
