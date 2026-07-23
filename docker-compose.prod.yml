@@ -22,7 +22,7 @@ services:
     <<: *common-service
     # Default pins to a known, immutable version for safe rollback.
     # Override with VERSION to deploy/roll back, e.g.: VERSION=0.2.2 docker compose up -d
-    image: ghcr.io/jmagar/unraid-rmcp:latest
+    image: ghcr.io/dinglebear-ai/runraid:latest
     container_name: runraid
     env_file:
       - path: .env
