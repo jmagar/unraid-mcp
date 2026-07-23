@@ -20,11 +20,11 @@ The server supports streamable-http (default), stdio, and legacy SSE (deprecated
 
 ## What this repository ships
 
-- `unraid_mcp/server.py`: FastMCP server with 4-layer middleware chain and ASGI bearer auth
-- `unraid_mcp/tools/`: 17 domain modules (array, connect, customization, disk, docker, health, key, live, notification, oidc, onboarding, plugin, rclone, setting, system, user, vm) plus the consolidated `unraid.py` router
-- `unraid_mcp/subscriptions/`: WebSocket subscription manager, resource registration, diagnostics, and snapshot queries
-- `unraid_mcp/core/`: GraphQL client, plugin-option credential setup, destructive action guards, auth middleware
-- `unraid_mcp/config/`: Settings management and structured logging
+- `src/unraid_mcp/server.py`: FastMCP server with 4-layer middleware chain and ASGI bearer auth
+- `src/unraid_mcp/tools/`: 17 domain modules (array, connect, customization, disk, docker, health, key, live, notification, oidc, onboarding, plugin, rclone, setting, system, user, vm) plus the consolidated `unraid.py` router
+- `src/unraid_mcp/subscriptions/`: WebSocket subscription manager, resource registration, diagnostics, and snapshot queries
+- `src/unraid_mcp/core/`: GraphQL client, plugin-option credential setup, destructive action guards, auth middleware
+- `src/unraid_mcp/config/`: Settings management and structured logging
 - `skills/unraid/SKILL.md`: Client-facing skill documentation
 - `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `gemini-extension.json`: Client manifests
 - `docker-compose.yaml`, `Dockerfile`, `entrypoint.sh`: Container deployment

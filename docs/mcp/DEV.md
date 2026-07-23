@@ -43,7 +43,7 @@ just lint           # uv run ruff check .
 just fmt            # uv run ruff format .
 
 # Type check
-just typecheck      # uv run ty check unraid_mcp/
+just typecheck      # uv run ty check src/
 
 # All quality gates
 just lint && just fmt && just typecheck

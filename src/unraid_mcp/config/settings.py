@@ -40,9 +40,10 @@ from ..version import VERSION as APP_VERSION
 
 
 # Get the script directory (config module location)
-SCRIPT_DIR = Path(__file__).parent  # /home/user/code/unraid-mcp/unraid_mcp/config/
-UNRAID_MCP_DIR = SCRIPT_DIR.parent  # /home/user/code/unraid-mcp/unraid_mcp/
-PROJECT_ROOT = UNRAID_MCP_DIR.parent  # /home/user/code/unraid-mcp/
+SCRIPT_DIR = Path(__file__).parent  # /home/user/code/unraid-mcp/src/unraid_mcp/config/
+UNRAID_MCP_DIR = SCRIPT_DIR.parent  # /home/user/code/unraid-mcp/src/unraid_mcp/
+# src-layout: package lives at src/unraid_mcp/, so the repo root is two levels up.
+PROJECT_ROOT = UNRAID_MCP_DIR.parent.parent  # /home/user/code/unraid-mcp/
 
 # Canonical credentials directory — version-agnostic, survives plugin version bumps.
 # Override with UNRAID_CREDENTIALS_DIR env var (useful for containers).

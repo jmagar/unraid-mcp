@@ -55,15 +55,15 @@ jobs:
         run: |
           set -euo pipefail
           wheel="$(ls dist/unraid_mcp-${{ steps.v.outputs.version }}-py3-none-any.whl)"
-          bash unraid-plugin/scripts/build-txz.sh "${{ steps.v.outputs.version }}" "$wheel"
+          bash unraid/scripts/build-txz.sh "${{ steps.v.outputs.version }}" "$wheel"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: unraid-plugin-${{ steps.v.outputs.version }}
           path: |
-            unraid-plugin/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz
-            unraid-plugin/packages/unraid-mcp.plg
+            unraid/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz
+            unraid/packages/unraid-mcp.plg
           retention-days: 14
 
       - name: Attach to the release
@@ -73,6 +73,6 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "${GITHUB_REF_NAME}" \
-            "unraid-plugin/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz" \
-            "unraid-plugin/packages/unraid-mcp.plg" \
+            "unraid/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz" \
+            "unraid/packages/unraid-mcp.plg" \
             --clobber

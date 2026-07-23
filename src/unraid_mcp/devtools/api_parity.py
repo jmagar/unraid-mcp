@@ -22,7 +22,7 @@ from graphql import (
 from unraid_mcp.devtools.graphql_inventory import all_operation_cases
 
 
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
+SCHEMA_PATH = Path(__file__).resolve().parents[3] / "docs" / "unraid" / "UNRAID-SCHEMA.graphql"
 
 INTENTIONAL_QUERY_GAPS: dict[str, str] = {}
 INTENTIONAL_MUTATION_GAPS: dict[str, str] = {}

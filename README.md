@@ -200,7 +200,7 @@ The server translates MCP tool calls into Unraid GraphQL queries and mutations o
 
 ```
 unraid-mcp/
-├── unraid_mcp/                  # server, GraphQL client, subscriptions, config, tool handlers
+├── src/unraid_mcp/                  # server, GraphQL client, subscriptions, config, tool handlers
 ├── plugins/
 │   └── unraid/                  # the distributable plugin/extension (one per client)
 │       ├── .claude-plugin/      #   Claude Code plugin manifest (plugin.json) + README
@@ -774,7 +774,7 @@ unraid(
 | `just test` | Run full test suite |
 | `just lint` | Run ruff linter |
 | `just fmt` | Run ruff formatter |
-| `just typecheck` | Run the `ty` type checker (`uv run ty check unraid_mcp/`, matches CI) |
+| `just typecheck` | Run the `ty` type checker (`uv run ty check src/`, matches CI) |
 | `just test-live` | Run live integration tests (requires a running Unraid server) |
 | `just up` | Start via Docker Compose |
 | `just down` | Stop Docker Compose containers |

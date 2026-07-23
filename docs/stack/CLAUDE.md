@@ -38,7 +38,7 @@ without testing against the new major:
 ```bash
 just lint        # uv run ruff check .
 just fmt         # uv run ruff format .
-just typecheck   # uv run ty check unraid_mcp/  (ty = Astral's type checker, NOT mypy)
+just typecheck   # uv run ty check src/  (ty = Astral's type checker, NOT mypy)
 just test        # uv run pytest tests/ -v
 ```
 

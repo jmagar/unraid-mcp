@@ -28,11 +28,11 @@ uv run -m unraid_mcp.main
 ### Code Quality
 ```bash
 # Lint and format with ruff
-uv run ruff check unraid_mcp/
-uv run ruff format unraid_mcp/
+uv run ruff check src/
+uv run ruff format src/
 
 # Type checking with ty (Astral's fast type checker)
-uv run ty check unraid_mcp/
+uv run ty check src/
 
 # Run tests
 uv run pytest
@@ -48,7 +48,7 @@ Copy `.env.example` to `.env` and configure:
 **Server:**
 - `UNRAID_MCP_LOG_LEVEL`: Log verbosity (default: INFO)
 - `UNRAID_MCP_LOG_FILE`: Log filename in logs/ (default: unraid-mcp.log)
-- `UNRAID_MCP_MAX_RESPONSE_BYTES`: Max serialized tool-response size in bytes (default: 40000 = 40 KB ≈ 10K tokens). Responses over the cap are replaced with a structured, parseable JSON truncation marker (`{"error": "response_truncated", "truncated": true, ...}`) rather than hard-cut mid-JSON. This is a backstop; the per-list `cap_list` defaults do the primary bounding. See `unraid_mcp/core/response_limit.py`.
+- `UNRAID_MCP_MAX_RESPONSE_BYTES`: Max serialized tool-response size in bytes (default: 40000 = 40 KB ≈ 10K tokens). Responses over the cap are replaced with a structured, parseable JSON truncation marker (`{"error": "response_truncated", "truncated": true, ...}`) rather than hard-cut mid-JSON. This is a backstop; the per-list `cap_list` defaults do the primary bounding. See `src/unraid_mcp/core/response_limit.py`.
 
 **SSL/TLS:**
 - `UNRAID_VERIFY_SSL`: SSL verification (default: true; set `false` for self-signed certs)
@@ -66,17 +66,17 @@ Copy `.env.example` to `.env` and configure:
 ## Architecture
 
 ### Core Components
-- **Main Server**: `unraid_mcp/server.py` - Modular MCP server with FastMCP integration
-- **Entry Point**: `unraid_mcp/main.py` - Application entry point and startup logic
-- **Configuration**: `unraid_mcp/config/` - Settings management and logging configuration
-- **Core Infrastructure**: `unraid_mcp/core/` - GraphQL client, exceptions, and shared types
+- **Main Server**: `src/unraid_mcp/server.py` - Modular MCP server with FastMCP integration
+- **Entry Point**: `src/unraid_mcp/main.py` - Application entry point and startup logic
+- **Configuration**: `src/unraid_mcp/config/` - Settings management and logging configuration
+- **Core Infrastructure**: `src/unraid_mcp/core/` - GraphQL client, exceptions, and shared types
   - `guards.py` — destructive action gating via MCP elicitation
   - `utils.py` — shared helpers (`safe_get`, `safe_display_url`, path validation)
   - `setup.py` — elicitation-based credential setup flow
-- **Subscriptions**: `unraid_mcp/subscriptions/` - Real-time WebSocket subscriptions and diagnostics
-- **Tools**: `unraid_mcp/tools/` - Domain-specific tool implementations
+- **Subscriptions**: `src/unraid_mcp/subscriptions/` - Real-time WebSocket subscriptions and diagnostics
+- **Tools**: `src/unraid_mcp/tools/` - Domain-specific tool implementations
 - **GraphQL Client**: Uses httpx for async HTTP requests to Unraid API
-- **Version Helper**: `unraid_mcp/version.py` - Reads version from package metadata via importlib
+- **Version Helper**: `src/unraid_mcp/version.py` - Reads version from package metadata via importlib
 
 ### Key Design Patterns
 - **Consolidated Action Pattern**: Each tool uses `action: Literal[...]` parameter to expose multiple operations via a single MCP tool, reducing context window usage
@@ -116,7 +116,7 @@ Markdown reference that used to be standalone tools are now actions of `unraid`:
   `subscription_query=`).
 - **`help`** — returns the full Markdown action/subaction reference (no subaction).
 
-The handler functions live in `unraid_mcp/subscriptions/diagnostics.py`
+The handler functions live in `src/unraid_mcp/subscriptions/diagnostics.py`
 (`_handle_subscriptions`, `diagnose_subscriptions`, `test_subscription_query`);
 `server.py` no longer calls `register_diagnostic_tools`.
 
@@ -163,7 +163,7 @@ Filtered responses add two counts plus a `filter` echo:
 
 The pure helpers are `filter_log_lines(lines, level=None, context=2)` (returns matches +
 context + `---` separators) and `count_log_matches(lines, level=None)` (severity-match
-count only), both in `unraid_mcp/core/utils.py`.
+count only), both in `src/unraid_mcp/core/utils.py`.
 
 ### Destructive Actions (require `confirm=True`)
 - **array**: stop_array, remove_disk, clear_disk_stats
@@ -185,7 +185,7 @@ The server loads environment variables from multiple locations in order:
 3. `/app/.env.local` (Docker compat mount)
 4. `<project root>/.env.local` (project root local overrides)
 5. `<project root>/.env` (project root fallback)
-6. `unraid_mcp/.env` (last resort)
+6. `src/unraid_mcp/.env` (last resort)
 
 ### Error Handling Strategy
 - GraphQL errors are converted to ToolError with descriptive messages
@@ -320,7 +320,7 @@ Merging that PR tags `vX.Y.Z` and triggers `publish-pypi.yml` + `docker-publish.
 
 Config: `release-please-config.json` (which files get bumped) and
 `.release-please-manifest.json` (last released version). `server.json` is **generated at
-publish time** from the tag (in-repo it is a `0.0.0` placeholder), and `unraid_mcp/version.py`
+publish time** from the tag (in-repo it is a `0.0.0` placeholder), and `src/unraid_mcp/version.py`
 reads from package metadata — neither is ever edited by hand.
 
 The release-please action needs a PAT/GitHub-App token (`RELEASE_PLEASE_TOKEN` secret); the
@@ -408,4 +408,4 @@ release-please keeps these files in sync automatically (configured in `release-p
 - `CHANGELOG.md` — new entry generated from commit messages
 
 `server.json` (placeholder `0.0.0` in-repo, set from the tag at publish time) and
-`unraid_mcp/version.py` (reads package metadata) are never edited by hand.
+`src/unraid_mcp/version.py` (reads package metadata) are never edited by hand.

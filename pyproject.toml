@@ -118,11 +118,11 @@ unraid-mcp = "unraid_mcp.main:main"
 # Build Configuration
 # ============================================================================
 [tool.hatch.build.targets.wheel]
-only-include = ["unraid_mcp"]
+packages = ["src/unraid_mcp"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/unraid_mcp",
+    "/src",
     "/tests",
     "/plugins",
     "/scripts",
@@ -245,7 +245,7 @@ cache_dir = ".cache/.pytest_cache"
 # Put the repo root on sys.path so tests can import the top-level `scripts`
 # package (a namespace package with no __init__.py), e.g.
 # tests/test_generate_unraid_api_reference.py.
-pythonpath = ["."]
+pythonpath = [".", "src"]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]

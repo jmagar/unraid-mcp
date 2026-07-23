@@ -13,15 +13,15 @@
 ## Top-level layout
 
 ```
-unraid_mcp/   Python package — server.py, main.py, config/, core/, subscriptions/, tools/
+src/unraid_mcp/   Python package — server.py, main.py, config/, core/, subscriptions/, tools/
 tests/        conftest.py + unit/http_layer/integration/safety/schema/contract/property suites
 plugins/      Claude/Codex/Gemini plugin (manifests, hooks, scripts, skill)
 scripts/      Repo-maintenance scripts (CI, git hooks, Justfile) — NOT shipped to runtimes
 docs/         This documentation tree
 ```
 
-The 19 domain tool modules live in `unraid_mcp/tools/_<domain>.py`; the consolidated
-`unraid` tool is assembled in `unraid_mcp/tools/unraid.py`.
+The 19 domain tool modules live in `src/unraid_mcp/tools/_<domain>.py`; the consolidated
+`unraid` tool is assembled in `src/unraid_mcp/tools/unraid.py`.
 
 ## Common commands
 
