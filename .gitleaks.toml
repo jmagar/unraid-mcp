@@ -14,7 +14,10 @@
 useDefault = true
 
 [allowlist]
-description = "Synthetic credentials in offline test scaffolding (not real secrets)"
+description = "Synthetic credentials in offline tests and documentation"
 paths = [
   '''tests/.*''',
+]
+regexes = [
+  '''your-token-here''',
 ]
