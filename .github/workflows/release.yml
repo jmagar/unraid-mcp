@@ -49,8 +49,10 @@ jobs:
       id-token: write
       attestations: write
     env:
-      # The self-hosted runner farm shares repository workspaces. Isolate each
-      # matrix leg so concurrent Cargo builds cannot prune each other's files.
+      # The self-hosted runner farm shares repository workspaces and the default
+      # Cargo registry. Isolate both writable trees so concurrent jobs cannot
+      # prune each other's sources or build outputs.
+      CARGO_HOME: ${{ github.workspace }}/.cargo-home-${{ github.run_id }}-${{ matrix.target }}
       CARGO_TARGET_DIR: ${{ github.workspace }}/target-${{ github.run_id }}-${{ matrix.target }}
     strategy:
       fail-fast: false
