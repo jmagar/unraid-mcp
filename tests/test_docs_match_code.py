@@ -8,8 +8,8 @@ module docstrings that quote counts) agree with the authoritative `_*_SUBACTIONS
 sets imported directly from the domain modules.
 
 If this test fails after you add or rename a subaction, update:
-  - `unraid_mcp/tools/unraid.py`  -> `_HELP_TEXT` table + module docstring counts
-  - `unraid_mcp/tools/__init__.py` -> the "(N actions, M subactions)" header
+  - `src/unraid_mcp/tools/unraid.py`  -> `_HELP_TEXT` table + module docstring counts
+  - `src/unraid_mcp/tools/__init__.py` -> the "(N actions, M subactions)" header
   - `CLAUDE.md` / `README.md` / `docs/**` tables (kept consistent by review)
 """
 
@@ -117,7 +117,7 @@ class TestHelpTextTableMatchesCode:
         assert not mismatches, (
             "`_HELP_TEXT` action/subaction table is out of sync with the live "
             f"`_*_SUBACTIONS` sets:\n{mismatches}\n"
-            "Update the table in unraid_mcp/tools/unraid.py (`_HELP_TEXT`)."
+            "Update the table in src/unraid_mcp/tools/unraid.py (`_HELP_TEXT`)."
         )
 
     def test_help_action_row_has_no_subactions(self) -> None:

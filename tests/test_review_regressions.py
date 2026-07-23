@@ -30,10 +30,10 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
     silently ignored. The same shadowing risk applies to any other var these
     manifests hardcode to a value that merely duplicates the package's own
     default (``UNRAID_MCP_LOG_LEVEL``, ``UNRAID_MCP_LOG_FILE`` — both from
-    ``Settings()`` in ``unraid_mcp/config/settings.py``;
+    ``Settings()`` in ``src/unraid_mcp/config/settings.py``;
     ``UNRAID_AUTO_START_SUBSCRIPTIONS``, ``UNRAID_MAX_RECONNECT_ATTEMPTS`` —
     both from ``os.getenv(...)`` fallbacks in
-    ``unraid_mcp/subscriptions/manager.py``) — none of them serve a purpose
+    ``src/unraid_mcp/subscriptions/manager.py``) — none of them serve a purpose
     beyond matching a default that already applies when unset, so none of
     them belong in the manifest. ``UNRAID_MCP_TRANSPORT=stdio`` is the one
     legitimate exception: it differs from the package default
