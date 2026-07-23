@@ -86,6 +86,9 @@ export function readChatTheme(): ChatTheme {
   return localStorage.getItem("unraid-codex.theme") === "unraid" ? "unraid" : "aurora"
 }
 
+const isCodexSettingsRoute = () =>
+  /\/Settings\/CodexSettings\/?$/.test(window.location.pathname)
+
 export function App({ rootElement }: { rootElement: HTMLElement }) {
   const {
     state,
@@ -102,7 +105,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
     uninstallPlugin,
     dismissNotice,
   } = useCodexAppServer()
-  const [open, setOpen] = React.useState(false)
+  const [open, setOpen] = React.useState(isCodexSettingsRoute)
   const [docked, setDocked] = React.useState(
     () => localStorage.getItem("unraid-codex.docked") !== "false",
   )
@@ -113,11 +116,20 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
   })
   const [viewportWidth, setViewportWidth] = React.useState(() => window.innerWidth)
   const [theme, setTheme] = React.useState<ChatTheme>(readChatTheme)
-  const [inspectorOpen, setInspectorOpen] = React.useState(false)
+  const [inspectorOpen, setInspectorOpen] = React.useState(isCodexSettingsRoute)
   const [permissionsOpen, setPermissionsOpen] = React.useState(false)
   const [prompt, setPrompt] = React.useState("")
   const [attachments, setAttachments] = React.useState<Attachment[]>([])
   const scrollRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const openSettings = () => {
+      setOpen(true)
+      setInspectorOpen(true)
+    }
+    window.addEventListener("unraid-codex:open-settings", openSettings)
+    return () => window.removeEventListener("unraid-codex:open-settings", openSettings)
+  }, [])
 
   React.useEffect(() => {
     rootElement.dataset.chatTheme = theme

@@ -25,7 +25,7 @@ class UnraidCodexChathead extends HTMLElement {
     const shadow = this.attachShadow({ mode: "open" })
     const stylesheet = document.createElement("link")
     stylesheet.rel = "stylesheet"
-    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=13"
+    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=14"
     const mount = document.createElement("div")
     const theme = readChatTheme()
     mount.className = `uc-root light uc-theme-${theme}`
@@ -48,6 +48,7 @@ declare global {
     UnraidCodex?: {
       mount: () => void
       open: () => void
+      openSettings: () => void
       close: () => void
       toggle: () => void
     }
@@ -64,9 +65,18 @@ const mountChathead = () => {
   document.body.appendChild(document.createElement("unraid-codex-chathead"))
 }
 
+const openSettings = () => {
+  mountChathead()
+  const notify = () =>
+    window.dispatchEvent(new CustomEvent("unraid-codex:open-settings"))
+  notify()
+  window.setTimeout(notify, 0)
+}
+
 window.UnraidCodex = {
   mount: mountChathead,
   open: () => getHost()?.shadowRoot?.querySelector<HTMLButtonElement>(".uc-launcher")?.click(),
+  openSettings,
   close: () =>
     getHost()?.shadowRoot?.querySelector<HTMLButtonElement>('[aria-label="Close"]')?.click(),
   toggle: () => getHost()?.shadowRoot?.querySelector<HTMLButtonElement>(".uc-launcher")?.click(),

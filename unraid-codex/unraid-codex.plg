@@ -5,10 +5,11 @@
   <!ENTITY version   "2026.07.23">
   <!ENTITY launch    "">
   <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main/unraid-codex">
+  <!ENTITY releaseURL "https://raw.githubusercontent.com/&author;/incus-unraid/unraid-codex-v2026.07.23-14/unraid-codex">
   <!ENTITY pluginURL "&gitURL;/unraid-codex.plg">
-  <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-13.txz">
-  <!ENTITY md5       "b5498a4988957abbf79f81a9ccffeef6">
-  <!ENTITY sha256    "4b6af0362b9575f631be7be09c81af266f2c695e0c7dd19ce6d533e701f17e0c">
+  <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-14.txz">
+  <!ENTITY md5       "cbbd50a4697911bf03869549e92e100f">
+  <!ENTITY sha256    "25019c01983bb793b683e7f95484805fa4ff09a83f079e4ea7638b687672cf62">
   <!ENTITY plugin    "/boot/config/plugins/&name;">
   <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
 ]>
@@ -17,6 +18,8 @@
 
 <CHANGES>
 ###2026.07.23
+- Build 14 adds a native Codex tile and icon to Unraid Settings. Opening the
+  tile launches the chathead directly into its real Session Inspector.
 - Build 13 streamlines the header and composer, fixes latest-turn context
   accounting, adds quick reasoning and permission controls, turns MCP servers
   into an editable configuration surface, replaces the plugin wall with a
@@ -40,7 +43,7 @@
 </CHANGES>
 
 <FILE Name="&plugin;/&txz;">
-<URL>&gitURL;/dist/&txz;</URL>
+<URL>&releaseURL;/dist/&txz;</URL>
 <MD5>&md5;</MD5>
 </FILE>
 
