@@ -34,7 +34,7 @@ def _validate_operation(schema: GraphQLSchema, query_str: str) -> list[str]:
 # Info Tool (19 queries)
 # ============================================================================
 class TestInfoQueries:
-    """Validate all queries from unraid_mcp/tools/info.py."""
+    """Validate all queries from src/unraid_mcp/tools/info.py."""
 
     def test_overview_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._system import _SYSTEM_QUERIES as QUERIES
@@ -194,7 +194,7 @@ class TestInfoQueries:
 # Array Tool (2 queries + 11 mutations)
 # ============================================================================
 class TestArrayQueries:
-    """Validate all queries from unraid_mcp/tools/array.py."""
+    """Validate all queries from src/unraid_mcp/tools/array.py."""
 
     def test_parity_status_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._array import _ARRAY_QUERIES as QUERIES
@@ -215,7 +215,7 @@ class TestArrayQueries:
 
 
 class TestArrayMutations:
-    """Validate all mutations from unraid_mcp/tools/array.py."""
+    """Validate all mutations from src/unraid_mcp/tools/array.py."""
 
     def test_parity_start_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._array import _ARRAY_MUTATIONS as MUTATIONS
@@ -306,7 +306,7 @@ class TestArrayMutations:
 # Storage Tool (5 queries + 1 mutation)
 # ============================================================================
 class TestStorageQueries:
-    """Validate all queries from unraid_mcp/tools/storage.py."""
+    """Validate all queries from src/unraid_mcp/tools/storage.py."""
 
     def test_shares_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._disk import _DISK_QUERIES as QUERIES
@@ -359,7 +359,7 @@ class TestStorageQueries:
 
 
 class TestStorageMutations:
-    """Validate all mutations from unraid_mcp/tools/storage.py."""
+    """Validate all mutations from src/unraid_mcp/tools/storage.py."""
 
     def test_flash_backup_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._disk import _DISK_MUTATIONS as MUTATIONS
@@ -377,7 +377,7 @@ class TestStorageMutations:
 # Docker Tool (4 queries + 2 mutations)
 # ============================================================================
 class TestDockerQueries:
-    """Validate all queries from unraid_mcp/tools/docker.py."""
+    """Validate all queries from src/unraid_mcp/tools/docker.py."""
 
     def test_list_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._docker import _DOCKER_QUERIES as QUERIES
@@ -423,7 +423,7 @@ class TestDockerQueries:
 
 
 class TestDockerMutations:
-    """Validate all mutations from unraid_mcp/tools/docker.py."""
+    """Validate all mutations from src/unraid_mcp/tools/docker.py."""
 
     def test_start_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._docker import _DOCKER_MUTATIONS as MUTATIONS
@@ -485,7 +485,7 @@ class TestDockerMutations:
 # VM Tool (1 query + 7 mutations)
 # ============================================================================
 class TestVmQueries:
-    """Validate all queries from unraid_mcp/tools/virtualization.py."""
+    """Validate all queries from src/unraid_mcp/tools/virtualization.py."""
 
     def test_list_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._vm import _VM_QUERIES as QUERIES
@@ -507,7 +507,7 @@ class TestVmQueries:
 
 
 class TestVmMutations:
-    """Validate all mutations from unraid_mcp/tools/virtualization.py."""
+    """Validate all mutations from src/unraid_mcp/tools/virtualization.py."""
 
     def test_start_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._vm import _VM_MUTATIONS as MUTATIONS
@@ -562,7 +562,7 @@ class TestVmMutations:
 # Notifications Tool (3 queries + 6 mutations)
 # ============================================================================
 class TestNotificationQueries:
-    """Validate all queries from unraid_mcp/tools/notifications.py."""
+    """Validate all queries from src/unraid_mcp/tools/notifications.py."""
 
     def test_overview_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._notification import _NOTIFICATION_QUERIES as QUERIES
@@ -583,7 +583,7 @@ class TestNotificationQueries:
 
 
 class TestNotificationMutations:
-    """Validate all mutations from unraid_mcp/tools/notifications.py."""
+    """Validate all mutations from src/unraid_mcp/tools/notifications.py."""
 
     def test_create_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._notification import _NOTIFICATION_MUTATIONS as MUTATIONS
@@ -668,7 +668,7 @@ class TestNotificationMutations:
 # RClone Tool (2 queries + 2 mutations)
 # ============================================================================
 class TestRcloneQueries:
-    """Validate all queries from unraid_mcp/tools/rclone.py."""
+    """Validate all queries from src/unraid_mcp/tools/rclone.py."""
 
     def test_list_remotes_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._rclone import _RCLONE_QUERIES as QUERIES
@@ -689,7 +689,7 @@ class TestRcloneQueries:
 
 
 class TestRcloneMutations:
-    """Validate all mutations from unraid_mcp/tools/rclone.py."""
+    """Validate all mutations from src/unraid_mcp/tools/rclone.py."""
 
     def test_create_remote_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._rclone import _RCLONE_MUTATIONS as MUTATIONS
@@ -713,7 +713,7 @@ class TestRcloneMutations:
 # Users Tool (1 query)
 # ============================================================================
 class TestUsersQueries:
-    """Validate all queries from unraid_mcp/tools/users.py."""
+    """Validate all queries from src/unraid_mcp/tools/users.py."""
 
     def test_me_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._user import _USER_QUERIES as QUERIES
@@ -731,7 +731,7 @@ class TestUsersQueries:
 # Keys Tool (2 queries + 3 mutations)
 # ============================================================================
 class TestKeysQueries:
-    """Validate all queries from unraid_mcp/tools/keys.py."""
+    """Validate all queries from src/unraid_mcp/tools/keys.py."""
 
     def test_list_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._key import _KEY_QUERIES as QUERIES
@@ -761,7 +761,7 @@ class TestKeysQueries:
 
 
 class TestKeysMutations:
-    """Validate all mutations from unraid_mcp/tools/keys.py."""
+    """Validate all mutations from src/unraid_mcp/tools/keys.py."""
 
     def test_create_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._key import _KEY_MUTATIONS as MUTATIONS
@@ -803,7 +803,7 @@ class TestKeysMutations:
 # Settings Tool (0 queries + 2 mutations)
 # ============================================================================
 class TestSettingsMutations:
-    """Validate all mutations from unraid_mcp/tools/settings.py."""
+    """Validate all mutations from src/unraid_mcp/tools/settings.py."""
 
     def test_update_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._setting import _SETTING_MUTATIONS as MUTATIONS
@@ -835,7 +835,7 @@ class TestSettingsMutations:
 # Health Tool (inline queries)
 # ============================================================================
 class TestHealthQueries:
-    """Validate inline queries from unraid_mcp/tools/health.py."""
+    """Validate inline queries from src/unraid_mcp/tools/health.py."""
 
     def test_connection_query(self, schema: GraphQLSchema) -> None:
         errors = _validate_operation(schema, "query { online }")
@@ -866,7 +866,7 @@ class TestHealthQueries:
 # Customization Tool (4 queries + 1 mutation)
 # ============================================================================
 class TestCustomizationQueries:
-    """Validate queries from unraid_mcp/tools/_customization.py."""
+    """Validate queries from src/unraid_mcp/tools/_customization.py."""
 
     def test_public_theme_query(self, schema: GraphQLSchema) -> None:
         # publicPartnerInfo was removed from Query upstream; query is publicTheme-only.
@@ -901,7 +901,7 @@ class TestCustomizationQueries:
 
 
 class TestCustomizationMutations:
-    """Validate mutations from unraid_mcp/tools/_customization.py."""
+    """Validate mutations from src/unraid_mcp/tools/_customization.py."""
 
     def test_set_theme_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._customization import _CUSTOMIZATION_MUTATIONS as MUTATIONS
@@ -919,7 +919,7 @@ class TestCustomizationMutations:
 # Plugins Tool (1 query + 2 mutations)
 # ============================================================================
 class TestPluginsQueries:
-    """Validate all queries from unraid_mcp/tools/plugins.py."""
+    """Validate all queries from src/unraid_mcp/tools/plugins.py."""
 
     def test_list_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._plugin import _PLUGIN_QUERIES as QUERIES
@@ -939,7 +939,7 @@ class TestPluginsQueries:
 
 
 class TestPluginsMutations:
-    """Validate all mutations from unraid_mcp/tools/plugins.py."""
+    """Validate all mutations from src/unraid_mcp/tools/plugins.py."""
 
     def test_add_mutation(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._plugin import _PLUGIN_MUTATIONS as MUTATIONS
@@ -963,7 +963,7 @@ class TestPluginsMutations:
 # OIDC Tool (5 queries)
 # ============================================================================
 class TestOidcQueries:
-    """Validate all queries from unraid_mcp/tools/oidc.py."""
+    """Validate all queries from src/unraid_mcp/tools/oidc.py."""
 
     def test_providers_query(self, schema: GraphQLSchema) -> None:
         from unraid_mcp.tools._oidc import _OIDC_QUERIES as QUERIES

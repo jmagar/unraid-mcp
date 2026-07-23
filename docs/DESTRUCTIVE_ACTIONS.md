@@ -343,7 +343,7 @@ The `tests/safety/` directory contains pytest tests that verify:
 - Every destructive action raises `ToolError` when called with `confirm=False`
 - Every destructive action raises `ToolError` when called without the `confirm` parameter
 - Each runtime `_*_DESTRUCTIVE` set (re-exported from the domain modules via
-  `unraid_mcp/tools/unraid.py`) matches the in-test `KNOWN_DESTRUCTIVE` audit dict in
+  `src/unraid_mcp/tools/unraid.py`) matches the in-test `KNOWN_DESTRUCTIVE` audit dict in
   `tests/safety/test_destructive_guards.py`. **No test parses this Markdown file** — keep
   this document in sync with `KNOWN_DESTRUCTIVE` and the domain `_*_DESTRUCTIVE` sets by hand.
 - No GraphQL request reaches the network layer when confirmation is missing (`TestNoGraphQLCallsWhenUnconfirmed`)

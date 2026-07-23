@@ -87,7 +87,7 @@ not checked here.
 |--------|--------------|
 | lint | `just lint` or `uv run ruff check .` |
 | format | `just fmt` or `uv run ruff format .` |
-| typecheck | `just typecheck` or `uv run ty check unraid_mcp/` |
+| typecheck | `just typecheck` or `uv run ty check src/` |
 | test | `just test` or `uv run pytest` |
 | build | `just build` or `docker build -t unraid-mcp .` |
 

@@ -1,7 +1,7 @@
 # tests/test_protocol.py
 """Direct tests for the shared graphql-ws protocol primitive.
 
-`graphql_ws_session` and `iter_messages` (in unraid_mcp/subscriptions/protocol.py)
+`graphql_ws_session` and `iter_messages` (in src/unraid_mcp/subscriptions/protocol.py)
 are the factored-out handshake + message-normalization shared by the manager loop,
 the snapshot helpers, and the diagnostics probe. They previously had no direct
 tests — coverage came only indirectly through the snapshot/integration suites.

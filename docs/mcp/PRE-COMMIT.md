@@ -10,16 +10,16 @@ Configured in `pyproject.toml`:
 
 ```bash
 # Lint
-uv run ruff check unraid_mcp/
+uv run ruff check src/
 
 # Auto-fix
-uv run ruff check --fix unraid_mcp/
+uv run ruff check --fix src/
 
 # Format
-uv run ruff format unraid_mcp/
+uv run ruff format src/
 
 # Format check (no changes)
-uv run ruff format --check unraid_mcp/
+uv run ruff format --check src/
 ```
 
 **Configuration highlights**:
@@ -35,7 +35,7 @@ uv run ruff format --check unraid_mcp/
 Astral's fast type checker:
 
 ```bash
-uv run ty check unraid_mcp/
+uv run ty check src/
 ```
 
 Configured for Python 3.12 with respect for `type: ignore` comments.
@@ -63,15 +63,15 @@ Configured for Python 3.12 with respect for `type: ignore` comments.
 ```bash
 just lint       # uv run ruff check .
 just fmt        # uv run ruff format .
-just typecheck  # uv run ty check unraid_mcp/
+just typecheck  # uv run ty check src/
 ```
 
 ## CI Enforcement
 
 The `ci.yml` workflow runs lint and format checks:
-- `uv run ruff check unraid_mcp/ tests/`
-- `uv run ruff format --check unraid_mcp/ tests/`
-- `uv run ty check unraid_mcp/`
+- `uv run ruff check src/ tests/`
+- `uv run ruff format --check src/ tests/`
+- `uv run ty check src/`
 
 All three must pass for the CI pipeline to succeed.
 

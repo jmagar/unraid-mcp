@@ -138,7 +138,7 @@ unraid-mcp/
 │   ├── .mcp.json            # Shared MCP server definition
 │   ├── hooks/               # SessionStart / ConfigChange hooks
 │   └── skills/unraid/       # Client-facing skill docs and references
-├── unraid_mcp/              # Python package (the actual MCP server)
+├── src/unraid_mcp/              # Python package (the actual MCP server)
 │   ├── main.py              # Entry point
 │   ├── server.py            # FastMCP server registration
 │   ├── tools/unraid.py      # Consolidated `unraid` tool (single tool, action-routed)

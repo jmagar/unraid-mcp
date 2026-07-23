@@ -95,7 +95,7 @@ The server loads the first `.env` file found:
 3. `/app/.env.local`
 4. `<project-root>/.env.local`
 5. `<project-root>/.env`
-6. `unraid_mcp/.env`
+6. `src/unraid_mcp/.env`
 
 ## See Also
 

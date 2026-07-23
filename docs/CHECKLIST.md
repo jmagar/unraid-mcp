@@ -12,9 +12,9 @@ Pre-release and quality checklist. Complete all items before tagging a release.
 
 ## Code quality
 
-- [ ] `uv run ruff check unraid_mcp/` passes (no lint errors)
-- [ ] `uv run ruff format --check unraid_mcp/` passes (no format drift)
-- [ ] `uv run ty check unraid_mcp/` passes (no type errors)
+- [ ] `uv run ruff check src/` passes (no lint errors)
+- [ ] `uv run ruff format --check src/` passes (no format drift)
+- [ ] `uv run ty check src/` passes (no type errors)
 - [ ] `uv run pytest -m "not slow and not integration"` passes (all unit tests green)
 - [ ] `uv run pytest tests/safety/` passes (destructive action guards verified)
 - [ ] `uv run pytest tests/schema/` passes (GraphQL query validation)

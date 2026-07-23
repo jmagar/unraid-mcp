@@ -24,7 +24,7 @@ fmt:
 
 # Type-check (ty — matches CI)
 typecheck:
-    uv run ty check unraid_mcp/
+    uv run ty check src/
 
 # Validate skills SKILL.md files exist and are non-empty
 validate-skills:

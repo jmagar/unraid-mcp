@@ -347,7 +347,7 @@ def test_collect_actions_all_handled():
     unhandled = {key for key in COLLECT_ACTIONS if f'"{key}"' not in source}
     assert not unhandled, (
         f"COLLECT_ACTIONS keys without handlers in _handle_live: {unhandled}. "
-        "Add an if-branch in unraid_mcp/tools/_live.py."
+        "Add an if-branch in src/unraid_mcp/tools/_live.py."
     )
 
 

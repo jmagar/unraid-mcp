@@ -34,9 +34,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --group dev
       - name: Ruff check
-        run: uv run ruff check unraid_mcp/ tests/
+        run: uv run ruff check src/ tests/
       - name: Ruff format
-        run: uv run ruff format --check unraid_mcp/ tests/
+        run: uv run ruff format --check src/ tests/
 
   typecheck:
     name: Type Check
@@ -52,7 +52,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --group dev
       - name: ty check
-        run: uv run ty check unraid_mcp/
+        run: uv run ty check src/
 
   test:
     name: Test (py${{ matrix.python-version }})

@@ -13,7 +13,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
 # Copy source and install project
-COPY unraid_mcp/ unraid_mcp/
+COPY src/ src/
 RUN touch README.md LICENSE
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
@@ -34,7 +34,7 @@ WORKDIR /app
 
 # Copy the virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
-COPY --from=builder /app/unraid_mcp /app/unraid_mcp
+COPY --from=builder /app/src /app/src
 
 # Ensure .venv/bin is on PATH
 ENV PATH="/app/.venv/bin:$PATH" \
@@ -65,7 +65,7 @@ RUN mkdir -p /app/logs /app/backups /home/mcp/.unraid-mcp && \
 # _load_env_files() loads ~/.unraid-mcp/.env with load_dotenv(override=False), so a
 # value already present in the process env (as these would be, coming from an image
 # ENV) permanently shadows the same var configured in that .env file. Package
-# defaults (streamable-http / 6970 / INFO — see unraid_mcp/config/settings.py) apply
+# defaults (streamable-http / 6970 / INFO — see src/unraid_mcp/config/settings.py) apply
 # identically when unset, so baking them in here would only ever silently block a
 # user's own configuration, never add real value (see issue #137).
 ENV UNRAID_MCP_HOST=0.0.0.0

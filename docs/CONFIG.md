@@ -11,7 +11,7 @@ The canonical configuration file is `~/.unraid-mcp/.env`. The server searches fo
 3. `/app/.env.local` -- Docker compat mount
 4. `<project-root>/.env.local` -- dev overrides
 5. `<project-root>/.env` -- dev fallback
-6. `unraid_mcp/.env` -- last resort
+6. `src/unraid_mcp/.env` -- last resort
 
 Override the credentials directory with `UNRAID_CREDENTIALS_DIR`.
 

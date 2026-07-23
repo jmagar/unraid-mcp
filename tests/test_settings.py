@@ -255,7 +255,7 @@ class TestSettingsServerIdentitySuccess:
 # ---------------------------------------------------------------------------
 # Module-level startup guards (S-H1 SSL fail-closed + port range)
 #
-# These are security-relevant guards in unraid_mcp/config/settings.py that lost
+# These are security-relevant guards in src/unraid_mcp/config/settings.py that lost
 # direct coverage in the pydantic migration:
 #   * the port guard is now the pydantic field validator Settings._parse_port —
 #     testable by instantiating Settings(...) directly;
@@ -378,25 +378,57 @@ class TestGoogleOAuthSettings:
 
 @pytest.fixture
 def _reload_settings(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Generator[None, None, None]:
-    """Reload the settings module under a controlled env, restoring it afterwards.
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Generator[Path, None, None]:
+    """Reload the settings module under a hermetic env, restoring it afterwards.
 
     The S-H1 guard fires while the module body executes, so it can only be
-    exercised by re-importing the module. After the test, reload once more with a
-    clean (verify-on) env so the global module state other tests share is left in
-    a known-good shape rather than whatever the last test forced.
+    exercised by re-importing the module.
+
+    Full env-file isolation: an empty ``.env`` is written as the FIRST entry on
+    ``_load_env_files()``'s search path (``UNRAID_CREDENTIALS_DIR/.env``), so the
+    loader's first-existing-file ``break`` short-circuits there and never consults
+    the developer's real ``~/.unraid-mcp/.env`` *or* the project-root/last-resort
+    fallbacks. Without this, a real ``~/.unraid-mcp/.env`` leaks in:
+    ``load_dotenv(override=False)`` only refuses to overwrite vars *already
+    present* in ``os.environ``, so a TLS var this fixture deliberately cleared
+    (e.g. ``UNRAID_ALLOW_INSECURE_TLS``) gets silently repopulated from that file
+    — defeating the isolation and making the S-H1 guard assertions pass or fail on
+    the host's credentials rather than the values the test set. (CI has no such
+    file, so it only bit locally.) Pointing *only* ``UNRAID_CREDENTIALS_DIR`` at an
+    empty dir would still miss the project-root/last-resort ``.env`` fallbacks —
+    they are ``__file__``-derived and not env-overridable — hence the empty
+    first-entry file, which neutralises the entire search path in one stroke.
+
+    Yields ``tmp_path`` so a test can drop a decoy ``.env`` (overwriting the empty
+    one) to exercise file-driven guard behaviour; teardown blanks it again before
+    the restore reload, so the shared module state is always left at pure verify-on
+    defaults independent of the host — and teardown can never ``sys.exit(1)``.
     """
+    env_file = tmp_path / ".env"
+    env_file.write_text("")  # first search-path entry -> loader breaks here
+    monkeypatch.setenv("UNRAID_CREDENTIALS_DIR", str(tmp_path))
     # Clear the TLS-related vars so each test starts from a known baseline and
-    # only the values it sets are in effect.
+    # only the values it sets (or a decoy .env it writes) are in effect.
     monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
     monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
     try:
-        yield
+        yield tmp_path
     finally:
+        # Blank any decoy .env a test wrote so the restore reload loads nothing
+        # and lands on pure defaults (verify-on) regardless of the host.
+        env_file.write_text("")
+        # Raw pop before monkeypatch's ledger is consulted: load_dotenv writes
+        # straight into os.environ, bypassing monkeypatch tracking, so a plain
+        # delenv could let monkeypatch restore a leaked value into a later test.
+        # (See _reload_settings_from_dotenv for the full rationale.)
+        os.environ.pop("UNRAID_VERIFY_SSL", None)
+        os.environ.pop("UNRAID_ALLOW_INSECURE_TLS", None)
         monkeypatch.delenv("UNRAID_VERIFY_SSL", raising=False)
         monkeypatch.delenv("UNRAID_ALLOW_INSECURE_TLS", raising=False)
+        # Reload with the empty creds .env still active, then drop the override.
         importlib.reload(settings_module)
+        monkeypatch.delenv("UNRAID_CREDENTIALS_DIR", raising=False)
 
 
 class TestVerifySslGuard:
@@ -404,7 +436,7 @@ class TestVerifySslGuard:
 
     @pytest.mark.parametrize("falsey", ["false", "0", "no"])
     def test_disabled_without_opt_in_exits(
-        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch, falsey: str
+        self, _reload_settings: Path, monkeypatch: pytest.MonkeyPatch, falsey: str
     ) -> None:
         # Disabling verification without the explicit UNRAID_ALLOW_INSECURE_TLS
         # opt-in must fail closed with sys.exit(1).
@@ -413,9 +445,27 @@ class TestVerifySslGuard:
             importlib.reload(settings_module)
         assert excinfo.value.code == 1
 
+    def test_guard_reads_isolated_credentials_dir_not_host(
+        self, _reload_settings: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Hermetic regression for the fixture's credentials-dir isolation.
+        #
+        # A decoy .env with verification-off and NO opt-in, dropped into the
+        # isolated creds dir, must trip the S-H1 guard from that file's content —
+        # proving _load_env_files() reads the pointed-at dir and nothing else. This
+        # fails deterministically in CI and on any host if the isolation regresses
+        # (the reload would then read the real ~/.unraid-mcp/.env, or none, and NOT
+        # exit). test_disabled_without_opt_in_exits alone can't catch that: it only
+        # exposes the leak on a machine that happens to have a real credentials .env
+        # with verification disabled — exactly the blind spot that let the bug ship.
+        (_reload_settings / ".env").write_text("UNRAID_VERIFY_SSL=false\n")
+        with pytest.raises(SystemExit) as excinfo:
+            importlib.reload(settings_module)
+        assert excinfo.value.code == 1
+
     @pytest.mark.parametrize("falsey", ["false", "0", "no"])
     def test_disabled_with_opt_in_allowed(
-        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch, falsey: str
+        self, _reload_settings: Path, monkeypatch: pytest.MonkeyPatch, falsey: str
     ) -> None:
         # With the second opt-in present, verification may be disabled: no exit,
         # and UNRAID_VERIFY_SSL resolves to the bool False.
@@ -425,7 +475,7 @@ class TestVerifySslGuard:
         assert settings_module.UNRAID_VERIFY_SSL is False
 
     def test_ca_bundle_path_preserved_as_str(
-        self, _reload_settings: None, monkeypatch: pytest.MonkeyPatch
+        self, _reload_settings: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # A value that is neither truthy nor falsey is treated as a CA-bundle
         # path and preserved verbatim as a str (the safe self-signed-cert route).

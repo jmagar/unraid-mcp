@@ -23,7 +23,7 @@ Conventional Commits (configured in `release-please-config.json`):
 | `gemini-extension.json` | `"version": "X.Y.Z"` | release-please (`extra-files`) |
 | `CHANGELOG.md` | Entry generated from commits | release-please |
 | `server.json` | `0.0.0` placeholder in-repo; set from the tag at publish time | `publish-pypi.yml` |
-| `unraid_mcp/version.py` | reads `importlib.metadata` at runtime | not a file (auto) |
+| `src/unraid_mcp/version.py` | reads `importlib.metadata` at runtime | not a file (auto) |
 
 `.release-please-manifest.json` tracks the last released version. The CI `version-sync`
 job is a safety net asserting the first four files agree.
