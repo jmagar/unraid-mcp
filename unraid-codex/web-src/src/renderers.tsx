@@ -1,5 +1,16 @@
 import * as React from "react"
-import { Check, ChevronRight, Copy, XCircle } from "lucide-react"
+import {
+  Activity,
+  BookOpenCheck,
+  Check,
+  ChevronRight,
+  Copy,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  XCircle,
+} from "lucide-react"
 import { Action } from "@/components/aurora/ai/action"
 import { Actions } from "@/components/aurora/ai/actions"
 import { Agent } from "@/components/aurora/ai/agent"
@@ -62,6 +73,14 @@ function compactValue(value: unknown): string {
   return enabled.length ? enabled.join(", ") : formatJson(value)
 }
 
+function humanizeStatus(value: unknown): string {
+  const raw = compactValue(value)
+  return raw
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^./, (letter) => letter.toUpperCase())
+}
+
 function InventoryBadges({ values }: { values: string[] }) {
   return (
     <span className="uc-badge-list">
@@ -74,10 +93,385 @@ function InventoryBadges({ values }: { values: string[] }) {
   )
 }
 
+interface McpEditorValue {
+  name: string
+  previousName?: string
+  config: JsonObject
+}
+
+function McpServerManager({
+  config,
+  servers,
+  onLogin,
+  onSave,
+  onRemove,
+}: {
+  config: JsonObject
+  servers: JsonObject[]
+  onLogin?: (name: string) => void
+  onSave?: (definition: McpEditorValue) => Promise<unknown>
+  onRemove?: (name: string) => Promise<unknown>
+}) {
+  const configured = config.mcp_servers ?? {}
+  const [editing, setEditing] = React.useState<string | null>(null)
+  const [draft, setDraft] = React.useState<JsonObject | null>(null)
+  const [busy, setBusy] = React.useState(false)
+  const names = Array.from(
+    new Set([...Object.keys(configured), ...servers.map((server) => server.name)]),
+  ).sort()
+
+  const beginEdit = (name?: string) => {
+    const current = name ? configured[name] ?? {} : {}
+    setEditing(name ?? "")
+    setDraft({
+      name: name ?? "",
+      transport: current.url ? "http" : "stdio",
+      url: current.url ?? "",
+      command: current.command ?? "",
+      args: (current.args ?? []).join(" "),
+      enabled: current.enabled !== false,
+      original: current,
+    })
+  }
+
+  const save = async () => {
+    if (!draft?.name?.trim() || !onSave) return
+    const next = { ...(draft.original ?? {}) }
+    delete next.url
+    delete next.command
+    delete next.args
+    next.enabled = draft.enabled !== false
+    if (draft.transport === "http") {
+      next.url = draft.url.trim()
+    } else {
+      next.command = draft.command.trim()
+      next.args = String(draft.args ?? "")
+        .split(/\s+/)
+        .filter(Boolean)
+    }
+    setBusy(true)
+    try {
+      await onSave({
+        name: draft.name.trim(),
+        previousName: editing || undefined,
+        config: next,
+      })
+      setEditing(null)
+      setDraft(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="uc-manager">
+      <div className="uc-manager-toolbar">
+        <div className="aurora-text-meta">
+          Add or edit user-configured STDIO and HTTP servers. Plugin-managed servers remain read-only.
+        </div>
+        <Button variant="aurora" size="sm" onClick={() => beginEdit()}>
+          <Plus size={14} aria-hidden />
+          Add Server
+        </Button>
+      </div>
+      {draft ? (
+        <div className="uc-editor-card">
+          <div className="uc-editor-grid">
+            <label className="uc-field">
+              <span className="aurora-text-label">Name</span>
+              <Input
+                value={draft.name}
+                onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                placeholder="context7"
+              />
+            </label>
+            <label className="uc-field">
+              <span className="aurora-text-label">Transport</span>
+              <Select
+                value={draft.transport}
+                onValueChange={(transport) => setDraft({ ...draft, transport })}
+              >
+                <SelectTrigger aria-label="MCP transport">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="http">Streamable HTTP</SelectItem>
+                  <SelectItem value="stdio">STDIO</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+          </div>
+          {draft.transport === "http" ? (
+            <label className="uc-field">
+              <span className="aurora-text-label">Server URL</span>
+              <Input
+                value={draft.url}
+                onChange={(event) => setDraft({ ...draft, url: event.target.value })}
+                placeholder="https://example.com/mcp"
+              />
+            </label>
+          ) : (
+            <div className="uc-editor-grid">
+              <label className="uc-field">
+                <span className="aurora-text-label">Command</span>
+                <Input
+                  value={draft.command}
+                  onChange={(event) => setDraft({ ...draft, command: event.target.value })}
+                  placeholder="npx"
+                />
+              </label>
+              <label className="uc-field">
+                <span className="aurora-text-label">Arguments</span>
+                <Input
+                  value={draft.args}
+                  onChange={(event) => setDraft({ ...draft, args: event.target.value })}
+                  placeholder="-y @scope/server"
+                />
+              </label>
+            </div>
+          )}
+          <div className="uc-editor-actions">
+            <Button
+              variant={draft.enabled === false ? "neutral" : "aurora"}
+              size="sm"
+              onClick={() => setDraft({ ...draft, enabled: draft.enabled === false })}
+            >
+              {draft.enabled === false ? "Disabled" : "Enabled"}
+            </Button>
+            <span className="uc-spacer" />
+            <Button variant="ghost" size="sm" onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="aurora"
+              size="sm"
+              disabled={
+                busy ||
+                !draft.name?.trim() ||
+                (draft.transport === "http" ? !draft.url?.trim() : !draft.command?.trim())
+              }
+              onClick={() => void save()}
+            >
+              {busy ? "Saving…" : "Save Server"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      <div className="uc-catalog-grid">
+        {names.map((name) => {
+          const definition = configured[name]
+          const server = servers.find((entry) => entry.name === name) ?? {}
+          const tools = Object.keys(server.tools ?? {})
+          const failed = server.startupStatus === "failed" || Boolean(server.startupError)
+          return (
+            <div className="uc-catalog-card" key={name}>
+              <div className="uc-inventory-heading">
+                <strong>{name}</strong>
+                <Badge tone={failed ? "error" : definition?.enabled === false ? "neutral" : "success"} dot size="sm">
+                  {failed ? "Failed" : definition?.enabled === false ? "Disabled" : humanizeStatus(server.authStatus ?? "ready")}
+                </Badge>
+              </div>
+              <div className="aurora-text-meta">
+                {definition?.url ? "HTTP" : definition?.command ? "STDIO" : "Plugin managed"} ·{" "}
+                {tools.length} tools · {(server.resources ?? []).length} resources
+              </div>
+              {server.startupError ? (
+                <div className="aurora-text-meta uc-error-text">{server.startupError}</div>
+              ) : null}
+              {tools.length ? <InventoryBadges values={tools.slice(0, 10)} /> : null}
+              <div className="uc-card-actions">
+                {server.authStatus === "notLoggedIn" && onLogin ? (
+                  <Button variant="neutral" size="sm" onClick={() => onLogin(name)}>
+                    Sign In
+                  </Button>
+                ) : null}
+                {definition ? (
+                  <>
+                    <Button variant="ghost" size="sm" onClick={() => beginEdit(name)}>
+                      <Pencil size={13} aria-hidden />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (window.confirm(`Remove MCP server "${name}"?`)) {
+                          void onRemove?.(name)
+                        }
+                      }}
+                    >
+                      <Trash2 size={13} aria-hidden />
+                      Remove
+                    </Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          )
+        })}
+        {!names.length ? (
+          <div className="aurora-text-meta">No MCP servers configured.</div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function PluginCatalog({
+  plugins,
+  apps,
+  onInstall,
+  onUninstall,
+}: {
+  plugins: JsonObject[]
+  apps: JsonObject[]
+  onInstall?: (plugin: JsonObject) => Promise<unknown>
+  onUninstall?: (plugin: JsonObject) => Promise<unknown>
+}) {
+  const [view, setView] = React.useState<"installed" | "available" | "apps">("installed")
+  const [query, setQuery] = React.useState("")
+  const [visible, setVisible] = React.useState(12)
+  const [busy, setBusy] = React.useState<string | null>(null)
+  React.useEffect(() => setVisible(12), [query, view])
+
+  const normalized = query.trim().toLowerCase()
+  const candidates =
+    view === "apps"
+      ? apps
+      : plugins.filter((plugin) => (view === "installed" ? plugin.installed : !plugin.installed))
+  const filtered = candidates.filter((entry) =>
+    [entry.name, entry.description, entry.summary, ...(entry.keywords ?? [])]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalized),
+  )
+
+  const runPluginAction = async (plugin: JsonObject) => {
+    setBusy(plugin.id)
+    try {
+      if (plugin.installed) await onUninstall?.(plugin)
+      else await onInstall?.(plugin)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="uc-manager">
+      <div className="uc-catalog-controls">
+        <div className="uc-filter-group" role="group" aria-label="Plugin catalog view">
+          {[
+            ["installed", `Installed ${plugins.filter((plugin) => plugin.installed).length}`],
+            ["available", `Available ${plugins.filter((plugin) => !plugin.installed).length}`],
+            ["apps", `Apps ${apps.length}`],
+          ].map(([id, label]) => (
+            <Button
+              key={id}
+              variant={view === id ? "aurora" : "neutral"}
+              size="sm"
+              onClick={() => setView(id as typeof view)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        <label className="uc-search">
+          <Search size={14} aria-hidden />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={`Search ${view}`}
+            aria-label={`Search ${view}`}
+          />
+        </label>
+      </div>
+      <div className="uc-catalog-grid">
+        {filtered.slice(0, visible).map((entry) => (
+          <div className="uc-catalog-card" key={`${view}-${entry.id}`}>
+            <div className="uc-inventory-heading">
+              <strong>{entry.name}</strong>
+              <Badge
+                tone={
+                  view === "apps"
+                    ? entry.isAccessible && entry.isEnabled
+                      ? "success"
+                      : "neutral"
+                    : entry.installed
+                      ? "success"
+                      : "info"
+                }
+                size="sm"
+              >
+                {view === "apps"
+                  ? entry.isAccessible && entry.isEnabled
+                    ? "ready"
+                    : "unavailable"
+                  : entry.installed
+                    ? "installed"
+                    : "available"}
+              </Badge>
+            </div>
+            <div className="aurora-text-meta uc-clamp">
+              {entry.description ??
+                entry.summary ??
+                [entry.marketplaceName, entry.localVersion ?? entry.version]
+                  .filter(Boolean)
+                  .join(" · ") ??
+                "No description provided."}
+            </div>
+            {entry.keywords?.length ? (
+              <InventoryBadges values={entry.keywords.slice(0, 5)} />
+            ) : null}
+            <div className="uc-card-actions">
+              {view === "apps" ? (
+                !entry.isAccessible && entry.installUrl ? (
+                  <Button
+                    variant="neutral"
+                    size="sm"
+                    onClick={() => window.open(entry.installUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    Connect
+                  </Button>
+                ) : null
+              ) : (
+                <Button
+                  variant={entry.installed ? "ghost" : "aurora"}
+                  size="sm"
+                  disabled={busy === entry.id}
+                  onClick={() => void runPluginAction(entry)}
+                >
+                  {busy === entry.id
+                    ? "Working…"
+                    : entry.installed
+                      ? "Remove"
+                      : "Install"}
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+        {!filtered.length ? (
+          <div className="aurora-text-meta">No matching {view}.</div>
+        ) : null}
+      </div>
+      {visible < filtered.length ? (
+        <Button variant="neutral" size="sm" onClick={() => setVisible((count) => count + 12)}>
+          Show 12 More
+        </Button>
+      ) : null}
+    </div>
+  )
+}
+
 export function SessionContextRenderer({
   state,
   onMcpLogin,
   onUpdateSettings,
+  onSaveMcpServer,
+  onRemoveMcpServer,
+  onInstallPlugin,
+  onUninstallPlugin,
 }: {
   state: {
     thread: JsonObject | null
@@ -98,11 +492,30 @@ export function SessionContextRenderer({
   }
   onMcpLogin?: (name: string) => void
   onUpdateSettings?: (settings: JsonObject) => void
+  onSaveMcpServer?: (definition: McpEditorValue) => Promise<unknown>
+  onRemoveMcpServer?: (name: string) => Promise<unknown>
+  onInstallPlugin?: (plugin: JsonObject) => Promise<unknown>
+  onUninstallPlugin?: (plugin: JsonObject) => Promise<unknown>
 }) {
   const config = state.config ?? {}
   const settings = state.settings ?? {}
-  const currentModel = settings.model ?? config.model ?? "Codex default"
-  const effort = settings.effort ?? config.model_reasoning_effort ?? "default"
+  const visibleModels = state.models.filter((model) => !model.hidden)
+  const configuredModel = settings.model ?? config.model
+  const currentModel =
+    visibleModels.some((model) => (model.model ?? model.id) === configuredModel)
+      ? configuredModel
+      : visibleModels[0]?.model ?? visibleModels[0]?.id ?? "codex"
+  const selectedModel = state.models.find(
+    (model) => (model.model ?? model.id) === currentModel,
+  )
+  const effortOptions =
+    selectedModel?.supportedReasoningEfforts?.map(
+      (option: JsonObject) => option.reasoningEffort ?? option.effort ?? option.value,
+    ).filter(Boolean) ?? ["minimal", "low", "medium", "high", "xhigh"]
+  const configuredEffort = settings.effort ?? config.model_reasoning_effort
+  const effort = effortOptions.includes(configuredEffort)
+    ? configuredEffort
+    : effortOptions.find((option: string) => option === "medium") ?? effortOptions[0]
   const approval =
     settings.approvalPolicy ?? config.approval_policy ?? config.approvalPolicy ?? "ask"
   const sandbox =
@@ -119,13 +532,6 @@ export function SessionContextRenderer({
     ["collabAgentToolCall", "subAgentActivity"].includes(entry.item.type),
   )
   const rateWindow = state.rateLimits?.primary
-  const selectedModel = state.models.find(
-    (model) => (model.model ?? model.id) === currentModel,
-  )
-  const effortOptions =
-    selectedModel?.supportedReasoningEfforts?.map(
-      (option: JsonObject) => option.reasoningEffort ?? option.effort ?? option.value,
-    ).filter(Boolean) ?? ["minimal", "low", "medium", "high", "xhigh"]
   const goalPercent =
     state.goal?.tokenBudget && state.goal.tokenBudget > 0
       ? Math.min(100, Math.round((state.goal.tokensUsed / state.goal.tokenBudget) * 100))
@@ -137,45 +543,46 @@ export function SessionContextRenderer({
         <DescriptionItem
           label="Model"
           value={
-            <div className="uc-setting-controls">
-              <Select
-                value={String(currentModel)}
-                onValueChange={(model) => onUpdateSettings?.({ model })}
-              >
-                <SelectTrigger aria-label="Session model">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {state.models.filter((model) => !model.hidden).map((model) => (
-                    <SelectItem
-                      key={model.model ?? model.id}
-                      value={model.model ?? model.id}
-                    >
-                      {model.displayName ?? model.model ?? model.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={String(effort)}
-                onValueChange={(nextEffort) =>
-                  onUpdateSettings?.({ effort: nextEffort })
-                }
-              >
-                <SelectTrigger aria-label="Reasoning effort">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {effortOptions.map((option: string) => (
-                    <SelectItem key={option} value={option}>
-                      {option} effort
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select
+              value={String(currentModel)}
+              onValueChange={(model) => onUpdateSettings?.({ model })}
+            >
+              <SelectTrigger className="uc-setting-select" aria-label="Session model">
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleModels.map((model) => (
+                  <SelectItem
+                    key={model.model ?? model.id}
+                    value={model.model ?? model.id}
+                  >
+                    {model.displayName ?? model.model ?? model.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           }
           active
+        />
+        <DescriptionItem
+          label="Reasoning Effort"
+          value={
+            <Select
+              value={String(effort)}
+              onValueChange={(nextEffort) => onUpdateSettings?.({ effort: nextEffort })}
+            >
+              <SelectTrigger className="uc-setting-select" aria-label="Reasoning effort">
+                <SelectValue placeholder="Select effort" />
+              </SelectTrigger>
+              <SelectContent>
+                {effortOptions.map((option: string) => (
+                  <SelectItem key={option} value={option}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
         />
         <DescriptionItem
           label="Permissions"
@@ -226,53 +633,13 @@ export function SessionContextRenderer({
           </span>
         }
       >
-        <div className="uc-inventory-list">
-          {state.mcpServers.length ? state.mcpServers.map((server) => {
-            const tools = Object.keys(server.tools ?? {})
-            const failed = server.startupStatus === "failed" || Boolean(server.startupError)
-            return (
-              <div className="uc-inventory-row" key={server.name}>
-                <div className="uc-inventory-heading">
-                  <strong>{server.name}</strong>
-                  <Badge tone={failed ? "error" : "success"} dot size="sm">
-                    {failed ? "failed" : compactValue(server.authStatus ?? "ready")}
-                  </Badge>
-                </div>
-                <div className="aurora-text-meta">
-                  {tools.length} tools · {(server.resources ?? []).length} resources ·{" "}
-                  {(server.resourceTemplates ?? []).length} templates
-                </div>
-                {tools.length ? <InventoryBadges values={tools} /> : null}
-                {(server.resources ?? []).length ? (
-                  <InventoryBadges
-                    values={(server.resources ?? [])
-                      .map((resource: JsonObject) => resource.name ?? resource.uri)
-                      .filter(Boolean)}
-                  />
-                ) : null}
-                {(server.resourceTemplates ?? []).length ? (
-                  <InventoryBadges
-                    values={(server.resourceTemplates ?? [])
-                      .map(
-                        (template: JsonObject) =>
-                          template.name ?? template.uriTemplate,
-                      )
-                      .filter(Boolean)}
-                  />
-                ) : null}
-                {server.authStatus === "notLoggedIn" && onMcpLogin ? (
-                  <Button
-                    variant="neutral"
-                    size="sm"
-                    onClick={() => onMcpLogin(server.name)}
-                  >
-                    Sign in
-                  </Button>
-                ) : null}
-              </div>
-            )
-          }) : <div className="aurora-text-meta">No MCP servers advertised.</div>}
-        </div>
+        <McpServerManager
+          config={config}
+          servers={state.mcpServers}
+          onLogin={onMcpLogin}
+          onSave={onSaveMcpServer}
+          onRemove={onRemoveMcpServer}
+        />
       </Collapsible>
 
       <Collapsible
@@ -285,70 +652,20 @@ export function SessionContextRenderer({
           </span>
         }
       >
-        <div className="uc-inventory-list">
-          {state.plugins.map((plugin) => (
-            <div className="uc-inventory-row" key={`plugin-${plugin.id}`}>
-              <div className="uc-inventory-heading">
-                <strong>{plugin.name}</strong>
-                <Badge
-                  tone={plugin.enabled ? "success" : "neutral"}
-                  size="sm"
-                >
-                  {plugin.enabled ? "plugin enabled" : "plugin disabled"}
-                </Badge>
-              </div>
-              <div className="aurora-text-meta">
-                {[plugin.marketplaceName, plugin.localVersion ?? plugin.version]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-              {plugin.keywords?.length ? (
-                <InventoryBadges values={plugin.keywords.slice(0, 8)} />
-              ) : null}
-            </div>
-          ))}
-          {state.apps.map((app) => (
-            <div className="uc-inventory-row" key={`app-${app.id}`}>
-              <div className="uc-inventory-heading">
-                <strong>{app.name}</strong>
-                <Badge
-                  tone={app.isAccessible && app.isEnabled ? "success" : "neutral"}
-                  size="sm"
-                >
-                  {app.isAccessible && app.isEnabled ? "app ready" : "app unavailable"}
-                </Badge>
-              </div>
-              {app.description ? (
-                <div className="aurora-text-meta">{app.description}</div>
-              ) : null}
-              {app.pluginDisplayNames?.length ? (
-                <InventoryBadges values={app.pluginDisplayNames} />
-              ) : null}
-              {!app.isAccessible && app.installUrl ? (
-                <Button
-                  variant="neutral"
-                  size="sm"
-                  onClick={() =>
-                    window.open(app.installUrl, "_blank", "noopener,noreferrer")
-                  }
-                >
-                  Connect app
-                </Button>
-              ) : null}
-            </div>
-          ))}
-          {!state.apps.length && !state.plugins.length ? (
-            <div className="aurora-text-meta">No apps or plugins discovered.</div>
-          ) : null}
-          {state.marketplaceErrors.map((error, index) => (
-            <Banner
-              key={`marketplace-error-${index}`}
-              variant="warn"
-              title="Plugin marketplace unavailable"
-              description={error.message ?? formatJson(error)}
-            />
-          ))}
-        </div>
+        <PluginCatalog
+          plugins={state.plugins}
+          apps={state.apps}
+          onInstall={onInstallPlugin}
+          onUninstall={onUninstallPlugin}
+        />
+        {state.marketplaceErrors.map((error, index) => (
+          <Banner
+            key={`marketplace-error-${index}`}
+            variant="warn"
+            title="Plugin marketplace unavailable"
+            description={error.message ?? formatJson(error)}
+          />
+        ))}
       </Collapsible>
 
       <Collapsible
@@ -474,32 +791,83 @@ export function SessionContextRenderer({
       <Collapsible
         title={
           <span className="uc-collapsible-title">
-            Protocol Activity
-            <Badge tone="neutral" size="sm">{state.events.length}</Badge>
+            Diagnostics
+            <Badge
+              tone={
+                state.events.some((event) =>
+                  /(error|warning|failed|deprecation|configWarning)/i.test(event.method),
+                )
+                  ? "warn"
+                  : "success"
+              }
+              size="sm"
+            >
+              {state.events.filter((event) =>
+                /(error|warning|failed|deprecation|configWarning)/i.test(event.method),
+              ).length}{" "}
+              issues
+            </Badge>
           </span>
         }
       >
-        <div className="uc-protocol-events">
-          {state.events.length ? state.events.slice(-20).reverse().map((event, index) => (
-            <div className="uc-protocol-event" key={`${event.at}-${event.method}-${index}`}>
-              <code>{event.method}</code>
-              <time dateTime={new Date(event.at).toISOString()}>
-                {new Date(event.at).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                  second: "2-digit",
-                })}
-              </time>
-              {Object.keys(event.params).length ? (
-                <details>
-                  <summary>Payload</summary>
-                  <pre>{formatJson(event.params)}</pre>
-                </details>
-              ) : null}
+        <div className="uc-diagnostics">
+          <div className="uc-diagnostic-summary">
+            <Activity size={15} strokeWidth={1.65} aria-hidden />
+            <div>
+              <div className="aurora-text-label">App-Server Health</div>
+              <div className="aurora-text-meta">
+                Lifecycle events are summarized here. Raw protocol payloads stay in the developer log.
+              </div>
             </div>
-          )) : (
-            <div className="aurora-text-meta">No app-server events yet.</div>
-          )}
+          </div>
+          <div className="uc-protocol-events">
+            {state.events
+              .filter((event) =>
+                /(error|warning|failed|deprecation|configWarning)/i.test(event.method),
+              )
+              .slice(-8)
+              .reverse()
+              .map((event, index) => (
+                <div className="uc-protocol-event" key={`${event.at}-${event.method}-${index}`}>
+                  <code>{event.method}</code>
+                  <time dateTime={new Date(event.at).toISOString()}>
+                    {new Date(event.at).toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </time>
+                  {Object.keys(event.params).length ? (
+                    <details>
+                      <summary>Details</summary>
+                      <pre>{formatJson(event.params)}</pre>
+                    </details>
+                  ) : null}
+                </div>
+              ))}
+            {!state.events.some((event) =>
+              /(error|warning|failed|deprecation|configWarning)/i.test(event.method),
+            ) ? (
+              <div className="aurora-text-meta">No warnings or failures in this session.</div>
+            ) : null}
+          </div>
+          <details className="uc-developer-log">
+            <summary>Developer Event Log · {state.events.length} events</summary>
+            <div className="uc-protocol-events">
+              {state.events.slice(-20).reverse().map((event, index) => (
+                <div className="uc-protocol-event" key={`${event.at}-${event.method}-raw-${index}`}>
+                  <code>{event.method}</code>
+                  <time>{new Date(event.at).toLocaleTimeString()}</time>
+                  {Object.keys(event.params).length ? (
+                    <details>
+                      <summary>Payload</summary>
+                      <pre>{formatJson(event.params)}</pre>
+                    </details>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       </Collapsible>
     </div>
@@ -778,17 +1146,77 @@ function ImageItem({ entry }: { entry: TimelineItem }) {
   )
 }
 
+function SkillUsageItem({
+  skill,
+  entry,
+  theme,
+}: {
+  skill: JsonObject
+  entry: TimelineItem
+  theme: "aurora" | "unraid"
+}) {
+  return (
+    <section className="uc-skill-usage">
+      <div className="uc-skill-usage-heading">
+        <BookOpenCheck size={15} strokeWidth={1.65} aria-hidden />
+        <div>
+          <div className="aurora-text-label">{skill.name}</div>
+          <div className="aurora-text-meta">
+            {skill.shortDescription ?? skill.interface?.short_description ?? "Skill instructions loaded"}
+          </div>
+        </div>
+        <Badge tone="info" size="sm">Skill</Badge>
+      </div>
+      {theme === "unraid" ? (
+        <UnraidTerminalItem entry={entry} />
+      ) : (
+        <Terminal
+          title="Skill Load"
+          status={entry.completedAtMs ? "idle" : "connected"}
+          lines={terminalLines(entry.item)}
+          compact
+        />
+      )}
+    </section>
+  )
+}
+
 export function TimelineRenderer({
   entries,
   theme = "aurora",
+  skills = [],
 }: {
   entries: TimelineItem[]
   theme?: "aurora" | "unraid"
+  skills?: JsonObject[]
 }) {
   return (
     <>
-      {entries.map((entry) => {
+      {entries.map((entry, index) => {
         const item = entry.item
+        const toolTypes = ["mcpToolCall", "dynamicToolCall", "webSearch"]
+        if (toolTypes.includes(item.type)) {
+          if (index > 0 && toolTypes.includes(entries[index - 1].item.type)) return null
+          const calls: ToolCall[] = []
+          for (let cursor = index; cursor < entries.length; cursor += 1) {
+            if (!toolTypes.includes(entries[cursor].item.type)) break
+            calls.push(mappedToolCall(entries[cursor]))
+          }
+          return (
+            <section className="uc-tool-group" key={`tools-${entry.id}`}>
+              <div className="uc-tool-group-heading">
+                <span>Tool Activity</span>
+                <Badge
+                  tone={calls.some((call) => call.status === "error") ? "error" : "info"}
+                  size="sm"
+                >
+                  {calls.length} {calls.length === 1 ? "call" : "calls"}
+                </Badge>
+              </div>
+              <ToolCalls calls={calls} />
+            </section>
+          )
+        }
         switch (item.type) {
           case "userMessage":
           case "agentMessage":
@@ -831,6 +1259,23 @@ export function TimelineRenderer({
           case "plan":
             return <PlanItem key={entry.id} entry={entry} />
           case "commandExecution":
+            {
+              const skill = skills.find(
+                (candidate) =>
+                  candidate.path &&
+                  String(item.command ?? "").includes(String(candidate.path)),
+              )
+              if (skill) {
+                return (
+                  <SkillUsageItem
+                    key={entry.id}
+                    skill={skill}
+                    entry={entry}
+                    theme={theme}
+                  />
+                )
+              }
+            }
             if (theme === "unraid") {
               return <UnraidTerminalItem key={entry.id} entry={entry} />
             }
@@ -851,10 +1296,6 @@ export function TimelineRenderer({
             )
           case "fileChange":
             return <FileChangeItem key={entry.id} entry={entry} />
-          case "mcpToolCall":
-          case "dynamicToolCall":
-          case "webSearch":
-            return <ToolCalls key={entry.id} calls={[mappedToolCall(entry)]} />
           case "collabAgentToolCall":
             return <CollabItem key={entry.id} entry={entry} />
           case "subAgentActivity":
@@ -1326,16 +1767,18 @@ export function PlanRenderer({
 }
 
 export function ContextRenderer({ tokenUsage }: { tokenUsage: JsonObject }) {
-  const total = tokenUsage.total ?? {}
+  const current = tokenUsage.last ?? tokenUsage.total ?? {}
+  const cached = Math.min(current.cachedInputTokens ?? 0, current.inputTokens ?? 0)
+  const reasoning = Math.min(current.reasoningOutputTokens ?? 0, current.outputTokens ?? 0)
   return (
     <Context
       variant="compact"
       limit={tokenUsage.modelContextWindow ?? undefined}
       segments={[
-        { label: "Input", value: total.inputTokens ?? 0 },
-        { label: "Cached", value: total.cachedInputTokens ?? 0 },
-        { label: "Output", value: total.outputTokens ?? 0 },
-        { label: "Reasoning", value: total.reasoningOutputTokens ?? 0 },
+        { label: "Input", value: Math.max(0, (current.inputTokens ?? 0) - cached) },
+        { label: "Cached", value: cached },
+        { label: "Output", value: Math.max(0, (current.outputTokens ?? 0) - reasoning) },
+        { label: "Reasoning", value: reasoning },
       ]}
     />
   )

@@ -71,6 +71,30 @@ function response(webSocket, id, result) {
   webSocket.send(JSON.stringify({ id, result }))
 }
 
+let mcpConfig = {
+  unraid: { url: "https://unraid.example.test/mcp", enabled: true },
+  labby: { command: "labby", args: ["mcp"], enabled: true },
+}
+
+const plugins = [
+  {
+    id: "unraid@local",
+    name: "Unraid",
+    installed: true,
+    enabled: true,
+    localVersion: "1.0.0",
+    keywords: ["server", "storage"],
+  },
+  {
+    id: "github@curated",
+    name: "GitHub",
+    installed: false,
+    enabled: false,
+    version: "2.0.0",
+    keywords: ["code", "pull requests"],
+  },
+]
+
 webSocketServer.on("connection", (webSocket) => {
   webSocket.on("message", (buffer) => {
     const message = JSON.parse(buffer.toString())
@@ -104,18 +128,178 @@ webSocketServer.on("connection", (webSocket) => {
         })
         break
       case "model/list":
-        response(webSocket, message.id, { data: [] })
+        response(webSocket, message.id, {
+          data: [
+            {
+              id: "gpt-5-codex",
+              model: "gpt-5-codex",
+              displayName: "GPT-5 Codex",
+              hidden: false,
+              supportedReasoningEfforts: [
+                { reasoningEffort: "low" },
+                { reasoningEffort: "medium" },
+                { reasoningEffort: "high" },
+              ],
+            },
+          ],
+        })
         break
       case "thread/resume":
         response(webSocket, message.id, {
           thread: {
             id: message.params.threadId,
+            cwd: "/workspace",
             turns: [],
+          },
+        })
+        send(webSocket, "thread/tokenUsage/updated", {
+          threadId: message.params.threadId,
+          turnId: "turn-existing",
+          tokenUsage: {
+            total: {
+              totalTokens: 2593000,
+              inputTokens: 2400000,
+              cachedInputTokens: 900000,
+              outputTokens: 193000,
+              reasoningOutputTokens: 80000,
+            },
+            last: {
+              totalTokens: 126000,
+              inputTokens: 118000,
+              cachedInputTokens: 72000,
+              outputTokens: 8000,
+              reasoningOutputTokens: 4200,
+            },
+            modelContextWindow: 258000,
           },
         })
         break
       case "thread/start":
-        response(webSocket, message.id, { thread: { id: "thread-mock", turns: [] } })
+        response(webSocket, message.id, {
+          thread: { id: "thread-mock", cwd: "/workspace", turns: [] },
+        })
+        break
+      case "config/read":
+        response(webSocket, message.id, {
+          config: {
+            model: "gpt-5-codex",
+            model_reasoning_effort: "medium",
+            approval_policy: "on-request",
+            permission_profile: "default",
+            mcp_servers: mcpConfig,
+          },
+        })
+        break
+      case "skills/list":
+        response(webSocket, message.id, {
+          data: [
+            {
+              skills: [
+                {
+                  name: "unraid",
+                  path: "/home/agent/.agents/skills/unraid/SKILL.md",
+                  enabled: true,
+                  scope: "user",
+                  shortDescription: "Operate Unraid safely.",
+                },
+              ],
+            },
+          ],
+        })
+        break
+      case "hooks/list":
+        response(webSocket, message.id, { data: [] })
+        break
+      case "permissionProfile/list":
+        response(webSocket, message.id, {
+          data: [
+            { id: "default", description: "Ask before sensitive actions.", allowed: true },
+            { id: "read-only", description: "Read-only workspace access.", allowed: true },
+          ],
+        })
+        break
+      case "mcpServerStatus/list":
+        response(webSocket, message.id, {
+          data: Object.entries(mcpConfig).map(([name, definition]) => ({
+            name,
+            authStatus: "notLoggedIn",
+            tools: name === "unraid" ? { server: {}, docker: {}, shares: {} } : { search: {} },
+            resources: [],
+            resourceTemplates: [],
+            startupStatus: definition.enabled === false ? "disabled" : "ready",
+          })),
+          nextCursor: null,
+        })
+        break
+      case "app/list":
+        response(webSocket, message.id, {
+          data: [
+            {
+              id: "unraid-app",
+              name: "Unraid",
+              description: "Unraid control surface",
+              isAccessible: true,
+              isEnabled: true,
+            },
+            ...Array.from({ length: 20 }, (_, index) => ({
+              id: `app-${index}`,
+              name: `Connected App ${index + 1}`,
+              description: "Optional connected application.",
+              isAccessible: index % 2 === 0,
+              isEnabled: index % 2 === 0,
+            })),
+          ],
+          nextCursor: null,
+        })
+        break
+      case "plugin/list":
+        response(webSocket, message.id, {
+          marketplaces: [
+            {
+              name: "curated",
+              path: null,
+              plugins,
+            },
+          ],
+          marketplaceLoadErrors: [],
+        })
+        break
+      case "plugin/install": {
+        const plugin = plugins.find((entry) => entry.name === message.params.pluginName)
+        if (plugin) {
+          plugin.installed = true
+          plugin.enabled = true
+        }
+        response(webSocket, message.id, {})
+        break
+      }
+      case "plugin/uninstall": {
+        const plugin = plugins.find((entry) => entry.id === message.params.pluginId)
+        if (plugin) {
+          plugin.installed = false
+          plugin.enabled = false
+        }
+        response(webSocket, message.id, {})
+        break
+      }
+      case "config/batchWrite":
+        for (const edit of message.params.edits ?? []) {
+          const match = edit.keyPath.match(/^mcp_servers\."(.+)"$/)
+          if (!match) continue
+          if (edit.value == null) delete mcpConfig[match[1]]
+          else mcpConfig[match[1]] = edit.value
+        }
+        response(webSocket, message.id, { status: "ok", version: "mock" })
+        break
+      case "config/value/write": {
+        const match = message.params.keyPath.match(/^mcp_servers\."(.+)"$/)
+        if (match && message.params.value == null) delete mcpConfig[match[1]]
+        response(webSocket, message.id, { status: "ok", version: "mock" })
+        break
+      }
+      case "config/mcpServer/reload":
+      case "thread/settings/update":
+        response(webSocket, message.id, {})
         break
       case "turn/start": {
         const turnId = "turn-mock"
@@ -148,6 +332,27 @@ webSocketServer.on("connection", (webSocket) => {
             { step: "Verify the service", status: "in_progress" },
             { step: "Summarize the result", status: "pending" },
           ],
+        })
+        const skillCommand = {
+          type: "commandExecution",
+          id: "skill-command-1",
+          command: "cat /home/agent/.agents/skills/unraid/SKILL.md",
+          cwd: "/workspace",
+          status: "completed",
+          aggregatedOutput: "# Unraid\\nOperate the server through the scoped API.",
+          exitCode: 0,
+        }
+        send(webSocket, "item/started", {
+          threadId: "thread-mock",
+          turnId,
+          item: { ...skillCommand, status: "inProgress", aggregatedOutput: "" },
+          startedAtMs: Date.now(),
+        })
+        send(webSocket, "item/completed", {
+          threadId: "thread-mock",
+          turnId,
+          item: skillCommand,
+          completedAtMs: Date.now() + 500,
         })
         const command = {
           type: "commandExecution",

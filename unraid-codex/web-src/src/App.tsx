@@ -1,10 +1,10 @@
 import * as React from "react"
 import {
   ArrowLeft,
+  Bot,
   MessageSquare,
   PanelRightClose,
   PanelRightOpen,
-  SquareTerminal,
   SlidersHorizontal,
 } from "lucide-react"
 import { CodeBlock } from "@/components/aurora/code-block"
@@ -96,6 +96,10 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
     login,
     loginMcpServer,
     updateThreadSettings,
+    saveMcpServer,
+    removeMcpServer,
+    installPlugin,
+    uninstallPlugin,
     dismissNotice,
   } = useCodexAppServer()
   const [open, setOpen] = React.useState(false)
@@ -110,6 +114,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
   const [viewportWidth, setViewportWidth] = React.useState(() => window.innerWidth)
   const [theme, setTheme] = React.useState<ChatTheme>(readChatTheme)
   const [inspectorOpen, setInspectorOpen] = React.useState(false)
+  const [permissionsOpen, setPermissionsOpen] = React.useState(false)
   const [prompt, setPrompt] = React.useState("")
   const [attachments, setAttachments] = React.useState<Attachment[]>([])
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -244,6 +249,42 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
     [send],
   )
 
+  const currentModel =
+    state.settings?.model ??
+    state.config?.model ??
+    state.models.find((model) => !model.hidden)?.model ??
+    state.models.find((model) => !model.hidden)?.id ??
+    "codex"
+  const selectedModel = state.models.find(
+    (model) => (model.model ?? model.id) === currentModel,
+  )
+  const effortOptions = (
+    selectedModel?.supportedReasoningEfforts?.map(
+      (option: Record<string, any>) =>
+        option.reasoningEffort ?? option.effort ?? option.value,
+    ) ?? ["minimal", "low", "medium", "high", "xhigh"]
+  ).filter(Boolean)
+  const currentEffort =
+    state.settings?.effort ??
+    state.config?.model_reasoning_effort ??
+    effortOptions.find((option: string) => option === "medium") ??
+    effortOptions[0]
+  const currentPermissionProfile =
+    state.settings?.activePermissionProfile?.id ??
+    state.settings?.permissions ??
+    state.config?.permission_profile ??
+    state.permissionProfiles.find((entry) => entry.allowed !== false)?.id
+  const currentApproval =
+    typeof state.settings?.approvalPolicy === "string"
+      ? state.settings.approvalPolicy
+      : typeof state.config?.approval_policy === "string"
+        ? state.config.approval_policy
+        : "on-request"
+  const permissionTools = PERMISSIONS.map((permission) => ({
+    ...permission,
+    state: currentApproval === "never" ? ("allow" as const) : ("ask" as const),
+  }))
+
   return (
     <TooltipProvider delayDuration={250}>
       <Sheet open={open} onOpenChange={setOpen} modal={false}>
@@ -257,11 +298,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
                   className={`uc-launcher uc-theme-${theme}`}
                   aria-label="Open Codex"
                 >
-                  {theme === "unraid" ? (
-                    <SquareTerminal size={23} strokeWidth={1.75} aria-hidden />
-                  ) : (
-                    <MessageSquare size={22} strokeWidth={1.65} aria-hidden />
-                  )}
+                  <Bot size={22} strokeWidth={1.65} aria-hidden />
                 </Button>
               </SheetTrigger>
             </TooltipTrigger>
@@ -301,11 +338,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
           <SheetHeader className="uc-header">
             <div className="uc-brand">
               <span className="uc-mark">
-                {theme === "unraid" ? (
-                  <SquareTerminal size={20} strokeWidth={1.75} aria-hidden />
-                ) : (
-                  <MessageSquare size={18} strokeWidth={1.65} aria-hidden />
-                )}
+                <Bot size={18} strokeWidth={1.65} aria-hidden />
               </span>
               <div className="uc-brand-copy">
                 <SheetTitle className="aurora-text-section">Codex</SheetTitle>
@@ -315,6 +348,73 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
               </div>
             </div>
             <div className="uc-header-actions">
+              <div className="uc-permission-menu">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <PermissionChip
+                        tools={permissionTools}
+                        iconOnly
+                        onClick={() => setPermissionsOpen((current) => !current)}
+                        className="uc-header-shield"
+                      />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Session permissions</TooltipContent>
+                </Tooltip>
+                {permissionsOpen ? (
+                  <div className="uc-header-popover">
+                    <div>
+                      <div className="aurora-text-label">Permission Profile</div>
+                      <div className="aurora-text-meta">
+                        Applies to subsequent turns in this session.
+                      </div>
+                    </div>
+                    <Select
+                      value={String(currentPermissionProfile ?? "")}
+                      onValueChange={(permissions) => {
+                        void updateThreadSettings({ permissions })
+                        setPermissionsOpen(false)
+                      }}
+                    >
+                      <SelectTrigger aria-label="Quick permission profile">
+                        <SelectValue placeholder="Default profile" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {state.permissionProfiles
+                          .filter((entry) => entry.allowed !== false)
+                          .map((entry) => (
+                            <SelectItem key={entry.id} value={entry.id}>
+                              {entry.name ?? entry.id}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <div>
+                      <div className="aurora-text-label">Approval Gate</div>
+                      <div className="uc-approval-toggle">
+                        {[
+                          ["untrusted", "Strict"],
+                          ["on-request", "Ask"],
+                          ["never", "Allow"],
+                        ].map(([value, label]) => (
+                          <Button
+                            key={value}
+                            variant={currentApproval === value ? "aurora" : "neutral"}
+                            size="sm"
+                            onClick={() => {
+                              void updateThreadSettings({ approvalPolicy: value })
+                              setPermissionsOpen(false)
+                            }}
+                          >
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -404,6 +504,10 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
                   state={state}
                   onMcpLogin={(name) => void loginMcpServer(name)}
                   onUpdateSettings={(settings) => void updateThreadSettings(settings)}
+                  onSaveMcpServer={(definition) => saveMcpServer(definition)}
+                  onRemoveMcpServer={(name) => removeMcpServer(name)}
+                  onInstallPlugin={(plugin) => installPlugin(plugin)}
+                  onUninstallPlugin={(plugin) => uninstallPlugin(plugin)}
                 />
               </div>
             ) : (
@@ -473,7 +577,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
               </div>
             ) : null}
 
-            <TimelineRenderer entries={state.items} theme={theme} />
+            <TimelineRenderer entries={state.items} theme={theme} skills={state.skills} />
 
             {state.plan ? (
               <PlanRenderer plan={state.plan} streaming={Boolean(state.activeTurnId)} />
@@ -518,7 +622,7 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
                   current.filter((attachment) => attachment.id !== id),
                 )
               }
-              model={state.settings?.model ?? state.config?.model ?? "codex"}
+              model={String(currentModel)}
               onModelChange={(model) => void updateThreadSettings({ model })}
               models={
                 state.models.length
@@ -533,16 +637,24 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
               isStreaming={Boolean(state.activeTurnId)}
               placeholder={theme === "unraid" ? "Ask Codex about your server…" : "Ask Codex…"}
               toolbarStart={
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <PermissionChip tools={PERMISSIONS} iconOnly />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    Write actions ask for approval
-                  </TooltipContent>
-                </Tooltip>
+                <Select
+                  value={String(currentEffort)}
+                  onValueChange={(effort) => void updateThreadSettings({ effort })}
+                >
+                  <SelectTrigger
+                    className="uc-effort-select"
+                    aria-label="Quick reasoning effort"
+                  >
+                    <SelectValue placeholder="Effort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {effortOptions.map((effort: string) => (
+                      <SelectItem key={effort} value={effort}>
+                        {effort.charAt(0).toUpperCase() + effort.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               }
               slashCommands={[
                 { id: "review", label: "/review", description: "Review workspace changes" },
@@ -553,6 +665,8 @@ export function App({ rootElement }: { rootElement: HTMLElement }) {
                 { id: "workspace", label: "/workspace", kind: "folder" },
                 { id: "instructions", label: "AGENTS.md", kind: "file" },
               ]}
+              showSlashButton={false}
+              showMentionButton={false}
               />
             </div>
           </SheetFooter> : null}

@@ -25,7 +25,7 @@ class UnraidCodexChathead extends HTMLElement {
     const shadow = this.attachShadow({ mode: "open" })
     const stylesheet = document.createElement("link")
     stylesheet.rel = "stylesheet"
-    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=12"
+    stylesheet.href = "/plugins/unraid-codex/web/unraid-codex.css?v=13"
     const mount = document.createElement("div")
     const theme = readChatTheme()
     mount.className = `uc-root light uc-theme-${theme}`

@@ -718,7 +718,7 @@ export function useCodexAppServer() {
             threadId,
           }).catch(() => ({ data: [] })),
           listAll("app/list", { threadId }).catch(() => ({ data: [] })),
-          rpc("plugin/installed", { cwds: ["/workspace"] }).catch(() => ({
+          rpc("plugin/list", { cwds: ["/workspace"] }).catch(() => ({
             marketplaces: [],
             marketplaceLoadErrors: [],
           })),
@@ -748,6 +748,7 @@ export function useCodexAppServer() {
             (marketplace.plugins ?? []).map((plugin: JsonObject) => ({
               ...plugin,
               marketplaceName: marketplace.name,
+              marketplacePath: marketplace.path,
             })),
         ),
         marketplaceErrors: plugins.marketplaceLoadErrors ?? [],
@@ -978,6 +979,149 @@ export function useCodexAppServer() {
     [addNotice, rpc],
   )
 
+  const refreshRuntimeCatalog = React.useCallback(async () => {
+    const threadId = threadIdRef.current
+    if (!threadId) return
+    const [config, mcpServers, plugins, apps] = await Promise.all([
+      rpc("config/read", { cwd: "/workspace", includeLayers: false }),
+      rpc("mcpServerStatus/list", {
+        detail: "full",
+        threadId,
+        limit: 100,
+      }).catch(() => ({ data: [] })),
+      rpc("plugin/list", { cwds: ["/workspace"] }).catch(() => ({
+        marketplaces: [],
+        marketplaceLoadErrors: [],
+      })),
+      rpc("app/list", { threadId, limit: 100 }).catch(() => ({ data: [] })),
+    ])
+    setState((current) => ({
+      ...current,
+      config: config.config ?? current.config,
+      mcpServers: mcpServers.data ?? current.mcpServers,
+      apps: apps.data ?? current.apps,
+      plugins: (plugins.marketplaces ?? []).flatMap(
+        (marketplace: JsonObject) =>
+          (marketplace.plugins ?? []).map((plugin: JsonObject) => ({
+            ...plugin,
+            marketplaceName: marketplace.name,
+            marketplacePath: marketplace.path,
+          })),
+      ),
+      marketplaceErrors: plugins.marketplaceLoadErrors ?? [],
+    }))
+  }, [rpc])
+
+  const saveMcpServer = React.useCallback(
+    async ({
+      name,
+      previousName,
+      config,
+    }: {
+      name: string
+      previousName?: string
+      config: JsonObject
+    }) => {
+      const segment = (value: string) => JSON.stringify(value.trim())
+      const edits: JsonObject[] = []
+      if (previousName && previousName !== name) {
+        edits.push({
+          keyPath: `mcp_servers.${segment(previousName)}`,
+          value: null,
+          mergeStrategy: "replace",
+        })
+      }
+      edits.push({
+        keyPath: `mcp_servers.${segment(name)}`,
+        value: config,
+        mergeStrategy: "replace",
+      })
+      try {
+        await rpc("config/batchWrite", { edits, reloadUserConfig: true })
+        await rpc("config/mcpServer/reload")
+        await refreshRuntimeCatalog()
+        addNotice({
+          tone: "success",
+          title: `${name} saved`,
+          description: "MCP configuration reloaded.",
+        })
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: `Could not save ${name}`,
+          description: textFromError(error),
+        })
+        throw error
+      }
+    },
+    [addNotice, refreshRuntimeCatalog, rpc],
+  )
+
+  const removeMcpServer = React.useCallback(
+    async (name: string) => {
+      try {
+        await rpc("config/value/write", {
+          keyPath: `mcp_servers.${JSON.stringify(name)}`,
+          value: null,
+          mergeStrategy: "replace",
+        })
+        await rpc("config/mcpServer/reload")
+        await refreshRuntimeCatalog()
+        addNotice({ tone: "success", title: `${name} removed` })
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: `Could not remove ${name}`,
+          description: textFromError(error),
+        })
+        throw error
+      }
+    },
+    [addNotice, refreshRuntimeCatalog, rpc],
+  )
+
+  const installPlugin = React.useCallback(
+    async (plugin: JsonObject) => {
+      try {
+        await rpc("plugin/install", {
+          pluginName: plugin.name,
+          remoteMarketplaceName: plugin.marketplacePath
+            ? null
+            : plugin.marketplaceName ?? null,
+          marketplacePath: plugin.marketplacePath ?? null,
+        })
+        await refreshRuntimeCatalog()
+        addNotice({ tone: "success", title: `${plugin.name} installed` })
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: `Could not install ${plugin.name}`,
+          description: textFromError(error),
+        })
+        throw error
+      }
+    },
+    [addNotice, refreshRuntimeCatalog, rpc],
+  )
+
+  const uninstallPlugin = React.useCallback(
+    async (plugin: JsonObject) => {
+      try {
+        await rpc("plugin/uninstall", { pluginId: plugin.id })
+        await refreshRuntimeCatalog()
+        addNotice({ tone: "success", title: `${plugin.name} removed` })
+      } catch (error) {
+        addNotice({
+          tone: "error",
+          title: `Could not remove ${plugin.name}`,
+          description: textFromError(error),
+        })
+        throw error
+      }
+    },
+    [addNotice, refreshRuntimeCatalog, rpc],
+  )
+
   const readMcpResource = React.useCallback(
     (server: string, uri: string) =>
       rpc("mcpServer/resource/read", {
@@ -1034,6 +1178,11 @@ export function useCodexAppServer() {
     login,
     loginMcpServer,
     updateThreadSettings,
+    refreshRuntimeCatalog,
+    saveMcpServer,
+    removeMcpServer,
+    installPlugin,
+    uninstallPlugin,
     dismissNotice,
     readMcpResource,
     requestMcpAppTool,

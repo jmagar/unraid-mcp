@@ -3,8 +3,11 @@
 
 const WebSocket = require(process.env.WS_MODULE || "ws");
 
-const socketPath = process.argv[2] || "/run/unraid-codex/appserver.sock";
-const socket = new WebSocket(`ws+unix://${socketPath}:/`, {
+const socketTarget = process.argv[2] || "/run/unraid-codex/appserver.sock";
+const socketUrl = /^wss?:\/\//.test(socketTarget)
+  ? socketTarget
+  : `ws+unix://${socketTarget}:/`;
+const socket = new WebSocket(socketUrl, {
   perMessageDeflate: false,
 });
 const pending = new Map();
@@ -77,7 +80,7 @@ socket.on("open", async () => {
       request("model/list", {}),
       request("skills/list", { cwds: ["/workspace"] }),
       request("app/list", { threadId, limit: 100 }),
-      request("plugin/installed", { cwds: ["/workspace"] }),
+      request("plugin/list", { cwds: ["/workspace"] }),
     ]);
     const servers = mcp.data || mcp.servers || [];
     const installedPlugins = (plugins.marketplaces || [])

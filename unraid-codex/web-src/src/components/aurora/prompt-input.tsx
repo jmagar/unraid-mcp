@@ -59,6 +59,10 @@ export interface PromptInputProps {
   placeholder?: string
   slashCommands?: SlashCommand[]
   mentionItems?: MentionItem[]
+  /** Keep typed slash-command completion while hiding its duplicate toolbar trigger. */
+  showSlashButton?: boolean
+  /** Keep typed mention completion while hiding its duplicate toolbar trigger. */
+  showMentionButton?: boolean
 }
 
 const DEFAULT_MODELS: PromptInputModel[] = [
@@ -451,6 +455,8 @@ export function PromptInput({
   placeholder = "Ask anything…",
   slashCommands = DEFAULT_SLASH_COMMANDS,
   mentionItems = DEFAULT_MENTIONS,
+  showSlashButton = true,
+  showMentionButton = true,
 }: PromptInputProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
@@ -861,41 +867,45 @@ export function PromptInput({
             <Paperclip size={15} strokeWidth={1.65} aria-hidden />
           </ToolbarButton>
 
-          <ToolbarButton
-            onClick={() => {
-              clearBlurTimer()
-              insertTrigger(value, "/", onChange)
-              setSlashQuery("")
-              setSlashIndex(0)
-              setSlashOpen(true)
-              setMentionOpen(false)
-              setShowModelMenu(false)
-              textareaRef.current?.focus()
-            }}
-            aria-label="Slash commands"
-            title="Commands"
-            disabled={isStreaming}
-          >
-            <Command size={15} strokeWidth={1.65} aria-hidden />
-          </ToolbarButton>
+          {showSlashButton ? (
+            <ToolbarButton
+              onClick={() => {
+                clearBlurTimer()
+                insertTrigger(value, "/", onChange)
+                setSlashQuery("")
+                setSlashIndex(0)
+                setSlashOpen(true)
+                setMentionOpen(false)
+                setShowModelMenu(false)
+                textareaRef.current?.focus()
+              }}
+              aria-label="Slash commands"
+              title="Commands"
+              disabled={isStreaming}
+            >
+              <Command size={15} strokeWidth={1.65} aria-hidden />
+            </ToolbarButton>
+          ) : null}
 
-          <ToolbarButton
-            onClick={() => {
-              clearBlurTimer()
-              insertTrigger(value, "@", onChange)
-              setMentionQuery("")
-              setMentionIndex(0)
-              setMentionOpen(true)
-              setSlashOpen(false)
-              setShowModelMenu(false)
-              textareaRef.current?.focus()
-            }}
-            aria-label="Mention File or Agent"
-            title="Mention File or Agent"
-            disabled={isStreaming}
-          >
-            <AtSign size={15} strokeWidth={1.65} aria-hidden />
-          </ToolbarButton>
+          {showMentionButton ? (
+            <ToolbarButton
+              onClick={() => {
+                clearBlurTimer()
+                insertTrigger(value, "@", onChange)
+                setMentionQuery("")
+                setMentionIndex(0)
+                setMentionOpen(true)
+                setSlashOpen(false)
+                setShowModelMenu(false)
+                textareaRef.current?.focus()
+              }}
+              aria-label="Mention File or Agent"
+              title="Mention File or Agent"
+              disabled={isStreaming}
+            >
+              <AtSign size={15} strokeWidth={1.65} aria-hidden />
+            </ToolbarButton>
+          ) : null}
 
           <Button
             type="button"
