@@ -1,0 +1,66 @@
+name: incus-release
+
+# Triggered when release-please publishes an incus-v<version> release. Rebuilds
+# the classic .txz (carrying forward the previous release's binary payload, since
+# .txz are no longer tracked in git) and attaches it + the .plg to the release.
+#
+# NOTE (verified post-merge): build-classic-package.sh REQUIRES a previous .txz to
+# carry the binary payload forward. The FIRST incus-v release has no predecessor —
+# seed it once from the legacy incus-unraid release asset (build 55), then this
+# workflow is self-sustaining.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: startsWith(github.event.release.tag_name, 'incus-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: plugins/incus
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install build + validation tooling
+        run: sudo apt-get update && sudo apt-get install -y jq xz-utils libxml2-utils shellcheck
+
+      - name: Derive build number and fetch previous payload
+        run: |
+          set -euo pipefail
+          txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' incus.plg)"
+          txz="${txz//&name;/incus}"
+          build="$(printf '%s\n' "$txz" | sed -n 's/incus-unraid-7\.0\.0-\([0-9]*\)-x86_64-1\.txz/\1/p')"
+          echo "BUILD=${build}" >> "$GITHUB_ENV"
+          mkdir -p prev
+          prev_tag="$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName \
+            --jq '[.[].tagName | select(startswith("incus-v"))] | .[1] // empty' 2>/dev/null || true)"
+          if [ -n "$prev_tag" ]; then
+            gh release download "$prev_tag" --repo "$GITHUB_REPOSITORY" -p '*.txz' -D prev || true
+          fi
+
+      - name: Build classic package
+        run: |
+          set -euo pipefail
+          prevtxz="$(ls prev/*.txz 2>/dev/null | head -1 || true)"
+          if [ -z "$prevtxz" ]; then
+            echo "::error::no previous .txz payload found; seed the first incus-v release from the legacy asset"
+            exit 1
+          fi
+          ./scripts/build-classic-package.sh "$BUILD" "$prevtxz"
+
+      - name: Verify the rebuilt package
+        run: ./scripts/verify-classic-package.sh
+
+      - name: Attach package + manifest to the release
+        run: |
+          gh release upload "$TAG" \
+            "packages/incus-unraid-7.0.0-${BUILD}-x86_64-1.txz" \
+            incus.plg --clobber
