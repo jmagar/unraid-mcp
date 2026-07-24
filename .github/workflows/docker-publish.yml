@@ -20,6 +20,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
   TEST_IMAGE: local/unraid-mcp:${{ github.sha }}
 
+# Python server sources (incl. scripts/, tests/, pyproject.toml, Dockerfile)
+# live in unraid-py/. run: steps execute there; docker build context is set to
+# ./unraid-py explicitly on each build step (action steps ignore working-directory).
+defaults:
+  run:
+    working-directory: unraid-py
+
 jobs:
   validate:
     name: Container Artifact Smoke & Scan
@@ -38,7 +45,7 @@ jobs:
       - name: Build exact test image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
+          context: ./unraid-py
           platforms: linux/amd64
           push: false
           load: true
@@ -137,7 +144,7 @@ jobs:
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
+          context: ./unraid-py
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
