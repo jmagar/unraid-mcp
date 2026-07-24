@@ -1,0 +1,37 @@
+name: meta-ci
+
+# Every per-component workflow is paths:-scoped to its own subtree, so a PR that
+# touches ONLY shared root files (release-please config/manifest, the
+# marketplace, or a workflow) would otherwise match no filter and run zero jobs —
+# merging green even if it breaks the release config. This job is scoped to
+# exactly those files so it always runs when they change. Make it a required
+# status check on main.
+on:
+  push:
+    paths:
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+      - ".claude-plugin/marketplace.json"
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - "release-please-config.json"
+      - ".release-please-manifest.json"
+      - ".claude-plugin/marketplace.json"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet pyyaml
+      - name: Validate JSON configs + marketplace sources + all workflow YAML
+        run: |
+          python3 -c "import json;[json.load(open(f)) for f in ['release-please-config.json','.release-please-manifest.json','.claude-plugin/marketplace.json']]"
+          python3 -c "import json,os;d=json.load(open('.claude-plugin/marketplace.json'));assert all(os.path.isdir(p['source'].lstrip('./')) for p in d['plugins']),'bad marketplace source path'"
+          python3 -c "import glob,yaml;[yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"
