@@ -28,6 +28,9 @@ jobs:
             # they are exempt from the generic large-blob size cap.
             case "$f" in plugins/incus/source/*) continue;; esac
             sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
-            [ "$sz" -gt 5242880 ] && echo "$f ($((sz/1048576)) MB)"
+            # NOTE: must be an `if`, not `[ ] && echo` — GitHub runs this as
+            # `bash -e`, and a false `[ ]` as the loop's last command returns
+            # non-zero, tripping errexit on every <=5MB file (a false failure).
+            if [ "$sz" -gt 5242880 ]; then echo "$f ($((sz/1048576)) MB)"; fi
           done)
           if [ -n "$bad" ]; then echo "Blocked large/binary additions:"; echo "$bad"; exit 1; fi
