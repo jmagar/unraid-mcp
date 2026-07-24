@@ -19,7 +19,7 @@ def test_plugin_option_map_matches_manifest_userconfig():
     """
     from unraid_mcp.core.setup import CREDENTIAL_OPTIONS, PLUGIN_OPTION_MAP
 
-    plugin_dir = _REPO_ROOT / "plugins" / "unraid"
+    plugin_dir = _REPO_ROOT.parent / "plugins" / "unraid"
     manifest = json.loads((plugin_dir / ".claude-plugin" / "plugin.json").read_text())
     user_keys = set(manifest["userConfig"])  # e.g. {"unraid_api_url", "unraid_api_key", ...}
 

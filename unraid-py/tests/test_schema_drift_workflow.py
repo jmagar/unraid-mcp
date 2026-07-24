@@ -2,7 +2,9 @@ import re
 from pathlib import Path
 
 
-WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
+# Workflows live at the monorepo root (two levels above this test file, which
+# sits in unraid-py/tests/).
+WORKFLOWS = Path(__file__).resolve().parents[2] / ".github" / "workflows"
 
 
 def assert_uses_pinned_action(workflow: str, action: str) -> None:

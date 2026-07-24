@@ -7,7 +7,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-WORKFLOWS = ROOT / ".github" / "workflows"
+# The Python package lives in unraid-py/ within the monorepo; CI workflows live
+# at the monorepo root (one level above the package).
+MONOREPO_ROOT = Path(__file__).resolve().parents[2]
+WORKFLOWS = MONOREPO_ROOT / ".github" / "workflows"
 
 
 def _workflows() -> dict[str, str]:

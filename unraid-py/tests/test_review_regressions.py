@@ -7,11 +7,14 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Agent plugin + CI workflows live at the monorepo root, one level above the
+# unraid-py/ Python package.
+MONOREPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_plugin_manifest_restores_stdio_server_definition() -> None:
     plugin = json.loads(
-        (PROJECT_ROOT / "plugins" / "unraid" / ".claude-plugin" / "plugin.json").read_text()
+        (MONOREPO_ROOT / "plugins" / "unraid" / ".claude-plugin" / "plugin.json").read_text()
     )
     assert plugin["userConfig"]["unraid_api_key"]["sensitive"] is True
     assert "mcpServers" in plugin
@@ -48,11 +51,11 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
         "UNRAID_MAX_RECONNECT_ATTEMPTS",
     }
 
-    mcp_json = json.loads((PROJECT_ROOT / "plugins" / "unraid" / ".mcp.json").read_text())
+    mcp_json = json.loads((MONOREPO_ROOT / "plugins" / "unraid" / ".mcp.json").read_text())
     mcp_env = mcp_json["mcpServers"]["unraid-mcp"]["env"]
 
     codex_manifest = json.loads(
-        (PROJECT_ROOT / "plugins" / "unraid" / ".codex-plugin" / "plugin.json").read_text()
+        (MONOREPO_ROOT / "plugins" / "unraid" / ".codex-plugin" / "plugin.json").read_text()
     )
     codex_env = codex_manifest["mcpServers"]["unraid-mcp"]["env"]
 
@@ -68,7 +71,7 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
 
 
 def test_ci_runs_blocking_live_integration_on_tailnet_runner() -> None:
-    workflow = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    workflow = (MONOREPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "secrets.UNRAID_API_URL" in workflow
     assert "secrets.UNRAID_API_KEY" in workflow
     assert "runs-on: [self-hosted, linux, tailscale]" in workflow
