@@ -2,8 +2,8 @@
   "name": "unraid-mcp",
   "version": "2.7.0",
   "description": "Unraid server management via MCP.",
-  "homepage": "https://github.com/jmagar/unraid-mcp",
-  "repository": "https://github.com/jmagar/unraid-mcp",
+  "homepage": "https://github.com/dinglebear-ai/unraid-mcp",
+  "repository": "https://github.com/dinglebear-ai/unraid-mcp",
   "license": "MIT",
   "keywords": [
     "unraid",
@@ -41,7 +41,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/jmagar/unraid-mcp",
+    "websiteURL": "https://github.com/dinglebear-ai/unraid-mcp",
     "defaultPrompt": [
       "Check my Unraid array status.",
       "List Docker containers on Unraid.",

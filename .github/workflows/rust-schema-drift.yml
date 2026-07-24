@@ -35,7 +35,12 @@ jobs:
             -o upstream-schema.graphql
 
       - name: Strip vendored provenance header
-        run: sed '1,/VENDOR-HEADER-END/d' schema/unraid-schema.graphql > vendored-body.graphql
+        run: |
+          # Guard: without the marker, `sed '1,/pat/d'` deletes to EOF → an empty
+          # body that reads as a full-file drift (loud false positive). Fail instead.
+          grep -q 'VENDOR-HEADER-END' schema/unraid-schema.graphql \
+            || { echo "::error::VENDOR-HEADER-END marker missing in schema/unraid-schema.graphql"; exit 1; }
+          sed '1,/VENDOR-HEADER-END/d' schema/unraid-schema.graphql > vendored-body.graphql
 
       - name: Diff
         id: diff

@@ -38,7 +38,16 @@ echo "==> [1/4] building web bundle"
 
 echo "==> [2/4] vendoring python ${PYTHON_VERSION} (${PBS_RELEASE})"
 if [ ! -f "${CACHE}/${PBS_TARBALL}" ]; then
-    curl -fsSL -o "${CACHE}/${PBS_TARBALL}" "${PBS_URL}"
+    tmp="$(mktemp)"
+    curl -fsSL -o "${tmp}" "${PBS_URL}"
+    # Verify against python-build-standalone's sha256 sidecar (best-effort) before
+    # trusting the interpreter, then move into the cache atomically so an aborted
+    # download can't poison the next run.
+    if sum="$(curl -fsSL "${PBS_URL}.sha256" 2>/dev/null)" && [ -n "$sum" ]; then
+        printf '%s  %s\n' "${sum%% *}" "${tmp}" | sha256sum -c - >/dev/null \
+          || { echo "ERROR: sha256 mismatch for ${PBS_TARBALL}" >&2; rm -f "${tmp}"; exit 1; }
+    fi
+    mv -f "${tmp}" "${CACHE}/${PBS_TARBALL}"
 fi
 mkdir -p "${STAGE}/usr/local/unraid-mcp/python"
 tar -xzf "${CACHE}/${PBS_TARBALL}" --strip-components=1 \

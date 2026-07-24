@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           version="${TAG#codex-v}"
           build="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"unraid-codex-[^"]*-x86_64-\([0-9]*\)\.txz".*/\1/p' unraid-codex.plg)"
+          [ -n "$build" ] || { echo "::error::could not parse build number from unraid-codex.plg &txz; entity"; exit 1; }
           echo "VERSION=${version}" >> "$GITHUB_ENV"
           echo "BUILD=${build}" >> "$GITHUB_ENV"
           ./scripts/build-package.sh "$version" "$build"

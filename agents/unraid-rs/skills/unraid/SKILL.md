@@ -111,12 +111,12 @@ unraid(action="parity_history")
 
 ## Tier 2 — CLI Binary
 
-Binary: `/home/jmagar/workspace/unrust/target/release/runraid`
+Binary: `runraid` — installed on `PATH` by the plugin's npm launcher (`npx -y unraid-rmcp`) or by a local `cargo build --release`.
 
 All commands accept `--json` for machine-readable output.
 
 ```bash
-UNRAID_BIN=/home/jmagar/workspace/unrust/target/release/runraid
+UNRAID_BIN="$(command -v runraid)"
 
 # Core queries
 $UNRAID_BIN array

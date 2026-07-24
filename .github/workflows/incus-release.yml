@@ -42,12 +42,15 @@ jobs:
           txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' incus.plg)"
           txz="${txz//&name;/incus}"
           build="$(printf '%s\n' "$txz" | sed -n 's/incus-unraid-7\.0\.0-\([0-9]*\)-x86_64-1\.txz/\1/p')"
+          [ -n "$build" ] || { echo "::error::could not parse build number from incus.plg &txz; entity"; exit 1; }
           echo "BUILD=${build}" >> "$GITHUB_ENV"
           mkdir -p prev
           prev_tag="$(gh release list --repo "$GITHUB_REPOSITORY" --json tagName \
             --jq '[.[].tagName | select(startswith("incus-v"))] | .[1] // empty' 2>/dev/null || true)"
+          echo "PREV_TAG=${prev_tag}" >> "$GITHUB_ENV"
           if [ -n "$prev_tag" ]; then
-            gh release download "$prev_tag" --repo "$GITHUB_REPOSITORY" -p '*.txz' -D prev || true
+            gh release download "$prev_tag" --repo "$GITHUB_REPOSITORY" -p '*.txz' -D prev \
+              || { echo "::error::failed to download the previous payload from $prev_tag (transient? asset renamed?) — re-run this job"; exit 1; }
           fi
 
       - name: Build classic package
@@ -55,7 +58,11 @@ jobs:
           set -euo pipefail
           prevtxz="$(ls prev/*.txz 2>/dev/null | head -1 || true)"
           if [ -z "$prevtxz" ]; then
-            echo "::error::no previous .txz payload found; seed the first incus-v release from the legacy asset"
+            if [ -n "${PREV_TAG:-}" ]; then
+              echo "::error::previous release ${PREV_TAG} exists but shipped no .txz asset — investigate before re-running"
+            else
+              echo "::error::no previous incus-v release; seed the first one from the legacy incus-unraid build-55 asset"
+            fi
             exit 1
           fi
           ./scripts/build-classic-package.sh "$BUILD" "$prevtxz"
