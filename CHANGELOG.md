@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.6.0...v2.7.0) (2026-07-24)
+
+
+### Features
+
+* **plugin:** dedicated Logs tab with Aurora-dark colorized viewer ([#207](https://github.com/dinglebear-ai/unraid-mcp/issues/207)) ([ab3d9a0](https://github.com/dinglebear-ai/unraid-mcp/commit/ab3d9a0e6466723738c86c046fbe4932be8c0658))
+
+
+### Documentation
+
+* save session log ([#210](https://github.com/dinglebear-ai/unraid-mcp/issues/210)) ([1586d71](https://github.com/dinglebear-ai/unraid-mcp/commit/1586d71232b53e399d138d11f2f982ff837664fe))
+* save session log ([#211](https://github.com/dinglebear-ai/unraid-mcp/issues/211)) ([fdcc22a](https://github.com/dinglebear-ai/unraid-mcp/commit/fdcc22afded944ec4a1c85ee6b0a2cf5bb139581))
+
 ## [2.6.0](https://github.com/dinglebear-ai/unraid-mcp/compare/v2.5.0...v2.6.0) (2026-07-22)
 
 
