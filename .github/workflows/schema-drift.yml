@@ -16,6 +16,11 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
+    # The vendored Python SDL (docs/unraid/UNRAID-SCHEMA.graphql) and the
+    # schema_diff_summary devtool live under unraid-py/; run: steps execute there.
+    defaults:
+      run:
+        working-directory: unraid-py
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
@@ -70,9 +75,9 @@ jobs:
         with:
           name: unraid-schema-drift-${{ github.run_id }}
           path: |
-            schema.diff
-            schema-summary.md
-            upstream-schema.graphql
+            unraid-py/schema.diff
+            unraid-py/schema-summary.md
+            unraid-py/upstream-schema.graphql
           retention-days: 14
 
       - name: Open or update drift issue
