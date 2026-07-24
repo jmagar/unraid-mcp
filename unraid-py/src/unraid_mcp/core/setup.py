@@ -282,8 +282,16 @@ def _write_env(
     # os.replace is atomic on POSIX — prevents a crash from leaving a partial .env.
     tmp_path = CREDENTIALS_ENV_PATH.with_suffix(".tmp")
     try:
-        tmp_path.write_text("\n".join(new_lines) + "\n")
-        tmp_path.chmod(0o600)
+        # Create the secret file with 0600 FROM THE START via os.open — umask only
+        # removes permission bits, so the API key is never briefly world-readable.
+        # (A write_text()-then-chmod leaves a race window where the file exists with
+        # the default umask mode, e.g. 0644, while already containing the key — a
+        # local user could read it in that window.) Unlink any stale tmp first so
+        # O_CREAT applies the mode to a freshly created file.
+        tmp_path.unlink(missing_ok=True)
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write("\n".join(new_lines) + "\n")
         os.replace(tmp_path, CREDENTIALS_ENV_PATH)  # noqa: PTH105
     finally:
         # Clean up tmp on failure (may not exist if os.replace succeeded). Swallow any

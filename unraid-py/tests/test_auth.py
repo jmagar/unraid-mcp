@@ -796,7 +796,7 @@ class TestWellKnownMiddleware:
         _, _, body = self._run(
             "/.well-known/oauth-protected-resource", host="myserver.example.com:6970"
         )
-        assert "myserver.example.com:6970" in body["resource"]
+        assert body["resource"] == "http://myserver.example.com:6970"
 
     def test_configured_public_host_overrides_request_host(self):
         """When a public_host is configured it is used verbatim, ignoring Host."""
