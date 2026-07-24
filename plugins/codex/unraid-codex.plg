@@ -4,8 +4,8 @@
   <!ENTITY author    "jmagar">
   <!ENTITY version   "2026.07.23">
   <!ENTITY launch    "">
-  <!ENTITY gitURL    "https://raw.githubusercontent.com/&author;/incus-unraid/main/unraid-codex">
-  <!ENTITY releaseURL "https://raw.githubusercontent.com/&author;/incus-unraid/unraid-codex-v2026.07.23-15/unraid-codex">
+  <!ENTITY gitURL    "https://raw.githubusercontent.com/dinglebear-ai/unraid-mcp/main/plugins/codex">
+  <!ENTITY txzURL    "https://github.com/dinglebear-ai/unraid-mcp/releases/download/codex-v&version;/&txz;">
   <!ENTITY pluginURL "&gitURL;/unraid-codex.plg">
   <!ENTITY txz       "unraid-codex-2026.07.23-x86_64-15.txz">
   <!ENTITY md5       "69784069fb5e4d285eaaf62d389a904d">
@@ -45,7 +45,7 @@
 </CHANGES>
 
 <FILE Name="&plugin;/&txz;">
-<URL>&releaseURL;/dist/&txz;</URL>
+<URL>&txzURL;</URL>
 <MD5>&md5;</MD5>
 </FILE>
 
