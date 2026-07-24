@@ -82,14 +82,18 @@ plugin_name="$(sed -n 's/.*<!ENTITY name[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
 txz="$(sed -n 's/.*<!ENTITY txz[[:space:]]*"\([^"]*\)".*/\1/p' "$PLG")"
 txz="${txz//&name;/$plugin_name}"
 archive="$ROOT/packages/$txz"
-[ -f "$archive" ]
-root_entries="$(tar -tJf "$archive" | awk '$0 == "./" { count++ } END { print count+0 }')"
-[ "$root_entries" -eq 0 ]
-bad_directory_mode="$(
-  tar -tvJf "$archive" |
-    awk '$1 ~ /^d/ && $1 != "drwxr-xr-x" && bad == "" { bad=$NF } END { print bad }'
-)"
-[ -z "$bad_directory_mode" ]
+# The .txz plugin payload is a GitHub release asset (not tracked in git after the
+# monorepo consolidation). Run the archive-shape checks only when it is present
+# (post-build / release CI); otherwise the source-level checks below are the gate.
+if [ -f "$archive" ]; then
+  root_entries="$(tar -tJf "$archive" | awk '$0 == "./" { count++ } END { print count+0 }')"
+  [ "$root_entries" -eq 0 ]
+  bad_directory_mode="$(
+    tar -tvJf "$archive" |
+      awk '$1 ~ /^d/ && $1 != "drwxr-xr-x" && bad == "" { bad=$NF } END { print bad }'
+  )"
+  [ -z "$bad_directory_mode" ]
+fi
 for script in "$ROOT"/source/usr/local/emhttp/plugins/incus/scripts/*.sh "$ROOT"/source/usr/local/emhttp/plugins/incus/event/*; do
   bash -n "$script"
 done
