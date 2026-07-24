@@ -1,0 +1,55 @@
+name: release-please
+
+# Drives versioning and changelog updates from Conventional Commits.
+#
+# On every green CI run on main, release-please maintains a "release PR" that
+# bumps Cargo.toml/Cargo.lock and CHANGELOG.md. Merging that PR creates the
+# git tag (vX.Y.Z) and a GitHub Release. release.yml (push: tags: v*) then
+# builds the linux/amd64 binary + Docker image and attaches them to that
+# release.
+#
+# IMPORTANT: `token` must be a PAT or GitHub App token with contents:write and
+# pull-requests:write. The default GITHUB_TOKEN does not trigger downstream
+# workflows (release.yml's tag push) for tags/releases it creates. Store it
+# as the RELEASE_PLEASE_TOKEN secret.
+#
+# WARNING — silent failure mode: a classic PAT EXPIRES SILENTLY. When it
+# lapses, this job simply stops opening/updating release PRs — no error, no
+# alert — and releases quietly halt until someone notices. Prefer a GitHub
+# App installation token (no expiry, scoped to exactly these permissions,
+# and auditable per install) over a classic PAT. If you must use a PAT, set a
+# calendar reminder tied to its expiry date so it gets rotated before it
+# lapses.
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: [self-hosted, unraid]
+    permissions:
+      contents: write       # required to create release commits and tags
+      pull-requests: write  # required to create and update release PRs
+    steps:
+      - name: Require release-please token
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: test -n "$RELEASE_PLEASE_TOKEN"
+      - uses: googleapis/release-please-action@8b8fd2cc23b2e18957157a9d923d75aa0c6f6ad5
+        id: release
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

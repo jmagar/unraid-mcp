@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Formatting
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v5
+
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.90
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: [self-hosted, unraid]
+    env:
+      # Keep git dependencies out of the runner's shared Cargo checkout cache.
+      # A partially-pruned checkout there can make Clippy fail before compiling.
+      CARGO_HOME: ${{ github.workspace }}/.cargo-home-clippy
+    steps:
+      - uses: actions/checkout@v5
+
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.90
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        # --all-targets + test-support so the offline mock, example, and test
+        # code (gated behind the feature) are linted too, not just the lib/bin.
+        run: cargo clippy --all-targets --features test-support -- -D warnings
+
+  test:
+    name: Tests
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v5
+
+      # Pinned to the project MSRV (Cargo.toml rust-version) so CI enforces it.
+      - uses: dtolnay/rust-toolchain@1.90
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests
+        run: cargo nextest run --profile ci
+
+      # nextest doesn't build examples; build the standalone mock so its
+      # breakage is caught in CI too.
+      - name: Build example (mock server)
+        run: cargo build --example mock_unraid --features test-support
+
+  check-toml:
+    name: TOML Format
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+
+      - name: Check TOML formatting
+        run: taplo check
+
+  audit:
+    name: Security Audit
+    runs-on: [self-hosted, unraid]
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v5
+
+      # cargo-audit is a CI tool and its current release requires newer Rust
+      # than the application's MSRV. Application builds remain pinned above.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # RUSTSEC-2023-0071: Marvin timing attack on rsa 0.9.x (no fixed 0.9.x release).
+          # Reaches us only transitively via lab-auth's RS256 JWT verification. This server
+          # is read-only and token/OAuth-gated; the timing side-channel is not exploitable in
+          # our threat model. The job still fails on any NEW advisory. Revisit when lab-auth
+          # moves off rsa 0.9.x. Reviewed 2026-06-15.
+          ignore: RUSTSEC-2023-0071
+
+  gitleaks:
+    name: Secret Scan
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      # The GitHub Action requires a separate commercial license for
+      # organization repositories. Run the open-source scanner directly.
+      - name: Run Gitleaks
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --source=/repo --verbose --redact --no-banner
+
+  no-env-files:
+    name: No tracked .env files
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v5
+      # CI equivalent of the lefthook block-env-commits.sh guard: fail if any
+      # non-example .env file is tracked in git.
+      - name: Check for tracked .env files
+        run: |
+          tracked=$(git ls-files '*.env' '.env' '.env.*' | grep -v -E '\.example($|\.)' | grep -v -E 'example\.env$' || true)
+          if [ -n "$tracked" ]; then
+            echo "::error::Tracked .env file(s) detected — remove and use .env.example instead:"
+            echo "$tracked"
+            exit 1
+          fi
+          echo "OK — no tracked .env files."
+
+  npm:
+    name: npm launcher
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test npm launcher
+        run: npm test --prefix packages/unraid-rmcp
+      - name: Check npm launcher syntax
+        run: npm run check --prefix packages/unraid-rmcp
+      - name: Dry-run npm package
+        run: npm pack --dry-run --json ./packages/unraid-rmcp

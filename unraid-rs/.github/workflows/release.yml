@@ -1,0 +1,210 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing release tag to attach assets to, e.g. v0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release-meta:
+    runs-on: [self-hosted, unraid]
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: meta
+        name: Resolve release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            tag="${{ github.event.release.tag_name }}"
+            release_name="${{ github.event.release.name }}"
+          else
+            tag="${{ inputs.tag_name }}"
+            if [[ -z "$tag" ]]; then
+              echo "::error::tag_name is required for manual releases"
+              exit 1
+            fi
+            release_name="unraid-rmcp ${tag}"
+          fi
+          echo "tag_name=${tag}" >> "$GITHUB_OUTPUT"
+          echo "release_name=${release_name}" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: release-meta
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      # The self-hosted runner farm shares repository workspaces and the default
+      # Cargo registry. Isolate both writable trees so concurrent jobs cannot
+      # prune each other's sources or build outputs.
+      CARGO_HOME: ${{ github.workspace }}/.cargo-home-${{ github.run_id }}-${{ matrix.target }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target-${{ github.run_id }}-${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            artifact: runraid-linux-x86_64
+            archive: runraid-x86_64.tar.gz
+            ext: ""
+          - target: x86_64-pc-windows-msvc
+            artifact: runraid-windows-x86_64.exe
+            archive: runraid-windows-x86_64.tar.gz
+            ext: ".exe"
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-meta.outputs.tag_name }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross toolchain
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm llvm clang lld
+          cargo install cargo-xwin --locked
+
+      - name: Build web assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f apps/web/package.json ]]; then
+            cd apps/web
+            npm install -g "$(node -p "require('./package.json').packageManager")"
+            pnpm install --frozen-lockfile
+            pnpm build
+          fi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build (linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo build --release --locked --target ${{ matrix.target }} --bin runraid
+
+      - name: Build (windows cross)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: cargo xwin build --release --locked --target ${{ matrix.target }} --bin runraid
+
+      - name: Stage artifact + checksum
+        run: |
+          cp "${CARGO_TARGET_DIR}/${{ matrix.target }}/release/runraid${{ matrix.ext }}" "${{ matrix.artifact }}"
+          sha256sum "${{ matrix.artifact }}" > "${{ matrix.artifact }}.sha256"
+          mkdir -p archive
+          cp "${{ matrix.artifact }}" "archive/runraid${{ matrix.ext }}"
+          tar -C archive -czf "${{ matrix.archive }}" "runraid${{ matrix.ext }}"
+          sha256sum "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ matrix.artifact }}
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+
+  publish-release:
+    needs: [release-meta, build]
+    runs-on: [self-hosted, unraid]
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-meta.outputs.tag_name }}
+          name: ${{ needs.release-meta.outputs.release_name }}
+          target_commitish: ${{ github.sha }}
+          files: dist/release-assets/*
+
+  npm:
+    needs: [release-meta, publish-release]
+    runs-on: [self-hosted, unraid]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-meta.outputs.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm package version matches release tag
+        id: npm-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.release-meta.outputs.tag_name }}"
+          version="$(node -p "require('./packages/unraid-rmcp/package.json').version")"
+          if [[ "$tag" != "v${version}" ]]; then
+            echo "::error::release tag ${tag} does not match packages/unraid-rmcp/package.json version ${version}"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Test npm launcher
+        run: npm test --prefix packages/unraid-rmcp
+      - name: Check npm launcher syntax
+        run: npm run check --prefix packages/unraid-rmcp
+      - name: Dry-run npm package
+        run: npm pack --dry-run --json ./packages/unraid-rmcp
+
+      - name: Check whether npm version is already published
+        id: published
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view "unraid-rmcp@${{ steps.npm-version.outputs.version }}" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish npm package
+        if: steps.published.outputs.exists == 'false'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public ./packages/unraid-rmcp
+
+      - name: Smoke published npm launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          cache="$(mktemp -d)"
+          trap 'rm -rf "$cache"' EXIT
+          npm_config_cache="$cache" npx -y "unraid-rmcp@${{ steps.npm-version.outputs.version }}" --version
