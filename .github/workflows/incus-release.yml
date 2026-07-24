@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: incus-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   build:
     if: startsWith(github.event.release.tag_name, 'incus-v')

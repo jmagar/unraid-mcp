@@ -6,6 +6,9 @@ on:
   pull_request:
     paths: ["unraid-rs/**", ".github/workflows/rust-ci.yml"]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -18,6 +21,10 @@ defaults:
 jobs:
   fmt:
     name: Formatting
+    # SECURITY: self-hosted runs on the Unraid box. Never execute untrusted
+    # fork-PR code here (build.rs/proc-macros/npm run arbitrary code). Runs on
+    # push, dispatch, and same-repo (non-fork) PRs; fork PRs are skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -33,6 +40,10 @@ jobs:
 
   clippy:
     name: Clippy
+    # SECURITY: self-hosted runs on the Unraid box. Never execute untrusted
+    # fork-PR code here (build.rs/proc-macros/npm run arbitrary code). Runs on
+    # push, dispatch, and same-repo (non-fork) PRs; fork PRs are skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, unraid]
     env:
       # Keep git dependencies out of the runner's shared Cargo checkout cache.
@@ -58,6 +69,10 @@ jobs:
 
   test:
     name: Tests
+    # SECURITY: self-hosted runs on the Unraid box. Never execute untrusted
+    # fork-PR code here (build.rs/proc-macros/npm run arbitrary code). Runs on
+    # push, dispatch, and same-repo (non-fork) PRs; fork PRs are skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -86,6 +101,10 @@ jobs:
 
   check-toml:
     name: TOML Format
+    # SECURITY: self-hosted runs on the Unraid box. Never execute untrusted
+    # fork-PR code here (build.rs/proc-macros/npm run arbitrary code). Runs on
+    # push, dispatch, and same-repo (non-fork) PRs; fork PRs are skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
@@ -100,6 +119,10 @@ jobs:
 
   npm:
     name: npm launcher
+    # SECURITY: self-hosted runs on the Unraid box. Never execute untrusted
+    # fork-PR code here (build.rs/proc-macros/npm run arbitrary code). Runs on
+    # push, dispatch, and same-repo (non-fork) PRs; fork PRs are skipped.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, unraid]
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0

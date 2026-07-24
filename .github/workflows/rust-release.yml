@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rust-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always

@@ -23,6 +23,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Detect stale release automation
+        # SCOPE: monitors only the primary Python component (unraid-py -> v*).
+        # rust/incus/codex releases are NOT liveness-checked here — plan Task 13c
+        # sanctioned scoping to the primary and documenting it. If a component
+        # release stalls, no alert fires; generalize this over all manifest keys
+        # if that coverage becomes necessary.
         run: |
           set -euo pipefail
           released_version="$(jq -r '.["unraid-py"]' .release-please-manifest.json)"

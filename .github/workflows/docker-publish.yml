@@ -6,6 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+    # The PR validate job runs Trivy (~30 min); only run it when the image's
+    # own source changes. (paths can't be scoped to push branches-vs-tags, so
+    # the main-push edge stays unfiltered to keep tag-triggered publish working.)
+    paths: ["unraid-py/**", "Dockerfile", ".github/workflows/docker-publish.yml"]
   workflow_dispatch:
 
 permissions:

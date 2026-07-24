@@ -12,12 +12,14 @@ on:
       - "release-please-config.json"
       - ".release-please-manifest.json"
       - ".claude-plugin/marketplace.json"
+      - "agents/**"
       - ".github/workflows/**"
   pull_request:
     paths:
       - "release-please-config.json"
       - ".release-please-manifest.json"
       - ".claude-plugin/marketplace.json"
+      - "agents/**"
       - ".github/workflows/**"
 
 permissions:

@@ -15,15 +15,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-unraid-plugin-${{ github.event.release.tag_name || github.event.inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build & attach plugin artifacts
-    # Only the primary (Python) release tag `v*` — NOT component tags
-    # (incus-v*/codex-v*/unraid-rs-v*), which would fail version parsing.
+    # Only the primary (Python) release tag `v*`. Component tags start with
+    # incus-/codex-/unraid-rs-, so startsWith(tag,'v') already excludes them.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (startsWith(github.event.release.tag_name, 'v') &&
-       !startsWith(github.event.release.tag_name, 'unraid-rs-v'))
+      startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: write # upload release assets
@@ -32,12 +35,14 @@ jobs:
 
       - name: Resolve version
         id: v
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
             version="${GITHUB_REF_NAME#v}"
           else
-            version="${{ github.event.inputs.version }}"
+            version="$INPUT_VERSION"
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::invalid version '$version'"

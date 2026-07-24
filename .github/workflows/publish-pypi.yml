@@ -25,13 +25,12 @@ env:
 jobs:
   build:
     name: Build & Attest Release Artifact
-    # Only the primary (Python) release tag `v*` — NOT component tags
-    # (incus-v*/codex-v*/unraid-rs-v*). Gating build cascades to the
-    # pypi/github-release/mcp-registry/reconcile jobs via `needs: build`.
+    # Only the primary (Python) release tag `v*`. Component tags start with
+    # incus-/codex-/unraid-rs-, so startsWith(tag,'v') already excludes them.
+    # Gating build cascades to pypi/github-release/mcp-registry/reconcile via needs.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (startsWith(github.event.release.tag_name, 'v') &&
-       !startsWith(github.event.release.tag_name, 'unraid-rs-v'))
+      startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
