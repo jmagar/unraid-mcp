@@ -169,9 +169,9 @@ build-plugin: release
     if [ ! -x "$target_dir/release/runraid" ] && [ -x ".cache/cargo/release/runraid" ]; then
       target_dir=".cache/cargo"
     fi
-    mkdir -p bin plugins/unraid/bin
+    mkdir -p bin ../agents/unraid-rs/bin
     install -m 755 "$target_dir/release/runraid" bin/runraid
-    install -m 755 "$target_dir/release/runraid" plugins/unraid/bin/runraid
+    install -m 755 "$target_dir/release/runraid" ../agents/unraid-rs/bin/runraid
 
 # Explicit binary artifact sync. This replaces hidden Cargo rustc-wrapper side effects.
 sync-bin: build-plugin

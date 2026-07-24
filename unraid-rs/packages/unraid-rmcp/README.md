@@ -88,7 +88,7 @@ existing deployment config.
 | Release installer | `curl -fsSL https://raw.githubusercontent.com/jmagar/runraid/main/scripts/install.sh \| bash` | Host installs without Node. | Installs `runraid` for linux/amd64. |
 | Docker / Compose | `docker compose up -d` | Shared HTTP MCP deployments. | Reads `.env` and exposes container port `40010`. |
 | Build from source | `cargo build --release` | Development and audits. | Produces `target/release/runraid`. |
-| Plugin | `claude plugin install plugins/unraid` | Claude Code local plugin setup from this checkout. | Uses the packaged setup hook, skill, and local runtime metadata. |
+| Plugin | `claude plugin install agents/unraid-rs` | Claude Code local plugin setup from this checkout. | Uses the packaged setup hook, skill, and local runtime metadata. |
 
 ### npm / npx
 
@@ -403,7 +403,7 @@ CLI shim      (src/cli.rs)       argv -> service -> stdout
 - The npm package name is `unraid-rmcp`; binary aliases are `unraid-rmcp` and
   `runraid`.
 - Docker/OCI metadata uses `ghcr.io/jmagar/runraid:<version>`.
-- `plugins/unraid/.mcp.json` must launch `npx -y unraid-rmcp mcp` so stdio
+- `agents/unraid-rs/.mcp.json` must launch `npx -y unraid-rmcp mcp` so stdio
   clients start the MCP transport rather than the HTTP server.
 - The root README is curated. `docs/INVENTORY.md` is the curated inventory for
   actions, CLI commands, env vars, HTTP endpoints, and dependencies.
@@ -497,7 +497,7 @@ gateway.
 - `docs/stack/ARCH.md` is the curated architecture guide.
 - `docs/SETUP.md` is curated plugin/setup guidance.
 - `docs/OAUTH.md` is curated OAuth setup guidance.
-- `plugins/unraid/skills/unraid/SKILL.md` is the agent usage guide.
+- `agents/unraid-rs/skills/unraid/SKILL.md` is the agent usage guide.
 - `src/` is the source of truth for current GraphQL queries, config defaults,
   auth behavior, and CLI parsing.
 

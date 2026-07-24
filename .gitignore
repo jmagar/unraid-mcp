@@ -100,3 +100,6 @@ data/
 
 # Mock GraphQL server (tests/mock) — JS deps installed locally
 tests/mock/node_modules/
+
+# runraid binary staged into the agent plugin by the Justfile install target
+agents/unraid-rs/bin/
