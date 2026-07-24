@@ -1,6 +1,6 @@
 # Scripts Reference -- unraid-mcp
 
-## Plugin hook scripts (`plugins/unraid/scripts/`)
+## Plugin hook scripts (`agents/unraid-py/scripts/`)
 
 `hooks.json` registers `plugin-setup.sh` on both `SessionStart` and `ConfigChange`
 (`user_settings` matcher). It runs `uvx unraid-mcp setup plugin-hook` to persist

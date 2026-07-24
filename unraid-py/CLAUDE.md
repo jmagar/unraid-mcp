@@ -314,8 +314,8 @@ Conventional Commit messages:
 
 On every push to `main`, release-please maintains a "release PR" that bumps the version
 in `pyproject.toml` + the three plugin manifests
-(`plugins/unraid/.claude-plugin/plugin.json`, `plugins/unraid/.codex-plugin/plugin.json`,
-`plugins/unraid/gemini-extension.json`) and prepends a CHANGELOG entry.
+(`agents/unraid-py/.claude-plugin/plugin.json`, `agents/unraid-py/.codex-plugin/plugin.json`,
+`agents/unraid-py/gemini-extension.json`) and prepends a CHANGELOG entry.
 Merging that PR tags `vX.Y.Z` and triggers `publish-pypi.yml` + `docker-publish.yml`.
 
 Config: `release-please-config.json` (which files get bumped) and
@@ -402,8 +402,8 @@ computes the bump when the work lands on `main`:
 
 release-please keeps these files in sync automatically (configured in `release-please-config.json`):
 - `pyproject.toml` — `version = "X.Y.Z"` in `[project]`
-- `plugins/unraid/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `plugins/unraid/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `agents/unraid-py/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `agents/unraid-py/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `gemini-extension.json` — `"version": "X.Y.Z"`
 - `CHANGELOG.md` — new entry generated from commit messages
 

@@ -14,15 +14,15 @@ The marketplace catalog that lists all available plugins in this repository.
 - Plugin catalog with the "unraid" plugin
 - Categories and tags for discoverability
 
-### 2. Plugin Manifest (`plugins/unraid/.claude-plugin/plugin.json`)
+### 2. Plugin Manifest (`agents/unraid-py/.claude-plugin/plugin.json`)
 The individual plugin configuration for the Unraid MCP server.
 
-**Location:** `plugins/unraid/.claude-plugin/plugin.json`
+**Location:** `agents/unraid-py/.claude-plugin/plugin.json`
 
 **Contents:**
 - Plugin name (`unraid-mcp`), release-please-managed version, author
 - Repository and homepage links
-- `mcpServers` reference to `plugins/unraid/.mcp.json`, which runs the published `uvx unraid-mcp` server in stdio mode
+- `mcpServers` reference to `agents/unraid-py/.mcp.json`, which runs the published `uvx unraid-mcp` server in stdio mode
 - `userConfig` fields for `UNRAID_API_URL` and `UNRAID_API_KEY`
 
 ## MCP Tools Exposed
@@ -129,7 +129,7 @@ unraid-mcp/
 │   └── marketplace.json     # Claude Code marketplace catalog
 ├── .agents/plugins/
 │   └── marketplace.json     # Codex marketplace catalog
-├── plugins/unraid/
+├── agents/unraid-py/
 │   ├── .claude-plugin/
 │   │   ├── plugin.json      # Claude Code plugin manifest
 │   │   └── README.md
@@ -181,7 +181,7 @@ Before publishing to GitHub:
 
 4. **Commit and Push**
    ```bash
-   git add .claude-plugin/ .agents/plugins/ plugins/unraid/ gemini-extension.json
+   git add .claude-plugin/ .agents/plugins/ agents/unraid-py/ gemini-extension.json
    git commit -m "docs: update marketplace documentation"
    git push origin main
    ```

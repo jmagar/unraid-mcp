@@ -304,8 +304,8 @@ git commit -m "feat!: remove deprecated SSH action"
 
 release-please automatically updates these files:
 - `pyproject.toml` — `version = "X.Y.Z"`
-- `plugins/unraid/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
-- `plugins/unraid/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `agents/unraid-py/.claude-plugin/plugin.json` — `"version": "X.Y.Z"`
+- `agents/unraid-py/.codex-plugin/plugin.json` — `"version": "X.Y.Z"`
 - `gemini-extension.json` — `"version": "X.Y.Z"`
 - `CHANGELOG.md` — new entry from commit messages
 

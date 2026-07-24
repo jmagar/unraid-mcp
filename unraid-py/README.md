@@ -8,7 +8,7 @@ GraphQL-backed MCP server for Unraid. Exposes a unified `unraid` tool for system
 
 ## Installation
 
-The plugin lives at `plugins/unraid/` and launches the server with
+The plugin lives at `agents/unraid-py/` and launches the server with
 `uvx unraid-mcp` (the published [PyPI package](https://pypi.org/project/unraid-mcp/)),
 so no local checkout is required once it's installed. You'll need
 [`uv`](https://docs.astral.sh/uv/) on your `PATH`.

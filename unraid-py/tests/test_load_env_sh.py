@@ -15,10 +15,12 @@ from pathlib import Path
 import pytest
 
 
+# load-env.sh ships with the Python agent plugin, which lives at the monorepo
+# root under agents/unraid-py/ (two levels above this test file in unraid-py/tests/).
 _LOAD_ENV = (
-    Path(__file__).resolve().parent.parent
-    / "plugins"
-    / "unraid"
+    Path(__file__).resolve().parents[2]
+    / "agents"
+    / "unraid-py"
     / "skills"
     / "unraid"
     / "load-env.sh"
@@ -26,7 +28,7 @@ _LOAD_ENV = (
 
 pytestmark = pytest.mark.skipif(
     shutil.which("bash") is None or not _LOAD_ENV.exists(),
-    reason="bash and plugins/unraid/skills/unraid/load-env.sh are required",
+    reason="bash and agents/unraid-py/skills/unraid/load-env.sh are required",
 )
 
 

@@ -31,7 +31,7 @@
 ## Version sync (gotcha)
 
 The plugin ships **three** manifests that must all match `pyproject.toml`:
-`plugins/unraid/.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
+`agents/unraid-py/.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
 `gemini-extension.json`. release-please keeps them in sync from Conventional Commits —
 **never hand-edit version strings.** Verify with `just check-contract`.
 

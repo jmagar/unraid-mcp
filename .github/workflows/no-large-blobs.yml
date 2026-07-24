@@ -21,7 +21,12 @@ jobs:
           base="${{ github.event.pull_request.base.sha }}"
           bad=$(git diff --name-only "$base"...HEAD | while read -r f; do
             [ -f "$f" ] || continue
-            case "$f" in *.txz) echo "$f (.txz must be a release asset)";; esac
+            case "$f" in *.txz) echo "$f (.txz must be a release asset)"; continue;; esac
+            # The incus classic plugin vendors its Incus runtime binaries under
+            # source/usr/local/incus/ (incusd, distrobuilder, mksquashfs, ...).
+            # These are intentionally tracked and vetted by incus-classic-ci, so
+            # they are exempt from the generic large-blob size cap.
+            case "$f" in plugins/incus/source/*) continue;; esac
             sz=$(git cat-file -s ":$f" 2>/dev/null || echo 0)
             [ "$sz" -gt 5242880 ] && echo "$f ($((sz/1048576)) MB)"
           done)

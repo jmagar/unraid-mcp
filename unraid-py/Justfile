@@ -29,11 +29,11 @@ typecheck:
 # Validate skills SKILL.md files exist and are non-empty
 validate-skills:
     @echo "=== Validating skills ==="
-    @for f in plugins/unraid/skills/*/SKILL.md; do \
-        if [ -f "$$f" ]; then \
-            echo "  ✓ $$f"; \
+    @for f in {{justfile_directory()}}/../agents/unraid-py/skills/*/SKILL.md; do \
+        if [ -f "$f" ]; then \
+            echo "  ✓ $f"; \
         else \
-            echo "  ✗ SKILL.md not found in plugins/unraid/skills/"; \
+            echo "  ✗ SKILL.md not found in agents/unraid-py/skills/"; \
             exit 1; \
         fi; \
     done
