@@ -34,9 +34,15 @@ check() {
 echo "=== Validating Claude Code Marketplace Structure ==="
 echo ""
 
-# Marketplace manifest lives at the repo root; the plugin lives under plugins/unraid/.
+# Resolve paths from this script's own location so it works regardless of cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"   # unraid-py/ (holds pyproject.toml)
+REPO_ROOT="$(cd "$PKG_ROOT/.." && pwd)"    # monorepo root (holds .claude-plugin/, agents/)
+cd "$REPO_ROOT"
+
+# Marketplace manifest lives at the monorepo root; the Python agent plugin lives under agents/unraid-py/.
 MARKETPLACE=".claude-plugin/marketplace.json"
-PLUGIN_DIR="plugins/unraid"
+PLUGIN_DIR="agents/unraid-py"
 PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
 SKILLS_DIR="$PLUGIN_DIR/skills/unraid"
 
@@ -77,7 +83,7 @@ fi
 
 # Check version sync between pyproject.toml and plugin.json
 echo "Checking version sync..."
-TOML_VER=$(grep -m1 '^version = ' pyproject.toml | sed 's/version = "//;s/"//')
+TOML_VER=$(grep -m1 "^version = " "$PKG_ROOT/pyproject.toml" | sed 's/version = "//;s/"//')
 PLUGIN_VER=$(python3 -c "import json; print(json.load(open('$PLUGIN_JSON'))['version'])" 2>/dev/null || echo "ERROR_READING")
 if [ "$TOML_VER" != "$PLUGIN_VER" ]; then
     echo -e "${RED}FAIL: Version mismatch — pyproject.toml=$TOML_VER, plugin.json=$PLUGIN_VER${NC}"

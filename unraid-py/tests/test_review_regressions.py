@@ -14,7 +14,7 @@ MONOREPO_ROOT = Path(__file__).resolve().parents[2]
 
 def test_plugin_manifest_restores_stdio_server_definition() -> None:
     plugin = json.loads(
-        (MONOREPO_ROOT / "plugins" / "unraid" / ".claude-plugin" / "plugin.json").read_text()
+        (MONOREPO_ROOT / "agents" / "unraid-py" / ".claude-plugin" / "plugin.json").read_text()
     )
     assert plugin["userConfig"]["unraid_api_key"]["sensitive"] is True
     assert "mcpServers" in plugin
@@ -51,11 +51,11 @@ def test_plugin_manifests_do_not_hardcode_env_configurable_defaults() -> None:
         "UNRAID_MAX_RECONNECT_ATTEMPTS",
     }
 
-    mcp_json = json.loads((MONOREPO_ROOT / "plugins" / "unraid" / ".mcp.json").read_text())
+    mcp_json = json.loads((MONOREPO_ROOT / "agents" / "unraid-py" / ".mcp.json").read_text())
     mcp_env = mcp_json["mcpServers"]["unraid-mcp"]["env"]
 
     codex_manifest = json.loads(
-        (MONOREPO_ROOT / "plugins" / "unraid" / ".codex-plugin" / "plugin.json").read_text()
+        (MONOREPO_ROOT / "agents" / "unraid-py" / ".codex-plugin" / "plugin.json").read_text()
     )
     codex_env = codex_manifest["mcpServers"]["unraid-mcp"]["env"]
 
