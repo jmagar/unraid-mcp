@@ -331,7 +331,7 @@ The project uses GitHub Actions for CI/CD:
 - **`.github/workflows/docker-publish.yml`** - Docker image builds
 - **`.github/workflows/publish-pypi.yml`** - PyPI publishing
 - **`.github/workflows/release-please.yml`** - Automated versioning
-- **`.github/workflows/openwiki-update.yml`** - Scheduled/manual OpenWiki documentation updates (`openwiki code --update --print`) run with OpenRouter (`OPENWIKI_PROVIDER=openrouter`, `OPENWIKI_MODEL_ID=z-ai/glm-5.2`) and generate a PR including `openwiki/`, `AGENTS.md`, `CLAUDE.md`, and the workflow file itself.
+- **`.github/workflows/openwiki-update.yml`** - Scheduled/manual OpenWiki documentation updates (`openwiki code --update --print`) run with OpenRouter (`OPENWIKI_PROVIDER=openrouter`, `OPENWIKI_MODEL_ID=z-ai/glm-5.2`) and include tracing/metadata env vars (`LANGCHAIN_PROJECT=openwiki`, `LANGCHAIN_TRACING_V2=true`, optional `LANGSMITH_API_KEY`) while generating a PR that includes `openwiki/`, `AGENTS.md`, `CLAUDE.md`, and the workflow file itself.
 - **`.github/workflows/schema-drift.yml`** - Schema drift detection
 
 ## Common Development Tasks
