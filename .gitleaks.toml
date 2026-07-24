@@ -1,15 +1,18 @@
-# Gitleaks config for the Secret Scan CI job (.github/workflows/ci.yml).
+# Gitleaks config for the Secret Scan CI job (.github/workflows/secret-scan.yml).
 # Extends the default ruleset; allowlists paths that contain only placeholder
-# credentials (docs examples, test fixtures, skill references). Real secrets
-# must never be committed anywhere, including these paths.
+# credentials (docs examples, generated openwiki, test fixtures, skill
+# references) — anywhere in the monorepo, since these categories live under each
+# component (unraid-py/, unraid-rs/, plugins/*/, agents/*/). Real secrets must
+# never be committed anywhere, including these paths.
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "Docs, tests, and skill references use placeholder credentials only"
+description = "Docs, generated wiki, tests, and skill references use placeholder credentials only"
 paths = [
-  '''^docs/''',
-  '''^tests/''',
-  '''^skills/''',
+  '''(^|/)docs/''',
+  '''(^|/)openwiki/''',
+  '''(^|/)tests/''',
+  '''(^|/)skills/''',
 ]
