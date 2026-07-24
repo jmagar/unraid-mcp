@@ -1,0 +1,39 @@
+name: incus-classic-ci
+
+# The classic package verify + contract validate incus.plg, ca/, the release
+# manifest and the embedded manifest — none of which live under source/ — so the
+# filter is the whole plugins/incus subtree MINUS the API backend and docs
+# (which have their own workflow / are doc-only). A narrow source/**-style
+# filter would let a bad .plg or checksum merge with this gate never running.
+on:
+  push:
+    paths:
+      - "plugins/incus/**"
+      - "!plugins/incus/unraid-api-plugin-incus/**"
+      - "!plugins/incus/docs/**"
+      - ".github/workflows/incus-classic-ci.yml"
+  pull_request:
+    paths:
+      - "plugins/incus/**"
+      - "!plugins/incus/unraid-api-plugin-incus/**"
+      - "!plugins/incus/docs/**"
+      - ".github/workflows/incus-classic-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  classic:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: plugins/incus
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Install static validators
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils shellcheck
+      - name: Validate classic sources and release artifact
+        run: ./scripts/verify-classic-package.sh
+      - name: Run classic contract tests
+        run: ./tests/classic-contract.sh

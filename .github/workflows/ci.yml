@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: ["main", "feat/**", "fix/**"]
+    paths: ["unraid-py/**", ".github/workflows/ci.yml"]
   pull_request:
     branches: ["main"]
+    paths: ["unraid-py/**", ".github/workflows/ci.yml"]
   schedule:
     # Weekly blocking live smoke on a tailnet-connected self-hosted runner.
     - cron: "23 7 * * 1"
@@ -18,6 +20,13 @@ permissions:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# The Python package now lives in unraid-py/; every run: step executes there.
+# Secret scanning was extracted to secret-scan.yml (unfiltered) so this
+# workflow's unraid-py/** path filter cannot gate it off.
+defaults:
+  run:
+    working-directory: unraid-py
 
 jobs:
   lint:
@@ -188,22 +197,3 @@ jobs:
           .artifact-venv/bin/python -c 'import importlib.metadata; assert importlib.metadata.version("unraid-mcp")'
       - name: Smoke installed wheel over stdio
         run: bash scripts/smoke-stdio.sh .artifact-venv/bin/unraid-mcp-server
-
-  gitleaks:
-    name: Secret Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
-        with:
-          fetch-depth: 0
-      - name: Run gitleaks CLI
-        env:
-          GITLEAKS_VERSION: 8.30.1
-          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-        run: |
-          curl -sSfL -o gitleaks.tar.gz \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --quiet
-          tar -xzf gitleaks.tar.gz gitleaks
-          ./gitleaks git . --redact --verbose

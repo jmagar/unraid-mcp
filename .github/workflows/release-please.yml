@@ -59,6 +59,8 @@ jobs:
           enable-cache: false
       - name: Sync uv.lock with the version bump
         if: ${{ steps.release.outputs.prs_created == 'true' }}
+        # uv.lock (and pyproject.toml) now live in unraid-py/.
+        working-directory: unraid-py
         run: |
           set -euo pipefail
           uv lock

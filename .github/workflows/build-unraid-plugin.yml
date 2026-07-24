@@ -15,9 +15,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-unraid-plugin-${{ github.event.release.tag_name || github.event.inputs.version }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build & attach plugin artifacts
+    # Only the primary (Python) release tag `v*`. Component tags start with
+    # incus-/codex-/unraid-rs-, so startsWith(tag,'v') already excludes them.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     permissions:
       contents: write # upload release assets
@@ -26,12 +35,14 @@ jobs:
 
       - name: Resolve version
         id: v
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "release" ]; then
             version="${GITHUB_REF_NAME#v}"
           else
-            version="${{ github.event.inputs.version }}"
+            version="$INPUT_VERSION"
           fi
           if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::invalid version '$version'"
@@ -49,21 +60,21 @@ jobs:
           node-version: "22"
 
       - name: Build wheel from source
-        run: uv build --wheel --out-dir dist
+        run: cd unraid-py && uv build --wheel --out-dir dist
 
       - name: Build plugin package
         run: |
           set -euo pipefail
-          wheel="$(ls dist/unraid_mcp-${{ steps.v.outputs.version }}-py3-none-any.whl)"
-          bash unraid/scripts/build-txz.sh "${{ steps.v.outputs.version }}" "$wheel"
+          wheel="$(ls unraid-py/dist/unraid_mcp-${{ steps.v.outputs.version }}-py3-none-any.whl)"
+          bash plugins/mcp/scripts/build-txz.sh "${{ steps.v.outputs.version }}" "$wheel"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
         with:
           name: unraid-plugin-${{ steps.v.outputs.version }}
           path: |
-            unraid/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz
-            unraid/packages/unraid-mcp.plg
+            plugins/mcp/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz
+            plugins/mcp/packages/unraid-mcp.plg
           retention-days: 14
 
       - name: Attach to the release
@@ -73,6 +84,6 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "${GITHUB_REF_NAME}" \
-            "unraid/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz" \
-            "unraid/packages/unraid-mcp.plg" \
+            "plugins/mcp/packages/unraid-mcp-${{ steps.v.outputs.version }}-x86_64-1.txz" \
+            "plugins/mcp/packages/unraid-mcp.plg" \
             --clobber

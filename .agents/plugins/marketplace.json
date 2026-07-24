@@ -8,7 +8,7 @@
       "name": "unraid-mcp",
       "source": {
         "source": "local",
-        "path": "./plugins/unraid"
+        "path": "./agents/unraid-py"
       },
       "policy": {
         "installation": "AVAILABLE",

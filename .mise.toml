@@ -1,5 +1,8 @@
 [tools]
-# Exact Python minor follows pyproject.toml's >=3.12 runtime floor and the
-# test/type-check configuration for this service.
+# The monorepo is polyglot: python (unraid-py), rust (unraid-rs), node
+# (incus NestJS backend + codex web + npm launchers), plus uv for the Python
+# package. Exact Python minor follows unraid-py/pyproject.toml's >=3.12 floor.
 python = "3.12"
 uv = "latest"
+rust = "latest"
+node = "22"
