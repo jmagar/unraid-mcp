@@ -23,8 +23,8 @@ The prototype includes:
 Build and verify:
 
 ```bash
-./unraid-codex/tests/contract.sh
-./unraid-codex/scripts/build-package.sh
+./tests/contract.sh
+./scripts/build-package.sh
 ```
 
 The build script requires Slackware's `makepkg`, which is available on Unraid.

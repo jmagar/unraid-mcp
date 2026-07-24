@@ -18,6 +18,12 @@ permissions:
 jobs:
   build:
     name: Build & attach plugin artifacts
+    # Only the primary (Python) release tag `v*` — NOT component tags
+    # (incus-v*/codex-v*/unraid-rs-v*), which would fail version parsing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.release.tag_name, 'v') &&
+       !startsWith(github.event.release.tag_name, 'unraid-rs-v'))
     runs-on: ubuntu-latest
     permissions:
       contents: write # upload release assets

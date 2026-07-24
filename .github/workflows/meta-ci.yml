@@ -35,3 +35,5 @@ jobs:
           python3 -c "import json;[json.load(open(f)) for f in ['release-please-config.json','.release-please-manifest.json','.claude-plugin/marketplace.json']]"
           python3 -c "import json,os;d=json.load(open('.claude-plugin/marketplace.json'));assert all(os.path.isdir(p['source'].lstrip('./')) for p in d['plugins']),'bad marketplace source path'"
           python3 -c "import glob,yaml;[yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"
+          # agents/*/plugin.json are release-please version-bump targets — a malformed one would fail at release time; catch it here
+          python3 -c "import glob,json;[json.load(open(f)) for f in glob.glob('agents/*/.claude-plugin/plugin.json')+glob.glob('agents/*/.codex-plugin/plugin.json')]"

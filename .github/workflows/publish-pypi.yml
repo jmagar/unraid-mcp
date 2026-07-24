@@ -25,6 +25,13 @@ env:
 jobs:
   build:
     name: Build & Attest Release Artifact
+    # Only the primary (Python) release tag `v*` — NOT component tags
+    # (incus-v*/codex-v*/unraid-rs-v*). Gating build cascades to the
+    # pypi/github-release/mcp-registry/reconcile jobs via `needs: build`.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.release.tag_name, 'v') &&
+       !startsWith(github.event.release.tag_name, 'unraid-rs-v'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
