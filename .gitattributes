@@ -1,0 +1,4 @@
+plugins/incus/**/*.sh eol=lf
+plugins/incus/**/*.plg eol=lf
+plugins/incus/**/*.cfg eol=lf
+plugins/*/packages/*.txz binary

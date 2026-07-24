@@ -10,7 +10,25 @@ txz="${txz//&name;/$plugin_name}"
 md5="$(sed -n 's/.*<!ENTITY md5[[:space:]]*"\([^"]*\)".*/\1/p' incus.plg)"
 sha256="$(sed -n 's/.*<!ENTITY sha256[[:space:]]*"\([^"]*\)".*/\1/p' incus.plg)"
 archive="packages/$txz"
-[ -f "$archive" ] || { echo "missing $archive" >&2; exit 1; }
+
+# --- Static source-level checks (always run; independent of the built archive) ---
+xmllint --noout incus.plg
+find source/usr/local/emhttp/plugins/incus -type f \( -name '*.sh' -o -path '*/event/*' \) -print0 |
+  xargs -0 -r -n1 bash -n
+shellcheck -x -e SC1090,SC1091,SC2001 source/usr/local/emhttp/plugins/incus/scripts/*.sh source/usr/local/emhttp/plugins/incus/event/*
+
+# --- Archive-dependent verification ---
+# The .txz plugin payload is a GitHub *release asset*, not tracked in git (its
+# history was scrubbed during the monorepo consolidation to avoid ~746 MB of
+# committed binaries). When the archive is absent (fresh checkout / release-asset
+# model) the source-only checks above are the full local gate; when the archive
+# IS present (after build-classic-package.sh, or in the release CI that fetches
+# the prior asset) the deep package verification below runs in full.
+if [ ! -f "$archive" ]; then
+  echo "classic/package source verification passed (archive '$txz' is a release asset, not in-tree; build-classic-package.sh or fetch the release asset for full package verification)"
+  exit 0
+fi
+
 archive_list="$(mktemp)"
 archive_tree="$(mktemp -d)"
 trap 'rm -f "$archive_list"; rm -rf "$archive_tree"' EXIT
@@ -31,11 +49,6 @@ bad_directory_mode="$(
   echo "archive contains unsafe directory metadata: $bad_directory_mode" >&2
   exit 1
 }
-
-xmllint --noout incus.plg
-find source/usr/local/emhttp/plugins/incus -type f \( -name '*.sh' -o -path '*/event/*' \) -print0 |
-  xargs -0 -r -n1 bash -n
-shellcheck -x -e SC1090,SC1091,SC2001 source/usr/local/emhttp/plugins/incus/scripts/*.sh source/usr/local/emhttp/plugins/incus/event/*
 
 entries="$(wc -l <"$archive_list")"
 expected_entries="$(sed -n 's/^- Entries: \([0-9][0-9]*\)$/\1/p' MANIFEST.md)"

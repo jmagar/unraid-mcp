@@ -60,9 +60,12 @@ grep -Fq '"$REGISTRATION" unregister' "$UNINSTALL_API"
 grep -Fq 'removepkg &txz;' "$PLG"
 # Literal workflow contract, not a shell expression in this test.
 # shellcheck disable=SC2016
-grep -Fq 'diff -qr dist "$payload/dist"' "$ROOT/.github/workflows/api-plugin-ci.yml"
-[ "$(grep -Fc '      - "packages/**"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
-[ "$(grep -Fc '      - "incus.plg"' "$ROOT/.github/workflows/api-plugin-ci.yml")" -eq 2 ]
+# The incus API CI workflow now lives at the monorepo root (path-scoped to the
+# plugins/incus subtree) after the consolidation; its filters are re-pathed.
+API_CI="$(cd "$ROOT/../.." && pwd)/.github/workflows/incus-api-ci.yml"
+grep -Fq 'diff -qr dist "$payload/dist"' "$API_CI"
+[ "$(grep -Fc '      - "plugins/incus/packages/**"' "$API_CI")" -eq 2 ]
+[ "$(grep -Fc '      - "plugins/incus/incus.plg"' "$API_CI")" -eq 2 ]
 grep -Fq 'archive entry count differs from release manifest' "$ROOT/scripts/verify-classic-package.sh"
 grep -Fq 'find "$stage" -type d -exec chmod 0755 {} +' "$BUILD_CLASSIC"
 grep -Fq 'archive must not contain a root directory entry' "$VERIFY_CLASSIC"

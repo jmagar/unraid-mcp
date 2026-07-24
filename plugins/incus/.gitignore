@@ -21,3 +21,6 @@ Thumbs.db
 # Logs
 *.log
 .env
+
+# plugin build artifacts are release assets, never tracked
+packages/*.txz
