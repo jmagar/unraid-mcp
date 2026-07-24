@@ -1,0 +1,41 @@
+name: Classic plugin and package CI
+
+on:
+  push:
+    paths:
+      - "source/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tests/**"
+      - "incus.plg"
+      - "MANIFEST.md"
+      - "README.md"
+      - "release-manifest.json"
+      - ".github/workflows/classic-plugin-ci.yml"
+  pull_request:
+    paths:
+      - "source/**"
+      - "packages/**"
+      - "scripts/**"
+      - "tests/**"
+      - "incus.plg"
+      - "MANIFEST.md"
+      - "README.md"
+      - "release-manifest.json"
+      - ".github/workflows/classic-plugin-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install static validators
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils shellcheck
+      - name: Validate classic sources and release artifact
+        run: ./scripts/verify-classic-package.sh
+      - name: Run classic contract tests
+        run: ./tests/classic-contract.sh
